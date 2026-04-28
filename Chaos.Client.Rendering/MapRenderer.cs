@@ -484,6 +484,12 @@ public sealed class MapRenderer : IDisposable
                 compressedFgData[tileId] = (palettized.Entity, palettized.Palette);
         }
 
+        //track tallest fg image across both phase 2.5 (pack-replaced) and phase 3 (legacy-rendered) so that
+        //ForegroundExtraMargin reflects the full set of fg tiles drawn this map. without folding pack heights
+        //in, a pack wall taller than every legacy hpf on the map would be undersized for culling and clip at
+        //the viewport edge.
+        var maxFgHeight = 0;
+
         //phase 2.5: static_tiles pack lookup. for each primary, non-cycled tile id, swap legacy archive data for
         //a pack-decoded SKImage by writing directly into the image cache and removing the id from the dict that
         //drives phase 3. cycled tiles are skipped because palette cycling overlays would visually overwrite the
@@ -527,6 +533,9 @@ public sealed class MapRenderer : IDisposable
                 {
                     FgImageCache[tileId] = packImage;
                     compressedFgData.Remove(tileId);
+
+                    if (packImage.Height > maxFgHeight)
+                        maxFgHeight = packImage.Height;
                 }
             }
         }
@@ -543,8 +552,6 @@ public sealed class MapRenderer : IDisposable
                 using (BgImageCacheLock.EnterScope())
                     BgImageCache[kvp.Key] = image;
             });
-
-        var maxFgHeight = 0;
 
         Parallel.ForEach(
             compressedFgData,
