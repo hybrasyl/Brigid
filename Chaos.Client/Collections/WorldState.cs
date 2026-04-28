@@ -1,6 +1,7 @@
 #region
 using Chaos.Client.Data;
 using Chaos.Client.Data.Models;
+using Chaos.Client.Data.Utilities;
 using Chaos.Client.Extensions;
 using Chaos.Client.Models;
 using Chaos.Client.Networking;
@@ -178,7 +179,7 @@ public static class WorldState
 
             entity.Appearance = new AislingAppearance
             {
-                Gender = args.BodySprite is BodySprite.Female or BodySprite.FemaleGhost ? Gender.Female : Gender.Male,
+                Gender = DataUtilities.DetermineGender(args.BodySprite),
                 BodySpriteId = GetBodySpriteId(args.BodySprite),
                 BodyColor = (int)args.BodyColor,
                 HeadSprite = args.HeadSprite,
