@@ -41,6 +41,17 @@ The simplest framing consistent with all observations: **N/S door clicks have li
 
 Retail validates **trailing payload bytes** on the door-click packet that Chaos.Client doesn't emit. Hybrasyl's handler reads exactly the 5 bytes we send and stops, silently consuming any additional legacy bytes; retail is stricter and likely requires (or at least keys door registration on) something past the X/Y. For E/W doors retail's missing-bytes default lines up; for N/S it doesn't.
 
+#### Server-emission evidence (2026-04-28, retail packet observation)
+
+Retail's door-open mechanism is **fundamentally different from Hybrasyl's**, and the client only sees activity for E/W:
+
+- **E/W door click on retail:** client receives `0x0C` (CreatureWalk, len 18) followed by `0x0E` (RemoveEntity, len 13). Retail represents doors as invisible entities sitting on the door tile; opening = walk-the-entity-off-tile + remove-entity, which makes the tile traversable. The client already handles this correctly *by accident* — `HandleCreatureWalk` / `HandleRemoveEntity` route through generic `WorldState` entity tracking, and the door-tile foreground is left alone (the door visual disappears because the door entity disappears).
+- **N/S door click on retail:** client receives **nothing**. Retail's `0x43 PointClick` handler rejects the click before it gets to "should I move + remove this door entity."
+
+This confirms the missing-trailing-payload hypothesis. Hybrasyl's `0x32 Door` mechanism is a different model entirely; the existing matrix entry "0x32 Door | VERIFIED-COMPATIBLE" was tested only against Hybrasyl, not retail.
+
+Implication for the fix once the missing payload is identified: nothing in `HandleDoor` (the 0x32 handler) needs to change for retail compat — it's dead code on the retail path. The fix is purely on the outbound `0x43` side. Inbound 0x0C / 0x0E already do the right thing.
+
 What might be in the trailing bytes — speculative until we have a capture:
 
 - An axis discriminator (E/W vs N/S) the client should set per door.
@@ -87,6 +98,83 @@ Premise: per the Hybrasyl-matches-retail rule, this points client-side.
 - **Wire-format suspicion (client→server):** Hybrasyl's `PacketHandler_0x2E_GroupRequest` in `server/hybrasyl/Servers/World.cs` reads the partner name then carries a `// TODO: currently leaving five bytes on the table here` comment — i.e. it expects 5 trailing bytes the Chaos.Client doesn't send. That mismatch could explain why Hybrasyl never advances the flow when the client initiates.
 - **Existing reference:** `docs/hybrasyl-compat-matrix.md` row 0x63 — marked `DIVERGENT | UNINSPECTED`. §4.13's enum values are **stale** (don't match the server source above) and must be refreshed as part of this work.
 - **Capture available:** the user can produce a retail packet capture of a working `0x2E GroupRequest` to disambiguate the 5-byte trailing payload. We should ask for that capture before guessing at the layout.
+
+### 4. CTD: `DivideByZeroException` in `GetSteppedWalkOffset` (item-triggered dialog while walking)
+
+User report + stack trace (2026-04-28, retail server, Hybrasyl client `US Dark Ages 7.41`):
+
+```text
+Unhandled exception. System.DivideByZeroException: Attempted to divide by zero.
+   at Chaos.Client.Systems.AnimationSystem.GetSteppedWalkOffset(Vector2 startOffset, Int32 frameIndex, Int32 frameCount) in AnimationSystem.cs:line 654
+   at Chaos.Client.Systems.AnimationSystem.AdvanceWalk(WorldEntity entity, Single elapsedMs, Boolean smoothScroll) in AnimationSystem.cs:line 221
+   at Chaos.Client.Systems.AnimationSystem.Advance(...) in AnimationSystem.cs:line 182
+   at Chaos.Client.Screens.WorldScreen.Update(GameTime gameTime) in WorldScreen.Update.cs:line 44
+```
+
+#### Root cause (concrete)
+
+[`AnimationSystem.GetSteppedWalkOffset`](../Chaos.Client/Systems/AnimationSystem.cs#L637) line 654 computes `var y = x * startY / startX;`. The function guards `frameCount <= 0` (line 639) but never guards `startX == 0`. When the entity's `WalkStartOffset` is `Vector2.Zero`, `startX = 0` and the division throws.
+
+`WalkStartOffset` is set by `StartWalk` from [`GetWalkOffset(direction)`](../Chaos.Client/Systems/AnimationSystem.cs#L623) which only returns nonzero values for `Direction.Up/Right/Down/Left`. Any other Direction value (e.g., `Direction.Invalid`, `Direction.None`, an out-of-range numeric cast) hits the `_ => Vector2.Zero` default, after which the entity is in `EntityAnimState.Walking` with `WalkStartOffset = (0, 0)` — and the next `WorldScreen.Update` frame crashes.
+
+The dialog/item is the **trigger** that sets walk state with a bad Direction; it's not the locus of the bug. The crash is the next-frame consequence.
+
+#### Why retail-only (likely)
+
+The trigger packet that produces a `Direction.Default` walk-start is presumably a retail-shape packet — a refresh, teleport, or movement-response with an unusual Direction byte that Hybrasyl emits differently. Possible candidates worth checking against `docs/hybrasyl-compat-matrix.md`:
+
+- `0x0B ClientWalkResponse` — direction-byte semantics (matrix §3 lists this as MATCH on Hybrasyl, but doesn't audit retail's variant for items that interrupt walk).
+- `0x07 DisplayVisibleEntities` — adds the player back at a new tile after item-teleport; if the encoded direction is novel, our enum cast may fall through to default.
+- `0x04 Location` / `0x05 UserId` — repositions the player; matrix §4.1 / §4.2 already note divergent trailing bytes.
+
+If we can identify the trigger packet, the secondary fix is to validate Direction at parse time (clamp to a known value or refuse to enter `Walking` with an undefined direction). The primary fix is independent: make `GetSteppedWalkOffset` not crash when its preconditions aren't met.
+
+#### Minimal fix (proposed, not yet implemented)
+
+Add a `startX == 0` early return alongside the existing `frameCount <= 0` guard:
+
+```csharp
+private static Vector2 GetSteppedWalkOffset(Vector2 startOffset, int frameIndex, int frameCount)
+{
+    if (frameCount <= 0)
+        return Vector2.Zero;
+
+    var startX = (int)startOffset.X;
+    var startY = (int)startOffset.Y;
+
+    //a zero-x start offset means StartWalk was called with a non-cardinal Direction —
+    //there's no x to anchor y on via the 2:1 isometric ratio, and the entity has no
+    //visible walk to interpolate. drop straight to zero rather than dividing by zero.
+    if (startX == 0)
+        return Vector2.Zero;
+
+    var framesLeft = frameCount - (frameIndex + 1);
+    var x = startX * framesLeft / frameCount;
+
+    if ((x & 1) != 0)
+        x += x > 0 ? -1 : 1;
+
+    var y = x * startY / startX;
+
+    return new Vector2(x, y);
+}
+```
+
+This stops the CTD immediately and is safe — when `startX == 0`, the previous code's `x = 0 * framesLeft / frameCount = 0` already produces no horizontal offset, so the entity wouldn't have visibly slid horizontally even if the divide didn't crash. Returning `Vector2.Zero` outright is consistent with that intent.
+
+#### Follow-up work (separate from the CTD fix)
+
+1. **Find the trigger packet.** Identify which item / dialog flow produces the bad walk state. Add it to `hybrasyl-compat-matrix.md` if it's a divergent retail packet shape.
+2. **Validate `Direction` at parse boundary.** Don't enter `EntityAnimState.Walking` with a Direction that isn't one of the four cardinals — either clamp to a default, or skip the `StartWalk` call entirely. Defense-in-depth so future bad Direction sources can't recreate this class of crash.
+3. **Audit other consumers of `GetWalkOffset`** (and any cousins) for the same `Vector2.Zero` blind-spot. The `_ => Vector2.Zero` pattern in `GetWalkOffset` looks like a defensive default that callers don't actually defend against.
+
+#### Critical files
+
+- [`Chaos.Client/Systems/AnimationSystem.cs:637-657`](../Chaos.Client/Systems/AnimationSystem.cs#L637) — `GetSteppedWalkOffset` (fix site).
+- [`Chaos.Client/Systems/AnimationSystem.cs:623-631`](../Chaos.Client/Systems/AnimationSystem.cs#L623) — `GetWalkOffset` (origin of the zero-vector default).
+- [`Chaos.Client/Systems/AnimationSystem.cs:43-66`](../Chaos.Client/Systems/AnimationSystem.cs#L43) — `StartWalk` (where bad Direction enters walk state).
+- `Chaos.Client/Collections/WorldState.cs:435,456` and `Chaos.Client/Screens/WorldScreen.ServerHandlers.cs:161,201` — `StartWalk` callsites.
+- `Chaos.Client/Screens/WorldScreen.ServerHandlers.cs` `HandleClientWalkResponse` and any teleport/refresh handlers — candidates for where the Direction value originates.
 
 ### 3. Boards — clicking a board-object does nothing on either server
 
