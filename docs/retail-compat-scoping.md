@@ -13,24 +13,68 @@ Hybrasyl has been reverse-engineered against retail for years, so its wire forma
 
 ## Three retail-compat bugs in scope
 
-### 1. Doors — N/S axis broken on retail (and possibly Hybrasyl)
+### 1. Doors — N/S axis broken on retail only
 
-Background investigation lives in `~/.claude/plans/on-our-recent-doors-snazzy-stonebraker.md` — carry it forward.
+Background investigation lives in `~/.claude/plans/on-our-recent-doors-snazzy-stonebraker.md`. Reframed below after a 2026-04-28 investigation pass.
 
-- **Symptom (confirmed by user 2026-04-28):** N/S-axis doors **never open** via tile click or right-click context-menu pathway, on `main` or `fix/retail-compat`. Affects all N/S panels regardless of whether they're center or side. E/W doors function normally on every server.
-- **Status:** Investigation re-routed from server (the original `feature/doors` PR for Hybrasyl) to client. Three Chaos.Client commits are suspect:
-  - `d74127b` feat(doors): regenerate DoorTable from audit, add Alt+right-click menu
-  - `c0237ef` crash fix, door fix — sotp-strict pathfinder change ← prime suspect
-  - `9bb61a6` fix(doors): dedup multi-tile doors; dismiss context menu on outside click / movement
-- **Confirmed failing instances** (1-indexed in-game / 0-indexed map binary):
-  - Rucesion (lod505) (40, 42), (37, 28) — center-only N/S 3-tile.
-  - Piet (lod501) (29, 12) — all-change N/S 3-tile, **inverted panel order**.
-  - Abel (lod502) (12, 16).
-- **Critical files (client):**
-  - `Chaos.Client/Definitions/DoorTable.cs`
-  - `Chaos.Client/Controls/World/Popups/DoorContextMenu.cs`
-  - The pathfinder code touched by `c0237ef` (sotp consultation)
-  - `docs/doors.md` — source of truth, 81 hand-audited rows.
+#### Refined symptom (2026-04-28)
+
+- N/S-axis doors **never toggle** when this client clicks them on retail (`da0.kru.com`). Affects every panel of every N/S door tested — clicking different panels of the same door doesn't change anything. Failing instances confirmed: Rucesion (40, 42), (37, 28); Piet (29, 12); Abel (12, 16); Mileth (69, 54) and (69, 55).
+- E/W doors function normally on retail.
+- **Both axes work on Hybrasyl** (across `main`, `develop`, `feature/doors`).
+- **Inbound `0x32 Door` handling is fine** — when another player opens an N/S door near this client, the sprite swap renders correctly and the user can walk through. So `HandleDoor` and the open-state pathfinder are both working. The failure is exclusively in this client's **outbound** click for N/S doors.
+- The legacy DA client opens these same doors on retail. So retail's catalog, server-side toggle, and 0x32 emission all work — the bug is wholly in what Chaos.Client puts on the wire that the legacy client doesn't.
+
+#### Reframe: missing-behavior, not regression
+
+Originally framed as a regression on `c0237ef`/`d74127b`/`9bb61a6`. After investigation that framing is **wrong**:
+
+- `c0237ef` (sotp-strict pathfinder) was reverted via the upstream merge `9d3ed3f` and is not in current `main`.
+- `d74127b` regenerated `DoorTable` correctly — every N/S pair from `docs/doors.md` is present (Rucesion `(2929,2923)`, Piet `(2850,2857)/(2851,2858)/(2852,2859)`, Mileth `(2000,2003)/(2001,2004)`, etc.). The table is not the bug.
+- `9bb61a6` only touches the Alt+right-click context menu (dedup + dismiss). It doesn't change the click-out path. User confirmed the menu shows correct labels for N/S doors anyway.
+- Hybrasyl's `0x43 PointClick` handler ([World.cs:3494](../../server/hybrasyl/Servers/World.cs#L3494)) is **byte-identical across `main`, `develop`, and `feature/doors`**. `feature/doors` only restructured server-side door registration (`Sprites.cs`, `Door.cs`/`DoorGroup.cs`/`MapObject.cs`), not the wire protocol.
+- `Chaos.Networking`'s `ClickConverter` writes `{0x43}{type=3}{x:u16BE}{y:u16BE}` (5 bytes payload). Hybrasyl reads it the same way and works.
+
+The simplest framing consistent with all observations: **N/S door clicks have likely never worked on retail in Chaos.Client.** E/W happens to work because retail's check is satisfied by what we send. N/S has an additional retail requirement we don't satisfy. Hybrasyl is more permissive and tolerates both, so we never noticed.
+
+#### Leading hypothesis (per user, 2026-04-28)
+
+Retail validates **trailing payload bytes** on the door-click packet that Chaos.Client doesn't emit. Hybrasyl's handler reads exactly the 5 bytes we send and stops, silently consuming any additional legacy bytes; retail is stricter and likely requires (or at least keys door registration on) something past the X/Y. For E/W doors retail's missing-bytes default lines up; for N/S it doesn't.
+
+What might be in the trailing bytes — speculative until we have a capture:
+
+- An axis discriminator (E/W vs N/S) the client should set per door.
+- The clicked tile's sprite ID (so retail can confirm which door the client thinks it's clicking).
+- An "open right" / hinge-side hint matching the legacy DA's door-rendering convention.
+- Padding zeros that retail length-validates.
+
+#### Ruled out
+
+- **Auto-walk + facing.** Confirmed not the case (user, 2026-04-28). Retail does not require the player to be physically adjacent or facing the door before the click is honored.
+- **Pathfinder treats N/S open doors as walls.** Confirmed: `IsTileWall` honors sotp correctly, and other-player door opens render and become walkable for this client. Pathfinding is not the failure mode.
+- **DoorTable is missing N/S entries.** Audited line-by-line against `docs/doors.md` — every catalogued N/S pair is present.
+- **`feature/doors` server changes affect retail compat.** They don't — `feature/doors` is a Hybrasyl-internal restructure with no wire-format change, and retail isn't running Hybrasyl anyway.
+
+#### Adjacent observation: ClickTile is sent for *any* foreground tile
+
+Currently [WorldScreen.InputHandlers.cs:1387-1388](Chaos.Client/Screens/WorldScreen.InputHandlers.cs#L1387) sends `ClickTile(x, y)` whenever `TileHasForeground` returns true — regardless of whether the foreground is an interactable. The legacy DA client only sends a click when the tile is a known interactable (door, signpost). This is a divergence.
+
+**Do not "fix" by gating on door/signpost detection.** Per user (2026-04-28), the broader plan is to expand `ClickTile` for targeting and other future features — gating it now would regress planned work. Note here for future awareness; treat as intentional client-forward behavior.
+
+#### What needs to happen next (handoff)
+
+1. **Capture wire bytes** the legacy DA client sends for an N/S door click on retail. Compare to what Chaos.Client sends for the same click. The byte-count delta and any post-`y` payload pinpoints the missing field. One E/W and one N/S capture bracketed together would also confirm whether legacy distinguishes axes on the wire.
+2. **If byte capture is impractical**, fall back to brute-force: append plausible trailing fields to `ClickArgs` (axis byte, sprite ID, zero padding) and observe which retail accepts. Slow but tractable.
+3. Once the missing field(s) are identified, add them to `Chaos.Networking`'s `ClickArgs` / `ClickConverter` (or fork client-side if that NuGet can't be modified) and re-test on retail (Mileth 69,54-55) and Hybrasyl (regression check).
+4. Add a regression test once the wire shape is known.
+
+#### Critical files for the eventual fix
+
+- `Chaos.Client.Networking/ConnectionManager.cs:138-144` — `ClickTile` send site (currently no axis info).
+- `Chaos-Server/Chaos.Networking/Converters/Client/ClickConverter.cs` — wire serialization (5 bytes after opcode currently). External NuGet — may need fork or upstream PR.
+- `Chaos-Server/Chaos.DarkAges/Definitions/Enums.cs` `ClickType` enum — only `TargetId=1, TargetPoint=3` defined. If retail uses an additional type, this is where it'd land.
+- `Chaos.Client/Screens/WorldScreen.ServerHandlers.cs:1113` `HandleDoor` — verified working; do not touch.
+- `Chaos.Client/Definitions/DoorTable.cs` — verified complete; do not touch.
 
 ### 2. Group system — broken on Hybrasyl AND retail
 
@@ -69,7 +113,13 @@ No source, no logs, no builds for `da0.kru.com`. Investigation against retail is
 
 ### Phase 1 — Doors
 
-Continue from the existing doors plan. Read `c0237ef`, `9bb61a6`, `d74127b` in order. The strongest hypothesis is that `c0237ef` (sotp-strict pathfinder) blocks N/S door clicks because the open-state side panels of N/S doors carry sotp wall-bits that, post-fix, the pathfinder treats as non-walkable — preventing the click from registering as targeting a door. Identify the regression, write a regression test if a client harness exists (or manual repro via Rucesion (40,42) and Piet (29,12)), fix.
+**Status (2026-04-28): blocked on observational data.** See the doors section above for the full investigation. Static analysis is exhausted; the client looks axis-correct at every layer. The leading hypothesis is that retail validates trailing payload bytes on the `0x43 PointClick` packet that Chaos.Client doesn't emit — and that this has likely been broken since the client's inception, masked by Hybrasyl's lenience. Resume when one of:
+
+- Wire-byte capture from the legacy DA client clicking an N/S door on retail (gold-standard).
+- Documentation of retail's `0x43`-with-`ClickType=3` trailing payload from prior reverse-engineering.
+- Brute-force experiments appending candidate fields to `ClickArgs` and watching retail's response.
+
+Once the missing payload is identified, the change likely lands in `Chaos.Networking`'s `ClickConverter` (or a client-side fork of it).
 
 **Phase-1 review gate:** bug/regression review + architecture review of the door fix before moving on (per CLAUDE.md review policy).
 
