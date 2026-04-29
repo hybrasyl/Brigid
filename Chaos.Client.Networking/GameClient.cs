@@ -257,6 +257,12 @@ public sealed class GameClient : IDisposable
         if (!Connected)
             return;
 
+        //log outbound bytes BEFORE encryption so the hex matches what the wire-format design says we should be sending.
+        //first 64 bytes of payload is enough to identify any packet we'd want to inspect; longer packets get truncated.
+        var preview = Math.Min(packet.Length, 64);
+        var hex = Convert.ToHexString(packet.Buffer[..preview]);
+        NoticeDebugLog.Write($"outbound opcode=0x{packet.OpCode:X2} len={packet.Length} hex={hex}");
+
         packet.IsEncrypted = Crypto.IsClientEncrypted(packet.OpCode);
         SocketAsyncEventArgs args;
 
