@@ -21,6 +21,7 @@ public static class AssetPackRegistry
     private static ItemPack? CurrentItemPack;
     private static NpcPortraitPack? CurrentNpcPortraitPack;
     private static LegendMarkIconPack? CurrentLegendMarkIconPack;
+    private static UiSpriteOverridePack? CurrentUiSpriteOverridePack;
     private static bool Initialized;
 
     /// <summary>
@@ -71,6 +72,12 @@ public static class AssetPackRegistry
     ///     <c>content_type: legend_mark_icons</c> is present.
     /// </summary>
     public static LegendMarkIconPack? GetLegendMarkIconPack() => CurrentLegendMarkIconPack;
+
+    /// <summary>
+    ///     Returns the currently-registered UI-sprite-override pack, or null if no pack of
+    ///     <c>content_type: ui_sprite_overrides</c> is present.
+    /// </summary>
+    public static UiSpriteOverridePack? GetUiSpriteOverridePack() => CurrentUiSpriteOverridePack;
 
     private static void TryRegisterPack(string path)
     {
@@ -143,6 +150,9 @@ public static class AssetPackRegistry
 
             case "legend_mark_icons":
                 return TryRegisterLegendMarkIconPack(archive, manifest);
+
+            case "ui_sprite_overrides":
+                return TryRegisterUiSpriteOverridePack(archive, manifest);
 
             default:
                 return false;
@@ -225,6 +235,22 @@ public static class AssetPackRegistry
         }
 
         LogWarning($"legend mark icon pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentLegendMarkIconPack.Manifest.PackId}' ({CurrentLegendMarkIconPack.Manifest.Priority})");
+        archive.Dispose();
+
+        return true;
+    }
+
+    private static bool TryRegisterUiSpriteOverridePack(ZipArchive archive, AssetPackManifest manifest)
+    {
+        if (CurrentUiSpriteOverridePack is null || manifest.Priority > CurrentUiSpriteOverridePack.Manifest.Priority)
+        {
+            CurrentUiSpriteOverridePack?.Dispose();
+            CurrentUiSpriteOverridePack = new UiSpriteOverridePack(archive, manifest);
+
+            return true;
+        }
+
+        LogWarning($"ui sprite override pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentUiSpriteOverridePack.Manifest.PackId}' ({CurrentUiSpriteOverridePack.Manifest.Priority})");
         archive.Dispose();
 
         return true;
