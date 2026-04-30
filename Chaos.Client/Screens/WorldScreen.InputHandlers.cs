@@ -1252,7 +1252,11 @@ public sealed partial class WorldScreen
                         } else
                             Game.Connection.ClickEntity(entity.Id);
                     }
-                }
+                } else if (TileHasForeground(tileX, tileY))
+                    //retail UX: messageboard signposts open on double-click. Signposts are tile-attached
+                    //(not broadcast as entities) so GetEntityAtScreen returns null. Send the 7-byte
+                    //coord click with the floor-aligned flag so retail's signpost dispatch resolves.
+                    Game.Connection.ClickFloorTile(tileX, tileY);
             }
 
             e.Handled = true;

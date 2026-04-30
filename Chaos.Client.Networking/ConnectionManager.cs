@@ -146,6 +146,32 @@ public sealed class ConnectionManager : IDisposable
             });
 
     /// <summary>
+    ///     Sends a coord click for a floor-aligned tile target (signpost, ground item, door frame, stair base).
+    ///     Matches the legacy DA wire shape verified in Comhaigne's 0x43 RE refresh (2026-04-29):
+    ///     <c>[0x43][0x03][u16 x BE][u16 y BE][u8 flag=1]</c>. The trailing flag byte is the
+    ///     <c>WorldObject_Static</c> anchor flag — <c>1</c> for floor-aligned sprites, <c>0</c> for
+    ///     above-tile sprites (door panels, awnings). Without this byte retail defaults to flag=0
+    ///     and the signpost dispatch silently drops. Hybrasyl ignores the trailing byte and resolves
+    ///     by <c>(x,y)</c> alone, so this works on both servers.
+    ///     Bypasses the sealed <c>ClickArgs</c>/<c>ClickConverter</c> in Chaos.Networking — see
+    ///     <c>chaos-networking-removal-direction.md</c> "Tactical workarounds (pre-removal)".
+    /// </summary>
+    public void ClickFloorTile(int x, int y)
+    {
+        if (State != ConnectionState.World)
+            return;
+
+        var writer = new SpanWriter(Encoding.GetEncoding(949), usePooling: true);
+        writer.WriteByte((byte)ClickType.TargetPoint);
+        writer.WriteUInt16((ushort)x);
+        writer.WriteUInt16((ushort)y);
+        writer.WriteByte(0x01); //floor-aligned anchor flag
+        var ownership = writer.TransferOwnership();
+        var packet = new Packet((byte)ClientOpCode.Click, ownership.Owner, ownership.Length);
+        Client.Send(ref packet);
+    }
+
+    /// <summary>
     ///     Sends a world map node click.
     /// </summary>
     public void ClickWorldMapNode(
