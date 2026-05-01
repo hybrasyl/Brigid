@@ -107,6 +107,16 @@ internal static partial class Sdl
     //SDL_Init subsystem flag for audio (consumed by SoundSystem during mixer bring-up)
     public const uint SDL_INIT_AUDIO = 0x00000010;
 
+    //SDL_Init subsystem flags for input devices we don't use. MonoGame's SdlGamePlatform inits
+    //all of these on startup, which causes SDL_PumpEvents to poll every connected joystick,
+    //gamepad, and HID device every frame — a wedged HID can hang the pump inside an
+    //NtDeviceIoControlFile syscall. ChaosGame.ctor calls SDL_QuitSubSystem on these flags
+    //immediately after base() returns to disable that polling entirely (DA is keyboard+mouse only).
+    public const uint SDL_INIT_JOYSTICK = 0x00000200;
+    public const uint SDL_INIT_HAPTIC = 0x00001000;
+    public const uint SDL_INIT_GAMECONTROLLER = 0x00002000;
+    public const uint SDL_INIT_SENSOR = 0x00008000;
+
     //when "1", SDL delivers the mouse click that focused the window as a normal MOUSEBUTTONDOWN
     //instead of swallowing it for OS-level window activation. must be set before SDL creates the window.
     public const string SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH = "SDL_MOUSE_FOCUS_CLICKTHROUGH";

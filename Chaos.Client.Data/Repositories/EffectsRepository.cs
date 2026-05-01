@@ -69,17 +69,10 @@ public sealed class EffectsRepository : RepositoryBase
             points[i] = (x, y);
         }
 
-        //fill remaining with last point if .tbl is shorter than frame count
-        if (frameCount > 0)
-        {
-            var lastValid = points[0];
-
-            for (var i = 0; i < frameCount; i++)
-                if (points[i] != default)
-                    lastValid = points[i];
-                else
-                    points[i] = lastValid;
-        }
+        //missing entries fall back to the standard tile-bottom-center anchor
+        for (var i = 0; i < frameCount; i++)
+            if (points[i] == default)
+                points[i] = (28, 70);
 
         return points;
     }
