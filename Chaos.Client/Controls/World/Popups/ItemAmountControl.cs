@@ -103,8 +103,7 @@ public sealed class ItemAmountControl : PrefabPanel
 
         base.Update(gameTime);
 
-        if (OkButton is not null)
-            OkButton.Enabled = !string.IsNullOrEmpty(AmountTextBox?.Text);
+        OkButton?.Enabled = !string.IsNullOrEmpty(AmountTextBox?.Text);
     }
 
     public void ShowForSlot(byte slot)
@@ -117,8 +116,7 @@ public sealed class ItemAmountControl : PrefabPanel
             AmountTextBox.IsFocused = true;
         }
 
-        if (OkButton is not null)
-            OkButton.Enabled = false;
+        OkButton?.Enabled = false;
 
         Show();
     }

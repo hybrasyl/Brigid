@@ -176,8 +176,10 @@ public sealed class HotkeyHelpControl : PrefabPanel
         if (group.SubElements is not null && group.SubTextures is not null)
             for (var i = 0; i < group.SubElements.Length; i++)
                 group.SubElements[i].Texture = highlighted ? group.SubTextures[i] : null;
-        else if (group.Primary is not null)
-            group.Primary.Texture = highlighted ? group.PrimaryTexture : null;
+        else
+        {
+            group.Primary?.Texture = highlighted ? group.PrimaryTexture : null;
+        }
     }
 
     private static Texture2D TryLoadDetailImage(int index) => UiRenderer.Instance!.GetNationalSpfTexture($"_nhke{index:D2}.spf");

@@ -195,8 +195,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
 
         //btn_changelayout is a stateful indicator — small hud shows the normal frame, and the
         //pressed frame is only shown by the large hud. strip the press-state visual here.
-        if (ChangeLayoutButton is not null)
-            ChangeLayoutButton.PressedTexture = null;
+        ChangeLayoutButton?.PressedTexture = null;
 
         //buttons — lower right
         HelpButton = CreateButton("BTN_HELP");
