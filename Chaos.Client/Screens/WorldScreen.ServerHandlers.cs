@@ -15,7 +15,6 @@ using Chaos.DarkAges.Definitions;
 using Chaos.Extensions.Common;
 using Chaos.Geometry.Abstractions.Definitions;
 using Chaos.Networking.Entities.Server;
-using DALib.Definitions;
 using DALib.Drawing;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -699,7 +698,10 @@ public sealed partial class WorldScreen
         if (Root is null)
             return;
 
-        var popup = new OkPopupMessageControl(true);
+        var popup = new OkPopupMessageControl(true)
+        {
+            Name = "GroupInvitePopup"
+        };
         Root.AddChild(popup);
 
         popup.OnOk += () =>

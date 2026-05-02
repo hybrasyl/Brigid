@@ -488,20 +488,28 @@ public sealed partial class WorldScreen : IScreen
         {
             ZIndex = -2
         };
-        DeleteConfirm = new OkPopupMessageControl(true);
-        BoardResponsePopup = new OkPopupMessageControl();
+        DeleteConfirm = new OkPopupMessageControl(true)
+        {
+            Name = "DeleteConfirm"
+        };
+        BoardResponsePopup = new OkPopupMessageControl
+        {
+            Name = "BoardResponsePopup"
+        };
 
         BoardResponsePopup.OnOk += () => BoardResponsePopup.Hide();
 
         ExchangeResultPopup = new OkPopupMessageControl
         {
-            ZIndex = 3
+            ZIndex = 3,
+            Name = "ExchangeResultPopup"
         };
         ExchangeResultPopup.OnOk += () => ExchangeResultPopup.Hide();
 
         DisconnectPopup = new OkPopupMessageControl(true)
         {
-            ZIndex = 10
+            ZIndex = 10,
+            Name = "DisconnectPopup"
         };
 
         DisconnectPopup.OnOk += () =>
