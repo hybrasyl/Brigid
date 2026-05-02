@@ -85,6 +85,12 @@ public sealed class InputDispatcher
     public UIElement? ExplicitFocus => ExplicitFocusElement;
 
     /// <summary>
+    ///     The chat input textbox. When set, focus on this element survives popup push/pop so
+    ///     typing is never interrupted by transient popups. Set once by ChatInputControl.
+    /// </summary>
+    public UITextBox? ChatInputTextBox { get; set; }
+
+    /// <summary>
     ///     True when a drag operation is in progress.
     /// </summary>
     public bool IsDragging => DragActive;
@@ -120,7 +126,9 @@ public sealed class InputDispatcher
         //the new top so keys don't leak to it (e.g. escape hitting a login textbox
         //behind an error popup). panels that want a specific child focused on open
         //can assign IsFocused themselves during their Show() override.
+        //exception: the chat input textbox is sticky — popups must not interrupt typing.
         if (ExplicitFocusElement is not null
+            && (ExplicitFocusElement != ChatInputTextBox)
             && (ExplicitFocusElement != panel)
             && !IsDescendantOf(panel, ExplicitFocusElement))
             ClearExplicitFocus();
@@ -140,7 +148,10 @@ public sealed class InputDispatcher
         //focus follows the stack top: after removal, the new top becomes the focus
         //target so keys route into it via Phase 1/1.5 before Phase 2 stack dispatch.
         //when the stack is now empty, leave focus clear (root-level hotkeys take over).
-        if (TopControl is { } newTop && IsEffectivelyVisible(newTop))
+        //exception: don't override the chat input textbox — it owns its focus track.
+        if (TopControl is { } newTop
+            && IsEffectivelyVisible(newTop)
+            && (ExplicitFocusElement != ChatInputTextBox))
             SetExplicitFocus(newTop);
     }
 
