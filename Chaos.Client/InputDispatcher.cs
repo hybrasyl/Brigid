@@ -15,6 +15,11 @@ public sealed class InputDispatcher
     //last element is the "top" (active keyboard target).
     private readonly List<UIPanel> ControlStack = [];
 
+    //focus active before each panel pushed onto the stack. lets RemoveControl restore
+    //the original textbox (etc.) when the panel pops, instead of falling through to
+    //the new top panel — which would route keys to a panel that doesn't accept text.
+    private readonly Dictionary<UIPanel, UIElement?> StashedFocus = [];
+
     //explicit focus — the single element (typically a uitextbox) that receives
     //keyboard events before the control stack. set via textboxfocusgained.
     private UIElement? ExplicitFocusElement;
@@ -119,8 +124,11 @@ public sealed class InputDispatcher
     /// </summary>
     public void PushControl(UIPanel panel)
     {
+        var alreadyOnStack = ControlStack.Contains(panel);
         ControlStack.Remove(panel);
         ControlStack.Add(panel);
+
+        UIElement? stashed = null;
 
         //focus follows the stack top. clear any stale focus sitting in a panel below
         //the new top so keys don't leak to it (e.g. escape hitting a login textbox
@@ -131,7 +139,16 @@ public sealed class InputDispatcher
             && (ExplicitFocusElement != ChatInputTextBox)
             && (ExplicitFocusElement != panel)
             && !IsDescendantOf(panel, ExplicitFocusElement))
+        {
+            stashed = ExplicitFocusElement;
             ClearExplicitFocus();
+        }
+
+        //only stash on first push. a re-push (panel already on stack, e.g. moved to top)
+        //must keep the original stash so the focus that was active before its first push
+        //is still recoverable when it pops.
+        if (!alreadyOnStack)
+            StashedFocus[panel] = stashed;
     }
 
     /// <summary>
@@ -141,9 +158,28 @@ public sealed class InputDispatcher
     public void RemoveControl(UIPanel panel)
     {
         ControlStack.Remove(panel);
+        StashedFocus.Remove(panel, out var stashed);
 
         if (ExplicitFocusElement is not null && IsDescendantOf(panel, ExplicitFocusElement))
             ClearExplicitFocus();
+
+        //prefer the focus that was active before this panel pushed (typically a textbox
+        //in the panel below). without this, a popup over a login textbox would leave
+        //the new top *panel* as the focus target — phase 1 dispatches to the panel
+        //instead of the textbox, so typing silently does nothing until the user clicks
+        //the textbox to refocus it.
+        if (stashed is not null && IsEffectivelyVisible(stashed))
+        {
+            //if a textbox inside the popup stole IsFocused while the popup was up,
+            //the stashed textbox now has IsFocused=false — re-assert it so OnTextInput
+            //(which gates on IsFocused) actually runs.
+            if (stashed is UITextBox tb && !tb.IsFocused)
+                tb.IsFocused = true;
+            else
+                SetExplicitFocus(stashed);
+
+            return;
+        }
 
         //focus follows the stack top: after removal, the new top becomes the focus
         //target so keys route into it via Phase 1/1.5 before Phase 2 stack dispatch.
@@ -172,6 +208,7 @@ public sealed class InputDispatcher
     public void Clear()
     {
         ControlStack.Clear();
+        StashedFocus.Clear();
         ClearExplicitFocus();
         CapturedElement = null;
 
