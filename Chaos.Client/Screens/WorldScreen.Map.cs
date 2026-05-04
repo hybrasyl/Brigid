@@ -98,7 +98,6 @@ public sealed partial class WorldScreen
         DebugRenderer.Clear();
         NpcSession.HideAll();
         Pathfinding.Clear();
-        PendingWalks.Clear();
         GroupHighlightedIds.Clear();
         Game.AislingRenderer.ClearGroupTintCache();
         Game.CreatureRenderer.ClearTintCaches();
@@ -361,8 +360,12 @@ public sealed partial class WorldScreen
         if ((player.TileX == x) && (player.TileY == y))
             return;
 
-        //server-authoritative position correction — clear all pending predictions and snap back
-        PendingWalks.Clear();
+        //server-authoritative position correction — snap and reset visuals.
+        //InFlightWalkAcks is intentionally NOT touched: any acks the server still owes us for walks
+        //we predicted will arrive after this Location and drain the counter naturally as no-ops.
+        //Clearing the counter here would turn those legitimate acks into "unmatched" acks that fall
+        //through HandleClientWalkResponse's rubberband path and undo the snap we just applied —
+        //which is exactly the F5-during-walk symptom.
         QueuedWalkDirection = null;
         player.TileX = x;
         player.TileY = y;

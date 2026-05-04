@@ -992,15 +992,16 @@ public sealed partial class WorldScreen
             {
                 if (player.IsAtRest)
                 {
+                    //fresh input at idle invalidates any direction queued from a prior walk —
+                    //the queue must not override what the user just pressed.
+                    QueuedWalkDirection = null;
+
                     if (player.Direction != direction.Value)
                     {
                         Game.Connection.Turn(direction.Value);
                         player.Direction = direction.Value;
                     } else
-                    {
                         PredictAndWalk(player, direction.Value);
-                        QueuedWalkDirection = null;
-                    }
                 } else if (player.AnimState == EntityAnimState.Walking)
                 {
                     var totalDuration = Math.Max(1f, player.AnimFrameCount * player.AnimFrameIntervalMs);

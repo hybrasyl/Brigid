@@ -47,6 +47,12 @@ public static class AnimationSystem
         bool isLocalPlayer = false,
         int? walkFrameOverride = null)
     {
+        //facing direction always matches walk direction. setting it here keeps entity.Direction
+        //and WalkStartOffset locked in lockstep, preventing the sprite from facing one way while
+        //the screen scrolls another (e.g. when the server rubberbands the player into a walk
+        //direction the client did not predict).
+        entity.Direction = direction;
+
         //swimming is not a form — use swim animation frame count and normal walk speed on water tiles
         var swimming = entity is { IsOnSwimmingTile: true, SwimWalkFrames: > 0 };
 
@@ -643,6 +649,13 @@ public static class AnimationSystem
         //this maintains the 2:1 isometric pixel ratio and prevents 1px wobble.
         var startX = (int)startOffset.X;
         var startY = (int)startOffset.Y;
+
+        //a zero start offset means the direction did not map to a cardinal walk vector
+        //(GetWalkOffset returned Vector2.Zero). there is no slope to follow — short-circuit
+        //before the y = x * startY / startX division would throw.
+        if (startX == 0)
+            return Vector2.Zero;
+
         var framesLeft = frameCount - (frameIndex + 1);
 
         var x = startX * framesLeft / frameCount;

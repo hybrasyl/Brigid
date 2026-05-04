@@ -143,12 +143,8 @@ public sealed partial class WorldScreen
 
         Game.Connection.Walk(direction);
 
-        //record prediction for server reconciliation
-        PendingWalks.Enqueue(
-            new PendingWalk(
-                player.TileX,
-                player.TileY,
-                direction));
+        //one more ack outstanding from the server
+        InFlightWalkAcks++;
 
         //predict position locally
         player.TileX = newX;
@@ -173,23 +169,23 @@ public sealed partial class WorldScreen
         if (player is null)
             return;
 
-        (var dx, var dy) = direction.ToTileOffset();
-        var serverX = oldX + dx;
-        var serverY = oldY + dy;
-
-        //check if the server confirmation matches our oldest pending prediction
-        if (PendingWalks.TryPeek(out var pending) && (pending.FromX == oldX) && (pending.FromY == oldY) && (pending.Direction == direction))
+        //if any predicted walk is still un-acked, this packet is the FIFO ack for one of them.
+        //treat it as a silent confirmation: the predicted state already reflects the move,
+        //and any later Location packet will override if there was a true divergence.
+        if (InFlightWalkAcks > 0)
         {
-            //prediction confirmed — discard it
-            PendingWalks.Dequeue();
+            InFlightWalkAcks--;
 
             return;
         }
 
-        //mismatch — server sent a walk we didn't predict. clear all pending predictions,
-        //rubberband to the server's source position, and play a walk to the destination.
-        PendingWalks.Clear();
+        //no prediction in flight — this is a genuine server-initiated walk (push tile, knockback,
+        //admin teleport). snap to the server's source position and animate the walk to the destination.
         QueuedWalkDirection = null;
+
+        (var dx, var dy) = direction.ToTileOffset();
+        var serverX = oldX + dx;
+        var serverY = oldY + dy;
 
         player.TileX = serverX;
         player.TileY = serverY;
@@ -1169,6 +1165,11 @@ public sealed partial class WorldScreen
         //see it. The retail client itself has no handler for 0x67. Worldmap teardown happens naturally
         //via Show()'s ClearNodes/ClearBackground on the next worldmap, or via Escape/click→new MapInfo.
         TownMapControl.Hide();
+
+        //a true map transition is the one place we discard outstanding walk acks: any walks that were
+        //in flight on the old map will not be ack'd on the new one. (the same-map F5 refresh path,
+        //which also runs ClearTransientState, must NOT touch this counter — its acks are still in flight.)
+        InFlightWalkAcks = 0;
     }
 
     //--- health / effects / light ---
