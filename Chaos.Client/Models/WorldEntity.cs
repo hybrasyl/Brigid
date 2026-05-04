@@ -26,6 +26,14 @@ public sealed class WorldEntity
     //animation state — managed by animationmanager
     public EntityAnimState AnimState { get; set; }
 
+    /// <summary>
+    ///     True when the entity is fully idle: <see cref="AnimState" /> is <see cref="EntityAnimState.Idle" /> AND no
+    ///     emote overlay is playing. Movement initiation, turning, and emote-hotkey input are gated on this — emote
+    ///     overlays (face emotes) are tracked independently from <see cref="AnimState" /> but still need to block input
+    ///     just like body animations do.
+    /// </summary>
+    public bool IsAtRest => (AnimState == EntityAnimState.Idle) && (ActiveEmoteFrame < 0);
+
     //appearance
     public AislingAppearance? Appearance { get; set; }
 

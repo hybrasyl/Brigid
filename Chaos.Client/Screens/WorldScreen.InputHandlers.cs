@@ -300,6 +300,19 @@ public sealed partial class WorldScreen
         if (keyIndex < 0)
             return false;
 
+        //past this point the keystroke is unambiguously an emote attempt — consume it
+        //regardless of whether the emote actually fires, so it doesn't fall through to
+        //HandleSlotHotkey and trigger an item/skill slot use as an unintended fallback.
+        e.Handled = true;
+
+        var player = WorldState.GetPlayerEntity();
+
+        //gate emote initiation on the same condition as movement: face emotes lock
+        //the body while playing, so it shouldn't be possible to start one mid-walk
+        //or while another emote/body anim is already running.
+        if (player is null || !player.IsAtRest)
+            return true;
+
         BodyAnimation bodyAnimation;
 
         if (e is { Ctrl: true, Alt: false })
@@ -310,7 +323,6 @@ public sealed partial class WorldScreen
             bodyAnimation = (BodyAnimation)(ALT_EMOTE_BASE + keyIndex);
 
         Game.Connection.SendEmote(bodyAnimation);
-        e.Handled = true;
 
         return true;
     }
@@ -967,7 +979,7 @@ public sealed partial class WorldScreen
 
             if (player is not null)
             {
-                if (player.AnimState == EntityAnimState.Idle)
+                if (player.IsAtRest)
                 {
                     if (player.Direction != direction.Value)
                     {
@@ -1590,7 +1602,7 @@ public sealed partial class WorldScreen
 
         var player = WorldState.GetPlayerEntity();
 
-        if (player is null || (player.AnimState != EntityAnimState.Idle))
+        if (player is null || !player.IsAtRest)
             return;
 
         var viewport = WorldHud.ViewportBounds;
