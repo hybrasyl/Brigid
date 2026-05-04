@@ -839,7 +839,7 @@ public sealed partial class WorldScreen
         if (dragging?.DragTexture is not { } icon)
             return;
 
-        spriteBatch.Draw(icon, new Vector2(dragging.DragX - icon.Width / 2.0f, dragging.DragY - icon.Height / 2.0f), Color.White * 0.7f);
+        spriteBatch.Draw(icon, new Vector2(dragging.DragX - icon.Width / 2, dragging.DragY - icon.Height / 2), Color.White * 0.7f);
     }
 
     private void DrawTileCursor(SpriteBatch spriteBatch)

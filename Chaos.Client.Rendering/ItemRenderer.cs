@@ -56,8 +56,12 @@ public sealed class ItemRenderer : IDisposable
 
         var contentWidth = texture.Width - sprite.Value.FrameLeft;
         var contentHeight = texture.Height - sprite.Value.FrameTop;
-        var contentCenterX = sprite.Value.FrameLeft + contentWidth / 2f;
-        var contentCenterY = sprite.Value.FrameTop + contentHeight / 2f;
+
+        //integer division: odd content dimensions (e.g. gold piles 23x15, 30x17) would otherwise produce
+        //fractional draw positions; with PointClamp + premultiplied alpha that drops the boundary row at the
+        //rasterization edge.
+        var contentCenterX = sprite.Value.FrameLeft + contentWidth / 2;
+        var contentCenterY = sprite.Value.FrameTop + contentHeight / 2;
         var drawX = tileCenterX - contentCenterX;
         var drawY = tileCenterY - contentCenterY;
         var screenPos = camera.WorldToScreen(new Vector2(drawX, drawY));
