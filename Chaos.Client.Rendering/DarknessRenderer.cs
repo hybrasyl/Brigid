@@ -31,7 +31,7 @@ public sealed class DarknessRenderer : IDisposable
     private Color DarknessColor;
     private HeaFile? HeaFile;
     private bool IsDarkMap;
-    private LightLevel LastLightLevel;
+    private LightLevel? LastLightLevel;
     private int LastLightSourceHash;
     private int LastOffsetX = int.MinValue;
     private int LastOffsetY = int.MinValue;
@@ -54,6 +54,13 @@ public sealed class DarknessRenderer : IDisposable
     ///     darkness color is pure black. The tab map uses this signal to switch into limited visibility mode.
     /// </summary>
     public bool IsFullBlackDark => IsDarkMap && (Alpha >= 1f) && (DarknessColor == Color.Black);
+
+    /// <summary>
+    ///     True when loaded light metadata explicitly assigns a light type to the current map. Gates all darkness
+    ///     application: light level packets and the dark-map fallback only take effect when this is true. Maps without
+    ///     an explicit metadata entry render without any darkness overlay regardless of the server-sent Darkness flag.
+    /// </summary>
+    private bool HasMetadataForCurrentMap => LightData?.MapLightTypes.ContainsKey(CurrentMapId) is true;
 
     public DarknessRenderer(GraphicsDevice device) => Device = device;
 
@@ -218,22 +225,29 @@ public sealed class DarknessRenderer : IDisposable
     }
 
     /// <summary>
-    ///     Called when the server sends a LightLevel packet. Updates the darkness alpha and color based on the current map's
-    ///     light type metadata.
+    ///     Called when the server sends a LightLevel packet. The level is always cached so that a later metadata load
+    ///     can refresh via <see cref="ReapplyLightLevel" />. The visual state is only updated when the current map has
+    ///     an explicit entry in the light metadata; maps without metadata are left bright regardless of the packet.
     /// </summary>
     public void OnLightLevel(LightLevel lightLevel)
     {
         LastLightLevel = lightLevel;
+
+        //skip visual updates until metadata for this map is available — once it loads, ReapplyLightLevel re-runs this
+        //path with the cached level and the current state takes effect
+        if (!HasMetadataForCurrentMap)
+            return;
+
         var enumHex = ((byte)lightLevel).ToString("X");
         var key = $"{CurrentLightType}_{enumHex}".ToLowerInvariant();
 
-        if (LightData?.LightProperties.TryGetValue(key, out var props) is true && (props.Alpha < 32))
+        if (LightData!.LightProperties.TryGetValue(key, out var props) && (props.Alpha < 32))
         {
             Alpha = (32 - props.Alpha) / 32f;
             DarknessColor = new Color(props.R, props.G, props.B);
         } else if (IsDarkMap)
         {
-            //dark map with no light metadata — pure black darkness
+            //dark map with no graduated entry for this level — pure black darkness
             Alpha = 1f;
             DarknessColor = Color.Black;
         } else
@@ -258,7 +272,9 @@ public sealed class DarknessRenderer : IDisposable
     }
 
     /// <summary>
-    ///     Called on map change. Looks up the map's light type and loads the HEA file if one exists.
+    ///     Called on map change. Looks up the map's light type and loads the HEA file if one exists. The
+    ///     <c>MapFlags.Darkness</c> flag always produces pure black darkness on entry; light metadata only refines
+    ///     this via <see cref="OnLightLevel" /> when the map has an explicit metadata entry.
     /// </summary>
     public void OnMapChanged(short mapId, bool isDarkMap)
     {
@@ -266,7 +282,10 @@ public sealed class DarknessRenderer : IDisposable
         CurrentMapId = mapId;
         CurrentLightType = LightData?.MapLightTypes.TryGetValue(mapId, out var lightType) is true ? lightType : "default";
 
-        //dark maps start dark immediately — light metadata can refine via onlightlevel
+        //level is per-map state; the new map starts without a cached level until the server resends one
+        LastLightLevel = null;
+
+        //dark maps start dark immediately — light metadata can refine via OnLightLevel
         if (isDarkMap)
         {
             Alpha = 1f;
@@ -292,9 +311,13 @@ public sealed class DarknessRenderer : IDisposable
 
     /// <summary>
     ///     Reapplies the last received light level. Called after metadata reload so the refreshed light type and
-    ///     properties take effect.
+    ///     properties take effect. No-op when no level has been received for the current map.
     /// </summary>
-    public void ReapplyLightLevel() => OnLightLevel(LastLightLevel);
+    public void ReapplyLightLevel()
+    {
+        if (LastLightLevel is { } level)
+            OnLightLevel(level);
+    }
 
     private void RebuildFlatWithLights(Rectangle viewport, ReadOnlySpan<LightSource> sources)
     {
