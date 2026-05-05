@@ -39,6 +39,7 @@ internal static partial class Sdl
     //  → SDL_Keysym { scancode(4) at 16, sym(4) at 20, mod(2) at 24, unused(4) }
     public const int KEYBOARDEVENT_REPEAT_OFFSET = 13;
     public const int KEYBOARDEVENT_SCANCODE_OFFSET = 16;
+    public const int KEYBOARDEVENT_MOD_OFFSET = 24;
 
     //SDL_TextInputEvent field offsets:
     //  type(4) + timestamp(4) + windowID(4) = 12 → text[32] UTF-8 null-terminated
