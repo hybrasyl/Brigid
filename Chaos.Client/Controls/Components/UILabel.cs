@@ -48,7 +48,7 @@ public class UILabel : UIElement
     /// </summary>
     public int ScrollOffset { get; set; }
 
-    public bool Shadowed { get; set; }
+    public ShadowStyle ShadowStyle { get; set; }
 
     public string Text
     {
@@ -113,7 +113,7 @@ public class UILabel : UIElement
                 var lineY = innerY + (lineIdx - firstLine) * TextRenderer.CHAR_HEIGHT;
 
                 if (TextElement.WrappedLines[lineIdx].Length > 0)
-                    DrawTextClipped(spriteBatch, new Vector2(innerX, lineY), TextElement.WrappedLines[lineIdx], TextElement.Color, ColorCodesEnabled, Opacity);
+                    TextElement.Draw(spriteBatch, new Vector2(innerX, lineY), ClipRect, TextElement.WrappedLines[lineIdx], Opacity);
             }
         } else if (TruncateWithEllipsis && (TextElement.Width > innerW))
         {
@@ -127,7 +127,7 @@ public class UILabel : UIElement
                 truncLen--;
 
             var truncated = truncLen > 0 ? text[..truncLen] + "..." : "...";
-            DrawTextClipped(spriteBatch, new Vector2(innerX, innerY + (int)(((VerticalAlignment == VerticalAlignment.Top ? TextElement.Height : innerH) - TextRenderer.CHAR_HEIGHT) / 2f)), truncated, TextElement.Color, ColorCodesEnabled, Opacity);
+            TextElement.Draw(spriteBatch, new Vector2(innerX, innerY + (int)(((VerticalAlignment == VerticalAlignment.Top ? TextElement.Height : innerH) - TextRenderer.CHAR_HEIGHT) / 2f)), ClipRect, truncated, Opacity);
         } else
         {
             var bounds = new Rectangle(
@@ -149,10 +149,7 @@ public class UILabel : UIElement
             var textY = bounds.Y + (bounds.Height - TextElement.Height) / 2;
             var pos = new Vector2(textX, textY);
 
-            if (Shadowed)
-                DrawTextShadowedClipped(spriteBatch, pos, TextElement.Text, TextElement.Color, Color.Black, ColorCodesEnabled, Opacity);
-            else
-                DrawTextClipped(spriteBatch, pos, TextElement.Text, TextElement.Color, ColorCodesEnabled, Opacity);
+            TextElement.Draw(spriteBatch, pos, ClipRect, opacity: Opacity);
         }
     }
 
@@ -253,12 +250,9 @@ public class UILabel : UIElement
             SelectionAnchor = 0;
         }
 
-        if (WordWrap)
-            TextElement.UpdateWrapped(text, Width - PaddingLeft - PaddingRight, color);
-        else if (Shadowed)
-            TextElement.UpdateShadowed(text, color, Color.Black);
-        else
-            TextElement.Update(text, color);
+        TextElement.WrapWidth = WordWrap ? Width - PaddingLeft - PaddingRight : 0;
+        TextElement.ShadowStyle = ShadowStyle;
+        TextElement.Update(text, color);
     }
 
     public override void ResetInteractionState()

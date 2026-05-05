@@ -41,6 +41,7 @@ public sealed class SystemMessagePaneControl : UIPanel
                 PaddingTop = 0,
                 PaddingBottom = 0,
                 ColorCodesEnabled = true,
+                ShadowStyle = ShadowStyle.BottomRight,
                 Visible = false
             };
 

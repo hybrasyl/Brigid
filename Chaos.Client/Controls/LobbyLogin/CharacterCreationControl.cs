@@ -124,9 +124,11 @@ public sealed class CharacterCreationControl : PrefabPanel
 
         NameField?.ForegroundColor = LegendColors.White;
         NameField?.IsTabStop = true;
+        
         PasswordField?.ForegroundColor = LegendColors.White;
         PasswordField?.IsTabStop = true;
         PasswordField?.IsMasked = true;
+        
         PasswordConfirmField?.ForegroundColor = LegendColors.White;
         PasswordConfirmField?.IsTabStop = true;
         PasswordConfirmField?.IsMasked = true;

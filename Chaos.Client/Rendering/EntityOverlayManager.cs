@@ -221,11 +221,15 @@ public sealed class EntityOverlayManager
 
             if (!NameTagCache.TryGetValue(entity.Id, out var cachedText))
             {
-                cachedText = new TextElement();
+                cachedText = new TextElement
+                {
+                    ShadowStyle = ShadowStyle.BothSides,
+                    ShadowColor = NAME_TAG_SHADOW_COLOR
+                };
                 NameTagCache[entity.Id] = cachedText;
             }
 
-            cachedText.UpdateShadowed(entity.Name, nameColor, NAME_TAG_SHADOW_COLOR);
+            cachedText.Update(entity.Name, nameColor);
 
             if (!cachedText.HasContent)
                 continue;

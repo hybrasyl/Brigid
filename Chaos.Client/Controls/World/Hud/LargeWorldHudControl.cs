@@ -131,11 +131,11 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         HpNumLabel = CreateLabel("NUM_HP", HorizontalAlignment.Center)!;
         HpNumLabel.ZIndex = 1;
         HpNumLabel.ForegroundColor = Color.White;
-        HpNumLabel.Shadowed = true;
+        HpNumLabel.ShadowStyle = ShadowStyle.BothSides;
         MpNumLabel = CreateLabel("NUM_MP", HorizontalAlignment.Center)!;
         MpNumLabel.ZIndex = 1;
         MpNumLabel.ForegroundColor = Color.White;
-        MpNumLabel.Shadowed = true;
+        MpNumLabel.ShadowStyle = ShadowStyle.BothSides;
 
         //info text areas
         PlayerNameLabel = CreateLabel("SZ_ID", HorizontalAlignment.Center)!;

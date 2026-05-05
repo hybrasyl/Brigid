@@ -14,6 +14,14 @@ public enum VerticalAlignment
     Bottom
 }
 
+public enum ShadowStyle
+{
+    None,
+    BottomLeft,
+    BottomRight,
+    BothSides
+}
+
 public enum PopupStyle
 {
     Scroll,

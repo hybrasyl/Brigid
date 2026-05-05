@@ -33,17 +33,24 @@ public sealed class PasswordChangeControl : PrefabPanel
 
         //text fields — type 7 with 0 images, manually created
         NameField = CreateTextBox("Name");
-        CurrentPasswordField = CreateTextBox("Password");
-        NewPasswordField = CreateTextBox("NewPassword");
-        ConfirmPasswordField = CreateTextBox("Confirm");
+        CurrentPasswordField = CreateTextBox("Password", 8);
+        NewPasswordField = CreateTextBox("NewPassword", 8);
+        ConfirmPasswordField = CreateTextBox("Confirm", 8);
 
         NameField?.ForegroundColor = LegendColors.White;
+        NameField?.IsTabStop = true;
+        
         CurrentPasswordField?.ForegroundColor = LegendColors.White;
-        NewPasswordField?.ForegroundColor = LegendColors.White;
-        ConfirmPasswordField?.ForegroundColor = LegendColors.White;
         CurrentPasswordField?.IsMasked = true;
+        CurrentPasswordField?.IsTabStop = true;
+        
+        NewPasswordField?.ForegroundColor = LegendColors.White;
         NewPasswordField?.IsMasked = true;
+        NewPasswordField?.IsTabStop = true;
+        
+        ConfirmPasswordField?.ForegroundColor = LegendColors.White;
         ConfirmPasswordField?.IsMasked = true;
+        ConfirmPasswordField?.IsTabStop = true;
 
         //focus management
         if (NameField is not null)

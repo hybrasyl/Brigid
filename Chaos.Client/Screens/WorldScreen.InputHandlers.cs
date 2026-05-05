@@ -969,6 +969,28 @@ public sealed partial class WorldScreen
         if (HandleSlotHotkey(e))
             return;
 
+        //shift+up/down scrolls the active chat-style panel (F = chat, shift+F = message history)
+        if (e.Shift && e.Key is Keys.Up or Keys.Down)
+        {
+            var scrollDelta = e.Key == Keys.Up ? 1 : -1;
+
+            if (WorldHud.ChatDisplay.Visible)
+            {
+                WorldHud.ChatDisplay.Scroll(scrollDelta);
+                e.Handled = true;
+
+                return;
+            }
+
+            if (WorldHud.MessageHistory.Visible)
+            {
+                WorldHud.MessageHistory.Scroll(scrollDelta);
+                e.Handled = true;
+
+                return;
+            }
+        }
+
         //player movement — arrow keys and zxcv
         Direction? direction = e.Key switch
         {

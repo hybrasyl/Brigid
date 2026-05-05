@@ -25,14 +25,13 @@ public sealed class LoginControl : PrefabPanel
 
         //text fields — type 7 with 0 images, must be created manually
         UsernameField = CreateTextBox("Name");
-        PasswordField = CreateTextBox("Password");
+        PasswordField = CreateTextBox("Password", 8);
 
         UsernameField?.ForegroundColor = LegendColors.White;
+        UsernameField?.IsTabStop = true;
+        
         PasswordField?.ForegroundColor = LegendColors.White;
         PasswordField?.IsMasked = true;
-
-        UsernameField?.IsTabStop = true;
-
         PasswordField?.IsTabStop = true;
 
         if (UsernameField is not null)

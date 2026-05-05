@@ -193,12 +193,19 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
     public override void OnMouseScroll(MouseScrollEvent e)
     {
-        if (History.Count > MaxVisibleLines)
-        {
-            ScrollOffset = Math.Clamp(ScrollOffset + e.Delta, 0, History.Count - MaxVisibleLines);
-            ScrollBar.Value = ScrollBar.MaxValue - ScrollOffset;
+        if (Scroll(e.Delta))
             e.Handled = true;
-        }
+    }
+
+    public bool Scroll(int delta)
+    {
+        if (History.Count <= MaxVisibleLines)
+            return false;
+
+        ScrollOffset = Math.Clamp(ScrollOffset + delta, 0, History.Count - MaxVisibleLines);
+        ScrollBar.Value = ScrollBar.MaxValue - ScrollOffset;
+
+        return true;
     }
 
     public override void Update(GameTime gameTime)
