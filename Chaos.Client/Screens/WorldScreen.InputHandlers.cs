@@ -1051,9 +1051,6 @@ public sealed partial class WorldScreen
             return;
         }
 
-        if (e.Ctrl)
-            return;
-
         //cache the hovered entity for the upcoming doubleclick — pathfinding triggered by this press will start
         //moving the player on the next update, which shifts the camera and makes the second click's ScreenToTile
         //resolve to a different world tile than the entity actually occupies
@@ -1074,7 +1071,20 @@ public sealed partial class WorldScreen
             PendingDoubleClickTick = currentTick;
         }
 
-        HandleWorldRightClick(e.ScreenX, e.ScreenY);
+        //ctrl is a UI modifier (ctrl+left-click opens the aisling context menu) — suppress single-press
+        //pathfinding, but prime the same-tile tracker so a right-doubleclick still resolves to follow.
+        if (e.Ctrl)
+        {
+            if (MapFile is not null)
+            {
+                (var tileX, var tileY) = ScreenToTile(e.ScreenX, e.ScreenY);
+                tileX = Math.Clamp(tileX, 0, MapFile.Width - 1);
+                tileY = Math.Clamp(tileY, 0, MapFile.Height - 1);
+                RightClickTracker.Click(tileX, tileY);
+            }
+        } else
+            HandleWorldRightClick(e.ScreenX, e.ScreenY);
+
         e.Handled = true;
     }
 
@@ -1189,7 +1199,7 @@ public sealed partial class WorldScreen
             {
                 var entity = GetEntityAtScreen(e.ScreenX, e.ScreenY);
 
-                if (entity is not null)
+                if (entity is not null && !entity.IsHidden)
                 {
                     if (entity.Type == ClientEntityType.GroundItem)
                     {
@@ -1245,8 +1255,10 @@ public sealed partial class WorldScreen
             }
 
             //reject self — following yourself produces a re-pathfinding loop that walks into walls or oscillates
+            //reject hidden aislings — they have a hitbox for spell targeting but should not be followable
             if (entity?.Type is ClientEntityType.Aisling or ClientEntityType.Creature
-                && (entity.Id != Game.Connection.AislingId))
+                && (entity.Id != Game.Connection.AislingId)
+                && !entity.IsHidden)
             {
                 Pathfinding.SetEntityTarget(entity.Id);
                 PathfindToEntity(player, entity);

@@ -203,16 +203,21 @@ public sealed partial class WorldScreen
                 var px = player.TileX;
                 var py = player.TileY;
 
-                var entityCount = sortedEntities.Count;
+                var sourceCount = sortedEntities.Count;
 
-                if (TabMapEntities.Length < entityCount)
-                    TabMapEntities = new TabMapEntity[entityCount];
+                if (TabMapEntities.Length < sourceCount)
+                    TabMapEntities = new TabMapEntity[sourceCount];
 
-                for (var i = 0; i < entityCount; i++)
+                var entityCount = 0;
+
+                for (var i = 0; i < sourceCount; i++)
                 {
                     var e = sortedEntities[i];
 
-                    TabMapEntities[i] = new TabMapEntity(
+                    if (e.IsHidden)
+                        continue;
+
+                    TabMapEntities[entityCount++] = new TabMapEntity(
                         e.TileX,
                         e.TileY,
                         e.Type,

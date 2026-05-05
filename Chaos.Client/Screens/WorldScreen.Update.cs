@@ -232,6 +232,7 @@ public sealed partial class WorldScreen
         var isItemDrag = GetDraggingPanel() is { } dragPanel && (dragPanel == WorldHud.Inventory);
 
         var newHoveredId = hoverEntity?.Type is ClientEntityType.Aisling or ClientEntityType.Creature
+                           && !hoverEntity.IsHidden
                            && !(isItemDrag && (hoverEntity.Id == Game.Connection.AislingId))
             ? hoverEntity.Id
             : (uint?)null;
