@@ -76,8 +76,18 @@ public class UILabel : UIElement
 
     public override void Draw(SpriteBatch spriteBatch)
     {
-        if (!Visible || !TextElement.HasContent)
+        if (!Visible)
             return;
+
+        //empty labels still need a valid ClipRect so ContainsPoint hit-testing works.
+        //ClipRect is otherwise only refreshed inside base.Draw, which the next early
+        //return would skip.
+        if (!TextElement.HasContent)
+        {
+            UpdateClipRect();
+
+            return;
+        }
 
         base.Draw(spriteBatch);
 

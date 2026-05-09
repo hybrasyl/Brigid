@@ -178,11 +178,10 @@ public sealed class TownMapControl : UIPanel
 
     public override void OnMouseUp(MouseUpEvent e)
     {
+        base.OnMouseUp(e);
+
         if (MouseDownReceived)
-        {
             Hide();
-            e.Handled = true;
-        }
     }
 
     public override void Update(GameTime gameTime)

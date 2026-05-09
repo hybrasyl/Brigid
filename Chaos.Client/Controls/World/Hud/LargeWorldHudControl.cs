@@ -147,6 +147,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         WeightLabel.PaddingLeft = 0;
         WeightLabel.PaddingRight = 0;
         CoordsLabel = CreateLabel("SZ_XY", HorizontalAlignment.Center)!;
+        CoordsLabel.TruncateWithEllipsis = false;
         ServerNameLabel = CreateLabel("SZ_SERVER", HorizontalAlignment.Center);
         DescriptionLabel = CreateLabel("SZ_DESCRIPTION");
 
@@ -675,6 +676,18 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         Expanded = !Expanded;
 
         ApplyExpandToActiveTab();
+    }
+
+    /// <inheritdoc />
+    public bool CollapseExpanded()
+    {
+        if (!Expanded)
+            return false;
+
+        Expanded = false;
+        ApplyExpandToActiveTab();
+
+        return true;
     }
 
     public void HandleTabActivation(HudTab tab, bool shift)

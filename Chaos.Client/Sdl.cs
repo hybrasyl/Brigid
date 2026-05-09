@@ -122,6 +122,12 @@ internal static partial class Sdl
     //instead of swallowing it for OS-level window activation. must be set before SDL creates the window.
     public const string SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH = "SDL_MOUSE_FOCUS_CLICKTHROUGH";
 
+    //Windows-only: sets the process DPI awareness ("unaware"/"system"/"permonitor"/"permonitorv2"). With
+    //"permonitorv2" the GL framebuffer matches physical pixels and DWM stops bilinear-resampling the backbuffer
+    //at non-100% display scaling — which is what causes thin (1px) glyph strokes to wash out and read as missing.
+    //Must be set before SDL_Init (i.e. before GraphicsDeviceManager construction). Silently ignored on Mac/Linux.
+    public const string SDL_HINT_WINDOWS_DPI_AWARENESS = "SDL_WINDOWS_DPI_AWARENESS";
+
     [LibraryImport("SDL2", StringMarshalling = StringMarshalling.Utf8)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial int SDL_SetHint(string name, string value);

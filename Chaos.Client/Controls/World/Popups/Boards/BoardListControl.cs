@@ -223,6 +223,8 @@ public sealed class BoardListControl : PrefabPanel
 
     public override void OnClick(ClickEvent e)
     {
+        base.OnClick(e);
+
         if (Slide.Sliding || (e.Button != MouseButton.Left))
             return;
 
@@ -245,11 +247,12 @@ public sealed class BoardListControl : PrefabPanel
         SelectedIndex = entryIndex;
         DataVersion++;
         UpdateButtonStates();
-        e.Handled = true;
     }
 
     public override void OnDoubleClick(DoubleClickEvent e)
     {
+        base.OnDoubleClick(e);
+
         if (Slide.Sliding || (e.Button != MouseButton.Left))
             return;
 
@@ -273,7 +276,6 @@ public sealed class BoardListControl : PrefabPanel
         DataVersion++;
         UpdateButtonStates();
         OnViewBoard?.Invoke(Boards[entryIndex].BoardId);
-        e.Handled = true;
     }
 
     private void UpdateButtonStates()

@@ -27,6 +27,7 @@ System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
 };
 
 //must run before ChaosGame constructs its GraphicsDeviceManager (which initializes SDL and creates the window)
+Sdl.SDL_SetHint(Sdl.SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
 Sdl.SDL_SetHint(Sdl.SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
 GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;

@@ -581,6 +581,7 @@ public sealed class InputDispatcher
     {
         e.Target = target;
         var current = target;
+        var isClickEvent = e is MouseDownEvent or MouseUpEvent or ClickEvent or DoubleClickEvent;
 
         while (current is not null)
         {
@@ -588,6 +589,16 @@ public sealed class InputDispatcher
 
             if (e.Handled)
                 return;
+
+            //panels absorb click events by default so popups/dialogs don't leak clicks past their
+            //visual bounds to whatever is rendered behind. drag/move/scroll still bubble normally
+            //since OnRootDragDrop and similar terminal handlers depend on reaching root unhandled.
+            if (isClickEvent && current is UIPanel)
+            {
+                e.Handled = true;
+
+                return;
+            }
 
             current = current.Parent;
         }

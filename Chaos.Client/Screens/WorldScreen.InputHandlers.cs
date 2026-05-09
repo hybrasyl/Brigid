@@ -705,6 +705,16 @@ public sealed partial class WorldScreen
         if (Game.Dispatcher.ControlStackCount > 0)
             return;
 
+        //escape — collapse any expanded HUD panel back to normal size. only consume
+        //the key when something was actually collapsed so it stays a no-op otherwise.
+        if (e.Key == Keys.Escape)
+        {
+            if (WorldHud.CollapseExpanded())
+                e.Handled = true;
+
+            return;
+        }
+
         //spacebar assail — fires on both initial press and os key-repeat keydowns
         //while held. sits after the stack guard so dialogs/menus block it; sits inside
         //the root handler so any ui element above can mark e.handled first and suppress it.

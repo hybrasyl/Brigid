@@ -164,6 +164,18 @@ public class UIPanel : UIElement
         }
     }
 
+    //panels absorb their own click events by default so popups/dialogs don't leak clicks past their
+    //visual bounds to whatever is rendered behind. opt out by overriding without calling base — the
+    //Root panel does this so its OnClick can run world-level handlers. drag/move/scroll still bubble
+    //normally since terminal handlers like OnRootDragDrop depend on reaching root unhandled.
+    public override void OnClick(ClickEvent e) => e.Handled = true;
+
+    public override void OnMouseDown(MouseDownEvent e) => e.Handled = true;
+
+    public override void OnMouseUp(MouseUpEvent e) => e.Handled = true;
+
+    public override void OnDoubleClick(DoubleClickEvent e) => e.Handled = true;
+
     public override void OnKeyDown(KeyDownEvent e)
     {
         if (e.Key != Keys.Tab)
