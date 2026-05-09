@@ -119,6 +119,7 @@ public sealed partial class WorldScreen
         {
             GoldDrop.CenterVerticallyIn(viewport);
             GoldDrop.ShowForTarget(droppedOnEntity ? entity!.Id : null, tileX, tileY);
+            WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
 
             return;
         }
@@ -1112,6 +1113,7 @@ public sealed partial class WorldScreen
         if (Exchange.Visible && Exchange.IsMyMoneyClicked(e.ScreenX, e.ScreenY))
         {
             GoldDrop.ShowForTarget(Exchange.OtherUserId, 0, 0);
+            WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
             e.Handled = true;
 
             return;

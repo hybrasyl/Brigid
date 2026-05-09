@@ -522,6 +522,10 @@ public sealed partial class WorldScreen
         ItemAmount.X = Exchange.X + (Exchange.Width - ItemAmount.Width) / 2;
         ItemAmount.Y = Exchange.Y + (Exchange.Height - ItemAmount.Height) / 2;
         ItemAmount.ShowForSlot(fromSlot);
+
+        //surface the slot's hover description (e.g. "Apple[ 10 ]") in the HUD bar while the popup
+        //is open — matches retail behavior of pinning the operated-on item's tooltip text.
+        WorldHud.SetDescription(WorldState.Inventory.GetSlot(fromSlot).Name);
     }
 
     private void HandleExchangeClosed(string? message)
