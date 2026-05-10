@@ -26,8 +26,10 @@ public sealed partial class WorldScreen
     private void HandleMapInfo(MapInfoArgs args)
     {
         WorldMap.HideMap();
-        //same map (refresh) — skip expensive teardown, just clear transient entity state
-        if ((args.MapId == CurrentMapId) && MapFile is not null)
+        //same map (refresh) — skip expensive teardown, just clear transient entity state. checksum must
+        //also match: a server-side map edit reuses the same id but changes the bytes, so a mismatch means
+        //the cached MapFile is stale and we have to take the full reload path.
+        if ((args.MapId == CurrentMapId) && (args.CheckSum == CurrentMapCheckSum) && MapFile is not null)
         {
             ClearTransientState();
 
@@ -59,6 +61,7 @@ public sealed partial class WorldScreen
         MapPreloaded = false;
         AwaitingMapData = false;
         CurrentMapId = args.MapId;
+        CurrentMapCheckSum = args.CheckSum;
         CurrentMapFlags = (MapFlags)args.Flags;
         MapLoading.Show();
 

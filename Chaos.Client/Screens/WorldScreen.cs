@@ -97,6 +97,7 @@ public sealed partial class WorldScreen : IScreen
     private OkPopupMessageControl BoardResponsePopup = null!;
     private Camera Camera = null!;
     private ChantEditControl ChantEdit = null!;
+    private ushort CurrentMapCheckSum;
     private MapFlags CurrentMapFlags;
     private short CurrentMapId;
 
