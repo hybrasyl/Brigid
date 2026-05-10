@@ -174,7 +174,7 @@ public sealed class MenuListPanel : FramedDialogPanelBase
 
                     control.X = col * ColumnWidth;
                     control.Y = row * ROW_HEIGHT;
-                    control.SetEntry(entry.Icon, entry.DisplayName, isSelected);
+                    control.SetEntry(entryIndex, entry.Icon, entry.DisplayName, isSelected);
                     control.Visible = true;
 
                     //clip the peek row's hit-test area to the content bounds
@@ -359,7 +359,9 @@ public sealed class MenuListPanel : FramedDialogPanelBase
         {
             var control = new ListEntryControl(ColumnWidth)
             {
-                Name = $"Entry_{i}"
+                Name = $"Entry_{i}",
+                Clicked = HandleEntryClicked,
+                DoubleClicked = HandleEntryDoubleClicked
             };
 
             EntryControls.Add(control);
@@ -370,62 +372,26 @@ public sealed class MenuListPanel : FramedDialogPanelBase
         Visible = true;
     }
 
-    public override void OnClick(ClickEvent e)
+    private void HandleEntryClicked(int entryIndex)
     {
-        if (e.Button != MouseButton.Left)
-            return;
-
-        var localX = e.ScreenX - ScreenX - CONTENT_X;
-        var localY = e.ScreenY - ScreenY - CONTENT_Y;
-
-        if ((localX < 0) || (localX >= CONTENT_WIDTH) || (localY < 0) || (localY >= CONTENT_HEIGHT))
-            return;
-
-        var row = localY / ROW_HEIGHT;
-        var col = localX / ColumnWidth;
-
-        if ((col < 0) || (col >= COLUMN_COUNT))
-            return;
-
-        var entryIndex = (ScrollOffset + row) * COLUMN_COUNT + col;
-
         if ((entryIndex < 0) || (entryIndex >= Entries.Count))
             return;
 
         SelectedIndex = entryIndex;
         LayoutEntries();
 
-        OkButton?.Enabled = true;
-
-        e.Handled = true;
+        if (OkButton is not null)
+            OkButton.Enabled = true;
     }
 
-    public override void OnDoubleClick(DoubleClickEvent e)
+    private void HandleEntryDoubleClicked(int entryIndex)
     {
-        if (e.Button != MouseButton.Left)
-            return;
-
-        var localX = e.ScreenX - ScreenX - CONTENT_X;
-        var localY = e.ScreenY - ScreenY - CONTENT_Y;
-
-        if ((localX < 0) || (localX >= CONTENT_WIDTH) || (localY < 0) || (localY >= CONTENT_HEIGHT))
-            return;
-
-        var row = localY / ROW_HEIGHT;
-        var col = localX / ColumnWidth;
-
-        if ((col < 0) || (col >= COLUMN_COUNT))
-            return;
-
-        var entryIndex = (ScrollOffset + row) * COLUMN_COUNT + col;
-
         if ((entryIndex < 0) || (entryIndex >= Entries.Count))
             return;
 
         SelectedIndex = entryIndex;
         LayoutEntries();
         OnItemSelected?.Invoke(SelectedIndex);
-        e.Handled = true;
     }
 
     public override void OnKeyDown(KeyDownEvent e)
@@ -468,6 +434,11 @@ public sealed class MenuListPanel : FramedDialogPanelBase
         private readonly UIImage IconImage;
         private readonly UILabel NameLabel;
 
+        public int EntryIndex { get; private set; } = -1;
+
+        public Action<int>? Clicked { get; set; }
+        public Action<int>? DoubleClicked { get; set; }
+
         public ListEntryControl(int columnWidth)
         {
             Width = columnWidth;
@@ -496,18 +467,39 @@ public sealed class MenuListPanel : FramedDialogPanelBase
 
         public void ClearEntry()
         {
+            EntryIndex = -1;
             IconImage.Visible = false;
             NameLabel.Text = string.Empty;
         }
 
-        public void SetEntry(Texture2D? icon, string name, bool selected)
+        public void SetEntry(int entryIndex, Texture2D? icon, string name, bool selected)
         {
+            EntryIndex = entryIndex;
             IconImage.Texture = icon;
             IconImage.Visible = icon is not null;
             NameLabel.Text = name;
             NameLabel.ForegroundColor = selected ? SELECTED_TEXT_COLOR : LegendColors.White;
         }
 
+        //handle click on the entry directly — the outer MenuListPanel can't see clicks that bubble
+        //through us because UIPanel absorbs click events by default. matches MerchantListingPanel.
+        public override void OnClick(ClickEvent e)
+        {
+            if ((e.Button != MouseButton.Left) || (EntryIndex < 0))
+                return;
+
+            Clicked?.Invoke(EntryIndex);
+            e.Handled = true;
+        }
+
+        public override void OnDoubleClick(DoubleClickEvent e)
+        {
+            if ((e.Button != MouseButton.Left) || (EntryIndex < 0))
+                return;
+
+            DoubleClicked?.Invoke(EntryIndex);
+            e.Handled = true;
+        }
     }
 
     private sealed record ListEntryData(
