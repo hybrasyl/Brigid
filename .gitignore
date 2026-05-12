@@ -410,3 +410,7 @@ CLAUDE.local.md
 
 # SDL / etc for non-Windows platforms
 runtimes/*
+
+# Epona launcher staging (local main checkout)
+.worktrees/
+.vscode/settings.json
