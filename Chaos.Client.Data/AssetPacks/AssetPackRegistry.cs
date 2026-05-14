@@ -20,6 +20,7 @@ public static class AssetPackRegistry
     private static NationBadgePack? CurrentNationBadgePack;
     private static ItemPack? CurrentItemPack;
     private static NpcPortraitPack? CurrentNpcPortraitPack;
+    private static LegendMarkIconPack? CurrentLegendMarkIconPack;
     private static bool Initialized;
 
     /// <summary>
@@ -64,6 +65,12 @@ public static class AssetPackRegistry
     ///     the highest <c>priority</c> wins.
     /// </summary>
     public static NpcPortraitPack? GetNpcPortraitPack() => CurrentNpcPortraitPack;
+
+    /// <summary>
+    ///     Returns the currently-registered legend-mark-icon pack, or null if no pack of
+    ///     <c>content_type: legend_mark_icons</c> is present.
+    /// </summary>
+    public static LegendMarkIconPack? GetLegendMarkIconPack() => CurrentLegendMarkIconPack;
 
     private static void TryRegisterPack(string path)
     {
@@ -134,6 +141,9 @@ public static class AssetPackRegistry
             case "npc_portraits":
                 return TryRegisterNpcPortraitPack(archive, manifest);
 
+            case "legend_mark_icons":
+                return TryRegisterLegendMarkIconPack(archive, manifest);
+
             default:
                 return false;
         }
@@ -199,6 +209,22 @@ public static class AssetPackRegistry
         }
 
         LogWarning($"npc portrait pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentNpcPortraitPack.Manifest.PackId}' ({CurrentNpcPortraitPack.Manifest.Priority})");
+        archive.Dispose();
+
+        return true;
+    }
+
+    private static bool TryRegisterLegendMarkIconPack(ZipArchive archive, AssetPackManifest manifest)
+    {
+        if (CurrentLegendMarkIconPack is null || manifest.Priority > CurrentLegendMarkIconPack.Manifest.Priority)
+        {
+            CurrentLegendMarkIconPack?.Dispose();
+            CurrentLegendMarkIconPack = new LegendMarkIconPack(archive, manifest);
+
+            return true;
+        }
+
+        LogWarning($"legend mark icon pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentLegendMarkIconPack.Manifest.PackId}' ({CurrentLegendMarkIconPack.Manifest.Priority})");
         archive.Dispose();
 
         return true;
