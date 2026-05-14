@@ -417,3 +417,6 @@ runtimes/*
 
 # Epona launcher staging (local main checkout)
 .worktrees/
+
+# diagnostic dumps from Scripts/dump-prefab-images.{sh,ps1} and similar
+output/
