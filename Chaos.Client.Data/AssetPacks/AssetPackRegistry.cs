@@ -20,6 +20,7 @@ public static class AssetPackRegistry
     private static NationBadgePack? CurrentNationBadgePack;
     private static ItemPack? CurrentItemPack;
     private static NpcPortraitPack? CurrentNpcPortraitPack;
+    private static StaticTilePack? CurrentStaticTilePack;
     private static bool Initialized;
 
     /// <summary>
@@ -64,6 +65,12 @@ public static class AssetPackRegistry
     ///     the highest <c>priority</c> wins.
     /// </summary>
     public static NpcPortraitPack? GetNpcPortraitPack() => CurrentNpcPortraitPack;
+
+    /// <summary>
+    ///     Returns the currently-registered static-tile pack, or null if no pack of <c>content_type: static_tiles</c>
+    ///     is present.
+    /// </summary>
+    public static StaticTilePack? GetStaticTilePack() => CurrentStaticTilePack;
 
     private static void TryRegisterPack(string path)
     {
@@ -134,6 +141,9 @@ public static class AssetPackRegistry
             case "npc_portraits":
                 return TryRegisterNpcPortraitPack(archive, manifest);
 
+            case "static_tiles":
+                return TryRegisterStaticTilePack(archive, manifest);
+
             default:
                 return false;
         }
@@ -199,6 +209,22 @@ public static class AssetPackRegistry
         }
 
         LogWarning($"npc portrait pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentNpcPortraitPack.Manifest.PackId}' ({CurrentNpcPortraitPack.Manifest.Priority})");
+        archive.Dispose();
+
+        return true;
+    }
+
+    private static bool TryRegisterStaticTilePack(ZipArchive archive, AssetPackManifest manifest)
+    {
+        if (CurrentStaticTilePack is null || manifest.Priority > CurrentStaticTilePack.Manifest.Priority)
+        {
+            CurrentStaticTilePack?.Dispose();
+            CurrentStaticTilePack = new StaticTilePack(archive, manifest);
+
+            return true;
+        }
+
+        LogWarning($"static tile pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentStaticTilePack.Manifest.PackId}' ({CurrentStaticTilePack.Manifest.Priority})");
         archive.Dispose();
 
         return true;
