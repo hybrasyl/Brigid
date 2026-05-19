@@ -32,8 +32,9 @@ public sealed class AssetPackManifest
 
     /// <summary>
     ///     Enum discriminator selecting which typed pack accessor this pack registers with. Known values:
-    ///     <c>ability_icons</c>, <c>nation_badges</c>, <c>item_icons</c>, <c>npc_portraits</c>. Future:
-    ///     <c>tiles</c>, <c>creatures</c>, <c>ui_sprites</c>, <c>effects</c>, <c>bundle</c>.
+    ///     <c>ability_icons</c>, <c>nation_badges</c>, <c>item_icons</c>, <c>npc_portraits</c>,
+    ///     <c>creature_sprites</c>. Future: <c>tiles</c>, <c>aisling_body</c>, <c>ui_sprites</c>,
+    ///     <c>effects</c>, <c>bundle</c>.
     /// </summary>
     [JsonPropertyName("content_type")]
     public string ContentType { get; init; } = string.Empty;

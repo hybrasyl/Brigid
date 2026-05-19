@@ -20,6 +20,7 @@ public static class AssetPackRegistry
     private static NationBadgePack? CurrentNationBadgePack;
     private static ItemPack? CurrentItemPack;
     private static NpcPortraitPack? CurrentNpcPortraitPack;
+    private static CreaturePack? CurrentCreaturePack;
     private static bool Initialized;
 
     /// <summary>
@@ -64,6 +65,14 @@ public static class AssetPackRegistry
     ///     the highest <c>priority</c> wins.
     /// </summary>
     public static NpcPortraitPack? GetNpcPortraitPack() => CurrentNpcPortraitPack;
+
+    /// <summary>
+    ///     Returns the currently-registered creature-sprite pack, or null if no pack of
+    ///     <c>content_type: creature_sprites</c> is present. Single pack per content type — when multiple are
+    ///     registered, the highest <c>priority</c> wins. Multi-pack with per-species ranges is deferred (see scoping
+    ///     doc "Open Decisions").
+    /// </summary>
+    public static CreaturePack? GetCreaturePack() => CurrentCreaturePack;
 
     private static void TryRegisterPack(string path)
     {
@@ -134,6 +143,9 @@ public static class AssetPackRegistry
             case "npc_portraits":
                 return TryRegisterNpcPortraitPack(archive, manifest);
 
+            case "creature_sprites":
+                return TryRegisterCreaturePack(archive, manifest);
+
             default:
                 return false;
         }
@@ -199,6 +211,22 @@ public static class AssetPackRegistry
         }
 
         LogWarning($"npc portrait pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentNpcPortraitPack.Manifest.PackId}' ({CurrentNpcPortraitPack.Manifest.Priority})");
+        archive.Dispose();
+
+        return true;
+    }
+
+    private static bool TryRegisterCreaturePack(ZipArchive archive, AssetPackManifest manifest)
+    {
+        if (CurrentCreaturePack is null || manifest.Priority > CurrentCreaturePack.Manifest.Priority)
+        {
+            CurrentCreaturePack?.Dispose();
+            CurrentCreaturePack = new CreaturePack(archive, manifest);
+
+            return true;
+        }
+
+        LogWarning($"creature pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentCreaturePack.Manifest.PackId}' ({CurrentCreaturePack.Manifest.Priority})");
         archive.Dispose();
 
         return true;
