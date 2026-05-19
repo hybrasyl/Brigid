@@ -7,14 +7,15 @@ namespace Chaos.Client.Data.AssetPacks;
 
 /// <summary>
 ///     An NPC-portrait asset pack backed by a <c>.datf</c> ZIP archive. Replaces the legacy <c>npc/npcbase.dat</c>
-///     SPF illustrations with uniform square PNGs (e.g. 200x200) keyed by the server-sent NPC name and an optional
-///     variant index. Lookup uses an explicit <c>(name, variant) → filename</c> table declared in the manifest's
-///     <c>covers.npc_portraits.portraits</c> block — there is no filename-derivation rule, so artist tooling owns
-///     the mapping verbatim.
+///     SPF illustrations with uniform square PNGs (e.g. 200x200) keyed by the literal value of the Hybrasyl XML
+///     <c>Portrait</c> attribute as the server publishes it via NPCIllust — verbatim, no extension stripping or
+///     normalization. Examples: <c>"inn.spf"</c> (innkeeper declaring a legacy SPF portrait) or <c>"Gobalt"</c>
+///     (modern custom NPC declaring a bare portrait name). Lookup is case-insensitive, matching the legacy
+///     <see cref="DALib.Data" /> npci.tbl semantics on string casing.
 /// </summary>
 public sealed class NpcPortraitPack : AssetPack
 {
-    private readonly Dictionary<(string Name, int Variant), string> Lookup;
+    private readonly Dictionary<string, string> Lookup;
 
     /// <summary>
     ///     Uniform pixel dimensions every portrait in this pack must match. Validated at decode time; mismatches are
@@ -27,7 +28,7 @@ public sealed class NpcPortraitPack : AssetPack
     internal NpcPortraitPack(ZipArchive archive, AssetPackManifest manifest)
         : base(archive, manifest)
     {
-        Lookup = new Dictionary<(string, int), string>();
+        Lookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         var coverage = manifest.Covers.GetValueOrDefault("npc_portraits");
         var dims = coverage?.Dimensions;
@@ -48,59 +49,45 @@ public sealed class NpcPortraitPack : AssetPack
         if (portraits is null)
             return;
 
-        foreach (var (rawName, entry) in portraits)
+        foreach (var (rawKey, fileName) in portraits)
         {
-            var name = rawName?.Trim();
+            var key = rawKey?.Trim();
 
-            if (string.IsNullOrEmpty(name))
+            if (string.IsNullOrEmpty(key))
                 continue;
 
-            if (string.IsNullOrEmpty(entry.Default))
+            if (string.IsNullOrEmpty(fileName))
                 continue;
 
-            Lookup[(name, 0)] = entry.Default;
-
-            if (entry.Variants is null)
-                continue;
-
-            for (var i = 0; i < entry.Variants.Length; i++)
-            {
-                var fileName = entry.Variants[i];
-
-                if (string.IsNullOrEmpty(fileName))
-                    continue;
-
-                Lookup[(name, i + 1)] = fileName;
-            }
+            Lookup[key] = fileName;
         }
     }
 
     /// <summary>
-    ///     Attempts to decode the portrait PNG for the given (npcName, variant) pair. Whitespace on
-    ///     <paramref name="npcName" /> is trimmed; the lookup is case-sensitive otherwise. When the requested variant
-    ///     isn't declared, falls back to variant 0 (the default). Returns false if neither the requested variant nor
-    ///     the default is present, the entry decodes to a size other than <see cref="Dimensions" />, or the pack was
-    ///     constructed with invalid dimensions.
+    ///     Attempts to decode the portrait PNG for the given <paramref name="portraitKey" />. The key is the literal
+    ///     value pulled from NPCIllust at runtime — e.g. <c>"inn.spf"</c> for Cotilde, <c>"Gobalt"</c> for Gobalt.
+    ///     Whitespace on the input is trimmed; lookup is case-insensitive. Returns false if the key isn't in the
+    ///     manifest, the PNG is missing or unreadable, the decoded image's size doesn't match
+    ///     <see cref="Dimensions" />, or the pack was constructed with invalid dimensions.
     /// </summary>
-    /// <param name="npcName">NPC name as sent by the server.</param>
-    /// <param name="variant">0 = default, 1+ = entries from <see cref="AssetPackPortraitEntry.Variants" />.</param>
+    /// <param name="portraitKey">Literal NPCIllust value (matches the XML <c>Portrait</c> attribute verbatim).</param>
     /// <param name="image">Decoded image on success. Caller owns disposal.</param>
-    public bool TryGetIllustration(string npcName, int variant, out SKImage? image)
+    public bool TryGetIllustration(string portraitKey, out SKImage? image)
     {
         image = null;
 
         if (Dimensions.Width == 0)
             return false;
 
-        if (string.IsNullOrEmpty(npcName))
+        if (string.IsNullOrEmpty(portraitKey))
             return false;
 
-        var name = npcName.Trim();
+        var key = portraitKey.Trim();
 
-        if (!Lookup.TryGetValue((name, variant), out var entryName) && ((variant == 0) || !Lookup.TryGetValue((name, 0), out entryName)))
+        if (!Lookup.TryGetValue(key, out var entryName))
             return false;
 
-        if (!TryGetImage(entryName!, out image) || image is null)
+        if (!TryGetImage(entryName, out image) || image is null)
             return false;
 
         if ((image.Width != Dimensions.Width) || (image.Height != Dimensions.Height))
