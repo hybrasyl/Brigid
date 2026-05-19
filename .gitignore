@@ -410,3 +410,7 @@ CLAUDE.local.md
 
 # SDL / etc for non-Windows platforms
 runtimes/*
+
+# local-only tooling state
+.claude/
+/.worktrees
