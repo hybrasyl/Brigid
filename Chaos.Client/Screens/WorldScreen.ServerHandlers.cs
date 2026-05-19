@@ -1232,7 +1232,7 @@ public sealed partial class WorldScreen
         //(no longer auto-confirms — user dismisses the popup or the timer expires before we send 0x0B [0]).
         Game.Connection.RequestExit(true);
 
-        ExitConfirmPopup.Show("You may log out now. This popup will dismiss in 10 seconds.");
+        ExitConfirmPopup.Show("Logging out. Press OK to log out now.");
         ExitConfirmSecondsRemaining = EXIT_CONFIRM_SECONDS;
     }
 
