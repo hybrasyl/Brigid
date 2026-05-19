@@ -30,6 +30,13 @@ public class UIImage : UIElement
     /// </summary>
     public bool ScaleToFit { get; set; }
 
+    public event Action<UIImage>? Hovered;
+    public event Action<UIImage>? Unhovered;
+
+    public override void OnMouseEnter() => Hovered?.Invoke(this);
+
+    public override void OnMouseLeave() => Unhovered?.Invoke(this);
+
     public override void Dispose()
     {
         Texture?.Dispose();
