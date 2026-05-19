@@ -285,6 +285,8 @@ public sealed class ArticleListControl : PrefabPanel
 
     public override void OnClick(ClickEvent e)
     {
+        base.OnClick(e);
+
         if (e.Button != MouseButton.Left)
             return;
 
@@ -307,8 +309,6 @@ public sealed class ArticleListControl : PrefabPanel
             if (Entries.Count > 0)
                 OnLoadMorePosts?.Invoke(Entries[^1].PostId);
 
-            e.Handled = true;
-
             return;
         }
 
@@ -318,11 +318,12 @@ public sealed class ArticleListControl : PrefabPanel
         SelectedIndex = entryIndex;
         DataVersion++;
         UpdateButtonStates();
-        e.Handled = true;
     }
 
     public override void OnDoubleClick(DoubleClickEvent e)
     {
+        base.OnDoubleClick(e);
+
         if (e.Button != MouseButton.Left)
             return;
 
@@ -346,7 +347,6 @@ public sealed class ArticleListControl : PrefabPanel
         DataVersion++;
         UpdateButtonStates();
         OnViewPost?.Invoke(Entries[entryIndex].PostId);
-        e.Handled = true;
     }
 
     public override void OnKeyDown(KeyDownEvent e)

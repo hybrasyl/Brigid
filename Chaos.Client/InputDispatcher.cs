@@ -15,6 +15,11 @@ public sealed class InputDispatcher
     //last element is the "top" (active keyboard target).
     private readonly List<UIPanel> ControlStack = [];
 
+    //focus active before each panel pushed onto the stack. lets RemoveControl restore
+    //the original textbox (etc.) when the panel pops, instead of falling through to
+    //the new top panel — which would route keys to a panel that doesn't accept text.
+    private readonly Dictionary<UIPanel, UIElement?> StashedFocus = [];
+
     //explicit focus — the single element (typically a uitextbox) that receives
     //keyboard events before the control stack. set via textboxfocusgained.
     private UIElement? ExplicitFocusElement;
@@ -85,6 +90,12 @@ public sealed class InputDispatcher
     public UIElement? ExplicitFocus => ExplicitFocusElement;
 
     /// <summary>
+    ///     The chat input textbox. When set, focus on this element survives popup push/pop so
+    ///     typing is never interrupted by transient popups. Set once by ChatInputControl.
+    /// </summary>
+    public UITextBox? ChatInputTextBox { get; set; }
+
+    /// <summary>
     ///     True when a drag operation is in progress.
     /// </summary>
     public bool IsDragging => DragActive;
@@ -113,17 +124,31 @@ public sealed class InputDispatcher
     /// </summary>
     public void PushControl(UIPanel panel)
     {
+        var alreadyOnStack = ControlStack.Contains(panel);
         ControlStack.Remove(panel);
         ControlStack.Add(panel);
+
+        UIElement? stashed = null;
 
         //focus follows the stack top. clear any stale focus sitting in a panel below
         //the new top so keys don't leak to it (e.g. escape hitting a login textbox
         //behind an error popup). panels that want a specific child focused on open
         //can assign IsFocused themselves during their Show() override.
+        //exception: the chat input textbox is sticky — popups must not interrupt typing.
         if (ExplicitFocusElement is not null
+            && (ExplicitFocusElement != ChatInputTextBox)
             && (ExplicitFocusElement != panel)
             && !IsDescendantOf(panel, ExplicitFocusElement))
+        {
+            stashed = ExplicitFocusElement;
             ClearExplicitFocus();
+        }
+
+        //only stash on first push. a re-push (panel already on stack, e.g. moved to top)
+        //must keep the original stash so the focus that was active before its first push
+        //is still recoverable when it pops.
+        if (!alreadyOnStack)
+            StashedFocus[panel] = stashed;
     }
 
     /// <summary>
@@ -133,14 +158,36 @@ public sealed class InputDispatcher
     public void RemoveControl(UIPanel panel)
     {
         ControlStack.Remove(panel);
+        StashedFocus.Remove(panel, out var stashed);
 
         if (ExplicitFocusElement is not null && IsDescendantOf(panel, ExplicitFocusElement))
             ClearExplicitFocus();
 
+        //prefer the focus that was active before this panel pushed (typically a textbox
+        //in the panel below). without this, a popup over a login textbox would leave
+        //the new top *panel* as the focus target — phase 1 dispatches to the panel
+        //instead of the textbox, so typing silently does nothing until the user clicks
+        //the textbox to refocus it.
+        if (stashed is not null && IsEffectivelyVisible(stashed))
+        {
+            //if a textbox inside the popup stole IsFocused while the popup was up,
+            //the stashed textbox now has IsFocused=false — re-assert it so OnTextInput
+            //(which gates on IsFocused) actually runs.
+            if (stashed is UITextBox tb && !tb.IsFocused)
+                tb.IsFocused = true;
+            else
+                SetExplicitFocus(stashed);
+
+            return;
+        }
+
         //focus follows the stack top: after removal, the new top becomes the focus
         //target so keys route into it via Phase 1/1.5 before Phase 2 stack dispatch.
         //when the stack is now empty, leave focus clear (root-level hotkeys take over).
-        if (TopControl is { } newTop && IsEffectivelyVisible(newTop))
+        //exception: don't override the chat input textbox — it owns its focus track.
+        if (TopControl is { } newTop
+            && IsEffectivelyVisible(newTop)
+            && (ExplicitFocusElement != ChatInputTextBox))
             SetExplicitFocus(newTop);
     }
 
@@ -161,6 +208,7 @@ public sealed class InputDispatcher
     public void Clear()
     {
         ControlStack.Clear();
+        StashedFocus.Clear();
         ClearExplicitFocus();
         CapturedElement = null;
 
@@ -179,7 +227,7 @@ public sealed class InputDispatcher
         var totalMs = (float)gameTime.TotalGameTime.TotalMilliseconds;
         var mouseX = InputBuffer.MouseX;
         var mouseY = InputBuffer.MouseY;
-        var modifiers = GetModifiers();
+        var modifiers = InputBuffer.CurrentModifiers;
 
         //mouse blocking: when a textbox has explicit focus, restrict mouse events
         //to the panel containing the focused textbox. clicks outside are consumed.
@@ -289,48 +337,14 @@ public sealed class InputDispatcher
         //reordered to one-mode-then-another-mode (which would cause the first event to
         //miss the state the earlier event was supposed to set up).
         //
-        //mouse button and wheel events carry their own SDL-captured cursor position
-        //and modifier state. keyboard events use a running modifier state tracked
-        //per-event, because fast macros can press shift, tap a key, release shift,
-        //and press another key within a single frame — if we used end-of-frame state
-        //both keys would see shift=false and shift-chorded hotkeys would silently lose
-        //their modifier.
-        //
         //WM_KEYDOWN always precedes its WM_CHAR, so when a KeyDown handler gains
         //textbox focus we suppress the immediately following TextInput to prevent the
         //hotkey character from leaking into the newly-focused textbox.
         var events = InputBuffer.Events;
 
-        //derive start-of-frame modifier state by walking backwards from the
-        //authoritative end-of-frame held state, undoing each key-modifier transition.
-        //non-key events are skipped — they don't affect modifier state.
-        var runningMods = GetModifiers();
-
-        for (var i = events.Length - 1; i >= 0; i--)
-        {
-            var evt = events[i];
-
-            if (evt.Kind is not (BufferedInputKind.KeyDown or BufferedInputKind.KeyUp))
-                continue;
-
-            var bit = ModifierBitFor(evt.Key);
-
-            if (bit == KeyModifiers.None)
-                continue;
-
-            if (evt.Kind == BufferedInputKind.KeyDown)
-                runningMods &= ~bit;
-            else
-                runningMods |= bit;
-        }
-
         var suppressNextTextInput = false;
         DispatchedKeys.Clear();
 
-        //walk forward, dispatching each event in OS order. keyboard events update and
-        //stamp the running modifier state; mouse button events carry their own
-        //SDL-captured modifiers and are dispatched (unless mouseBlocked) via the same
-        //ProcessMouseButton path the old two-pass implementation used.
         foreach (var evt in events)
             switch (evt.Kind)
             {
@@ -372,11 +386,6 @@ public sealed class InputDispatcher
 
                 case BufferedInputKind.KeyDown:
                 {
-                    var bit = ModifierBitFor(evt.Key);
-
-                    if (bit != KeyModifiers.None)
-                        runningMods |= bit;
-
                     //OS key-repeat emits repeated WM_KEYDOWN for a single held press.
                     //DispatchedKeys is reset per-key on KeyUp so genuine re-presses
                     //inside the same frame still dispatch.
@@ -387,7 +396,7 @@ public sealed class InputDispatcher
 
                     KeyDown.Reset();
                     KeyDown.Key = evt.Key;
-                    KeyDown.Modifiers = runningMods;
+                    KeyDown.Modifiers = evt.Modifiers;
                     DispatchKeyboardEvent(root, KeyDown);
 
                     if ((focusBefore is null) && (ExplicitFocusElement is not null))
@@ -398,16 +407,11 @@ public sealed class InputDispatcher
 
                 case BufferedInputKind.KeyUp:
                 {
-                    var bit = ModifierBitFor(evt.Key);
-
-                    if (bit != KeyModifiers.None)
-                        runningMods &= ~bit;
-
                     DispatchedKeys.Remove(evt.Key);
 
                     KeyUp.Reset();
                     KeyUp.Key = evt.Key;
-                    KeyUp.Modifiers = runningMods;
+                    KeyUp.Modifiers = evt.Modifiers;
                     DispatchKeyboardEvent(root, KeyUp);
 
                     break;
@@ -577,6 +581,7 @@ public sealed class InputDispatcher
     {
         e.Target = target;
         var current = target;
+        var isClickEvent = e is MouseDownEvent or MouseUpEvent or ClickEvent or DoubleClickEvent;
 
         while (current is not null)
         {
@@ -584,6 +589,16 @@ public sealed class InputDispatcher
 
             if (e.Handled)
                 return;
+
+            //panels absorb click events by default so popups/dialogs don't leak clicks past their
+            //visual bounds to whatever is rendered behind. drag/move/scroll still bubble normally
+            //since OnRootDragDrop and similar terminal handlers depend on reaching root unhandled.
+            if (isClickEvent && current is UIPanel)
+            {
+                e.Handled = true;
+
+                return;
+            }
 
             current = current.Parent;
         }
@@ -704,30 +719,6 @@ public sealed class InputDispatcher
     }
 
     //── helpers ──
-
-    private static KeyModifiers GetModifiers()
-    {
-        var mods = KeyModifiers.None;
-
-        if (InputBuffer.IsKeyHeld(Keys.LeftShift) || InputBuffer.IsKeyHeld(Keys.RightShift))
-            mods |= KeyModifiers.Shift;
-
-        if (InputBuffer.IsKeyHeld(Keys.LeftControl) || InputBuffer.IsKeyHeld(Keys.RightControl))
-            mods |= KeyModifiers.Ctrl;
-
-        if (InputBuffer.IsKeyHeld(Keys.LeftAlt) || InputBuffer.IsKeyHeld(Keys.RightAlt))
-            mods |= KeyModifiers.Alt;
-
-        return mods;
-    }
-
-    private static KeyModifiers ModifierBitFor(Keys key) => key switch
-    {
-        Keys.LeftShift or Keys.RightShift     => KeyModifiers.Shift,
-        Keys.LeftControl or Keys.RightControl => KeyModifiers.Ctrl,
-        Keys.LeftAlt or Keys.RightAlt         => KeyModifiers.Alt,
-        _                                     => KeyModifiers.None
-    };
 
     /// <summary>
     ///     True if <paramref name="descendant" /> is a child, grandchild, etc. of <paramref name="ancestor" />.

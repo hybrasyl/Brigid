@@ -96,6 +96,22 @@ public sealed class ItemAmountControl : PrefabPanel
     /// </summary>
     public event AmountConfirmedHandler? OnConfirm;
 
+    /// <summary>
+    ///     Fired after the popup transitions from visible to hidden via any close path (OK, Cancel, ESC).
+    ///     Used to clear ambient state set while the popup was open (e.g. the HUD description bar).
+    /// </summary>
+    public event Action? Closed;
+
+    public override void Hide()
+    {
+        var wasVisible = Visible;
+
+        base.Hide();
+
+        if (wasVisible)
+            Closed?.Invoke();
+    }
+
     public override void Update(GameTime gameTime)
     {
         if (!Visible)
@@ -103,8 +119,7 @@ public sealed class ItemAmountControl : PrefabPanel
 
         base.Update(gameTime);
 
-        if (OkButton is not null)
-            OkButton.Enabled = !string.IsNullOrEmpty(AmountTextBox?.Text);
+        OkButton?.Enabled = !string.IsNullOrEmpty(AmountTextBox?.Text);
     }
 
     public void ShowForSlot(byte slot)
@@ -117,8 +132,7 @@ public sealed class ItemAmountControl : PrefabPanel
             AmountTextBox.IsFocused = true;
         }
 
-        if (OkButton is not null)
-            OkButton.Enabled = false;
+        OkButton?.Enabled = false;
 
         Show();
     }

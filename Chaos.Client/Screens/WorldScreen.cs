@@ -80,7 +80,15 @@ public sealed partial class WorldScreen : IScreen
     private readonly Dictionary<(int X, int Y), bool> KnownDoorClosedState = [];
     private readonly EntityOverlayManager Overlays = new();
     private readonly PathfindingState Pathfinding = new();
-    private readonly Queue<PendingWalk> PendingWalks = new();
+    //count of Walk packets we've sent that the server has not yet acknowledged via ClientWalkResponse.
+    //the server emits one ack per Walk in FIFO order over the same TCP stream, and we never send a walk
+    //the server would reject (the local walkability check in PredictAndWalk gates outbound traffic).
+    //so each ack we receive while this counter is positive corresponds to a walk we predicted and is
+    //treated as a no-op confirmation; only when the counter is zero does an unmatched ack mean a
+    //genuine server-initiated walk (force-walk, push tile, knockback) that the rubberband path applies.
+    //Location packets do not touch this counter — they snap position authoritatively and let the
+    //pending acks drain naturally as no-ops on arrival.
+    private int InFlightWalkAcks;
 
     private AbilityMetadataDetailsControl AbilityMetadataDetails = null!;
     private AislingContextMenu AislingContext = null!;
@@ -97,6 +105,7 @@ public sealed partial class WorldScreen : IScreen
     private OkPopupMessageControl BoardResponsePopup = null!;
     private Camera Camera = null!;
     private ChantEditControl ChantEdit = null!;
+    private ushort CurrentMapCheckSum;
     private MapFlags CurrentMapFlags;
     private short CurrentMapId;
 
@@ -440,6 +449,10 @@ public sealed partial class WorldScreen : IScreen
                 Game.Connection.DropGold((int)amount, GoldDrop.TargetTileX, GoldDrop.TargetTileY);
         };
 
+        //match retail: while the gold amount popup is open, the HUD description bar shows what's
+        //being operated on even though nothing is hovered. clear it when the popup closes.
+        GoldDrop.Closed += () => WorldHud.SetDescription(null);
+
         ItemAmount = new ItemAmountControl
         {
             ZIndex = 2
@@ -453,6 +466,8 @@ public sealed partial class WorldScreen : IScreen
                 ItemAmount.ItemSlot,
                 (byte)Math.Min(amount, byte.MaxValue));
         };
+
+        ItemAmount.Closed += () => WorldHud.SetDescription(null);
 
         BoardList = new BoardListControl
         {
@@ -488,20 +503,28 @@ public sealed partial class WorldScreen : IScreen
         {
             ZIndex = -2
         };
-        DeleteConfirm = new OkPopupMessageControl(true);
-        BoardResponsePopup = new OkPopupMessageControl();
+        DeleteConfirm = new OkPopupMessageControl(true)
+        {
+            Name = "DeleteConfirm"
+        };
+        BoardResponsePopup = new OkPopupMessageControl
+        {
+            Name = "BoardResponsePopup"
+        };
 
         BoardResponsePopup.OnOk += () => BoardResponsePopup.Hide();
 
         ExchangeResultPopup = new OkPopupMessageControl
         {
-            ZIndex = 3
+            ZIndex = 3,
+            Name = "ExchangeResultPopup"
         };
         ExchangeResultPopup.OnOk += () => ExchangeResultPopup.Hide();
 
         DisconnectPopup = new OkPopupMessageControl(true)
         {
-            ZIndex = 10
+            ZIndex = 10,
+            Name = "DisconnectPopup"
         };
 
         DisconnectPopup.OnOk += () =>
@@ -762,9 +785,4 @@ public sealed partial class WorldScreen : IScreen
         Overlays.Clear();
         DebugRenderer.Clear();
     }
-
-    private readonly record struct PendingWalk(
-        int FromX,
-        int FromY,
-        Direction Direction);
 }

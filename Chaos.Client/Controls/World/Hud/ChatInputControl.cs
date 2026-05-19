@@ -82,6 +82,10 @@ public sealed class ChatInputControl : UIPanel
         };
 
         AddChild(TextBox);
+
+        //register the chat textbox so popups don't tear keyboard focus away while typing.
+        if (InputDispatcher.Instance is { } dispatcher)
+            dispatcher.ChatInputTextBox = TextBox;
     }
 
     //--- events ---

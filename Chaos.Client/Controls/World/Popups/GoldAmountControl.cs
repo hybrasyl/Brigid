@@ -66,6 +66,22 @@ public sealed class GoldAmountControl : PrefabPanel
     /// </summary>
     public event AmountConfirmedHandler? OnConfirm;
 
+    /// <summary>
+    ///     Fired after the popup transitions from visible to hidden via any close path (OK, Cancel, ESC).
+    ///     Used to clear ambient state set while the popup was open (e.g. the HUD description bar).
+    /// </summary>
+    public event Action? Closed;
+
+    public override void Hide()
+    {
+        var wasVisible = Visible;
+
+        base.Hide();
+
+        if (wasVisible)
+            Closed?.Invoke();
+    }
+
     public override void Show()
     {
         if (AmountTextBox is not null)

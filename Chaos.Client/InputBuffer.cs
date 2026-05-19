@@ -138,6 +138,13 @@ public static class InputBuffer
     public static ReadOnlySpan<BufferedInputEvent> Events => EventBuffer.AsSpan(0, EventCount);
 
     /// <summary>
+    ///     Live modifier state from SDL — the same snapshot stamped onto each per-event
+    ///     modifier field. Used for synthesized events (e.g. MouseMove) that don't have
+    ///     an underlying buffered event to source modifiers from.
+    /// </summary>
+    public static KeyModifiers CurrentModifiers => TranslateSdlMods(Sdl.SDL_GetModState());
+
+    /// <summary>
     ///     Sets the virtual-to-raw scale factor used by <see cref="MouseX" /> /
     ///     <see cref="MouseY" /> and by the per-click coordinate capture in the SDL watcher.
     ///     Called by <c>ChaosGame</c> whenever the window size changes.
@@ -325,14 +332,21 @@ public static class InputBuffer
         if (key == Keys.None)
             return;
 
+        //SDL stamps keysym.mod with the live modifier state at event time. reading
+        //it per-event keeps a chorded keydown's modifier bit attached to the event
+        //itself, so a macro's KEYDOWN(D) still reports Shift even when the bracketing
+        //KEYDOWN(Shift) lands in a different frame.
+        var sdlMods = (uint)(ushort)Marshal.ReadInt16(sdlEvent, Sdl.KEYBOARDEVENT_MOD_OFFSET);
+        var mods = TranslateSdlMods(sdlMods);
+
         if (isDown)
         {
             HeldKeys.Add(key);
-            PendingEvents.Add(BufferedInputEvent.ForKeyDown(key));
+            PendingEvents.Add(BufferedInputEvent.ForKeyDown(key, mods));
         } else
         {
             HeldKeys.Remove(key);
-            PendingEvents.Add(BufferedInputEvent.ForKeyUp(key));
+            PendingEvents.Add(BufferedInputEvent.ForKeyUp(key, mods));
         }
     }
 
@@ -573,7 +587,7 @@ public readonly record struct BufferedInputEvent(
     int WheelDelta,
     KeyModifiers Modifiers)
 {
-    public static BufferedInputEvent ForKeyDown(Keys key)
+    public static BufferedInputEvent ForKeyDown(Keys key, KeyModifiers modifiers)
         => new(
             BufferedInputKind.KeyDown,
             key,
@@ -583,9 +597,9 @@ public readonly record struct BufferedInputEvent(
             0,
             0,
             0,
-            KeyModifiers.None);
+            modifiers);
 
-    public static BufferedInputEvent ForKeyUp(Keys key)
+    public static BufferedInputEvent ForKeyUp(Keys key, KeyModifiers modifiers)
         => new(
             BufferedInputKind.KeyUp,
             key,
@@ -595,7 +609,7 @@ public readonly record struct BufferedInputEvent(
             0,
             0,
             0,
-            KeyModifiers.None);
+            modifiers);
 
     public static BufferedInputEvent ForTextInput(char character)
         => new(

@@ -39,6 +39,7 @@ internal static partial class Sdl
     //  → SDL_Keysym { scancode(4) at 16, sym(4) at 20, mod(2) at 24, unused(4) }
     public const int KEYBOARDEVENT_REPEAT_OFFSET = 13;
     public const int KEYBOARDEVENT_SCANCODE_OFFSET = 16;
+    public const int KEYBOARDEVENT_MOD_OFFSET = 24;
 
     //SDL_TextInputEvent field offsets:
     //  type(4) + timestamp(4) + windowID(4) = 12 → text[32] UTF-8 null-terminated
@@ -107,9 +108,25 @@ internal static partial class Sdl
     //SDL_Init subsystem flag for audio (consumed by SoundSystem during mixer bring-up)
     public const uint SDL_INIT_AUDIO = 0x00000010;
 
+    //SDL_Init subsystem flags for input devices we don't use. MonoGame's SdlGamePlatform inits
+    //all of these on startup, which causes SDL_PumpEvents to poll every connected joystick,
+    //gamepad, and HID device every frame — a wedged HID can hang the pump inside an
+    //NtDeviceIoControlFile syscall. ChaosGame.ctor calls SDL_QuitSubSystem on these flags
+    //immediately after base() returns to disable that polling entirely (DA is keyboard+mouse only).
+    public const uint SDL_INIT_JOYSTICK = 0x00000200;
+    public const uint SDL_INIT_HAPTIC = 0x00001000;
+    public const uint SDL_INIT_GAMECONTROLLER = 0x00002000;
+    public const uint SDL_INIT_SENSOR = 0x00008000;
+
     //when "1", SDL delivers the mouse click that focused the window as a normal MOUSEBUTTONDOWN
     //instead of swallowing it for OS-level window activation. must be set before SDL creates the window.
     public const string SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH = "SDL_MOUSE_FOCUS_CLICKTHROUGH";
+
+    //Windows-only: sets the process DPI awareness ("unaware"/"system"/"permonitor"/"permonitorv2"). With
+    //"permonitorv2" the GL framebuffer matches physical pixels and DWM stops bilinear-resampling the backbuffer
+    //at non-100% display scaling — which is what causes thin (1px) glyph strokes to wash out and read as missing.
+    //Must be set before SDL_Init (i.e. before GraphicsDeviceManager construction). Silently ignored on Mac/Linux.
+    public const string SDL_HINT_WINDOWS_DPI_AWARENESS = "SDL_WINDOWS_DPI_AWARENESS";
 
     [LibraryImport("SDL2", StringMarshalling = StringMarshalling.Utf8)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]

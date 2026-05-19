@@ -1,5 +1,6 @@
 #region
 using Chaos.Client.Controls.Components;
+using Chaos.Client.Controls.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -9,6 +10,7 @@ namespace Chaos.Client.Controls.LobbyLogin;
 public sealed class LoginNoticeControl : PrefabPanel
 {
     private readonly UILabel? AgreementTextLabel;
+    private readonly ScrollBarControl? ScrollBar;
     private readonly int TextAreaHeight;
     private readonly int TextAreaWidth;
     public UIButton? CancelButton { get; }
@@ -54,12 +56,30 @@ public sealed class LoginNoticeControl : PrefabPanel
             };
 
             AddChild(AgreementTextLabel);
+
+            ScrollBar = new ScrollBarControl
+            {
+                Name = "AgreementScroll",
+                X = textRect.X + textRect.Width - ScrollBarControl.DEFAULT_WIDTH,
+                Y = textRect.Y,
+                Height = TextAreaHeight
+            };
+
+            ScrollBar.OnValueChanged += value =>
+            {
+                AgreementTextLabel?.ScrollOffset = value * TextRenderer.CHAR_HEIGHT;
+            };
+
+            AddChild(ScrollBar);
         }
     }
 
     public override void Hide()
     {
         AgreementTextLabel?.Visible = false;
+
+        ScrollBar?.Visible = false;
+
         base.Hide();
     }
 
@@ -72,8 +92,22 @@ public sealed class LoginNoticeControl : PrefabPanel
         if (AgreementTextLabel is not null)
         {
             AgreementTextLabel.ForegroundColor = TextColors.Default;
+            AgreementTextLabel.ScrollOffset = 0;
             AgreementTextLabel.Text = agreementText;
             AgreementTextLabel.Visible = true;
+
+            if (ScrollBar is not null)
+            {
+                var visibleLines = TextAreaHeight / TextRenderer.CHAR_HEIGHT;
+                var totalLines = AgreementTextLabel.ContentHeight / TextRenderer.CHAR_HEIGHT;
+                var scrollMax = Math.Max(0, totalLines - visibleLines);
+
+                ScrollBar.Value = 0;
+                ScrollBar.MaxValue = scrollMax;
+                ScrollBar.TotalItems = totalLines;
+                ScrollBar.VisibleItems = visibleLines;
+                ScrollBar.Enabled = scrollMax > 0;
+            }
         }
 
         base.Show();
@@ -95,5 +129,26 @@ public sealed class LoginNoticeControl : PrefabPanel
 
                 break;
         }
+    }
+
+    public override void OnMouseScroll(MouseScrollEvent e)
+    {
+        if ((AgreementTextLabel is null) || (ScrollBar is null))
+            return;
+
+        if (AgreementTextLabel.ContentHeight <= TextAreaHeight)
+            return;
+
+        var visibleLines = TextAreaHeight / TextRenderer.CHAR_HEIGHT;
+        var totalLines = AgreementTextLabel.ContentHeight / TextRenderer.CHAR_HEIGHT;
+        var maxScroll = Math.Max(0, totalLines - visibleLines);
+        var newValue = Math.Clamp(ScrollBar.Value - e.Delta, 0, maxScroll);
+
+        if (newValue == ScrollBar.Value)
+            return;
+
+        ScrollBar.Value = newValue;
+        AgreementTextLabel.ScrollOffset = newValue * TextRenderer.CHAR_HEIGHT;
+        e.Handled = true;
     }
 }

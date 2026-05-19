@@ -1051,7 +1051,7 @@ public sealed class AislingRenderer : IDisposable
             return 0;
 
         var maxWidth = GetSwimMaxFrameWidth(isFemale);
-        var drawX = tileCenterX + visualOffset.X - maxWidth / 2f;
+        var drawX = tileCenterX + visualOffset.X - maxWidth / 2;
 
         //when flipped, compensate for the difference between maxwidth and actual texture width
         //so the flip pivot stays at the center of maxwidth rather than the center of the texture
@@ -1177,8 +1177,15 @@ public sealed class AislingRenderer : IDisposable
         if (texture is null)
             return 0;
 
-        var drawX = tileCenterX + visualOffset.X - texture.Width / 2f;
+        var drawX = tileCenterX + visualOffset.X - BODY_CENTER_X;
         var drawY = tileCenterY + visualOffset.Y - CANVAS_CENTER_Y;
+
+        //flip compensation: SpriteEffects.FlipHorizontally mirrors around texture.Width/2,
+        //but the canonical SPF canvas is 2*BODY_CENTER_X wide. shift to keep the canvas
+        //center as the mirror axis instead of the bounding-box center.
+        if (flip)
+            drawX += 2 * BODY_CENTER_X - texture.Width;
+
         var screenPos = camera.WorldToScreen(new Vector2(drawX, drawY));
         var effects = flip ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
 

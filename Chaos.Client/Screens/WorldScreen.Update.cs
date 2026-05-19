@@ -96,7 +96,7 @@ public sealed partial class WorldScreen
         //execute queued walk when player becomes idle after walk animation.
         var movementHandled = false;
 
-        if (player is not null && (player.AnimState == EntityAnimState.Idle) && QueuedWalkDirection.HasValue)
+        if (player is not null && player.IsAtRest && QueuedWalkDirection.HasValue)
         {
             var queuedDir = QueuedWalkDirection.Value;
             QueuedWalkDirection = null;
@@ -112,7 +112,7 @@ public sealed partial class WorldScreen
         }
 
         //execute next pathfinding step when player becomes idle
-        if (!movementHandled && player is not null && (player.AnimState == EntityAnimState.Idle))
+        if (!movementHandled && player is not null && player.IsAtRest)
         {
             if (Pathfinding.Path is { Count: > 0 })
             {
@@ -232,6 +232,7 @@ public sealed partial class WorldScreen
         var isItemDrag = GetDraggingPanel() is { } dragPanel && (dragPanel == WorldHud.Inventory);
 
         var newHoveredId = hoverEntity?.Type is ClientEntityType.Aisling or ClientEntityType.Creature
+                           && !hoverEntity.IsHidden
                            && !(isItemDrag && (hoverEntity.Id == Game.Connection.AislingId))
             ? hoverEntity.Id
             : (uint?)null;
@@ -393,8 +394,7 @@ public sealed partial class WorldScreen
         {
             proj.IsComplete = true;
 
-            if (targetEntity is not null)
-                targetEntity.HitTintExpiryMs = HIT_TINT_FLASH_MS;
+            targetEntity?.HitTintExpiryMs = HIT_TINT_FLASH_MS;
 
             return;
         }

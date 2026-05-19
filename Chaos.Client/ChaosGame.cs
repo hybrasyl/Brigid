@@ -91,6 +91,16 @@ public sealed class ChaosGame : Game
 
     public ChaosGame()
     {
+        //sdl by default is polling all possible input devices
+        //some devices apparently don't like to always respond in a timely manner
+        //when this occurs it causes the entire application to hang
+        //to remedy this, we use this to disable polling of extraneous devices
+        Sdl.SDL_QuitSubSystem(
+            Sdl.SDL_INIT_JOYSTICK
+            | Sdl.SDL_INIT_GAMECONTROLLER
+            | Sdl.SDL_INIT_HAPTIC
+            | Sdl.SDL_INIT_SENSOR);
+
         ClientSettings.Load();
 
         Graphics = new GraphicsDeviceManager(this)

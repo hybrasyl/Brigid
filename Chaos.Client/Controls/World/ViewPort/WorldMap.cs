@@ -168,6 +168,8 @@ public sealed class WorldMap : UIPanel
 
     public override void OnClick(ClickEvent e)
     {
+        base.OnClick(e);
+
         if (HoveredNodeIndex >= 0)
         {
             var control = NodeControls[HoveredNodeIndex];

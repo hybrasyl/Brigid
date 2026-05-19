@@ -245,13 +245,20 @@ public sealed class ChatPanel : ExpandablePanel
 
     public override void OnMouseScroll(MouseScrollEvent e)
     {
-        if (ChatLog.Count > MaxVisibleLines)
-        {
-            ScrollOffset = Math.Clamp(ScrollOffset + e.Delta, 0, ChatLog.Count - MaxVisibleLines);
-            ScrollBar.Value = ScrollBar.MaxValue - ScrollOffset;
-            LogVersion++;
+        if (Scroll(e.Delta))
             e.Handled = true;
-        }
+    }
+
+    public bool Scroll(int delta)
+    {
+        if (ChatLog.Count <= MaxVisibleLines)
+            return false;
+
+        ScrollOffset = Math.Clamp(ScrollOffset + delta, 0, ChatLog.Count - MaxVisibleLines);
+        ScrollBar.Value = ScrollBar.MaxValue - ScrollOffset;
+        LogVersion++;
+
+        return true;
     }
 
     public override void Update(GameTime gameTime)

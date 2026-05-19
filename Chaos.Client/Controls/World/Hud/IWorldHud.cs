@@ -59,6 +59,12 @@ public interface IWorldHud
     void ToggleExpand();
 
     /// <summary>
+    ///     Collapses any panel currently in expanded mode back to its normal size. Returns <c>true</c> if anything was
+    ///     collapsed, <c>false</c> if nothing was expanded.
+    /// </summary>
+    bool CollapseExpanded();
+
+    /// <summary>
     ///     Shared activation logic for HUD tab hotkeys (A/S/D/F/G/H) and the matching tab buttons. Mirrors the keyboard
     ///     handler exactly: applies shift modifiers (alt panels, expand inventory, message history, extended stats) and
     ///     the click-while-active behavior gated on <c>UseShiftKeyForAltPanels</c>.

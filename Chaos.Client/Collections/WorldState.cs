@@ -168,6 +168,10 @@ public static class WorldState
         {
             entity.SpriteId = args.Sprite.Value;
             entity.Appearance = null;
+
+            //sprite-form players default to a small lantern when the server hasn't sent one
+            if (entity.LanternSize == LanternSize.None)
+                entity.LanternSize = LanternSize.Small;
         } else
         {
             entity.SpriteId = 0;

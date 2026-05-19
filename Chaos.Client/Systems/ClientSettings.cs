@@ -82,7 +82,7 @@ public static class ClientSettings
                         break;
 
                     case "UserClickMode":
-                        EnableProfileClick = value == "1";
+                        EnableProfileClick = value != "1";
 
                         break;
 
@@ -141,7 +141,7 @@ public static class ClientSettings
             writer.WriteLine($"SkillSpellSelectByToggle : {(UseShiftKeyForAltPanels ? 0 : 1)}");
             writer.WriteLine($"GroupAnswer : {(GroupOpen ? 1 : 0)}");
             writer.WriteLine($"ScrollLevel : {ScrollLevel}");
-            writer.WriteLine($"UserClickMode : {(EnableProfileClick ? 1 : 0)}");
+            writer.WriteLine($"UserClickMode : {(EnableProfileClick ? 0 : 1)}");
             writer.WriteLine($"MonsterSayRecordMode : {(RecordNpcChat ? 1 : 0)}");
             writer.WriteLine($"GroupObjectOption : {(UseGroupWindow ? 1 : 0)}");
         } catch
