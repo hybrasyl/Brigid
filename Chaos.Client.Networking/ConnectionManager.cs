@@ -1855,12 +1855,31 @@ public sealed class ConnectionManager : IDisposable
         OnDisplayExchange?.Invoke(args);
     }
 
+    /// <summary>
+    ///     Deserializes the <c>0x63 DisplayGroupInvite</c> server packet directly off the wire, bypassing
+    ///     <c>Chaos.Networking.DisplayGroupInviteConverter</c>. The upstream converter's
+    ///     <c>Deserialize</c> / <c>Serialize</c> branches are functionally swapped against the actual
+    ///     Hybrasyl/retail wire shape (<c>Invite=1</c> reads group-box info that isn't on the wire;
+    ///     <c>ShowGroupBox=4</c> ignores group-box info that is) and reads class slots in the wrong order
+    ///     (Monk before Rogue vs. the actual W/Wiz/R/P/M emission), so calling it produces garbage args.
+    ///     Wire shape is per <c>server/hybrasyl/Subsystems/Players/Grouping/UserGroup.cs</c>.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>TACTICAL WORKAROUND</b> — second of three pre-removal bypasses logged in
+    ///         <c>chaos-networking-removal-direction.md</c> "Tactical workarounds (pre-removal)",
+    ///         alongside <see cref="ClickFloorTile"/> and the PR-6 <c>ClickDoor</c> path.
+    ///     </para>
+    ///     <para>
+    ///         <b>REMOVE WHEN</b> the new Hybrasyl networking library replaces Chaos.Networking and
+    ///         <c>DisplayGroupInviteArgs</c> / <c>DisplayGroupBoxInfo</c> are owned locally with a correct
+    ///         <c>IPacketConverter</c>. At that point this method collapses back to
+    ///         <c>Client.Deserialize&lt;DisplayGroupInviteArgs&gt;(in pkt)</c> and the subtype 2 / 5
+    ///         "log + drop" branches fold into the converter.
+    ///     </para>
+    /// </remarks>
     private void HandleDisplayGroupInvite(ServerPacket pkt)
     {
-        //bypass chaos.networking's DisplayGroupInviteConverter — its Deserialize/Serialize branches are
-        //functionally swapped against the actual Hybrasyl/retail wire shape (Invite=1 reads box info that
-        //isn't there; ShowGroupBox=4 ignores box info that is). See chaos-networking-removal-direction.md
-        //"Tactical workarounds (pre-removal)". Wire shape per server/hybrasyl Subsystems/Players/Grouping/UserGroup.cs.
         var span = pkt.Data.AsSpan(0, pkt.Length);
         var packet = new Packet(ref span, pkt.IsEncrypted);
         var reader = new SpanReader(Encoding.GetEncoding(949), in packet.Buffer);
@@ -1882,7 +1901,7 @@ public sealed class ConnectionManager : IDisposable
 
                 break;
             }
-            case 2: //Hybrasyl `Member` — never emitted; retail wire shape unknown without capture.
+            case 2: //Hybrasyl `Member` — never emitted by Hybrasyl. TODO: capture retail wire shape before re-enabling.
                 NoticeDebugLog.Write($"0x63 subtype 0x02 (Member) unhandled — no retail capture yet. len={pkt.Length}");
 
                 return;
@@ -1931,7 +1950,7 @@ public sealed class ConnectionManager : IDisposable
 
                 break;
             }
-            case 5: //Hybrasyl `RecruitAsk` — never emitted; retail wire shape unknown without capture.
+            case 5: //Hybrasyl `RecruitAsk` — never emitted by Hybrasyl. TODO: capture retail wire shape before re-enabling.
                 NoticeDebugLog.Write($"0x63 subtype 0x05 (RecruitAsk) unhandled — no retail capture yet. len={pkt.Length}");
 
                 return;
