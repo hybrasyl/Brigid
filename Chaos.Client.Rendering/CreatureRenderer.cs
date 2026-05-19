@@ -1,5 +1,6 @@
 #region
 using Chaos.Client.Data;
+using Chaos.Client.Data.AssetPacks;
 using Chaos.Client.Rendering.Models;
 using Chaos.Client.Rendering.Utility;
 using DALib.Definitions;
@@ -137,12 +138,29 @@ public sealed class CreatureRenderer : IDisposable
     /// <summary>
     ///     Returns the average height above the entity anchor reached by this sprite's frames, in pixels. Used by overlay
     ///     positioning to derive a stable "sprite top" that accounts for frame-to-frame variance without per-frame jitter.
-    ///     Cached per spriteId after the first call. Returns 0 if the sprite cannot be loaded.
+    ///     Cached per spriteId after the first call. Returns 0 if the sprite cannot be loaded. For pack-served
+    ///     creatures the value is simply the decoded image height (bottom-center anchor → entire image is above
+    ///     anchor).
     /// </summary>
     public int GetAverageTopOffset(int spriteId)
     {
         if (AverageTopOffsetCache.TryGetValue(spriteId, out var cached))
             return cached;
+
+        var pack = AssetPackRegistry.GetCreaturePack();
+
+        if (pack is not null && pack.Covers(spriteId))
+        {
+            var packFrame = GetFrame(spriteId, 0);
+
+            if (packFrame is null)
+                return 0;
+
+            var height = packFrame.Value.Texture.Height;
+            AverageTopOffsetCache[spriteId] = height;
+
+            return height;
+        }
 
         var palettized = DataContext.CreatureSprites.GetCreatureSprite(spriteId);
 
@@ -170,10 +188,16 @@ public sealed class CreatureRenderer : IDisposable
 
     /// <summary>
     ///     Returns animation metadata for a creature sprite — walk/attack/standing frame ranges and total frame count. Returns
-    ///     null if the sprite cannot be loaded.
+    ///     null if the sprite cannot be loaded. Probes the modern <c>creature_sprites</c> pack first; on miss falls
+    ///     back to the legacy MPF metadata.
     /// </summary>
     public CreatureAnimInfo? GetAnimInfo(int spriteId)
     {
+        var pack = AssetPackRegistry.GetCreaturePack();
+
+        if (pack is not null && pack.Covers(spriteId))
+            return SynthesizeStaticAnimInfo(pack.GetPairCount(spriteId));
+
         var palettized = DataContext.CreatureSprites.GetCreatureSprite(spriteId);
 
         if (palettized is null)
@@ -199,8 +223,33 @@ public sealed class CreatureRenderer : IDisposable
     }
 
     /// <summary>
+    ///     Synthesizes single-frame <see cref="CreatureAnimInfo" /> for a pack-served creature. All animation
+    ///     ranges (walk, attack, attack2, attack3, standing) collapse to a single frame so
+    ///     <c>AnimationSystem.GetCreatureFrame</c> always returns frame 0 (or frame 1 for the second pair when both
+    ///     <c>nw</c> and <c>es</c> masters exist). The legacy single-direction-sprite check
+    ///     (<c>WalkFrameIndex + 2*WalkFrameCount + frame &gt;= TotalFrameCount</c>) yields the right behavior:
+    ///     single-pair → reuse frame 0 for all directions, two-pair → frame 0 for N/W, frame 1 for E/S.
+    /// </summary>
+    private static CreatureAnimInfo SynthesizeStaticAnimInfo(int pairCount) =>
+        new(
+            WalkFrameIndex: 0,
+            WalkFrameCount: 1,
+            AttackFrameIndex: 0,
+            AttackFrameCount: 1,
+            Attack2StartIndex: 0,
+            Attack2FrameCount: 0,
+            Attack3StartIndex: 0,
+            Attack3FrameCount: 0,
+            StandingFrameIndex: 0,
+            StandingFrameCount: 1,
+            OptionalAnimationFrameCount: 0,
+            OptionalAnimationProbability: 0,
+            AnimationIntervalMs: 100,
+            TotalFrameCount: pairCount);
+
+    /// <summary>
     ///     Returns the rendered sprite frame for a creature at the given frame index. Returns null if the sprite or frame
-    ///     cannot be loaded.
+    ///     cannot be loaded. Probes the modern <c>creature_sprites</c> pack first; on miss falls back to legacy MPF.
     /// </summary>
     public SpriteFrame? GetFrame(int spriteId, int frameIndex)
     {
@@ -208,6 +257,18 @@ public sealed class CreatureRenderer : IDisposable
 
         if (FrameCache.TryGetValue(key, out var cached))
             return cached;
+
+        var pack = AssetPackRegistry.GetCreaturePack();
+
+        if (pack is not null && pack.Covers(spriteId))
+        {
+            var packed = LoadPackFrame(pack, spriteId, frameIndex);
+
+            if (packed is not null)
+                FrameCache[key] = packed.Value;
+
+            return packed;
+        }
 
         var palettized = DataContext.CreatureSprites.GetCreatureSprite(spriteId);
 
@@ -239,6 +300,33 @@ public sealed class CreatureRenderer : IDisposable
         FrameCache[key] = spriteFrame;
 
         return spriteFrame;
+    }
+
+    /// <summary>
+    ///     Loads a frame from the modern <c>creature_sprites</c> pack. <paramref name="frameIndex" /> is interpreted
+    ///     as the pair-index (0 = first authored pair, 1 = second authored pair); higher indices return null.
+    ///     Anchors default to bottom-center of the decoded image (<c>CenterX = W/2</c>, <c>CenterY = H</c>,
+    ///     <c>Left = Top = 0</c>) — phase 1 doesn't read per-frame center data.
+    /// </summary>
+    private static SpriteFrame? LoadPackFrame(CreaturePack pack, int spriteId, int frameIndex)
+    {
+        if ((frameIndex < 0) || (frameIndex >= pack.GetPairCount(spriteId)))
+            return null;
+
+        if (!pack.TryGetFrame(spriteId, frameIndex, out var image) || image is null)
+            return null;
+
+        using (image)
+        {
+            var texture = TextureConverter.ToTexture2D(image);
+
+            return new SpriteFrame(
+                texture,
+                CenterX: (short)(texture.Width / 2),
+                CenterY: (short)texture.Height,
+                Left: 0,
+                Top: 0);
+        }
     }
 
     
