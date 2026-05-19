@@ -155,10 +155,26 @@ public sealed class ConnectionManager : IDisposable
     ///     </code>
     ///     Modifier byte is 0 for an unmodified click. Hybrasyl drops both trailing bytes; retail strictly requires this
     ///     shape for door dispatch — without the layer byte, retail silently rejects N/S door clicks (defaults to layer
-    ///     0 = LFG and finds nothing where the panel actually lives in RFG). Bypasses the sealed
-    ///     <see cref="ClickArgs"/>/<c>ClickConverter</c> in Chaos.Networking; once that package is removed, this folds
-    ///     back into a normal converter.
+    ///     0 = LFG and finds nothing where the panel actually lives in RFG).
     /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>TACTICAL WORKAROUND</b> — first of three pre-removal bypasses logged in
+    ///         <c>chaos-networking-removal-direction.md</c> "Tactical workarounds (pre-removal)",
+    ///         alongside the PR-7 <c>ClickFloorTile</c> and <c>HandleDisplayGroupInvite</c> paths.
+    ///         All three exist because <c>Chaos.Networking</c>'s <see cref="ClickArgs"/> /
+    ///         <c>ClickConverter</c> (and equivalents) are sealed and don't expose the trailing bytes
+    ///         retail requires, so the raw <see cref="SpanWriter"/> construction here is hand-rolled
+    ///         in place of a library call.
+    ///     </para>
+    ///     <para>
+    ///         <b>REMOVE WHEN</b> the new Hybrasyl networking library replaces Chaos.Networking and
+    ///         <c>ClickArgs</c> is owned locally with a correct <c>IPacketConverter</c> that supports
+    ///         the optional trailing <c>layer</c> + <c>modifier</c> bytes. At that point this method
+    ///         collapses back to a <c>SendIfWorld(new ClickArgs { ... })</c> one-liner matching
+    ///         <see cref="ClickTile"/>.
+    ///     </para>
+    /// </remarks>
     /// <param name="x">Tile x.</param>
     /// <param name="y">Tile y.</param>
     /// <param name="layer">0 = LeftForeground (E/W door panels), 1 = RightForeground (N/S panels).</param>
