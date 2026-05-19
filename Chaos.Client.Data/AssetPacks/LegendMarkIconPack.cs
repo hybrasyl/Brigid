@@ -13,55 +13,15 @@ namespace Chaos.Client.Data.AssetPacks;
 ///     <c>legends.epf</c>, so <c>legend0000.png</c> replaces EPF frame 0 and corresponds to server icon ID 0.
 ///     Decoded <see cref="SKImage" /> results must be disposed by the caller.
 /// </summary>
-public sealed class LegendMarkIconPack : IDisposable
+public sealed class LegendMarkIconPack : AssetPack
 {
-    private readonly ZipArchive Archive;
-    private readonly Dictionary<string, ZipArchiveEntry> EntryIndex;
-
-    public AssetPackManifest Manifest { get; }
-
     internal LegendMarkIconPack(ZipArchive archive, AssetPackManifest manifest)
-    {
-        Archive = archive;
-        Manifest = manifest;
-
-        EntryIndex = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var entry in archive.Entries)
-            EntryIndex[entry.FullName] = entry;
-    }
+        : base(archive, manifest) { }
 
     /// <summary>
     ///     Attempts to decode the PNG for the given legend mark icon ID. Returns false if the entry isn't present,
     ///     decode fails, or the entry is malformed — caller should fall back to the legacy <c>legends.epf</c> frame.
     /// </summary>
     public bool TryGetLegendMarkImage(byte iconId, out SKImage? image)
-    {
-        image = null;
-
-        var name = $"legend{iconId:D4}.png";
-
-        if (!EntryIndex.TryGetValue(name, out var entry))
-            return false;
-
-        try
-        {
-            using var entryStream = entry.Open();
-            using var ms = new MemoryStream();
-            entryStream.CopyTo(ms);
-            ms.Position = 0;
-            image = SKImage.FromEncodedData(ms);
-
-            return image is not null;
-        }
-        catch
-        {
-            image?.Dispose();
-            image = null;
-
-            return false;
-        }
-    }
-
-    public void Dispose() => Archive.Dispose();
+        => TryGetImage($"legend{iconId:D4}.png", out image);
 }
