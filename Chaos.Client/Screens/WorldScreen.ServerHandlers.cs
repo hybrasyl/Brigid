@@ -2,6 +2,7 @@
 using Chaos.Client.Collections;
 using Chaos.Client.Controls.Generic;
 using Chaos.Client.Data;
+using Chaos.Client.Data.AssetPacks;
 using Chaos.Client.Data.Repositories;
 using Chaos.Client.Data.Utilities;
 using Chaos.Client.Extensions;
@@ -461,13 +462,20 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>
-    ///     Attempts to load a full-art NPC illustration SPF from <c>npcbase.dat</c>. Looks up <paramref name="npcName" />
-    ///     in the merged illustration metadata (npci.tbl + server NPCIllust metafile) and picks the filename at
-    ///     <paramref name="variant" />. Returns null if the NPC has no entries, the variant index is out of range,
-    ///     or the SPF file is missing.
+    ///     Attempts to load a full-art NPC illustration. First probes the modern <c>npc_portraits</c> asset pack
+    ///     keyed on the server-sent NPC name + variant. On miss, falls back to the legacy <c>npcbase.dat</c> SPF
+    ///     path: looks up <paramref name="npcName" /> in the merged illustration metadata (npci.tbl + server
+    ///     NPCIllust metafile) and picks the filename at <paramref name="variant" />. Returns null if neither path
+    ///     produces an image.
     /// </summary>
     private static Texture2D? TryLoadNpcIllustration(string npcName, byte variant)
     {
+        var portraitPack = AssetPackRegistry.GetNpcPortraitPack();
+
+        if (portraitPack is not null && portraitPack.TryGetIllustration(npcName, variant, out var packImage) && packImage is not null)
+            using (packImage)
+                return TextureConverter.ToTexture2D(packImage);
+
         var illustMeta = DataContext.MetaFiles.GetNpcIllustrationMetadata();
 
         if (!illustMeta.Illustrations.TryGetValue(npcName, out var filenames) || (filenames.Count == 0))
