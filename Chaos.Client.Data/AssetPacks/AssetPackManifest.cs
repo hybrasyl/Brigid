@@ -76,32 +76,13 @@ public sealed class AssetPackCoverageEntry
     public int[]? Dyeable { get; init; }
 
     /// <summary>
-    ///     For <c>npc_portraits</c>, the explicit <c>(NPC name) → (default PNG, optional variant PNGs)</c> lookup
-    ///     table. Replaces the legacy <c>npci.tbl</c> normalization round-trip — keys are matched against the
-    ///     server-sent NPC name verbatim (after whitespace trim). Absent or empty means the pack covers no NPCs.
+    ///     For <c>npc_portraits</c>, a flat <c>(portrait key → PNG filename)</c> lookup. The key is the literal
+    ///     value of the Hybrasyl XML <c>Portrait</c> attribute as the server publishes it via the NPCIllust metafile
+    ///     — verbatim, no extension stripping or normalization. Examples: <c>"inn.spf"</c> for an NPC declared
+    ///     <c>Portrait="inn.spf"</c>, <c>"Gobalt"</c> for an NPC declared <c>Portrait="Gobalt"</c>. The value is the
+    ///     PNG entry name inside the ZIP root. Lookup is case-insensitive at runtime. Absent or empty means the pack
+    ///     covers no portraits.
     /// </summary>
     [JsonPropertyName("portraits")]
-    public Dictionary<string, AssetPackPortraitEntry>? Portraits { get; init; }
-}
-
-/// <summary>
-///     A single NPC's portrait entry inside <see cref="AssetPackCoverageEntry.Portraits" />. <see cref="Default" />
-///     is variant 0 and is required if the entry is present. <see cref="Variants" /> is a zero-indexed array of PNG
-///     filenames for variants 1, 2, … — sparse entries (null or empty string) fall back to <see cref="Default" />.
-/// </summary>
-public sealed class AssetPackPortraitEntry
-{
-    /// <summary>
-    ///     PNG filename inside the ZIP root for variant 0 (the default illustration). Required when the entry exists;
-    ///     null or empty causes the whole NPC entry to be skipped at load.
-    /// </summary>
-    [JsonPropertyName("default")]
-    public string? Default { get; init; }
-
-    /// <summary>
-    ///     Optional array of variant PNG filenames. <c>Variants[0]</c> is variant 1, <c>Variants[1]</c> is variant 2,
-    ///     etc. Missing or empty entries fall back to <see cref="Default" /> at lookup time.
-    /// </summary>
-    [JsonPropertyName("variants")]
-    public string[]? Variants { get; init; }
+    public Dictionary<string, string>? Portraits { get; init; }
 }
