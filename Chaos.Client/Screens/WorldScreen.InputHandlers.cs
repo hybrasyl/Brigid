@@ -1007,6 +1007,12 @@ public sealed partial class WorldScreen
 
         if (direction.HasValue)
         {
+            //any movement intent dismisses the door context menu. right-click-driven movement is
+            //already covered by the outside-click guard in OnRootMouseDown; this path catches
+            //keyboard movement (arrows + zxcv).
+            if (DoorContext.Visible)
+                DoorContext.Hide();
+
             Pathfinding.Clear();
             var player = WorldState.GetPlayerEntity();
 
@@ -1062,6 +1068,17 @@ public sealed partial class WorldScreen
     /// </summary>
     private void OnRootMouseDown(MouseDownEvent e)
     {
+        //door context menu dismisses on any click outside its bounds — clicks on the menu itself
+        //are consumed by DoorContextMenu.OnClick and never reach here. swallow the event so the
+        //same click doesn't ALSO kick off pathfinding/attack on the tile underneath.
+        if (DoorContext.Visible && !DoorContext.ContainsPoint(e.ScreenX, e.ScreenY))
+        {
+            DoorContext.Hide();
+            e.Handled = true;
+
+            return;
+        }
+
         if (e.Button != MouseButton.Right)
             return;
 
@@ -1441,6 +1458,28 @@ public sealed partial class WorldScreen
         if (entity?.Type is ClientEntityType.Creature)
             Game.Connection.ClickEntity(entity.Id);
         else if (TileHasForeground(tileX, tileY))
+            ClickForegroundTile(tileX, tileY);
+    }
+
+    /// <summary>
+    ///     Routes a foreground-tile click to the appropriate send path. Door tiles use the extended
+    ///     <see cref="ConnectionManager.ClickDoor" /> (7-byte payload with layer + modifier bytes that retail's 0x43
+    ///     handler requires for door dispatch); non-door foreground (signposts, anything else) uses the standard 5-byte
+    ///     <see cref="ConnectionManager.ClickTile" />. Layer byte is empirically derived: door in LeftForeground → 0
+    ///     (E/W panel), door in RightForeground → 1 (N/S panel).
+    /// </summary>
+    private void ClickForegroundTile(int tileX, int tileY)
+    {
+        if (MapFile is null)
+            return;
+
+        var tile = MapFile.Tiles[tileX, tileY];
+
+        if (DoorTable.IsDoorTile(tile.LeftForeground))
+            Game.Connection.ClickDoor(tileX, tileY, 0);
+        else if (DoorTable.IsDoorTile(tile.RightForeground))
+            Game.Connection.ClickDoor(tileX, tileY, 1);
+        else
             Game.Connection.ClickTile(tileX, tileY);
     }
 
@@ -1560,7 +1599,7 @@ public sealed partial class WorldScreen
 
     private List<(string Label, Action Callback)> FindNearbyDoors(int mouseX, int mouseY)
     {
-        var results = new List<(int DistanceSq, string Label, Action Callback)>();
+        var results = new List<DoorProximityDedup.DoorHit<(string Label, Action Callback)>>();
 
         if (MapFile is null)
             return [];
@@ -1621,18 +1660,27 @@ public sealed partial class WorldScreen
 
                 var doorX = tx;
                 var doorY = ty;
-                Action callback = () => Game.Connection.ClickTile(doorX, doorY);
 
-                results.Add((distSq, label, callback));
+                //layer byte mirrors ClickForegroundTile: 0 if the door panel sits in LeftForeground (E/W door), 1 if
+                //in RightForeground (N/S door). captured into a local so the lambda closes over the byte rather than
+                //re-checking lfg/rfg at click time.
+                byte doorLayer = DoorTable.IsDoorTile(lfg) ? (byte)0 : (byte)1;
+                Action callback = () => Game.Connection.ClickDoor(doorX, doorY, doorLayer);
+
+                results.Add(new DoorProximityDedup.DoorHit<(string, Action)>(distSq, tx, ty, (label, callback)));
             }
 
         results.Sort(static (a, b) => a.DistanceSq.CompareTo(b.DistanceSq));
 
-        var limit = Math.Min(results.Count, DoorContextMenu.MAX_ENTRIES);
+        //collapse multi-tile doors: a 2/3/4-tile door registers each panel separately, but should
+        //appear as one menu entry. see DoorProximityDedup for the 4-neighbor adjacency rule.
+        var deduped = DoorProximityDedup.CollapseAdjacent(results);
+
+        var limit = Math.Min(deduped.Count, DoorContextMenu.MAX_ENTRIES);
         var final = new List<(string Label, Action Callback)>(limit);
 
         for (var i = 0; i < limit; i++)
-            final.Add((results[i].Label, results[i].Callback));
+            final.Add(deduped[i].Payload);
 
         return final;
     }

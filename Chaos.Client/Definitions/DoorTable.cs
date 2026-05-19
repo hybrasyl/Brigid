@@ -117,6 +117,10 @@ public static class DoorTable
     /// </summary>
     public static short? GetOpenTileId(short closedTileId) => ClosedToOpen.TryGetValue(closedTileId, out var open) ? open : null;
 
+    /// <summary>
+    ///     Returns true when the tile id matches either the closed or open variant of any catalogued door pair.
+    /// </summary>
+    public static bool IsDoorTile(short tileId) => ClosedToOpen.ContainsKey(tileId) || OpenToClosed.ContainsKey(tileId);
 
     /// <summary>
     ///     Enumerates door counterparts of a given tile id. If the tile is a known closed door, yields its open variant.

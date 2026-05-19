@@ -10,4 +10,5 @@
     <Project Path="Chaos.Client.Networking/Chaos.Client.Networking.csproj" />
     <Project Path="Chaos.Client.Rendering/Chaos.Client.Rendering.csproj" />
     <Project Path="Chaos.Client/Chaos.Client.csproj" />
+    <Project Path="Chaos.Client.Tests/Chaos.Client.Tests.csproj" />
 </Solution>
