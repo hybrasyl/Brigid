@@ -1033,7 +1033,7 @@ public sealed partial class WorldScreen
         PauseMenu.OnSettings += () => ToggleSubPanel(SettingsDialog, MacrosList, FriendsList);
         PauseMenu.OnFriends += () => ToggleSubPanel(FriendsList, MacrosList, SettingsDialog);
 
-        PauseMenu.OnExit += () => Game.Connection.RequestExit();
+        PauseMenu.OnExit += BeginExit;
 
         PauseMenu.OnSoundVolumeChanged += volume =>
         {

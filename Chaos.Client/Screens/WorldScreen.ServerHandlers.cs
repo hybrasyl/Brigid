@@ -1220,11 +1220,37 @@ public sealed partial class WorldScreen
 
     //--- exit / state ---
 
+    private const float EXIT_CONFIRM_SECONDS = 10f;
+
+    private void BeginExit()
+    {
+        //guard against re-entry while the popup is already up
+        if (ExitConfirmPopup.Visible)
+            return;
+
+        //retail-compat signal: announce the exit dialog opened. server responds with a cosmetic 0x4C
+        //(no longer auto-confirms — user dismisses the popup or the timer expires before we send 0x0B [0]).
+        Game.Connection.RequestExit(true);
+
+        ExitConfirmPopup.Show("You may log out now. This popup will dismiss in 10 seconds.");
+        ExitConfirmSecondsRemaining = EXIT_CONFIRM_SECONDS;
+    }
+
+    private void ConfirmExit()
+    {
+        ExitConfirmSecondsRemaining = 0f;
+
+        if (ExitConfirmPopup.Visible)
+            ExitConfirmPopup.Hide();
+
+        Game.Connection.RequestExit(false);
+    }
+
     private void HandleExitResponse(ExitResponseArgs args)
     {
-        //server confirmed exit — send the actual logout (isrequest=false triggers server-side redirect to login)
-        if (args.ExitConfirmed)
-            Game.Connection.RequestExit(false);
+        //server's 0x4C ack to the query phase. retail's 0x4C is a state-machine signal, not a control-flow
+        //trigger — the user's click on the confirmation popup (or its 10s timeout) drives the actual exit.
+        //hook left in place so phase 2 can update the popup text on server ack if desired.
     }
 
     private void HandleStateChanged(ConnectionState oldState, ConnectionState newState)
