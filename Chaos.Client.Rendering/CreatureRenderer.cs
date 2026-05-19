@@ -7,6 +7,7 @@ using DALib.Definitions;
 using DALib.Drawing;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using SkiaSharp;
 #endregion
 
 namespace Chaos.Client.Rendering;
@@ -30,6 +31,12 @@ public sealed class CreatureRenderer : IDisposable
     //uses the frame's visible top row, which differs from the bitmap top row when Top > 0 (transparent padding).
     private readonly Dictionary<int, int> AverageTopOffsetCache = [];
 
+    //per-pack-creature union bbox in source-image coordinates: the tightest rect that contains every visible pixel
+    //across all of this creature's pair-master frames. Every frame is cropped to this same rect so the anchor stays
+    //stable across frames (preserves relative position when phase 2 introduces multi-frame animation). Computed
+    //lazily on first frame request, cleared on map change.
+    private readonly Dictionary<int, SKRectI> PackCreatureUnionBboxCache = [];
+
     /// <inheritdoc />
     public void Dispose() => Clear();
 
@@ -40,6 +47,7 @@ public sealed class CreatureRenderer : IDisposable
     {
         FrameCache.DisposeAndClear();
         AverageTopOffsetCache.Clear();
+        PackCreatureUnionBboxCache.Clear();
         GroundTintCache.DisposeAndClear();
         ClearTintCaches();
     }
@@ -270,6 +278,7 @@ public sealed class CreatureRenderer : IDisposable
             return packed;
         }
 
+
         var palettized = DataContext.CreatureSprites.GetCreatureSprite(spriteId);
 
         if (palettized is null)
@@ -305,20 +314,42 @@ public sealed class CreatureRenderer : IDisposable
     /// <summary>
     ///     Loads a frame from the modern <c>creature_sprites</c> pack. <paramref name="frameIndex" /> is interpreted
     ///     as the pair-index (0 = first authored pair, 1 = second authored pair); higher indices return null.
-    ///     Anchors default to bottom-center of the decoded image (<c>CenterX = W/2</c>, <c>CenterY = H</c>,
-    ///     <c>Left = Top = 0</c>) — phase 1 doesn't read per-frame center data.
+    ///     <para>
+    ///     Auto-trims pack PNGs at load by computing the per-creature union bbox — the tightest rectangle that
+    ///     contains every visible pixel across <em>all</em> of this creature's pair-master frames. Every frame is
+    ///     cropped to that same rectangle, so the bottom-center anchor stays stable across frames even when
+    ///     individual frames' silhouettes differ in size (e.g., an attack frame wider than the idle frame in a
+    ///     future multi-frame pack). The union bbox is cached per spriteId and cleared on map change.
+    ///     </para>
     /// </summary>
-    private static SpriteFrame? LoadPackFrame(CreaturePack pack, int spriteId, int frameIndex)
+    private SpriteFrame? LoadPackFrame(CreaturePack pack, int spriteId, int frameIndex)
     {
-        if ((frameIndex < 0) || (frameIndex >= pack.GetPairCount(spriteId)))
+        var pairCount = pack.GetPairCount(spriteId);
+
+        if ((frameIndex < 0) || (frameIndex >= pairCount))
             return null;
+
+        if (!PackCreatureUnionBboxCache.TryGetValue(spriteId, out var unionBbox))
+        {
+            unionBbox = ComputePackUnionBbox(pack, spriteId, pairCount);
+
+            if (unionBbox.IsEmpty)
+                return null;
+
+            PackCreatureUnionBboxCache[spriteId] = unionBbox;
+        }
 
         if (!pack.TryGetFrame(spriteId, frameIndex, out var image) || image is null)
             return null;
 
         using (image)
         {
-            var texture = TextureConverter.ToTexture2D(image);
+            using var cropped = image.Subset(unionBbox);
+
+            if (cropped is null)
+                return null;
+
+            var texture = TextureConverter.ToTexture2D(cropped);
 
             return new SpriteFrame(
                 texture,
@@ -327,6 +358,86 @@ public sealed class CreatureRenderer : IDisposable
                 Left: 0,
                 Top: 0);
         }
+    }
+
+    /// <summary>
+    ///     Computes the union of all pair-master frame bboxes for a pack-served creature. Returns an empty rect if
+    ///     no frame contains any visible pixels (a degenerate, fully-transparent pack entry).
+    /// </summary>
+    private static SKRectI ComputePackUnionBbox(CreaturePack pack, int spriteId, int pairCount)
+    {
+        var minX = int.MaxValue;
+        var minY = int.MaxValue;
+        var maxX = int.MinValue;
+        var maxY = int.MinValue;
+
+        for (var i = 0; i < pairCount; i++)
+        {
+            if (!pack.TryGetFrame(spriteId, i, out var image) || image is null)
+                continue;
+
+            using (image)
+            {
+                var bbox = FindAlphaBoundingBox(image);
+
+                if (bbox.IsEmpty)
+                    continue;
+
+                if (bbox.Left < minX)
+                    minX = bbox.Left;
+
+                if (bbox.Top < minY)
+                    minY = bbox.Top;
+
+                if (bbox.Right > maxX)
+                    maxX = bbox.Right;
+
+                if (bbox.Bottom > maxY)
+                    maxY = bbox.Bottom;
+            }
+        }
+
+        if (maxX <= minX)
+            return SKRectI.Empty;
+
+        return new SKRectI(minX, minY, maxX, maxY);
+    }
+
+    /// <summary>
+    ///     Scans a decoded <see cref="SKImage" /> for the tightest rectangle containing every pixel with non-zero
+    ///     alpha. Used by the per-creature union-bbox computation; the result is in source-image coordinates.
+    /// </summary>
+    private static SKRectI FindAlphaBoundingBox(SKImage image)
+    {
+        using var bitmap = SKBitmap.FromImage(image);
+        var width = bitmap.Width;
+        var height = bitmap.Height;
+        var minX = width;
+        var minY = height;
+        var maxX = -1;
+        var maxY = -1;
+
+        for (var y = 0; y < height; y++)
+        for (var x = 0; x < width; x++)
+            if (bitmap.GetPixel(x, y).Alpha > 0)
+            {
+                if (x < minX)
+                    minX = x;
+
+                if (x > maxX)
+                    maxX = x;
+
+                if (y < minY)
+                    minY = y;
+
+                if (y > maxY)
+                    maxY = y;
+            }
+
+        if (maxX < 0)
+            return SKRectI.Empty;
+
+        return new SKRectI(minX, minY, maxX + 1, maxY + 1);
     }
 
     
