@@ -1221,6 +1221,11 @@ public sealed partial class WorldScreen
     //--- exit / state ---
 
     private const float EXIT_CONFIRM_SECONDS = 10f;
+    //buggy/older servers (e.g. Hybrasyl, which enqueues the Redirect with a 1200ms TransmitDelay and
+    //drops the user from WorldState before the queue flushes) close the socket without sending Redirect.
+    //this window says "if disconnect arrives within N seconds of us sending the confirm, treat it as a
+    //graceful exit instead of an unexpected drop."
+    private const float EXIT_IN_PROGRESS_GRACE_SECONDS = 10f;
 
     private void BeginExit()
     {
@@ -1244,6 +1249,7 @@ public sealed partial class WorldScreen
             ExitConfirmPopup.Hide();
 
         Game.Connection.RequestExit(false);
+        ExitInProgressSecondsRemaining = EXIT_IN_PROGRESS_GRACE_SECONDS;
     }
 
     private void HandleExitResponse(ExitResponseArgs args)
@@ -1260,14 +1266,28 @@ public sealed partial class WorldScreen
         if (newState == ConnectionState.Login)
         {
             RedirectInProgress = false;
+            ExitInProgressSecondsRemaining = 0f;
             PendingLoginSwitch = true;
 
             return;
         }
 
-        //unexpected disconnect — show reconnect prompt (skip if this is part of a redirect sequence)
         if ((newState == ConnectionState.Disconnected) && !RedirectInProgress)
+        {
+            //defensive: a disconnect arriving within the exit-in-progress grace window is the expected
+            //logout outcome on servers that drop the socket without flushing Redirect. transition to
+            //login instead of showing the unexpected-disconnect popup.
+            if (ExitInProgressSecondsRemaining > 0f)
+            {
+                ExitInProgressSecondsRemaining = 0f;
+                PendingLoginSwitch = true;
+
+                return;
+            }
+
+            //unexpected disconnect — show reconnect prompt
             DisconnectPopup.Show("Connection lost.");
+        }
     }
 
     //--- helpers ---

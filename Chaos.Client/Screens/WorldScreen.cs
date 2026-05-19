@@ -116,6 +116,10 @@ public sealed partial class WorldScreen : IScreen
     private OkPopupMessageControl DisconnectPopup = null!;
     private OkPopupMessageControl ExitConfirmPopup = null!;
     private float ExitConfirmSecondsRemaining;
+    //grace window after ConfirmExit fires — if a disconnect arrives within this window we treat it as
+    //the expected logout (suppress the "Connection Lost" popup and transition to login). Defensive against
+    //servers that drop the connection without flushing the Redirect packet.
+    private float ExitInProgressSecondsRemaining;
 
     //event detail popup (from events tab)
     private EventMetadataDetailsControl EventMetadataDetails = null!;
