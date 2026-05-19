@@ -63,4 +63,12 @@ public sealed class AssetPackCoverageEntry
     /// </summary>
     [JsonPropertyName("dimensions")]
     public int[]? Dimensions { get; init; }
+
+    /// <summary>
+    ///     Optional list of 1-based item IDs that participate in the runtime find-and-replace dye pass. Only meaningful
+    ///     for <c>item_icons</c> content. Items outside this list ignore the server's color byte and render as-is —
+    ///     the renderer also collapses the cache key to <c>color = 0</c> for them.
+    /// </summary>
+    [JsonPropertyName("dyeable")]
+    public int[]? Dyeable { get; init; }
 }

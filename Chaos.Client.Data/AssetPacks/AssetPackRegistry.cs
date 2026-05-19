@@ -18,6 +18,7 @@ public static class AssetPackRegistry
 
     private static IconPack? CurrentIconPack;
     private static NationBadgePack? CurrentNationBadgePack;
+    private static ItemPack? CurrentItemPack;
     private static bool Initialized;
 
     /// <summary>
@@ -49,6 +50,12 @@ public static class AssetPackRegistry
     ///     is present.
     /// </summary>
     public static NationBadgePack? GetNationBadgePack() => CurrentNationBadgePack;
+
+    /// <summary>
+    ///     Returns the currently-registered item-icon pack, or null if no pack of <c>content_type: item_icons</c> is
+    ///     present. Stage 1 is single-pack only — multi-pack support (with per-ID dispatch) lands in Stage 2.
+    /// </summary>
+    public static ItemPack? GetItemPack() => CurrentItemPack;
 
     private static void TryRegisterPack(string path)
     {
@@ -113,6 +120,9 @@ public static class AssetPackRegistry
             case "nation_badges":
                 return TryRegisterNationBadgePack(archive, manifest);
 
+            case "item_icons":
+                return TryRegisterItemPack(archive, manifest);
+
             default:
                 return false;
         }
@@ -145,6 +155,23 @@ public static class AssetPackRegistry
         }
 
         LogWarning($"nation badge pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentNationBadgePack.Manifest.PackId}' ({CurrentNationBadgePack.Manifest.Priority})");
+        archive.Dispose();
+
+        return true;
+    }
+
+    private static bool TryRegisterItemPack(ZipArchive archive, AssetPackManifest manifest)
+    {
+        //item_icons is strictly additive — first-registered pack wins, no priority resolution (per scoping doc).
+        //Stage 2 will expand this to a List<ItemPack> with per-ID dispatch.
+        if (CurrentItemPack is null)
+        {
+            CurrentItemPack = new ItemPack(archive, manifest);
+
+            return true;
+        }
+
+        LogWarning($"item pack '{manifest.PackId}' ignored — pack '{CurrentItemPack.Manifest.PackId}' is already registered (item_icons is single-pack in Stage 1, no priority resolution)");
         archive.Dispose();
 
         return true;

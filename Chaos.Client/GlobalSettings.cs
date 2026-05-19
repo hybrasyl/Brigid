@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using Chaos.Client.Data;
 using Chaos.Client.Networking;
+using Chaos.Client.Rendering;
 using Chaos.Client.Systems;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -67,6 +68,9 @@ public static class GlobalSettings
             DataPath,
             LobbyHost,
             LobbyPort);
+
+        if (DataContext.AislingDrawData.DyeColorTable.Contains(0))
+            ItemDyePass.VerifyAgainstLegacy(DataContext.AislingDrawData.DyeColorTable[0].Colors);
 
         LegendColors.Initialize();
         TextColors.Initialize();

@@ -1,5 +1,6 @@
 #region
 using Chaos.Client.Data;
+using Chaos.Client.Data.AssetPacks;
 using Chaos.Client.Rendering.Utility;
 using DALib.Drawing;
 using Microsoft.Xna.Framework;
@@ -88,22 +89,54 @@ public sealed class ItemRenderer : IDisposable
     }
 
     /// <summary>
-    ///     Returns the ground item sprite for the given sprite ID and dye color. Applies palette dye if color is non-zero.
+    ///     Returns the ground item sprite for the given sprite ID and dye color. If an <c>item_icons</c> asset pack covers
+    ///     the ID, renders from the pack PNG (running the find-and-replace dye pass for dyeable IDs); otherwise renders
+    ///     from the legacy EPF + palette pipeline. Non-dyeable pack items collapse to <c>color = 0</c> in the cache so a
+    ///     single decode is shared across every server-sent color byte for that ID.
     /// </summary>
     public ItemSprite? GetSprite(int spriteId, byte color = 0)
     {
+        var pack = AssetPackRegistry.GetItemPack();
+        var packCovers = (pack is not null) && pack.HasItem(spriteId);
+
+        if (packCovers && !pack!.IsDyeable(spriteId))
+            color = 0;
+
         var key = (spriteId, color);
 
         if (SpriteCache.TryGetValue(key, out var cached))
             return cached;
 
-        var sprite = LoadSprite(spriteId, color);
+        var sprite = packCovers
+            ? LoadSpriteFromPack(pack!, spriteId, color)
+            : LoadSpriteFromLegacy(spriteId, color);
         SpriteCache[key] = sprite;
 
         return sprite;
     }
 
-    private static ItemSprite? LoadSprite(int spriteId, byte color)
+    private static ItemSprite? LoadSpriteFromPack(ItemPack pack, int spriteId, byte color)
+    {
+        if (!pack.TryGetItemImage(spriteId, out var sourceImage) || (sourceImage is null))
+            return null;
+
+        using var owned = sourceImage;
+
+        if ((color > 0) && DataContext.AislingDrawData.DyeColorTable.Contains(color))
+        {
+            using var dyed = ItemDyePass.ApplyDyeFindReplace(owned, DataContext.AislingDrawData.DyeColorTable[color]);
+            var dyedTexture = TextureConverter.ToTexture2D(dyed);
+
+            //modern PNGs are tightly cropped — no legacy frame Left/Top padding to compensate for
+            return new ItemSprite(dyedTexture, 0, 0);
+        }
+
+        var texture = TextureConverter.ToTexture2D(owned);
+
+        return new ItemSprite(texture, 0, 0);
+    }
+
+    private static ItemSprite? LoadSpriteFromLegacy(int spriteId, byte color)
     {
         var palettized = DataContext.PanelSprites.GetItemSprite(spriteId);
 
