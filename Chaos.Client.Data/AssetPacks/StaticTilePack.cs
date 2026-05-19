@@ -16,23 +16,10 @@ namespace Chaos.Client.Data.AssetPacks;
 ///     would produce mixed-frame glitches). Decoded <see cref="SKImage" /> results must be disposed by the caller —
 ///     typically by the renderer's image cache.
 /// </summary>
-public sealed class StaticTilePack : IDisposable
+public sealed class StaticTilePack : AssetPack
 {
-    private readonly ZipArchive Archive;
-    private readonly Dictionary<string, ZipArchiveEntry> EntryIndex;
-
-    public AssetPackManifest Manifest { get; }
-
     internal StaticTilePack(ZipArchive archive, AssetPackManifest manifest)
-    {
-        Archive = archive;
-        Manifest = manifest;
-
-        EntryIndex = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var entry in archive.Entries)
-            EntryIndex[entry.FullName] = entry;
-    }
+        : base(archive, manifest) { }
 
     /// <summary>
     ///     Attempts to decode the PNG for the given background (floor) tile ID. Returns false if the entry isn't
@@ -45,32 +32,4 @@ public sealed class StaticTilePack : IDisposable
     ///     present, decode fails, or the entry is malformed — caller falls back to legacy <c>stc{tileId:D5}.hpf</c>.
     /// </summary>
     public bool TryGetWallImage(int tileId, out SKImage? image) => TryGetImage($"wall{tileId:D5}.png", out image);
-
-    private bool TryGetImage(string name, out SKImage? image)
-    {
-        image = null;
-
-        if (!EntryIndex.TryGetValue(name, out var entry))
-            return false;
-
-        try
-        {
-            using var entryStream = entry.Open();
-            using var ms = new MemoryStream();
-            entryStream.CopyTo(ms);
-            ms.Position = 0;
-            image = SKImage.FromEncodedData(ms);
-
-            return image is not null;
-        }
-        catch
-        {
-            image?.Dispose();
-            image = null;
-
-            return false;
-        }
-    }
-
-    public void Dispose() => Archive.Dispose();
 }
