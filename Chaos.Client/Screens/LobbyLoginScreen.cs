@@ -39,7 +39,7 @@ public sealed class LobbyLoginScreen : IScreen
     private LoginControl LoginControl = null!;
     private PasswordChangeControl PasswordChangeControl = null!;
     private bool PendingWorldSwitch;
-    private OkPopupMessageControl PopupMessage = null!;
+    private OkPopupMessageControl LobbyLoginPopupMessage = null!;
     private IReadOnlyList<ServerTableEntry> ServerList = [];
     private ServerSelectControl ServerSelectControl = null!;
 
@@ -124,11 +124,12 @@ public sealed class LobbyLoginScreen : IScreen
         PasswordChangeControl.OnOk += OnPasswordChangeOkClicked;
         PasswordChangeControl.OnCancel += OnPasswordChangeCancelClicked;
 
-        PopupMessage = new OkPopupMessageControl
+        LobbyLoginPopupMessage = new OkPopupMessageControl
         {
-            ZIndex = 1
+            ZIndex = 1,
+            Name = "LobbyLoginPopupMessage"
         };
-        PopupMessage.OnOk += OnPopupMessageOk;
+        LobbyLoginPopupMessage.OnOk += OnLobbyLoginPopupMessageOk;
 
         Root = new LobbyRootPanel
         {
@@ -142,7 +143,7 @@ public sealed class LobbyLoginScreen : IScreen
         Root.AddChild(LoginNoticeControl);
         Root.AddChild(CharCreateControl);
         Root.AddChild(PasswordChangeControl);
-        Root.AddChild(PopupMessage);
+        Root.AddChild(LobbyLoginPopupMessage);
 
         //build ui atlas after all login controls are constructed
         UiRenderer.Instance?.BuildAtlas();
@@ -196,10 +197,7 @@ public sealed class LobbyLoginScreen : IScreen
         Root!.Update(gameTime);
     }
 
-    private void WireRootInputHandlers()
-    {
-        ((LobbyRootPanel)Root!).Screen = this;
-    }
+    private void WireRootInputHandlers() => ((LobbyRootPanel)Root!).Screen = this;
 
     #region Button Handlers
     private void OnContinueClicked()
@@ -229,14 +227,14 @@ public sealed class LobbyLoginScreen : IScreen
 
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(password))
         {
-            PopupMessage.Show("Name and password are required.");
+            LobbyLoginPopupMessage.Show("Name and password are required.");
 
             return;
         }
 
         if (password != passwordConfirm)
         {
-            PopupMessage.Show("Passwords do not match.");
+            LobbyLoginPopupMessage.Show("Passwords do not match.");
             CharCreateControl.PasswordField?.Text = string.Empty;
             CharCreateControl.PasswordConfirmField?.Text = string.Empty;
 
@@ -274,14 +272,14 @@ public sealed class LobbyLoginScreen : IScreen
 
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(currentPassword) || string.IsNullOrWhiteSpace(newPassword))
         {
-            PopupMessage.Show("All fields are required.");
+            LobbyLoginPopupMessage.Show("All fields are required.");
 
             return;
         }
 
         if (newPassword != confirmPassword)
         {
-            PopupMessage.Show("New passwords do not match.");
+            LobbyLoginPopupMessage.Show("New passwords do not match.");
             PasswordChangeControl.NewPasswordField?.Text = string.Empty;
             PasswordChangeControl.ConfirmPasswordField?.Text = string.Empty;
 
@@ -354,7 +352,7 @@ public sealed class LobbyLoginScreen : IScreen
         StartPanel.SetButtonsEnabled(true);
     }
 
-    private void OnPopupMessageOk() => PopupMessage.Hide();
+    private void OnLobbyLoginPopupMessageOk() => LobbyLoginPopupMessage.Hide();
 
     private void OnServerSelected(byte serverId)
     {
@@ -402,11 +400,7 @@ public sealed class LobbyLoginScreen : IScreen
         }
     }
 
-    private void OnConnectionError(string error)
-    {
-        //connection error: {error}
-        Connecting = false;
-    }
+    private void OnConnectionError(string error) => Connecting = false;
 
     private void OnServerTableReceived(ServerTableData data)
     {
@@ -464,7 +458,7 @@ public sealed class LobbyLoginScreen : IScreen
             LoginControl.PasswordField.IsFocused = true;
         }
 
-        PopupMessage.Show(args.Message ?? "Login failed.");
+        LobbyLoginPopupMessage.Show(args.Message ?? "Login failed.");
     }
 
     private void HandleCharCreateMessage(LoginMessageArgs args)
@@ -487,7 +481,7 @@ public sealed class LobbyLoginScreen : IScreen
                 CreatingCharacter = false;
                 AwaitingCharFinalize = false;
                 CharCreateControl.Hide();
-                PopupMessage.Show("Character has been created. Choose \"CONTINUE\".");
+                LobbyLoginPopupMessage.Show("Character has been created. Choose \"CONTINUE\".");
             }
 
             return;
@@ -518,7 +512,7 @@ public sealed class LobbyLoginScreen : IScreen
                 throw new ArgumentOutOfRangeException();
         }
 
-        PopupMessage.Show(args.Message ?? "Character creation failed.");
+        LobbyLoginPopupMessage.Show(args.Message ?? "Character creation failed.");
     }
 
     private void HandlePasswordChangeMessage(LoginMessageArgs args)
@@ -529,12 +523,12 @@ public sealed class LobbyLoginScreen : IScreen
         if (args.LoginMessageType == LoginMessageType.Confirm)
         {
             PasswordChangeControl.Hide();
-            PopupMessage.Show("Password has been changed.");
+            LobbyLoginPopupMessage.Show("Password has been changed.");
 
             return;
         }
 
-        PopupMessage.Show(args.Message ?? "Password change failed.");
+        LobbyLoginPopupMessage.Show(args.Message ?? "Password change failed.");
     }
 
     private void OnLoginNotice(LoginNoticeArgs args)

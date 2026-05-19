@@ -55,8 +55,7 @@ public sealed class DialogOptionPanel : FramedDialogPanelBase
         
         OkButton = CreateButton("Btn1");
 
-        if (OkButton is not null)
-            OkButton.Enabled = false;
+        OkButton?.Enabled = false;
     }
 
     private void ClearOptionLabels()

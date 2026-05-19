@@ -196,9 +196,9 @@ public sealed class EffectRenderer : IDisposable
             using var skImage = Graphics.RenderImage(epfFrame, palette, alphaType);
             var texture = TextureConverter.ToTexture2D(skImage);
 
-            //use center point from .tbl if available, otherwise fall back to half-size
-            var centerX = centerPoints is not null ? centerPoints[epfFrameIndex].X : (short)(epfFrame.PixelWidth / 2);
-            var centerY = centerPoints is not null ? centerPoints[epfFrameIndex].Y : (short)(epfFrame.PixelHeight / 2);
+            //use center point from .tbl if available, otherwise fall back to the standard tile-bottom-center anchor
+            var centerX = centerPoints is not null ? centerPoints[epfFrameIndex].X : (short)28;
+            var centerY = centerPoints is not null ? centerPoints[epfFrameIndex].Y : (short)70;
 
             frames[i] = new SpriteFrame(
                 texture,

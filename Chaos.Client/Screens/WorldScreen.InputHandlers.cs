@@ -119,6 +119,7 @@ public sealed partial class WorldScreen
         {
             GoldDrop.CenterVerticallyIn(viewport);
             GoldDrop.ShowForTarget(droppedOnEntity ? entity!.Id : null, tileX, tileY);
+            WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
 
             return;
         }
@@ -300,6 +301,19 @@ public sealed partial class WorldScreen
         if (keyIndex < 0)
             return false;
 
+        //past this point the keystroke is unambiguously an emote attempt — consume it
+        //regardless of whether the emote actually fires, so it doesn't fall through to
+        //HandleSlotHotkey and trigger an item/skill slot use as an unintended fallback.
+        e.Handled = true;
+
+        var player = WorldState.GetPlayerEntity();
+
+        //gate emote initiation on the same condition as movement: face emotes lock
+        //the body while playing, so it shouldn't be possible to start one mid-walk
+        //or while another emote/body anim is already running.
+        if (player is null || !player.IsAtRest)
+            return true;
+
         BodyAnimation bodyAnimation;
 
         if (e is { Ctrl: true, Alt: false })
@@ -310,7 +324,6 @@ public sealed partial class WorldScreen
             bodyAnimation = (BodyAnimation)(ALT_EMOTE_BASE + keyIndex);
 
         Game.Connection.SendEmote(bodyAnimation);
-        e.Handled = true;
 
         return true;
     }
@@ -472,10 +485,7 @@ public sealed partial class WorldScreen
             {
                 var skillSlot = panel.GetSkillSlot(slot);
 
-                if (skillSlot is null)
-                    continue;
-
-                skillSlot.Chant = chantLines.Length > 0 ? chantLines[0] : string.Empty;
+                skillSlot?.Chant = chantLines.Length > 0 ? chantLines[0] : string.Empty;
             }
 
             SaveSkillChants();
@@ -695,6 +705,16 @@ public sealed partial class WorldScreen
         //stack guard: suppress all game hotkeys when a popup is active
         if (Game.Dispatcher.ControlStackCount > 0)
             return;
+
+        //escape — collapse any expanded HUD panel back to normal size. only consume
+        //the key when something was actually collapsed so it stays a no-op otherwise.
+        if (e.Key == Keys.Escape)
+        {
+            if (WorldHud.CollapseExpanded())
+                e.Handled = true;
+
+            return;
+        }
 
         //spacebar assail — fires on both initial press and os key-repeat keydowns
         //while held. sits after the stack guard so dialogs/menus block it; sits inside
@@ -949,6 +969,28 @@ public sealed partial class WorldScreen
         if (HandleSlotHotkey(e))
             return;
 
+        //shift+up/down scrolls the active chat-style panel (F = chat, shift+F = message history)
+        if (e.Shift && e.Key is Keys.Up or Keys.Down)
+        {
+            var scrollDelta = e.Key == Keys.Up ? 1 : -1;
+
+            if (WorldHud.ChatDisplay.Visible)
+            {
+                WorldHud.ChatDisplay.Scroll(scrollDelta);
+                e.Handled = true;
+
+                return;
+            }
+
+            if (WorldHud.MessageHistory.Visible)
+            {
+                WorldHud.MessageHistory.Scroll(scrollDelta);
+                e.Handled = true;
+
+                return;
+            }
+        }
+
         //player movement — arrow keys and zxcv
         Direction? direction = e.Key switch
         {
@@ -965,22 +1007,29 @@ public sealed partial class WorldScreen
 
         if (direction.HasValue)
         {
+            //any movement intent dismisses the door context menu. right-click-driven movement is
+            //already covered by the outside-click guard in OnRootMouseDown; this path catches
+            //keyboard movement (arrows + zxcv).
+            if (DoorContext.Visible)
+                DoorContext.Hide();
+
             Pathfinding.Clear();
             var player = WorldState.GetPlayerEntity();
 
             if (player is not null)
             {
-                if (player.AnimState == EntityAnimState.Idle)
+                if (player.IsAtRest)
                 {
+                    //fresh input at idle invalidates any direction queued from a prior walk —
+                    //the queue must not override what the user just pressed.
+                    QueuedWalkDirection = null;
+
                     if (player.Direction != direction.Value)
                     {
                         Game.Connection.Turn(direction.Value);
                         player.Direction = direction.Value;
                     } else
-                    {
                         PredictAndWalk(player, direction.Value);
-                        QueuedWalkDirection = null;
-                    }
                 } else if (player.AnimState == EntityAnimState.Walking)
                 {
                     var totalDuration = Math.Max(1f, player.AnimFrameCount * player.AnimFrameIntervalMs);
@@ -1019,6 +1068,17 @@ public sealed partial class WorldScreen
     /// </summary>
     private void OnRootMouseDown(MouseDownEvent e)
     {
+        //door context menu dismisses on any click outside its bounds — clicks on the menu itself
+        //are consumed by DoorContextMenu.OnClick and never reach here. swallow the event so the
+        //same click doesn't ALSO kick off pathfinding/attack on the tile underneath.
+        if (DoorContext.Visible && !DoorContext.ContainsPoint(e.ScreenX, e.ScreenY))
+        {
+            DoorContext.Hide();
+            e.Handled = true;
+
+            return;
+        }
+
         if (e.Button != MouseButton.Right)
             return;
 
@@ -1042,9 +1102,6 @@ public sealed partial class WorldScreen
             return;
         }
 
-        if (e.Ctrl)
-            return;
-
         //cache the hovered entity for the upcoming doubleclick — pathfinding triggered by this press will start
         //moving the player on the next update, which shifts the camera and makes the second click's ScreenToTile
         //resolve to a different world tile than the entity actually occupies
@@ -1065,7 +1122,20 @@ public sealed partial class WorldScreen
             PendingDoubleClickTick = currentTick;
         }
 
-        HandleWorldRightClick(e.ScreenX, e.ScreenY);
+        //ctrl is a UI modifier (ctrl+left-click opens the aisling context menu) — suppress single-press
+        //pathfinding, but prime the same-tile tracker so a right-doubleclick still resolves to follow.
+        if (e.Ctrl)
+        {
+            if (MapFile is not null)
+            {
+                (var tileX, var tileY) = ScreenToTile(e.ScreenX, e.ScreenY);
+                tileX = Math.Clamp(tileX, 0, MapFile.Width - 1);
+                tileY = Math.Clamp(tileY, 0, MapFile.Height - 1);
+                RightClickTracker.Click(tileX, tileY);
+            }
+        } else
+            HandleWorldRightClick(e.ScreenX, e.ScreenY);
+
         e.Handled = true;
     }
 
@@ -1083,6 +1153,7 @@ public sealed partial class WorldScreen
         if (Exchange.Visible && Exchange.IsMyMoneyClicked(e.ScreenX, e.ScreenY))
         {
             GoldDrop.ShowForTarget(Exchange.OtherUserId, 0, 0);
+            WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
             e.Handled = true;
 
             return;
@@ -1180,7 +1251,7 @@ public sealed partial class WorldScreen
             {
                 var entity = GetEntityAtScreen(e.ScreenX, e.ScreenY);
 
-                if (entity is not null)
+                if (entity is not null && !entity.IsHidden)
                 {
                     if (entity.Type == ClientEntityType.GroundItem)
                     {
@@ -1236,8 +1307,10 @@ public sealed partial class WorldScreen
             }
 
             //reject self — following yourself produces a re-pathfinding loop that walks into walls or oscillates
+            //reject hidden aislings — they have a hitbox for spell targeting but should not be followable
             if (entity?.Type is ClientEntityType.Aisling or ClientEntityType.Creature
-                && (entity.Id != Game.Connection.AislingId))
+                && (entity.Id != Game.Connection.AislingId)
+                && !entity.IsHidden)
             {
                 Pathfinding.SetEntityTarget(entity.Id);
                 PathfindToEntity(player, entity);
@@ -1385,6 +1458,28 @@ public sealed partial class WorldScreen
         if (entity?.Type is ClientEntityType.Creature)
             Game.Connection.ClickEntity(entity.Id);
         else if (TileHasForeground(tileX, tileY))
+            ClickForegroundTile(tileX, tileY);
+    }
+
+    /// <summary>
+    ///     Routes a foreground-tile click to the appropriate send path. Door tiles use the extended
+    ///     <see cref="ConnectionManager.ClickDoor" /> (7-byte payload with layer + modifier bytes that retail's 0x43
+    ///     handler requires for door dispatch); non-door foreground (signposts, anything else) uses the standard 5-byte
+    ///     <see cref="ConnectionManager.ClickTile" />. Layer byte is empirically derived: door in LeftForeground → 0
+    ///     (E/W panel), door in RightForeground → 1 (N/S panel).
+    /// </summary>
+    private void ClickForegroundTile(int tileX, int tileY)
+    {
+        if (MapFile is null)
+            return;
+
+        var tile = MapFile.Tiles[tileX, tileY];
+
+        if (DoorTable.IsDoorTile(tile.LeftForeground))
+            Game.Connection.ClickDoor(tileX, tileY, 0);
+        else if (DoorTable.IsDoorTile(tile.RightForeground))
+            Game.Connection.ClickDoor(tileX, tileY, 1);
+        else
             Game.Connection.ClickTile(tileX, tileY);
     }
 
@@ -1504,7 +1599,7 @@ public sealed partial class WorldScreen
 
     private List<(string Label, Action Callback)> FindNearbyDoors(int mouseX, int mouseY)
     {
-        var results = new List<(int DistanceSq, string Label, Action Callback)>();
+        var results = new List<DoorProximityDedup.DoorHit<(string Label, Action Callback)>>();
 
         if (MapFile is null)
             return [];
@@ -1565,18 +1660,27 @@ public sealed partial class WorldScreen
 
                 var doorX = tx;
                 var doorY = ty;
-                Action callback = () => Game.Connection.ClickTile(doorX, doorY);
 
-                results.Add((distSq, label, callback));
+                //layer byte mirrors ClickForegroundTile: 0 if the door panel sits in LeftForeground (E/W door), 1 if
+                //in RightForeground (N/S door). captured into a local so the lambda closes over the byte rather than
+                //re-checking lfg/rfg at click time.
+                byte doorLayer = DoorTable.IsDoorTile(lfg) ? (byte)0 : (byte)1;
+                Action callback = () => Game.Connection.ClickDoor(doorX, doorY, doorLayer);
+
+                results.Add(new DoorProximityDedup.DoorHit<(string, Action)>(distSq, tx, ty, (label, callback)));
             }
 
         results.Sort(static (a, b) => a.DistanceSq.CompareTo(b.DistanceSq));
 
-        var limit = Math.Min(results.Count, DoorContextMenu.MAX_ENTRIES);
+        //collapse multi-tile doors: a 2/3/4-tile door registers each panel separately, but should
+        //appear as one menu entry. see DoorProximityDedup for the 4-neighbor adjacency rule.
+        var deduped = DoorProximityDedup.CollapseAdjacent(results);
+
+        var limit = Math.Min(deduped.Count, DoorContextMenu.MAX_ENTRIES);
         var final = new List<(string Label, Action Callback)>(limit);
 
         for (var i = 0; i < limit; i++)
-            final.Add((results[i].Label, results[i].Callback));
+            final.Add(deduped[i].Payload);
 
         return final;
     }
@@ -1593,7 +1697,7 @@ public sealed partial class WorldScreen
 
         var player = WorldState.GetPlayerEntity();
 
-        if (player is null || (player.AnimState != EntityAnimState.Idle))
+        if (player is null || !player.IsAtRest)
             return;
 
         var viewport = WorldHud.ViewportBounds;

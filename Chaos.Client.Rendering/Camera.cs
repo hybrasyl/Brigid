@@ -182,15 +182,15 @@ public sealed class Camera
     }
 
     /// <summary>
-    ///     Converts world pixel coordinates to tile coordinates.
+    ///     Converts world pixel coordinates to tile coordinates. Inverts <see cref="TileToWorld" />, which returns the
+    ///     bounding-box top-left of a tile's image. The diamond's visual center is at +HALF_TILE_WIDTH, +HALF_TILE_HEIGHT
+    ///     from that origin, so to map a click on the visual center back to the right tile, subtract those offsets from
+    ///     the world coordinates before doing the iso-grid math.
     /// </summary>
     public static Point WorldToTile(float worldX, float worldY, int mapHeight)
     {
-        //shift by half-tile width to align picking with the visual tile grid.
-        //tiletoworld returns the image origin (top-left), but the image center
-        //is half_tile_width to the right of the mathematical diamond center.
         var isoX = (worldX - HALF_TILE_WIDTH) / HALF_TILE_WIDTH;
-        var isoY = worldY / HALF_TILE_HEIGHT;
+        var isoY = (worldY - HALF_TILE_HEIGHT) / HALF_TILE_HEIGHT;
 
         var tileX = (int)MathF.Floor((isoX + isoY - mapHeight + 1) / 2f);
         var tileY = (int)MathF.Floor((isoY - isoX + mapHeight - 1) / 2f);

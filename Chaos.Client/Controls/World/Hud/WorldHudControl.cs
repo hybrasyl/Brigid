@@ -162,6 +162,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         WeightLabel.PaddingLeft = 0;
         WeightLabel.PaddingRight = 0;
         CoordsLabel = CreateLabel("SZ_XY", HorizontalAlignment.Center)!;
+        CoordsLabel.TruncateWithEllipsis = false;
         ServerNameLabel = CreateLabel("SZ_SERVER", HorizontalAlignment.Center);
         DescriptionLabel = CreateLabel("SZ_DESCRIPTION");
 
@@ -195,8 +196,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
 
         //btn_changelayout is a stateful indicator — small hud shows the normal frame, and the
         //pressed frame is only shown by the large hud. strip the press-state visual here.
-        if (ChangeLayoutButton is not null)
-            ChangeLayoutButton.PressedTexture = null;
+        ChangeLayoutButton?.PressedTexture = null;
 
         //buttons — lower right
         HelpButton = CreateButton("BTN_HELP");
@@ -603,6 +603,17 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
     ///     Small HUD: only inventory supports expand (3 rows → 5 rows).
     /// </summary>
     public void ToggleExpand() => Inventory.SetExpanded(!Inventory.IsExpanded);
+
+    /// <inheritdoc />
+    public bool CollapseExpanded()
+    {
+        if (!Inventory.IsExpanded)
+            return false;
+
+        Inventory.SetExpanded(false);
+
+        return true;
+    }
 
     public void HandleTabActivation(HudTab tab, bool shift)
     {

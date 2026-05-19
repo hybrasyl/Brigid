@@ -26,8 +26,10 @@ public sealed partial class WorldScreen
     private void HandleMapInfo(MapInfoArgs args)
     {
         WorldMap.HideMap();
-        //same map (refresh) — skip expensive teardown, just clear transient entity state
-        if ((args.MapId == CurrentMapId) && MapFile is not null)
+        //same map (refresh) — skip expensive teardown, just clear transient entity state. checksum must
+        //also match: a server-side map edit reuses the same id but changes the bytes, so a mismatch means
+        //the cached MapFile is stale and we have to take the full reload path.
+        if ((args.MapId == CurrentMapId) && (args.CheckSum == CurrentMapCheckSum) && MapFile is not null)
         {
             ClearTransientState();
 
@@ -59,6 +61,7 @@ public sealed partial class WorldScreen
         MapPreloaded = false;
         AwaitingMapData = false;
         CurrentMapId = args.MapId;
+        CurrentMapCheckSum = args.CheckSum;
         CurrentMapFlags = (MapFlags)args.Flags;
         MapLoading.Show();
 
@@ -95,7 +98,6 @@ public sealed partial class WorldScreen
         DebugRenderer.Clear();
         NpcSession.HideAll();
         Pathfinding.Clear();
-        PendingWalks.Clear();
         GroupHighlightedIds.Clear();
         Game.AislingRenderer.ClearGroupTintCache();
         Game.CreatureRenderer.ClearTintCaches();
@@ -358,8 +360,12 @@ public sealed partial class WorldScreen
         if ((player.TileX == x) && (player.TileY == y))
             return;
 
-        //server-authoritative position correction — clear all pending predictions and snap back
-        PendingWalks.Clear();
+        //server-authoritative position correction — snap and reset visuals.
+        //InFlightWalkAcks is intentionally NOT touched: any acks the server still owes us for walks
+        //we predicted will arrive after this Location and drain the counter naturally as no-ops.
+        //Clearing the counter here would turn those legitimate acks into "unmatched" acks that fall
+        //through HandleClientWalkResponse's rubberband path and undo the snap we just applied —
+        //which is exactly the F5-during-walk symptom.
         QueuedWalkDirection = null;
         player.TileX = x;
         player.TileY = y;

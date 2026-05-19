@@ -221,11 +221,15 @@ public sealed class EntityOverlayManager
 
             if (!NameTagCache.TryGetValue(entity.Id, out var cachedText))
             {
-                cachedText = new TextElement();
+                cachedText = new TextElement
+                {
+                    ShadowStyle = ShadowStyle.BothSides,
+                    ShadowColor = NAME_TAG_SHADOW_COLOR
+                };
                 NameTagCache[entity.Id] = cachedText;
             }
 
-            cachedText.UpdateShadowed(entity.Name, nameColor, NAME_TAG_SHADOW_COLOR);
+            cachedText.Update(entity.Name, nameColor);
 
             if (!cachedText.HasContent)
                 continue;
@@ -233,7 +237,7 @@ public sealed class EntityOverlayManager
             var tileWorld = Camera.TileToWorld(entity.TileX, entity.TileY, mapHeight);
             var entityWorldX = tileWorld.X + DaLibConstants.HALF_TILE_WIDTH + entity.VisualOffset.X;
             var entityWorldY = tileWorld.Y + DaLibConstants.HALF_TILE_HEIGHT + entity.VisualOffset.Y - NAME_TAG_Y_OFFSET;
-            var screenPos = camera.WorldToScreen(new Vector2(entityWorldX - cachedText.Width / 2f, entityWorldY));
+            var screenPos = camera.WorldToScreen(new Vector2(entityWorldX - cachedText.Width / 2, entityWorldY));
 
             cachedText.Draw(spriteBatch, screenPos);
         }

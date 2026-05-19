@@ -48,20 +48,14 @@ public sealed class Exchange
         DisplayColor color,
         string? name)
     {
-        //server sends 1-based indices
-        var index = exchangeIndex - 1;
-
-        if (index < 0)
-            return;
-
+        //legacy DA client dead-stores the slot byte and renders in arrival
+        //order using the list widget's own item count. Match that so we
+        //render identically against Hybrasyl (0-based wire) and retail
+        //(1-based wire).
         var items = rightSide ? OtherItems : MyItems;
-
-        while (items.Count <= index)
-            items.Add(null);
-
-        items[index] = new ExchangeItemData(sprite, color, name);
-
-        ItemAdded?.Invoke(rightSide, (byte)index);
+        var index = (byte)items.Count;
+        items.Add(new ExchangeItemData(sprite, color, name));
+        ItemAdded?.Invoke(rightSide, index);
     }
 
     /// <summary>

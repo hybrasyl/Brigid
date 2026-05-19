@@ -389,29 +389,6 @@ public abstract class UIElement : IDisposable
         TextRenderer.DrawTextClipped(spriteBatch, position, text, color, ClipRect, colorCodesEnabled, opacity);
     }
 
-    /// <summary>
-    ///     Draws shadowed text clipped to this element's ClipRect.
-    /// </summary>
-    protected void DrawTextShadowedClipped(
-        SpriteBatch spriteBatch,
-        Vector2 position,
-        string text,
-        Color textColor,
-        Color shadowColor,
-        bool colorCodesEnabled = true,
-        float opacity = 1f)
-    {
-        if (string.IsNullOrEmpty(text))
-            return;
-
-        //shadow at down-right (+1,+1) and down-left (-1,+1)
-        DrawTextClipped(spriteBatch, position + new Vector2(2, 1), text, shadowColor, colorCodesEnabled, opacity);
-        DrawTextClipped(spriteBatch, position + new Vector2(0, 1), text, shadowColor, colorCodesEnabled, opacity);
-
-        //main text
-        DrawTextClipped(spriteBatch, position + new Vector2(1, 0), text, textColor, colorCodesEnabled, opacity);
-    }
-
     //── event handlers (dispatched by inputdispatcher) ──
 
     public virtual void OnMouseDown(MouseDownEvent e) { }

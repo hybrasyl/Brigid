@@ -413,4 +413,7 @@ runtimes/*
 
 # local-only tooling state
 .claude/
-/.worktrees
+.vscode/settings.json
+
+# Epona launcher staging (local main checkout)
+.worktrees/
