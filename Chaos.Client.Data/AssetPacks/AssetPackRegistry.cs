@@ -19,6 +19,7 @@ public static class AssetPackRegistry
     private static IconPack? CurrentIconPack;
     private static NationBadgePack? CurrentNationBadgePack;
     private static ItemPack? CurrentItemPack;
+    private static NpcPortraitPack? CurrentNpcPortraitPack;
     private static bool Initialized;
 
     /// <summary>
@@ -56,6 +57,13 @@ public static class AssetPackRegistry
     ///     present. Stage 1 is single-pack only — multi-pack support (with per-ID dispatch) lands in Stage 2.
     /// </summary>
     public static ItemPack? GetItemPack() => CurrentItemPack;
+
+    /// <summary>
+    ///     Returns the currently-registered NPC-portrait pack, or null if no pack of
+    ///     <c>content_type: npc_portraits</c> is present. Single pack per content type — when multiple are registered,
+    ///     the highest <c>priority</c> wins.
+    /// </summary>
+    public static NpcPortraitPack? GetNpcPortraitPack() => CurrentNpcPortraitPack;
 
     private static void TryRegisterPack(string path)
     {
@@ -123,6 +131,9 @@ public static class AssetPackRegistry
             case "item_icons":
                 return TryRegisterItemPack(archive, manifest);
 
+            case "npc_portraits":
+                return TryRegisterNpcPortraitPack(archive, manifest);
+
             default:
                 return false;
         }
@@ -172,6 +183,22 @@ public static class AssetPackRegistry
         }
 
         LogWarning($"item pack '{manifest.PackId}' ignored — pack '{CurrentItemPack.Manifest.PackId}' is already registered (item_icons is single-pack in Stage 1, no priority resolution)");
+        archive.Dispose();
+
+        return true;
+    }
+
+    private static bool TryRegisterNpcPortraitPack(ZipArchive archive, AssetPackManifest manifest)
+    {
+        if (CurrentNpcPortraitPack is null || manifest.Priority > CurrentNpcPortraitPack.Manifest.Priority)
+        {
+            CurrentNpcPortraitPack?.Dispose();
+            CurrentNpcPortraitPack = new NpcPortraitPack(archive, manifest);
+
+            return true;
+        }
+
+        LogWarning($"npc portrait pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentNpcPortraitPack.Manifest.PackId}' ({CurrentNpcPortraitPack.Manifest.Priority})");
         archive.Dispose();
 
         return true;

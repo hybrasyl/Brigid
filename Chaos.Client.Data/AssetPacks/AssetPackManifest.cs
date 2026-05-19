@@ -31,8 +31,9 @@ public sealed class AssetPackManifest
     public string PackVersion { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Enum discriminator selecting which typed pack accessor this pack registers with. Known values: <c>ability_icons</c>.
-    ///     Future: <c>tiles</c>, <c>creatures</c>, <c>ui_sprites</c>, <c>effects</c>, <c>bundle</c>.
+    ///     Enum discriminator selecting which typed pack accessor this pack registers with. Known values:
+    ///     <c>ability_icons</c>, <c>nation_badges</c>, <c>item_icons</c>, <c>npc_portraits</c>. Future:
+    ///     <c>tiles</c>, <c>creatures</c>, <c>ui_sprites</c>, <c>effects</c>, <c>bundle</c>.
     /// </summary>
     [JsonPropertyName("content_type")]
     public string ContentType { get; init; } = string.Empty;
@@ -59,7 +60,9 @@ public sealed class AssetPackManifest
 public sealed class AssetPackCoverageEntry
 {
     /// <summary>
-    ///     Two-element array [width, height] in pixels. For ability icons, <c>[32, 32]</c> in v1.
+    ///     Two-element array [width, height] in pixels. For ability icons, <c>[32, 32]</c> in v1. For
+    ///     <c>npc_portraits</c>, the uniform square size every portrait in the pack must match (e.g. <c>[200, 200]</c>);
+    ///     non-square values cause the pack to register with an empty lookup and never serve illustrations.
     /// </summary>
     [JsonPropertyName("dimensions")]
     public int[]? Dimensions { get; init; }
@@ -71,4 +74,34 @@ public sealed class AssetPackCoverageEntry
     /// </summary>
     [JsonPropertyName("dyeable")]
     public int[]? Dyeable { get; init; }
+
+    /// <summary>
+    ///     For <c>npc_portraits</c>, the explicit <c>(NPC name) → (default PNG, optional variant PNGs)</c> lookup
+    ///     table. Replaces the legacy <c>npci.tbl</c> normalization round-trip — keys are matched against the
+    ///     server-sent NPC name verbatim (after whitespace trim). Absent or empty means the pack covers no NPCs.
+    /// </summary>
+    [JsonPropertyName("portraits")]
+    public Dictionary<string, AssetPackPortraitEntry>? Portraits { get; init; }
+}
+
+/// <summary>
+///     A single NPC's portrait entry inside <see cref="AssetPackCoverageEntry.Portraits" />. <see cref="Default" />
+///     is variant 0 and is required if the entry is present. <see cref="Variants" /> is a zero-indexed array of PNG
+///     filenames for variants 1, 2, … — sparse entries (null or empty string) fall back to <see cref="Default" />.
+/// </summary>
+public sealed class AssetPackPortraitEntry
+{
+    /// <summary>
+    ///     PNG filename inside the ZIP root for variant 0 (the default illustration). Required when the entry exists;
+    ///     null or empty causes the whole NPC entry to be skipped at load.
+    /// </summary>
+    [JsonPropertyName("default")]
+    public string? Default { get; init; }
+
+    /// <summary>
+    ///     Optional array of variant PNG filenames. <c>Variants[0]</c> is variant 1, <c>Variants[1]</c> is variant 2,
+    ///     etc. Missing or empty entries fall back to <see cref="Default" /> at lookup time.
+    /// </summary>
+    [JsonPropertyName("variants")]
+    public string[]? Variants { get; init; }
 }
