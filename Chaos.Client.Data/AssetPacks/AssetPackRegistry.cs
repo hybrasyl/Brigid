@@ -28,10 +28,11 @@ public static class AssetPackRegistry
     {
         ["ability_icons"] = static (a, m) => new IconPack(a, m),
         ["nation_badges"] = static (a, m) => new NationBadgePack(a, m),
-        ["item_icons"]        = static (a, m) => new ItemPack(a, m),
-        ["npc_portraits"]     = static (a, m) => new NpcPortraitPack(a, m),
-        ["static_tiles"]      = static (a, m) => new StaticTilePack(a, m),
-        ["legend_mark_icons"] = static (a, m) => new LegendMarkIconPack(a, m)
+        ["item_icons"]          = static (a, m) => new ItemPack(a, m),
+        ["npc_portraits"]       = static (a, m) => new NpcPortraitPack(a, m),
+        ["static_tiles"]        = static (a, m) => new StaticTilePack(a, m),
+        ["legend_mark_icons"]   = static (a, m) => new LegendMarkIconPack(a, m),
+        ["ui_sprite_overrides"] = static (a, m) => new UiSpriteOverridePack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -94,6 +95,12 @@ public static class AssetPackRegistry
     ///     <c>content_type: legend_mark_icons</c> is present.
     /// </summary>
     public static LegendMarkIconPack? GetLegendMarkIconPack() => Packs.GetValueOrDefault("legend_mark_icons") as LegendMarkIconPack;
+
+    /// <summary>
+    ///     Returns the currently-registered UI-sprite-override pack, or null if no pack of
+    ///     <c>content_type: ui_sprite_overrides</c> is present.
+    /// </summary>
+    public static UiSpriteOverridePack? GetUiSpriteOverridePack() => Packs.GetValueOrDefault("ui_sprite_overrides") as UiSpriteOverridePack;
 
     private static void TryRegisterPack(string path)
     {

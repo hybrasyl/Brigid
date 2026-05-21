@@ -1,6 +1,7 @@
 #region
 using System.Collections.Frozen;
 using Chaos.Client.Data.Abstractions;
+using Chaos.Client.Data.AssetPacks;
 using Chaos.DarkAges.Definitions;
 using Chaos.Client.Data.Models;
 using Chaos.Extensions.Common;
@@ -81,7 +82,9 @@ public sealed class UiComponentRepository : RepositoryBase
     }
 
     /// <summary>
-    ///     Loads all frames from an EPF file in setoa.dat, rendered with the appropriate GUI palette.
+    ///     Loads all frames from an EPF file in setoa.dat, rendered with the appropriate GUI palette. If a
+    ///     <c>ui_sprite_overrides</c> pack is registered, per-frame PNG overrides replace the corresponding rendered
+    ///     frame; un-overridden frames pass through unchanged.
     /// </summary>
     public SKImage[] GetEpfImages(string fileName)
     {
@@ -98,6 +101,16 @@ public sealed class UiComponentRepository : RepositoryBase
 
         for (var i = 0; i < epf.Count; i++)
             images[i] = Graphics.RenderImage(epf[i], palette);
+
+        var pack = AssetPackRegistry.GetUiSpriteOverridePack();
+
+        if (pack is not null)
+            for (var i = 0; i < images.Length; i++)
+                if (pack.TryGetSprite(fileName, i, out var overrideImage) && (overrideImage is not null))
+                {
+                    images[i].Dispose();
+                    images[i] = overrideImage;
+                }
 
         return images;
     }
@@ -274,37 +287,23 @@ public sealed class UiComponentRepository : RepositoryBase
     }
 
     /// <summary>
-    ///     Loads a single frame from an SPF file in setoa.dat as an SKImage.
+    ///     Loads a single frame from an SPF file in setoa.dat as an SKImage. If a <c>ui_sprite_overrides</c> pack is
+    ///     registered and contains an entry for this <c>(fileName, frameIndex)</c>, the override PNG is returned in
+    ///     place of the legacy SPF frame; the legacy file is not loaded in that case.
     /// </summary>
     public SKImage? GetSpfImage(string fileName, int frameIndex = 0)
     {
+        var pack = AssetPackRegistry.GetUiSpriteOverridePack();
+
+        if ((pack is not null) && pack.TryGetSprite(fileName, frameIndex, out var overrideImage) && (overrideImage is not null))
+            return overrideImage;
+
         var spf = GetOrCreate($"SPF_{fileName}", () => LoadSpfFile(fileName));
 
         if (spf is null || (frameIndex >= spf.Count))
             return null;
 
         return SpfRenderer.RenderFrame(spf, frameIndex);
-    }
-
-    /// <summary>
-    ///     Loads all frames from an SPF file in setoa.dat as an SKImage array.
-    /// </summary>
-    /// <remarks>
-    ///     Caller is responsible for disposing the returned images.
-    /// </remarks>
-    public SKImage[] GetSpfImages(string fileName)
-    {
-        var spf = GetOrCreate($"SPF_{fileName}", () => LoadSpfFile(fileName));
-
-        if (spf is null || (spf.Count == 0))
-            return [];
-
-        var images = new SKImage[spf.Count];
-
-        for (var i = 0; i < spf.Count; i++)
-            images[i] = SpfRenderer.RenderFrame(spf, i);
-
-        return images;
     }
 
     private static FrozenDictionary<int, Palette> LoadGuiPalettes()
@@ -371,13 +370,26 @@ public sealed class UiComponentRepository : RepositoryBase
 
     private SKImage? RenderFrame(string imageName, int frameIndex)
     {
-        //try epf first, then spf
         var epfName = imageName.WithExtension(".epf");
+        var spfName = imageName.WithExtension(".spf");
 
+        //ui_sprite_overrides pack wins over legacy art for prefab-resolved images. Probe both extensions
+        //since the prefab control file references images by stem only — whichever extension the artist
+        //packaged determines the lookup.
+        var pack = AssetPackRegistry.GetUiSpriteOverridePack();
+
+        if (pack is not null)
+        {
+            if (pack.TryGetSprite(epfName, frameIndex, out var overrideImage) && (overrideImage is not null))
+                return overrideImage;
+
+            if (pack.TryGetSprite(spfName, frameIndex, out overrideImage) && (overrideImage is not null))
+                return overrideImage;
+        }
+
+        //legacy: try epf first, then spf
         if (DatArchives.Setoa.TryGetValue(epfName, out var entry) || DatArchives.Cious.TryGetValue(epfName, out entry))
             return RenderEpfFrame(entry, imageName, frameIndex);
-
-        var spfName = imageName.WithExtension(".spf");
 
         if (DatArchives.Setoa.TryGetValue(spfName, out entry) || DatArchives.Cious.TryGetValue(spfName, out entry))
             return RenderSpfFrame(entry, frameIndex);
@@ -398,6 +410,7 @@ public sealed class UiComponentRepository : RepositoryBase
     private ControlPrefabSet ResolvePrefabSet(string name, ControlFile controlFile)
     {
         var set = new ControlPrefabSet(name);
+        var dumpPrefabs = Environment.GetEnvironmentVariable("CHAOS_PREFAB_DUMP") == "1";
 
         foreach (var control in controlFile)
         {
@@ -406,6 +419,9 @@ public sealed class UiComponentRepository : RepositoryBase
             if (control.Images is not null)
                 foreach ((var imageName, var frameIndex) in control.Images)
                 {
+                    if (dumpPrefabs)
+                        Console.Error.WriteLine($"[prefab-dump] {name}/{control.Name} -> {imageName}[{frameIndex}]");
+
                     var image = RenderFrame(imageName, frameIndex);
 
                     if (image is not null)
