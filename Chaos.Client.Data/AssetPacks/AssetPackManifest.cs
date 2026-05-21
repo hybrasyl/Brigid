@@ -31,8 +31,10 @@ public sealed class AssetPackManifest
     public string PackVersion { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Enum discriminator selecting which typed pack accessor this pack registers with. Known values: <c>ability_icons</c>.
-    ///     Future: <c>tiles</c>, <c>creatures</c>, <c>ui_sprites</c>, <c>effects</c>, <c>bundle</c>.
+    ///     Enum discriminator selecting which typed pack accessor this pack registers with. The registry's
+    ///     <c>Factories</c> dictionary lists every recognized value; manifests declaring an unknown content type are
+    ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>nation_badges</c>. Future content
+    ///     types land as additions to that dictionary.
     /// </summary>
     [JsonPropertyName("content_type")]
     public string ContentType { get; init; } = string.Empty;

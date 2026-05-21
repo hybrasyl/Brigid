@@ -11,23 +11,10 @@ namespace Chaos.Client.Data.AssetPacks;
 ///     (1-based, matching the legacy <c>_nui_nat.spf</c> frame-index-plus-one convention). Decoded
 ///     <see cref="SKImage" /> results must be disposed by the caller.
 /// </summary>
-public sealed class NationBadgePack : IDisposable
+public sealed class NationBadgePack : AssetPack
 {
-    private readonly ZipArchive Archive;
-    private readonly Dictionary<string, ZipArchiveEntry> EntryIndex;
-
-    public AssetPackManifest Manifest { get; }
-
     internal NationBadgePack(ZipArchive archive, AssetPackManifest manifest)
-    {
-        Archive = archive;
-        Manifest = manifest;
-
-        EntryIndex = new Dictionary<string, ZipArchiveEntry>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var entry in archive.Entries)
-            EntryIndex[entry.FullName] = entry;
-    }
+        : base(archive, manifest) { }
 
     /// <summary>
     ///     Attempts to decode the PNG for the given nation ID. Returns false if the entry isn't present, decode
@@ -40,29 +27,6 @@ public sealed class NationBadgePack : IDisposable
         if (nationId == 0)
             return false;
 
-        var name = $"nation{nationId:D4}.png";
-
-        if (!EntryIndex.TryGetValue(name, out var entry))
-            return false;
-
-        try
-        {
-            using var entryStream = entry.Open();
-            using var ms = new MemoryStream();
-            entryStream.CopyTo(ms);
-            ms.Position = 0;
-            image = SKImage.FromEncodedData(ms);
-
-            return image is not null;
-        }
-        catch
-        {
-            image?.Dispose();
-            image = null;
-
-            return false;
-        }
+        return TryGetImage($"nation{nationId:D4}.png", out image);
     }
-
-    public void Dispose() => Archive.Dispose();
 }

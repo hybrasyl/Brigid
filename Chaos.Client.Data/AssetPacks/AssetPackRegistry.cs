@@ -6,23 +6,38 @@ using System.Text.Json;
 namespace Chaos.Client.Data.AssetPacks;
 
 /// <summary>
-///     Discovers and registers <c>.datf</c> asset packs from the configured data directory at startup. Packs are
+///     Discovers and registers <c>.datf</c> asset packs from <c>{DataPath}/hybrasyl-data/</c> at startup. Packs are
 ///     identified by the <c>content_type</c> field in their embedded <c>_manifest.json</c> and exposed via typed
-///     accessors (e.g. <see cref="GetIconPack" />). Missing manifests, malformed JSON, or unsupported schema versions
-///     cause the pack to be skipped with a warning rather than failing startup.
+///     accessors (e.g. <see cref="GetIconPack" />). Missing manifests, malformed JSON, or unsupported schema
+///     versions cause the pack to be skipped with a warning rather than failing startup.
+///     <para>
+///     The registry stores packs through the <see cref="IAssetPack" /> interface in a content-type-keyed dictionary;
+///     adding a new pack type is one factory entry in <see cref="Factories" /> plus one typed accessor. Per-type
+///     register methods (the older shape) have been collapsed into a single <see cref="TryRegisterByContentType" />.
+///     </para>
 /// </summary>
 public static class AssetPackRegistry
 {
     private const int SUPPORTED_SCHEMA_VERSION = 1;
     private const string MANIFEST_ENTRY_NAME = "_manifest.json";
+    private const string PACK_SUBFOLDER = "hybrasyl-data";
 
-    private static IconPack? CurrentIconPack;
-    private static NationBadgePack? CurrentNationBadgePack;
+    //factories know how to build each pack type from a (ZipArchive, AssetPackManifest) pair. Adding a new content
+    //type = add one line here + write the pack class. Keyed by manifest.content_type.
+    private static readonly Dictionary<string, Func<ZipArchive, AssetPackManifest, IAssetPack>> Factories = new()
+    {
+        ["ability_icons"] = static (a, m) => new IconPack(a, m),
+        ["nation_badges"] = static (a, m) => new NationBadgePack(a, m)
+    };
+
+    //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
+    //content type, the highest priority wins (ties broken by first-registered).
+    private static readonly Dictionary<string, IAssetPack> Packs = new();
     private static bool Initialized;
 
     /// <summary>
-    ///     Scans <see cref="DataContext.DataPath" /> for <c>*.datf</c> files and registers each pack by its declared
-    ///     content type. Idempotent; subsequent calls are no-ops.
+    ///     Scans <c>{<see cref="DataContext.DataPath" />}/hybrasyl-data/</c> for <c>*.datf</c> files and registers
+    ///     each pack by its declared content type. Idempotent; subsequent calls are no-ops.
     /// </summary>
     public static void Initialize()
     {
@@ -31,10 +46,12 @@ public static class AssetPackRegistry
 
         Initialized = true;
 
-        if (!Directory.Exists(DataContext.DataPath))
+        var packDir = Path.Combine(DataContext.DataPath, PACK_SUBFOLDER);
+
+        if (!Directory.Exists(packDir))
             return;
 
-        foreach (var path in Directory.EnumerateFiles(DataContext.DataPath, "*.datf", SearchOption.TopDirectoryOnly))
+        foreach (var path in Directory.EnumerateFiles(packDir, "*.datf", SearchOption.TopDirectoryOnly))
             TryRegisterPack(path);
     }
 
@@ -42,13 +59,13 @@ public static class AssetPackRegistry
     ///     Returns the currently-registered ability-icon pack, or null if no pack of <c>content_type: ability_icons</c>
     ///     is present.
     /// </summary>
-    public static IconPack? GetIconPack() => CurrentIconPack;
+    public static IconPack? GetIconPack() => Packs.GetValueOrDefault("ability_icons") as IconPack;
 
     /// <summary>
     ///     Returns the currently-registered nation-badge pack, or null if no pack of <c>content_type: nation_badges</c>
     ///     is present.
     /// </summary>
-    public static NationBadgePack? GetNationBadgePack() => CurrentNationBadgePack;
+    public static NationBadgePack? GetNationBadgePack() => Packs.GetValueOrDefault("nation_badges") as NationBadgePack;
 
     private static void TryRegisterPack(string path)
     {
@@ -89,7 +106,7 @@ public static class AssetPackRegistry
                 return;
             }
 
-            if (!RegisterByContentType(archive, manifest))
+            if (!TryRegisterByContentType(archive, manifest))
             {
                 LogWarning($"pack {Path.GetFileName(path)} has unknown content_type='{manifest.ContentType}'; skipping");
                 archive.Dispose();
@@ -103,49 +120,26 @@ public static class AssetPackRegistry
         }
     }
 
-    private static bool RegisterByContentType(ZipArchive archive, AssetPackManifest manifest)
+    /// <summary>
+    ///     Single consolidated registration path. Looks up a factory for the declared content type, applies the
+    ///     priority-wins conflict resolution rule (ties broken by first-registered), and either stores the new pack
+    ///     or logs the rejected pack and disposes its archive.
+    /// </summary>
+    private static bool TryRegisterByContentType(ZipArchive archive, AssetPackManifest manifest)
     {
-        switch (manifest.ContentType)
+        if (!Factories.TryGetValue(manifest.ContentType, out var factory))
+            return false;
+
+        if (Packs.TryGetValue(manifest.ContentType, out var existing) && (manifest.Priority <= existing.Manifest.Priority))
         {
-            case "ability_icons":
-                return TryRegisterIconPack(archive, manifest);
-
-            case "nation_badges":
-                return TryRegisterNationBadgePack(archive, manifest);
-
-            default:
-                return false;
-        }
-    }
-
-    private static bool TryRegisterIconPack(ZipArchive archive, AssetPackManifest manifest)
-    {
-        if (CurrentIconPack is null || manifest.Priority > CurrentIconPack.Manifest.Priority)
-        {
-            CurrentIconPack?.Dispose();
-            CurrentIconPack = new IconPack(archive, manifest);
+            LogWarning($"{manifest.ContentType} pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{existing.Manifest.PackId}' ({existing.Manifest.Priority})");
+            archive.Dispose();
 
             return true;
         }
 
-        LogWarning($"icon pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentIconPack.Manifest.PackId}' ({CurrentIconPack.Manifest.Priority})");
-        archive.Dispose();
-
-        return true;
-    }
-
-    private static bool TryRegisterNationBadgePack(ZipArchive archive, AssetPackManifest manifest)
-    {
-        if (CurrentNationBadgePack is null || manifest.Priority > CurrentNationBadgePack.Manifest.Priority)
-        {
-            CurrentNationBadgePack?.Dispose();
-            CurrentNationBadgePack = new NationBadgePack(archive, manifest);
-
-            return true;
-        }
-
-        LogWarning($"nation badge pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{CurrentNationBadgePack.Manifest.PackId}' ({CurrentNationBadgePack.Manifest.Priority})");
-        archive.Dispose();
+        existing?.Dispose();
+        Packs[manifest.ContentType] = factory(archive, manifest);
 
         return true;
     }
