@@ -33,8 +33,8 @@ public sealed class AssetPackManifest
     /// <summary>
     ///     Enum discriminator selecting which typed pack accessor this pack registers with. The registry's
     ///     <c>Factories</c> dictionary lists every recognized value; manifests declaring an unknown content type are
-    ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>nation_badges</c>. Future content
-    ///     types land as additions to that dictionary.
+    ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>nation_badges</c>,
+    ///     <c>item_icons</c>. Future content types land as additions to that dictionary.
     /// </summary>
     [JsonPropertyName("content_type")]
     public string ContentType { get; init; } = string.Empty;
@@ -65,4 +65,12 @@ public sealed class AssetPackCoverageEntry
     /// </summary>
     [JsonPropertyName("dimensions")]
     public int[]? Dimensions { get; init; }
+
+    /// <summary>
+    ///     Optional list of 1-based item IDs that participate in the runtime find-and-replace dye pass. Only meaningful
+    ///     for <c>item_icons</c> content. Items outside this list ignore the server's color byte and render as-is —
+    ///     the renderer also collapses the cache key to <c>color = 0</c> for them.
+    /// </summary>
+    [JsonPropertyName("dyeable")]
+    public int[]? Dyeable { get; init; }
 }

@@ -27,7 +27,8 @@ public static class AssetPackRegistry
     private static readonly Dictionary<string, Func<ZipArchive, AssetPackManifest, IAssetPack>> Factories = new()
     {
         ["ability_icons"] = static (a, m) => new IconPack(a, m),
-        ["nation_badges"] = static (a, m) => new NationBadgePack(a, m)
+        ["nation_badges"] = static (a, m) => new NationBadgePack(a, m),
+        ["item_icons"]    = static (a, m) => new ItemPack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -66,6 +67,12 @@ public static class AssetPackRegistry
     ///     is present.
     /// </summary>
     public static NationBadgePack? GetNationBadgePack() => Packs.GetValueOrDefault("nation_badges") as NationBadgePack;
+
+    /// <summary>
+    ///     Returns the currently-registered item-icon pack, or null if no pack of <c>content_type: item_icons</c> is
+    ///     present.
+    /// </summary>
+    public static ItemPack? GetItemPack() => Packs.GetValueOrDefault("item_icons") as ItemPack;
 
     private static void TryRegisterPack(string path)
     {
