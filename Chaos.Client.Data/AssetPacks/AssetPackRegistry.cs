@@ -28,7 +28,8 @@ public static class AssetPackRegistry
     {
         ["ability_icons"] = static (a, m) => new IconPack(a, m),
         ["nation_badges"] = static (a, m) => new NationBadgePack(a, m),
-        ["item_icons"]    = static (a, m) => new ItemPack(a, m)
+        ["item_icons"]    = static (a, m) => new ItemPack(a, m),
+        ["npc_portraits"] = static (a, m) => new NpcPortraitPack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -73,6 +74,12 @@ public static class AssetPackRegistry
     ///     present.
     /// </summary>
     public static ItemPack? GetItemPack() => Packs.GetValueOrDefault("item_icons") as ItemPack;
+
+    /// <summary>
+    ///     Returns the currently-registered NPC-portrait pack, or null if no pack of
+    ///     <c>content_type: npc_portraits</c> is present.
+    /// </summary>
+    public static NpcPortraitPack? GetNpcPortraitPack() => Packs.GetValueOrDefault("npc_portraits") as NpcPortraitPack;
 
     private static void TryRegisterPack(string path)
     {

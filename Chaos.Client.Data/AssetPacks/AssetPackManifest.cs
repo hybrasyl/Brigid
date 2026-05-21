@@ -34,7 +34,7 @@ public sealed class AssetPackManifest
     ///     Enum discriminator selecting which typed pack accessor this pack registers with. The registry's
     ///     <c>Factories</c> dictionary lists every recognized value; manifests declaring an unknown content type are
     ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>nation_badges</c>,
-    ///     <c>item_icons</c>. Future content types land as additions to that dictionary.
+    ///     <c>item_icons</c>, <c>npc_portraits</c>. Future content types land as additions to that dictionary.
     /// </summary>
     [JsonPropertyName("content_type")]
     public string ContentType { get; init; } = string.Empty;
@@ -61,7 +61,9 @@ public sealed class AssetPackManifest
 public sealed class AssetPackCoverageEntry
 {
     /// <summary>
-    ///     Two-element array [width, height] in pixels. For ability icons, <c>[32, 32]</c> in v1.
+    ///     Two-element array [width, height] in pixels. For ability icons, <c>[32, 32]</c> in v1. For
+    ///     <c>npc_portraits</c>, the uniform square size every portrait in the pack must match (e.g. <c>[200, 200]</c>);
+    ///     non-square values cause the pack to register with an empty lookup and never serve illustrations.
     /// </summary>
     [JsonPropertyName("dimensions")]
     public int[]? Dimensions { get; init; }
@@ -73,4 +75,15 @@ public sealed class AssetPackCoverageEntry
     /// </summary>
     [JsonPropertyName("dyeable")]
     public int[]? Dyeable { get; init; }
+
+    /// <summary>
+    ///     For <c>npc_portraits</c>, a flat <c>(portrait key → PNG filename)</c> lookup. The key is the literal
+    ///     value of the Hybrasyl XML <c>Portrait</c> attribute as the server publishes it via the NPCIllust metafile
+    ///     — verbatim, no extension stripping or normalization. Examples: <c>"inn.spf"</c> for an NPC declared
+    ///     <c>Portrait="inn.spf"</c>, <c>"Gobalt"</c> for an NPC declared <c>Portrait="Gobalt"</c>. The value is the
+    ///     PNG entry name inside the ZIP root. Lookup is case-insensitive at runtime. Absent or empty means the pack
+    ///     covers no portraits.
+    /// </summary>
+    [JsonPropertyName("portraits")]
+    public Dictionary<string, string>? Portraits { get; init; }
 }
