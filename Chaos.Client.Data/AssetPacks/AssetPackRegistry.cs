@@ -32,7 +32,8 @@ public static class AssetPackRegistry
         ["npc_portraits"]       = static (a, m) => new NpcPortraitPack(a, m),
         ["static_tiles"]        = static (a, m) => new StaticTilePack(a, m),
         ["legend_mark_icons"]   = static (a, m) => new LegendMarkIconPack(a, m),
-        ["ui_sprite_overrides"] = static (a, m) => new UiSpriteOverridePack(a, m)
+        ["ui_sprite_overrides"] = static (a, m) => new UiSpriteOverridePack(a, m),
+        ["creature_sprites"]    = static (a, m) => new CreaturePack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -101,6 +102,12 @@ public static class AssetPackRegistry
     ///     <c>content_type: ui_sprite_overrides</c> is present.
     /// </summary>
     public static UiSpriteOverridePack? GetUiSpriteOverridePack() => Packs.GetValueOrDefault("ui_sprite_overrides") as UiSpriteOverridePack;
+
+    /// <summary>
+    ///     Returns the currently-registered creature-sprite pack, or null if no pack of
+    ///     <c>content_type: creature_sprites</c> is present.
+    /// </summary>
+    public static CreaturePack? GetCreaturePack() => Packs.GetValueOrDefault("creature_sprites") as CreaturePack;
 
     private static void TryRegisterPack(string path)
     {
