@@ -28,9 +28,10 @@ public static class AssetPackRegistry
     {
         ["ability_icons"] = static (a, m) => new IconPack(a, m),
         ["nation_badges"] = static (a, m) => new NationBadgePack(a, m),
-        ["item_icons"]    = static (a, m) => new ItemPack(a, m),
-        ["npc_portraits"] = static (a, m) => new NpcPortraitPack(a, m),
-        ["static_tiles"]  = static (a, m) => new StaticTilePack(a, m)
+        ["item_icons"]        = static (a, m) => new ItemPack(a, m),
+        ["npc_portraits"]     = static (a, m) => new NpcPortraitPack(a, m),
+        ["static_tiles"]      = static (a, m) => new StaticTilePack(a, m),
+        ["legend_mark_icons"] = static (a, m) => new LegendMarkIconPack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -87,6 +88,12 @@ public static class AssetPackRegistry
     ///     is present.
     /// </summary>
     public static StaticTilePack? GetStaticTilePack() => Packs.GetValueOrDefault("static_tiles") as StaticTilePack;
+
+    /// <summary>
+    ///     Returns the currently-registered legend-mark-icon pack, or null if no pack of
+    ///     <c>content_type: legend_mark_icons</c> is present.
+    /// </summary>
+    public static LegendMarkIconPack? GetLegendMarkIconPack() => Packs.GetValueOrDefault("legend_mark_icons") as LegendMarkIconPack;
 
     private static void TryRegisterPack(string path)
     {
