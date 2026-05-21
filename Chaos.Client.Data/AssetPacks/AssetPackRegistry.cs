@@ -29,7 +29,8 @@ public static class AssetPackRegistry
         ["ability_icons"] = static (a, m) => new IconPack(a, m),
         ["nation_badges"] = static (a, m) => new NationBadgePack(a, m),
         ["item_icons"]    = static (a, m) => new ItemPack(a, m),
-        ["npc_portraits"] = static (a, m) => new NpcPortraitPack(a, m)
+        ["npc_portraits"] = static (a, m) => new NpcPortraitPack(a, m),
+        ["static_tiles"]  = static (a, m) => new StaticTilePack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -80,6 +81,12 @@ public static class AssetPackRegistry
     ///     <c>content_type: npc_portraits</c> is present.
     /// </summary>
     public static NpcPortraitPack? GetNpcPortraitPack() => Packs.GetValueOrDefault("npc_portraits") as NpcPortraitPack;
+
+    /// <summary>
+    ///     Returns the currently-registered static-tile pack, or null if no pack of <c>content_type: static_tiles</c>
+    ///     is present.
+    /// </summary>
+    public static StaticTilePack? GetStaticTilePack() => Packs.GetValueOrDefault("static_tiles") as StaticTilePack;
 
     private static void TryRegisterPack(string path)
     {
