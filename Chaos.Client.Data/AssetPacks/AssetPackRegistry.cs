@@ -55,10 +55,29 @@ public static class AssetPackRegistry
         var packDir = Path.Combine(DataContext.DataPath, PACK_SUBFOLDER);
 
         if (!Directory.Exists(packDir))
+        {
+            LogInfo($"no asset-pack folder at '{packDir}'; skipping pack discovery");
+
             return;
+        }
+
+        var discovered = 0;
+        var registeredBefore = Packs.Count;
 
         foreach (var path in Directory.EnumerateFiles(packDir, "*.datf", SearchOption.TopDirectoryOnly))
+        {
+            discovered++;
             TryRegisterPack(path);
+        }
+
+        if (discovered == 0)
+        {
+            LogInfo($"asset-pack folder '{packDir}' contains no .datf files");
+
+            return;
+        }
+
+        LogInfo($"registered {Packs.Count - registeredBefore} asset pack(s) from '{packDir}'");
     }
 
     /// <summary>
@@ -187,4 +206,6 @@ public static class AssetPackRegistry
     }
 
     private static void LogWarning(string message) => Console.Error.WriteLine($"[asset-pack] {message}");
+
+    private static void LogInfo(string message) => Console.Out.WriteLine($"[asset-pack] {message}");
 }
