@@ -2,6 +2,7 @@
 using Chaos.Client.Collections;
 using Chaos.Client.Controls.Generic;
 using Chaos.Client.Data;
+using Chaos.Client.Data.AssetPacks;
 using Chaos.Client.Data.Repositories;
 using Chaos.Client.Data.Utilities;
 using Chaos.Client.Extensions;
@@ -461,10 +462,13 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>
-    ///     Attempts to load a full-art NPC illustration SPF from <c>npcbase.dat</c>. Looks up <paramref name="npcName" />
-    ///     in the merged illustration metadata (npci.tbl + server NPCIllust metafile) and picks the filename at
-    ///     <paramref name="variant" />. Returns null if the NPC has no entries, the variant index is out of range,
-    ///     or the SPF file is missing.
+    ///     Attempts to load a full-art NPC illustration. Resolves <paramref name="npcName" /> through the merged
+    ///     NPCIllust metadata (npci.tbl + server NPCIllust metafile) to get the portrait key for
+    ///     <paramref name="variant" /> — for Hybrasyl this is the literal value of the XML <c>Portrait</c> attribute
+    ///     (e.g. <c>"inn.spf"</c>, <c>"Gobalt"</c>). The modern <c>npc_portraits</c> pack is probed with that key
+    ///     first; on miss, falls back to <c>npcbase.dat</c> SPF lookup which only succeeds when the key happens to
+    ///     name a real SPF file in the archive. Returns null if neither path produces an image (caller falls through
+    ///     to the entity sprite portrait).
     /// </summary>
     private static Texture2D? TryLoadNpcIllustration(string npcName, byte variant)
     {
@@ -476,9 +480,15 @@ public sealed partial class WorldScreen
         if (variant >= filenames.Count)
             return null;
 
-        var spfFileName = filenames[variant];
+        var portraitKey = filenames[variant];
 
-        if (!DatArchives.Npcbase.TryGetValue(spfFileName, out var entry))
+        var portraitPack = AssetPackRegistry.GetNpcPortraitPack();
+
+        if (portraitPack is not null && portraitPack.TryGetIllustration(portraitKey, out var packImage) && packImage is not null)
+            using (packImage)
+                return TextureConverter.ToTexture2D(packImage);
+
+        if (!DatArchives.Npcbase.TryGetValue(portraitKey, out var entry))
             return null;
 
         var spf = SpfFile.FromEntry(entry);

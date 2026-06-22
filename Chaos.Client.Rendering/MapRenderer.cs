@@ -1,5 +1,6 @@
 #region
 using Chaos.Client.Data;
+using Chaos.Client.Data.AssetPacks;
 using Chaos.Client.Data.Models;
 using DALib.Data;
 using DALib.Definitions;
@@ -425,6 +426,12 @@ public sealed class MapRenderer : IDisposable
                 foreach (var variant in expandFgVariants(fgId))
                     uniqueFgTileIds.Add(variant);
 
+        //snapshot primary tile ids before animation expansion. only primary ids are eligible for static_tiles pack
+        //lookup — animation frames stay legacy to avoid mixed-frame visual glitches when a pack covers only the
+        //base frame of an animated tile.
+        var primaryBgIds = new HashSet<int>(uniqueBgTileIds);
+        var primaryFgIds = new HashSet<int>(uniqueFgTileIds);
+
         //expand animated bg tiles: add all animation frame ids to the set
         var bgAnimEntries = new HashSet<TileAnimationEntry>(ReferenceEqualityComparer.Instance);
 
@@ -477,6 +484,62 @@ public sealed class MapRenderer : IDisposable
                 compressedFgData[tileId] = (palettized.Entity, palettized.Palette);
         }
 
+        //track tallest fg image across both phase 2.5 (pack-replaced) and phase 3 (legacy-rendered) so that
+        //ForegroundExtraMargin reflects the full set of fg tiles drawn this map. without folding pack heights
+        //in, a pack wall taller than every legacy hpf on the map would be undersized for culling and clip at
+        //the viewport edge.
+        var maxFgHeight = 0;
+
+        //phase 2.5: static_tiles pack lookup. for each primary, non-cycled tile id, swap legacy archive data for
+        //a pack-decoded SKImage by writing directly into the image cache and removing the id from the dict that
+        //drives phase 3. cycled tiles are skipped because palette cycling overlays would visually overwrite the
+        //pack PNG anyway, wasting a decode.
+        var staticTilePack = AssetPackRegistry.GetStaticTilePack();
+
+        if (staticTilePack is not null)
+        {
+            var bgLookup = DataContext.Tiles.BackgroundPaletteLookup;
+
+            foreach (var tileId in bgTileData.Keys.ToArray())
+            {
+                if (!primaryBgIds.Contains(tileId))
+                    continue;
+
+                var paletteNumber = bgLookup.Table.GetPaletteNumber(tileId + 1);
+
+                if (bgLookup.Table.GetCyclingEntries(paletteNumber) is not null)
+                    continue;
+
+                if (staticTilePack.TryGetFloorImage(tileId, out var packImage) && (packImage is not null))
+                {
+                    BgImageCache[tileId] = packImage;
+                    bgTileData.Remove(tileId);
+                }
+            }
+
+            var fgLookup = DataContext.Tiles.ForegroundPaletteLookup;
+
+            foreach (var tileId in compressedFgData.Keys.ToArray())
+            {
+                if (!primaryFgIds.Contains(tileId))
+                    continue;
+
+                var paletteNumber = fgLookup.Table.GetPaletteNumber(tileId + 1);
+
+                if (fgLookup.Table.GetCyclingEntries(paletteNumber) is not null)
+                    continue;
+
+                if (staticTilePack.TryGetWallImage(tileId, out var packImage) && (packImage is not null))
+                {
+                    FgImageCache[tileId] = packImage;
+                    compressedFgData.Remove(tileId);
+
+                    if (packImage.Height > maxFgHeight)
+                        maxFgHeight = packImage.Height;
+                }
+            }
+        }
+
         onProgress?.Invoke(0.4f);
 
         //phase 3: decompress + render all tiles in parallel (cpu-only, no archive access)
@@ -489,8 +552,6 @@ public sealed class MapRenderer : IDisposable
                 using (BgImageCacheLock.EnterScope())
                     BgImageCache[kvp.Key] = image;
             });
-
-        var maxFgHeight = 0;
 
         Parallel.ForEach(
             compressedFgData,

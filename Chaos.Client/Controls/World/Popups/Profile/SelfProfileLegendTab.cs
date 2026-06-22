@@ -79,13 +79,13 @@ public sealed class SelfProfileLegendTab : PrefabPanel
 
         AddChild(ScrollBar);
 
-        //legend mark icons from legends.epf
+        //legend mark icons — pack-first with legacy legends.epf fallback. Clamp to byte range since mark.Icon is byte.
         var cache = UiRenderer.Instance!;
-        var frameCount = cache.GetEpfFrameCount("legends.epf");
+        var frameCount = Math.Min(cache.GetEpfFrameCount("legends.epf"), 256);
         IconFrames = new Texture2D[frameCount];
 
         for (var i = 0; i < frameCount; i++)
-            IconFrames[i] = cache.GetEpfTexture("legends.epf", i);
+            IconFrames[i] = cache.GetLegendMarkIcon((byte)i);
     }
 
     public override void Dispose()
