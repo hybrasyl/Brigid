@@ -1230,11 +1230,43 @@ public sealed partial class WorldScreen
 
     //--- exit / state ---
 
+    private const float EXIT_CONFIRM_SECONDS = 10f;
+    //buggy/older servers (e.g. Hybrasyl, which enqueues the Redirect with a 1200ms TransmitDelay and
+    //drops the user from WorldState before the queue flushes) close the socket without sending Redirect.
+    //this window says "if disconnect arrives within N seconds of us sending the confirm, treat it as a
+    //graceful exit instead of an unexpected drop."
+    private const float EXIT_IN_PROGRESS_GRACE_SECONDS = 10f;
+
+    private void BeginExit()
+    {
+        //guard against re-entry while the popup is already up
+        if (ExitConfirmPopup.Visible)
+            return;
+
+        //retail-compat signal: announce the exit dialog opened. server responds with a cosmetic 0x4C
+        //(no longer auto-confirms — user dismisses the popup or the timer expires before we send 0x0B [0]).
+        Game.Connection.RequestExit(true);
+
+        ExitConfirmPopup.Show("Logging out. Press OK to log out now.");
+        ExitConfirmSecondsRemaining = EXIT_CONFIRM_SECONDS;
+    }
+
+    private void ConfirmExit()
+    {
+        ExitConfirmSecondsRemaining = 0f;
+
+        if (ExitConfirmPopup.Visible)
+            ExitConfirmPopup.Hide();
+
+        Game.Connection.RequestExit(false);
+        ExitInProgressSecondsRemaining = EXIT_IN_PROGRESS_GRACE_SECONDS;
+    }
+
     private void HandleExitResponse(ExitResponseArgs args)
     {
-        //server confirmed exit — send the actual logout (isrequest=false triggers server-side redirect to login)
-        if (args.ExitConfirmed)
-            Game.Connection.RequestExit(false);
+        //server's 0x4C ack to the query phase. retail's 0x4C is a state-machine signal, not a control-flow
+        //trigger — the user's click on the confirmation popup (or its 10s timeout) drives the actual exit.
+        //hook left in place so phase 2 can update the popup text on server ack if desired.
     }
 
     private void HandleStateChanged(ConnectionState oldState, ConnectionState newState)
@@ -1244,14 +1276,28 @@ public sealed partial class WorldScreen
         if (newState == ConnectionState.Login)
         {
             RedirectInProgress = false;
+            ExitInProgressSecondsRemaining = 0f;
             PendingLoginSwitch = true;
 
             return;
         }
 
-        //unexpected disconnect — show reconnect prompt (skip if this is part of a redirect sequence)
         if ((newState == ConnectionState.Disconnected) && !RedirectInProgress)
+        {
+            //defensive: a disconnect arriving within the exit-in-progress grace window is the expected
+            //logout outcome on servers that drop the socket without flushing Redirect. transition to
+            //login instead of showing the unexpected-disconnect popup.
+            if (ExitInProgressSecondsRemaining > 0f)
+            {
+                ExitInProgressSecondsRemaining = 0f;
+                PendingLoginSwitch = true;
+
+                return;
+            }
+
+            //unexpected disconnect — show reconnect prompt
             DisconnectPopup.Show("Connection lost.");
+        }
     }
 
     //--- helpers ---

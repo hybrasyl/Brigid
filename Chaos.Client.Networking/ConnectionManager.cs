@@ -1500,11 +1500,14 @@ public sealed class ConnectionManager : IDisposable
             args.Id,
             targetState);
 
-        //begin teardown immediately — the redirect will be followed from the game loop
-        //once the old connection is fully dead.
-        Client.Disconnect();
-
+        //order matters: fire the redirect event BEFORE Disconnect. Disconnect synchronously fires
+        //OnDisconnected → State setter → StateChanged, and the world-screen handler suppresses its
+        //"Connection lost" popup based on a flag set by OnRedirectReceived. Inverting this order
+        //races the popup against the redirect flag.
         OnRedirectReceived?.Invoke(PendingRedirect.Value);
+
+        //begin teardown — the redirect will be followed from the game loop once the old connection is fully dead.
+        Client.Disconnect();
     }
 
     private void HandleLoginMessage(ServerPacket pkt)

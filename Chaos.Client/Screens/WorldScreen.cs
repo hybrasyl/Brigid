@@ -114,6 +114,12 @@ public sealed partial class WorldScreen : IScreen
     private OkPopupMessageControl DeleteConfirm = null!;
     private GraphicsDevice Device = null!;
     private OkPopupMessageControl DisconnectPopup = null!;
+    private OkPopupMessageControl ExitConfirmPopup = null!;
+    private float ExitConfirmSecondsRemaining;
+    //grace window after ConfirmExit fires — if a disconnect arrives within this window we treat it as
+    //the expected logout (suppress the "Connection Lost" popup and transition to login). Defensive against
+    //servers that drop the connection without flushing the Redirect packet.
+    private float ExitInProgressSecondsRemaining;
 
     //event detail popup (from events tab)
     private EventMetadataDetailsControl EventMetadataDetails = null!;
@@ -534,6 +540,13 @@ public sealed partial class WorldScreen : IScreen
         };
         DisconnectPopup.OnCancel += () => Game.Exit();
 
+        ExitConfirmPopup = new OkPopupMessageControl
+        {
+            ZIndex = 10,
+            Name = "ExitConfirmPopup"
+        };
+        ExitConfirmPopup.OnOk += ConfirmExit;
+
         var boardViewport = WorldHud.ViewportBounds;
         BoardList.SetViewportBounds(boardViewport);
         ArticleList.SetViewportBounds(boardViewport);
@@ -700,6 +713,7 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(TownMapControl);
         Root.AddChild(MapLoading);
         Root.AddChild(DisconnectPopup);
+        Root.AddChild(ExitConfirmPopup);
 
         WireHudPanels(SmallHud);
         WireHudPanels(LargeHud);
