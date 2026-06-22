@@ -1,5 +1,6 @@
 #region
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
@@ -51,10 +52,139 @@ public sealed class GameClient : IDisposable
     public bool Connected => IsAlive && (Socket?.Connected ?? false);
 
     /// <summary>
-    ///     The remote endpoint of the active socket, or null when not connected. Used by latency monitoring to ping the
-    ///     currently connected world server (which differs from the lobby host after a redirect).
+    ///     The remote endpoint of the active socket, or null when not connected.
     /// </summary>
     public IPEndPoint? RemoteEndPoint => Connected ? Socket?.RemoteEndPoint as IPEndPoint : null;
+
+    /// <summary>
+    ///     Queries the OS kernel's smoothed round-trip-time estimate for the gameplay socket. Uses Windows
+    ///     <c>SIO_TCP_INFO</c> (TCP_INFO_v0), Linux <c>getsockopt(IPPROTO_TCP, TCP_INFO)</c>, or macOS
+    ///     <c>getsockopt(IPPROTO_TCP, TCP_CONNECTION_INFO)</c> depending on platform. Returns false when not connected,
+    ///     on unsupported platforms, or when the underlying call fails (kernel too old, transient socket state, etc.).
+    ///     Caller treats false as "no measurement".
+    /// </summary>
+    public bool TryGetTcpSmoothedRttMs(out long rttMs)
+    {
+        rttMs = 0;
+
+        var socket = Socket;
+
+        if (socket is null || !Connected)
+            return false;
+
+        if (OperatingSystem.IsWindows())
+            return TryGetWindowsTcpRttMs(socket, out rttMs);
+
+        if (OperatingSystem.IsLinux())
+            return TryGetLinuxTcpRttMs(socket, out rttMs);
+
+        if (OperatingSystem.IsMacOS())
+            return TryGetMacTcpRttMs(socket, out rttMs);
+
+        return false;
+    }
+
+    private static bool TryGetWindowsTcpRttMs(Socket socket, out long rttMs)
+    {
+        rttMs = 0;
+
+        //SIO_TCP_INFO = _WSAIORW(IOC_VENDOR, 39) = IOC_INOUT|IOC_VENDOR|39 = 0xD8000027.
+        //Input  : uint32 version (0 selects TCP_INFO_v0, supported since Win10 1703).
+        //Output : TCP_INFO_v0 struct, 104 bytes. RttUs (uint32) sits at offset 20,
+        //         after State(4) + Mss(4) + ConnectionTimeMs(8) + TimestampsEnabled(1) + 3 bytes alignment padding.
+        const int SIO_TCP_INFO = unchecked((int)0xD8000027U);
+        const int RTT_US_OFFSET = 20;
+        const int TCP_INFO_V0_SIZE = 104;
+
+        var inBuf = new byte[sizeof(uint)];
+        var outBuf = new byte[TCP_INFO_V0_SIZE];
+
+        try
+        {
+            var bytesWritten = socket.IOControl(SIO_TCP_INFO, inBuf, outBuf);
+
+            if (bytesWritten < RTT_US_OFFSET + sizeof(uint))
+                return false;
+
+            var rttUs = BinaryPrimitives.ReadUInt32LittleEndian(outBuf.AsSpan(RTT_US_OFFSET, sizeof(uint)));
+            rttMs = rttUs / 1000;
+
+            return true;
+        } catch (SocketException)
+        {
+            return false;
+        } catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetLinuxTcpRttMs(Socket socket, out long rttMs)
+    {
+        rttMs = 0;
+
+        //getsockopt(IPPROTO_TCP, TCP_INFO) returns the kernel's `struct tcp_info`. The struct is append-only
+        //across kernel versions, so reading the first 72 bytes is safe everywhere since Linux 2.6.
+        //tcpi_rtt (uint32, microseconds) sits at offset 68 — past the fixed-size byte prefix and 16 leading uint32s.
+        const int IPPROTO_TCP = 6;
+        const int TCP_INFO = 11;
+        const int RTT_US_OFFSET = 68;
+        const int READ_SIZE = 72;
+
+        Span<byte> buf = stackalloc byte[READ_SIZE];
+
+        try
+        {
+            var bytesRead = socket.GetRawSocketOption(IPPROTO_TCP, TCP_INFO, buf);
+
+            if (bytesRead < RTT_US_OFFSET + sizeof(uint))
+                return false;
+
+            var rttUs = BinaryPrimitives.ReadUInt32LittleEndian(buf.Slice(RTT_US_OFFSET, sizeof(uint)));
+            rttMs = rttUs / 1000;
+
+            return true;
+        } catch (SocketException)
+        {
+            return false;
+        } catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetMacTcpRttMs(Socket socket, out long rttMs)
+    {
+        rttMs = 0;
+
+        //getsockopt(IPPROTO_TCP, TCP_CONNECTION_INFO) returns macOS's `struct tcp_connection_info` (xnu bsd/netinet/tcp.h).
+        //Different option name from Linux — macOS has no plain TCP_INFO. Available since macOS 10.10.
+        //tcpi_srtt (uint32, MILLISECONDS — already the unit we want) sits at offset 44, after the leading byte/uint32 prefix.
+        const int IPPROTO_TCP = 6;
+        const int TCP_CONNECTION_INFO = 0x106;
+        const int SRTT_MS_OFFSET = 44;
+        const int READ_SIZE = 48;
+
+        Span<byte> buf = stackalloc byte[READ_SIZE];
+
+        try
+        {
+            var bytesRead = socket.GetRawSocketOption(IPPROTO_TCP, TCP_CONNECTION_INFO, buf);
+
+            if (bytesRead < SRTT_MS_OFFSET + sizeof(uint))
+                return false;
+
+            rttMs = BinaryPrimitives.ReadUInt32LittleEndian(buf.Slice(SRTT_MS_OFFSET, sizeof(uint)));
+
+            return true;
+        } catch (SocketException)
+        {
+            return false;
+        } catch (ObjectDisposedException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="GameClient" /> class.

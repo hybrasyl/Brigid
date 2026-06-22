@@ -57,7 +57,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
     private int CoordY = int.MinValue;
     private readonly UILabel ZoneNameLabel;
 
-    //ping indicator — _nping.spf has 4 frames mapped to latency tiers (frame 0 = best)
+    //ping indicator — _nping.spf is a single dot in four colors: [0]=red, [1]=orange, [2]=green, [3]=blue
     private readonly UIImage? PingIcon;
     private readonly Texture2D?[] PingFrames = new Texture2D?[4];
     public HudTab ActiveTab { get; private set; } = HudTab.Inventory;
@@ -178,6 +178,10 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
 
             LatencyMonitor.LatencyChanged += OnLatencyChanged;
             OnLatencyChanged();
+
+            PingIcon.Hovered += _ => ShowPingTooltip();
+            PingIcon.Unhovered += _ => HideTooltip();
+            PingIcon.VisibilityChanged += _ => HideTooltip();
         }
 
         //effect bar — right side, above the option button
@@ -299,11 +303,10 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
 
         var frameIndex = LatencyMonitor.LatencyMs switch
         {
-            null  => 0,
-            < 75  => 3,
-            < 150 => 2,
-            < 250 => 1,
-            _     => 0
+            null   => 3, // blue — no data / error
+            < 100  => 2, // green — good
+            < 1000 => 1, // orange — mid
+            _      => 0  // red — 1000ms+
         };
 
         PingIcon.Texture = PingFrames[frameIndex];
@@ -378,6 +381,34 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
     }
 
     private void HideTooltip() => TooltipLabel.Visible = false;
+
+    private void ShowPingTooltip()
+    {
+        if (PingIcon is null)
+            return;
+
+        var ms = LatencyMonitor.LatencyMs;
+        var text = ms.HasValue ? $"{ms.Value} ms (TCP)" : "— (no data)";
+
+        TooltipLabel.Text = text;
+        TooltipLabel.Width = TextRenderer.MeasureWidth(text) + 4;
+        TooltipLabel.Height = TextRenderer.CHAR_HEIGHT + 4;
+
+        var x = PingIcon.X;
+        var y = PingIcon.Y + 5 - TooltipLabel.Height;
+
+        var rightLimit = ChaosGame.VIRTUAL_WIDTH - TooltipLabel.Width;
+
+        if (x > rightLimit)
+            x = rightLimit;
+
+        if (x < 0)
+            x = 0;
+
+        TooltipLabel.X = x;
+        TooltipLabel.Y = y;
+        TooltipLabel.Visible = true;
+    }
     #endregion
 
     #region Tab Panel Management

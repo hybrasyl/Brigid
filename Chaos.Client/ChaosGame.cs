@@ -42,6 +42,7 @@ public sealed class ChaosGame : Game
     private bool MetaSyncStarted;
     private RenderTarget2D RenderTarget = null!;
     private bool ResizingInProgress;
+    private CancellationTokenSource? LatencyPollCts;
     private int WindowSizeMultiplier = 1;
     private SpriteBatch SpriteBatch = null!;
 
@@ -526,12 +527,40 @@ public sealed class ChaosGame : Game
     /// </summary>
     public event MetaDataSyncCompleteHandler? OnMetaDataSyncComplete;
 
+    private const int LATENCY_POLL_INTERVAL_MS = 2000;
+
     private void OnConnectionStateChanged(ConnectionState oldState, ConnectionState newState)
     {
         if (newState == ConnectionState.World)
-            LatencyMonitor.Start(Connection.Client);
-        else if (oldState == ConnectionState.World)
-            LatencyMonitor.Stop();
+        {
+            LatencyPollCts?.Cancel();
+            LatencyPollCts?.Dispose();
+            LatencyPollCts = new CancellationTokenSource();
+            var token = LatencyPollCts.Token;
+            _ = Task.Run(() => PollTcpLatencyAsync(token), token);
+        } else if (oldState == ConnectionState.World)
+        {
+            LatencyPollCts?.Cancel();
+            LatencyPollCts?.Dispose();
+            LatencyPollCts = null;
+            LatencyMonitor.Update(null);
+        }
+    }
+
+    private async Task PollTcpLatencyAsync(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            LatencyMonitor.Update(Connection.Client.TryGetTcpSmoothedRttMs(out var rttMs) ? rttMs : null);
+
+            try
+            {
+                await Task.Delay(LATENCY_POLL_INTERVAL_MS, token);
+            } catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
     }
 
     protected override void UnloadContent()

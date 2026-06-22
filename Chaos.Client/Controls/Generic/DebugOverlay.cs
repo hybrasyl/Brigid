@@ -2,6 +2,8 @@
 using System.Diagnostics;
 using System.Runtime;
 using Chaos.Client.Controls.Components;
+using Chaos.Client.Rendering;
+using Chaos.Client.Systems;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -19,7 +21,9 @@ public static class DebugOverlay
     private const float GRAPH_WIDTH = 180;
     private const float GRAPH_HEIGHT = 36;
     private const float GEN2_FLASH_DURATION_MS = 1000;
-    private const int STATS_LINE_COUNT = 6;
+    private const int STATS_LINE_COUNT = 7;
+    private const int STATS_LINE_PITCH = TextRenderer.CHAR_HEIGHT + 1;
+    private const int STATS_BG_HEIGHT = STATS_LINE_COUNT * STATS_LINE_PITCH + 4;
 
     //per-line change detection — only rebuild the interpolated string when its inputs actually changed
     private static int StatsPrevFps = -1;
@@ -30,7 +34,9 @@ public static class DebugOverlay
     private static int StatsPrevG0 = -1;
     private static int StatsPrevG1 = -1;
     private static int StatsPrevG2 = -1;
-    private static GCLatencyMode StatsPrevLatency = (GCLatencyMode)(-1);
+    private static GCLatencyMode StatsPrevGcMode = (GCLatencyMode)(-1);
+    //sentinel `long.MinValue` distinguishes "never set" from a legitimate null reading
+    private static long? StatsPrevNetMs = long.MinValue;
 
     private static readonly float[] FrameTimeHistory = new float[FRAME_TIME_HISTORY];
     private static readonly Stopwatch FrameStopwatch = new();
@@ -89,7 +95,8 @@ public static class DebugOverlay
         StatsPrevG0 = -1;
         StatsPrevG1 = -1;
         StatsPrevG2 = -1;
-        StatsPrevLatency = (GCLatencyMode)(-1);
+        StatsPrevGcMode = (GCLatencyMode)(-1);
+        StatsPrevNetMs = long.MinValue;
     }
 
     /// <summary>
@@ -237,8 +244,7 @@ public static class DebugOverlay
 
     private static void DrawPerformanceStatsGeometry(SpriteBatch spriteBatch)
     {
-        //background for stats area
-        var statsHeight = 82;
+        var statsHeight = STATS_BG_HEIGHT;
 
         UIElement.DrawRect(
             spriteBatch,
@@ -279,8 +285,9 @@ public static class DebugOverlay
         }
 
         var heapMb = GC.GetTotalMemory(false) / (1024.0 * 1024.0);
-        var gcMode = GCSettings.IsServerGC ? "Server" : "Workstation";
-        var latencyMode = GCSettings.LatencyMode;
+        var gcServerMode = GCSettings.IsServerGC ? "Server" : "Workstation";
+        var gcLatencyMode = GCSettings.LatencyMode;
+        var netMs = LatencyMonitor.LatencyMs;
         var drawCount = SnappedDrawCount;
         var debugDrawCount = DebugDrawCount;
         var fps = DisplayFps;
@@ -328,7 +335,7 @@ public static class DebugOverlay
             StatsPrevHeapMb = heapMb;
 
             StatsTextElement[3]
-                .Update($"Heap: {heapMb:F1} MB  ({gcMode})", Color.White);
+                .Update($"Heap: {heapMb:F1} MB  ({gcServerMode})", Color.White);
         }
 
         //line 4 — gc collection counts
@@ -344,13 +351,25 @@ public static class DebugOverlay
                 .Update($"GC: G0={LastGen0Count} G1={LastGen1Count} G2={LastGen2Count}", color);
         }
 
-        //line 5 — latency mode
-        if (StatsPrevLatency != latencyMode)
+        //line 5 — gc latency mode
+        if (StatsPrevGcMode != gcLatencyMode)
         {
-            StatsPrevLatency = latencyMode;
+            StatsPrevGcMode = gcLatencyMode;
 
             StatsTextElement[5]
-                .Update($"Latency: {latencyMode}", Color.Gray);
+                .Update($"GC Mode: {gcLatencyMode}", Color.Gray);
+        }
+
+        //line 6 — network latency (TCP smoothed RTT from kernel; null when unavailable)
+        if (StatsPrevNetMs != netMs)
+        {
+            StatsPrevNetMs = netMs;
+
+            var netText = netMs.HasValue ? $"Net: {netMs.Value} ms" : "Net: —";
+            var netColor = netMs.HasValue ? Color.White : Color.Gray;
+
+            StatsTextElement[6]
+                .Update(netText, netColor);
         }
 
         var y = StatsY;
