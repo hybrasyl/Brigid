@@ -24,6 +24,20 @@ public sealed partial class WorldScreen
 
         var elapsedMs = (float)gameTime.ElapsedGameTime.TotalMilliseconds;
 
+        //auto-confirm exit when the 10s grace period elapses without user input
+        if (ExitConfirmSecondsRemaining > 0f)
+        {
+            ExitConfirmSecondsRemaining -= elapsedMs / 1000f;
+
+            if (ExitConfirmSecondsRemaining <= 0f)
+                ConfirmExit();
+        }
+
+        //after we've sent the exit confirm, an in-window disconnect counts as expected (handled in
+        //HandleStateChanged). once the window elapses, fall back to normal "Connection Lost" semantics.
+        if (ExitInProgressSecondsRemaining > 0f)
+            ExitInProgressSecondsRemaining -= elapsedMs / 1000f;
+
         //global tile animation tick — 100ms resolution (matches tile animation table format)
         AnimationTick = (int)(gameTime.TotalGameTime.TotalMilliseconds / 100);
         MapRenderer.UpdatePaletteCycling(AnimationTick);

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Chaos.Client is a Dark Ages MMORPG client built in C# (.NET 10.0) using MonoGame for windowing/graphics and DALib for Dark Ages file format handling. Targets Chaos-Server. Licensed under AGPL-3.0-or-later. v0.1.0.
+Chaos.Client is a Dark Ages MMORPG client built in C# (.NET 10.0) using MonoGame for windowing/graphics and DALib for Dark Ages file format handling. It is the Hybrasyl team's reference client: a clean, modern implementation of the Dark Ages protocol whose first meaningful dev target is the Hybrasyl server (`qa.hybrasyl.com:2610`). It speaks the standard, retail-compatible DA protocol, so it also interoperates with other compatible servers. Licensed under AGPL-3.0-or-later. v0.1.0.
 
 ## Build & Run
 
@@ -24,19 +24,28 @@ Chaos.Client.slnx (.NET 10.0, C# 14)
 ├── Chaos.Client               — MonoGame Game class, screens, UI controls, systems, entry point
 ├── Chaos.Client.Data           — Asset repositories, DALib integration, archive loading, caching
 ├── Chaos.Client.Rendering      — Texture conversion, sprite renderers, map rendering, text, camera
-├── Chaos.Client.Networking     — TCP client, crypto, packet framing, connection state machine
-└── DALib                       — Dark Ages file format support
+└── Chaos.Client.Networking     — TCP client, crypto, packet framing, connection state machine
 ```
+
+DALib (Dark Ages file format support) is consumed as an external NuGet package, not a solution project.
 
 **Dependency flow:** Data <- Rendering <- Client, Networking <- Client
 
 ## Related Repositories
 
-| Path                      | Description                                                        |
-|---------------------------|--------------------------------------------------------------------|
-| `../Chaos-Server/`        | Chaos-Server source (Sichii). Protocol reference for compat work.  |
-| `../server/`              | Hybrasyl server source. Dev target (qa.hybrasyl.com:2610).         |
-| `../dalib/DALib/`         | DALib upstream (Hybrasyl-owned). Project reference.                |
+| Path                | Description                                                            |
+|---------------------|-----------------------------------------------------------------------|
+| `../server/`        | Hybrasyl server source. Dev target (qa.hybrasyl.com:2610).             |
+| `../api/`           | hybrasyl.com web/server interface.                                     |
+| `../ceridwen/`      | World test data for the Hybrasyl server.                              |
+| `../creidhne/`      | Hybrasyl world data editor.                                            |
+| `../taliesin/`      | Hybrasyl asset management — authoring tool for `.datf` packs.          |
+| `../epona/`         | Client/server launcher tool.                                          |
+| `../dalib/`         | Local checkout of the DALib NuGet package (Hybrasyl-owned).            |
+| `../dalib-ts/`      | DALib reimplemented in TypeScript.                                     |
+| `../xml/`           | Local checkout of the Hybrasyl XML NuGet package.                      |
+| `../lodunity/`      | Decompile of the Unity LOD client.                                    |
+| `../Chaos-Server/`  | Chaos-Server source (Sichii). Protocol reference for compat work.     |
 
 ## Key Dependencies
 
@@ -52,6 +61,8 @@ Chaos.Client.slnx (.NET 10.0, C# 14)
 | Microsoft.Extensions.Caching.Memory 10.0.5 | MemoryCache infrastructure                                                |
 | TextCopy 6.2.1                             | Cross-platform clipboard access (used by `Utilities/Clipboard`)           |
 
+The `Chaos.*` preview packages (`Chaos.Networking`, `Chaos.Common`, `Chaos.DarkAges`, `Chaos.Geometry`, `Chaos.Pathfinding`) are inherited from the upstream project and are slated for replacement with Hybrasyl equivalents.
+
 ## Build Configuration
 
 Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implicit usings, TieredPGO + TieredCompilation (+ QuickJit) enabled, WarningLevel 4, EnforceCodeStyleInBuild. Package versions managed centrally in `Directory.Packages.props`. Versioning via Nerdbank.GitVersioning.
@@ -60,12 +71,20 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 
 ### Data Layer (`Chaos.Client.Data`)
 - **`DataContext`** -- Static singleton exposing all repositories via `Initialize()`.
-- **`DatArchives`** -- Static holder for 21 game data archives loaded at startup via memory-mapped files.
+- **`DatArchives`** -- Static holder for 22 game data archives loaded at startup via memory-mapped files.
 - **`RepositoryBase`** -- Abstract base with MemoryCache (15-min sliding expiration). Uses `GetOrCreate<T>(key, factory)`.
-- **11 repositories:** AislingDrawData, CreatureSprite, Effects, Font, LightMask, LocalPlayerSettings, MapFile, MetaFile, PanelSprite, Tile, UiComponent.
+- **11 repositories** (exposed on `DataContext` by these accessor names): AislingDrawData, CreatureSprites, Effects, Fonts, LightMasks, LocalPlayerSettings, MapsFiles, MetaFiles, PanelSprites, Tiles, UserControls (the UI-component repository).
 - **`ControlPrefab`/`ControlPrefabSet`** -- Wraps DALib Control definitions + pre-rendered SKImage arrays. First control (Anchor) defines panel bounds.
 - Control file catalog in `controlFileList.txt` at solution root.
-- **`AssetPackRegistry`** (`AssetPacks/`) -- Static registry. On `Initialize()`, scans `DataContext.DataPath` for `*.datf` files (ZIP archives with modern PNG asset overrides), reads each one's `_manifest.json`, validates `schema_version`, and registers by `content_type`. Typed accessors like `GetIconPack() : IconPack?`. Lookups return null when no pack is registered; renderer falls through to legacy. See `asset-pack-format.md` in the document repo for the artist-facing format spec.
+- **`AssetPackRegistry`** (`AssetPacks/`) -- Static registry. On `Initialize()`, scans `{DataContext.DataPath}/hybrasyl-data/` (the `PACK_SUBFOLDER`) for `*.datf` files (ZIP archives with modern PNG asset overrides), reads each one's `_manifest.json`, validates `schema_version`, and registers a single pack per `content_type`. Lookups return null when no pack is registered; the renderer falls through to legacy. See `asset-pack-format.md` in the document repo for the artist-facing format spec. Eight content types are supported, each with a typed accessor:
+  - `ability_icons` -> `IconPack` -> `GetIconPack()`
+  - `item_icons` -> `ItemPack` -> `GetItemPack()`
+  - `nation_badges` -> `NationBadgePack` -> `GetNationBadgePack()`
+  - `npc_portraits` -> `NpcPortraitPack` -> `GetNpcPortraitPack()`
+  - `static_tiles` -> `StaticTilePack` -> `GetStaticTilePack()`
+  - `legend_mark_icons` -> `LegendMarkIconPack` -> `GetLegendMarkIconPack()`
+  - `ui_sprite_overrides` -> `UiSpriteOverridePack` -> `GetUiSpriteOverridePack()`
+  - `creature_sprites` -> `CreaturePack` -> `GetCreaturePack()` (per-creature auto-trim)
 - **`IconPack`** (`AssetPacks/`) -- Wraps a ZipArchive of `{prefix}_{id:D4}.png` entries. `TryGetIconImage(prefix, spriteId, out SKImage?)` case-insensitive lookup; decode failures treated as "not present" so renderer falls back cleanly to legacy.
 
 ### Rendering Layer (`Chaos.Client.Rendering`)
@@ -160,7 +179,7 @@ Chaos.Client/
 - **`SoundSystem`** -- SDL2_mixer-based audio. MP3s decoded to PCM once via `Mix_LoadWAV_RW` and cached as `Mix_Chunk` pointers; playback uses the mixer's channel pool with per-channel volume. Music streams via `Mix_LoadMUS` with `Mix_FadeOutMusic`/`Mix_FadeInMusic` for map transitions. Same-sound overlap ducks prior instances by -3 dB (equal-power) instead of voice-stealing.
 - **`Pathfinder`** -- A* pathfinding algorithm.
 - **`LightingSystem`** -- Owns the per-frame light source buffer. Walks world entities, reads `LanternSize`, and gathers into a span consumed read-only by `DarknessRenderer` and `TabMapRenderer` (neither stores its own copy). Caches Euclidean circle offset arrays (radius 3/5) and exposes `BaselineVisibilityOffsets` for the unconditional player-tile reveal on darkness maps.
-- **`LatencyMonitor`** -- Static class. Background ICMP ping loop (15s interval) against the connected server endpoint. Exposes `LatencyMs` and fires `LatencyChanged` for the HUD ping indicator. Started/stopped by `ChaosGame` on connect/disconnect. Events fire on thread-pool threads — consumers must poll from the game-loop thread.
+- **`LatencyMonitor`** -- Static class. Passive sink for application-layer round-trip-time samples. Producers call `Update(long? rttMs)` (null clears the reading); the HUD subscribes to `LatencyChanged` and reads `LatencyMs`. May fire on any thread — subscribers must not block, and any non-trivial work should be marshalled to the game-loop thread by the consumer. Producer: `ChaosGame` runs a 2s polling task while in World state that calls `GameClient.TryGetTcpSmoothedRttMs` — real kernel-measured smoothed RTT, no protocol changes. Cross-platform via `SIO_TCP_INFO` IOCTL (Windows), `getsockopt(IPPROTO_TCP, TCP_INFO)` (Linux), or `getsockopt(IPPROTO_TCP, TCP_CONNECTION_INFO)` (macOS). Clears via `Update(null)` on World exit.
 - **`MachineIdentity`** -- Machine-specific identification for the client.
 - **`ClientSettings`** -- Static class. Persistent user settings. Access via `ClientSettings.SoundVolume`, etc.
 
@@ -201,7 +220,7 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - Use `Lock` with `EnterScope()` instead of the `lock` keyword -- e.g. `using var scope = SendLock.EnterScope();`. This is the new .NET 9+ lock primitive with better usage semantics and performance.
 
 ### Packet Dispatch
-- Use array-indexed handler dispatch (not switch-case) for opcode routing, matching Chaos-Server's pattern
+- Use array-indexed handler dispatch (not switch-case) for opcode routing, mirroring the server's opcode-routing convention (the array-indexed dispatch used by the `Chaos.Networking` library)
 - Delegate arrays sized `byte.MaxValue + 1`, indexed by opcode byte, registered via `IndexHandlers()`
 - **Adding a handler:** write `private void OnXxx(ref ServerPacket packet)` in `ConnectionManager`, register it in `IndexHandlers()` as `Handlers[(byte)ServerOpCode.Xxx] = OnXxx`, deserialize via the appropriate `Chaos.Networking` converter, then raise an event on the manager for `WorldScreen` to subscribe to.
 
@@ -230,7 +249,6 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - **Pathfinding:** Right-click A* to tile/entity, entity following with auto-assail, arrow/spacebar cancels
 - **Casting flow:** CastingSystem coordinates targeting -> UseSpellOnTarget and chant progress
 
-<<<<<<< HEAD
 ### Other
 - Case-insensitive string operations: `StartsWithI`, `ContainsI`, `EqualsI`, `ReplaceI`
 - Thread-safe cache access via `RepositoryBase.GetOrCreate<T>` (per-instance Lock)
@@ -249,7 +267,7 @@ Notable refactors or changes must have at minimum:
 When writing any implementation plan, each plan must include:
 - **Phase-level review gates** -- After each phase/milestone, include a review step that performs both bug/regression review and architecture/design review of the changes made in that phase before proceeding to the next.
 - **Final review** -- After full implementation is complete, include a comprehensive review step covering the entire changeset for correctness, regressions, architectural consistency, and adherence to established patterns.
-- **Execution via project lead** -- When an implementation plan is approved, send the full plan to the project-lead agent for orchestration. The project lead breaks the plan into tasks and assigns work to the appropriate specialist agents.
+- **Execution** -- Once a plan is approved, work through its phases in order, completing both reviews at each gate before advancing.
 
 ## Guardrails
 
@@ -257,7 +275,6 @@ When writing any implementation plan, each plan must include:
 - Do not add commentary inside code solely to explain actions
 - Avoid exception swallowing -- use guard checks (`TryGetValue`, bounds checks, null checks) instead of try-catch for control flow. Prefer `archive.TryGetValue` + `FromEntry` over `FromArchive` wrapped in try-catch, `lookup.Palettes.TryGetValue` over `lookup.GetPaletteForId` in try-catch, etc.
 - Every implementation plan must include review gates after each phase and a final review after full implementation. Do not proceed to the next phase without completing both bug/regression and architecture/design review of the current phase.
-- When an implementation plan is approved, send it to the project-lead agent for orchestration. Do not assign work to specialist agents directly -- the project lead coordinates all work assignment.
 
 ## Control File Reference
 

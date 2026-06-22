@@ -450,6 +450,43 @@ public sealed class UiRenderer : IDisposable
     }
 
     /// <summary>
+    ///     Returns a cached legend-mark icon texture for the given icon ID. Tries the modern <c>.datf</c>
+    ///     legend-mark-icon pack first, falls back to frame <paramref name="iconId" /> of the legacy
+    ///     <c>legends.epf</c> sheet (palette 3 of <c>national.dat</c>). Unlike nation badges and ability icons, legend
+    ///     mark IDs are <b>0-based</b> — the wire byte is used directly as the EPF frame index, so
+    ///     <c>legend0000.png</c> replaces server icon ID 0.
+    /// </summary>
+    public Texture2D GetLegendMarkIcon(byte iconId)
+    {
+        var key = $"legend:{iconId}";
+
+        if (Cache.TryGetValue(key, out var cached))
+            return cached;
+
+        //modern path: pack PNG decoded via SkiaSharp
+        var pack = AssetPackRegistry.GetLegendMarkIconPack();
+
+        if ((pack is not null) && pack.TryGetLegendMarkImage(iconId, out var modernImage) && (modernImage is not null))
+            try
+            {
+                var modernTex = Convert(modernImage);
+                Cache[key] = modernTex;
+
+                return modernTex;
+            }
+            finally
+            {
+                modernImage.Dispose();
+            }
+
+        //legacy path: frame iconId of legends.epf — GetEpfTexture caches under its own "epf:legends.epf:{i}" key,
+        //so we don't re-cache under "legend:{iconId}". The legend: key is reserved for modern-pack results, which
+        //means a pack registering mid-session (hypothetical; no hot-reload today) would still be picked up on the
+        //first uncached lookup after registration.
+        return GetEpfTexture("legends.epf", iconId);
+    }
+
+    /// <summary>
     ///     Returns a cached copy of <paramref name="source" /> with a 50/50 blend of
     ///     <paramref name="tint" /> applied, used for cooldown overlays on skill/spell icons.
     ///     Retail parity: <see cref="LegendColors.DimGray" /> (<c>legend.pal[0x18]</c>) is the

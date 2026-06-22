@@ -146,6 +146,55 @@ public sealed class ConnectionManager : IDisposable
             });
 
     /// <summary>
+    ///     Sends a click on a known door tile, including the trailing layer + modifier bytes that retail's 0x43 handler
+    ///     uses to dispatch to the correct foreground entity. Empirically verified against legacy DA Darkages.exe via
+    ///     packet capture (2026-04-29):
+    ///     <code>
+    ///       N/S door (panel in RFG): layer = 1
+    ///       E/W door (panel in LFG): layer = 0
+    ///     </code>
+    ///     Modifier byte is 0 for an unmodified click. Hybrasyl drops both trailing bytes; retail strictly requires this
+    ///     shape for door dispatch — without the layer byte, retail silently rejects N/S door clicks (defaults to layer
+    ///     0 = LFG and finds nothing where the panel actually lives in RFG).
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>TACTICAL WORKAROUND</b> — first of three pre-removal bypasses logged in
+    ///         <c>chaos-networking-removal-direction.md</c> "Tactical workarounds (pre-removal)",
+    ///         alongside the PR-7 <c>ClickFloorTile</c> and <c>HandleDisplayGroupInvite</c> paths.
+    ///         All three exist because <c>Chaos.Networking</c>'s <see cref="ClickArgs"/> /
+    ///         <c>ClickConverter</c> (and equivalents) are sealed and don't expose the trailing bytes
+    ///         retail requires, so the raw <see cref="SpanWriter"/> construction here is hand-rolled
+    ///         in place of a library call.
+    ///     </para>
+    ///     <para>
+    ///         <b>REMOVE WHEN</b> the new Hybrasyl networking library replaces Chaos.Networking and
+    ///         <c>ClickArgs</c> is owned locally with a correct <c>IPacketConverter</c> that supports
+    ///         the optional trailing <c>layer</c> + <c>modifier</c> bytes. At that point this method
+    ///         collapses back to a <c>SendIfWorld(new ClickArgs { ... })</c> one-liner matching
+    ///         <see cref="ClickTile"/>.
+    ///     </para>
+    /// </remarks>
+    /// <param name="x">Tile x.</param>
+    /// <param name="y">Tile y.</param>
+    /// <param name="layer">0 = LeftForeground (E/W door panels), 1 = RightForeground (N/S panels).</param>
+    public void ClickDoor(int x, int y, byte layer)
+    {
+        if (State != ConnectionState.World)
+            return;
+
+        var writer = new SpanWriter(Encoding.GetEncoding(949), usePooling: true);
+        writer.WriteByte((byte)ClickType.TargetPoint);
+        writer.WriteUInt16((ushort)x);
+        writer.WriteUInt16((ushort)y);
+        writer.WriteByte(layer);
+        writer.WriteByte(0x00);
+        var ownership = writer.TransferOwnership();
+        var packet = new Packet((byte)ClientOpCode.Click, ownership.Owner, ownership.Length);
+        Client.Send(ref packet);
+    }
+
+    /// <summary>
     ///     Sends a coord click for a floor-aligned tile target (signpost, ground item, door frame, stair base).
     ///     Matches the legacy DA wire shape verified in Comhaigne's 0x43 RE refresh (2026-04-29):
     ///     <c>[0x43][0x03][u16 x BE][u16 y BE][u8 flag=1]</c>. The trailing flag byte is the
@@ -1477,11 +1526,14 @@ public sealed class ConnectionManager : IDisposable
             args.Id,
             targetState);
 
-        //begin teardown immediately — the redirect will be followed from the game loop
-        //once the old connection is fully dead.
-        Client.Disconnect();
-
+        //order matters: fire the redirect event BEFORE Disconnect. Disconnect synchronously fires
+        //OnDisconnected → State setter → StateChanged, and the world-screen handler suppresses its
+        //"Connection lost" popup based on a flag set by OnRedirectReceived. Inverting this order
+        //races the popup against the redirect flag.
         OnRedirectReceived?.Invoke(PendingRedirect.Value);
+
+        //begin teardown — the redirect will be followed from the game loop once the old connection is fully dead.
+        Client.Disconnect();
     }
 
     private void HandleLoginMessage(ServerPacket pkt)

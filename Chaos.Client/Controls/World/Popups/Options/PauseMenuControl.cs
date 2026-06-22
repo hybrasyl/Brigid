@@ -158,7 +158,11 @@ public sealed class PauseMenuControl : UIPanel
         };
 
         ExitButton = CreateTextButton("Exit Game", rightX, BUTTON_ROW_2_Y, BUTTON_WIDTH);
-        ExitButton.Clicked += () => OnExit?.Invoke();
+        ExitButton.Clicked += () =>
+        {
+            Hide();
+            OnExit?.Invoke();
+        };
 
         //close button — centered below the grid
         CloseButton = CreateTextButton("Close", (PANEL_WIDTH - CLOSE_WIDTH) / 2, CLOSE_Y, CLOSE_WIDTH);
@@ -260,6 +264,7 @@ public sealed class PauseMenuControl : UIPanel
             e.Handled = true;
         } else if (e.Key == Keys.X)
         {
+            Hide();
             OnExit?.Invoke();
             e.Handled = true;
         }

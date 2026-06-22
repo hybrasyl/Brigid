@@ -2,6 +2,7 @@
 using Chaos.Client.Collections;
 using Chaos.Client.Controls.Generic;
 using Chaos.Client.Data;
+using Chaos.Client.Data.AssetPacks;
 using Chaos.Client.Data.Repositories;
 using Chaos.Client.Data.Utilities;
 using Chaos.Client.Extensions;
@@ -461,10 +462,13 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>
-    ///     Attempts to load a full-art NPC illustration SPF from <c>npcbase.dat</c>. Looks up <paramref name="npcName" />
-    ///     in the merged illustration metadata (npci.tbl + server NPCIllust metafile) and picks the filename at
-    ///     <paramref name="variant" />. Returns null if the NPC has no entries, the variant index is out of range,
-    ///     or the SPF file is missing.
+    ///     Attempts to load a full-art NPC illustration. Resolves <paramref name="npcName" /> through the merged
+    ///     NPCIllust metadata (npci.tbl + server NPCIllust metafile) to get the portrait key for
+    ///     <paramref name="variant" /> — for Hybrasyl this is the literal value of the XML <c>Portrait</c> attribute
+    ///     (e.g. <c>"inn.spf"</c>, <c>"Gobalt"</c>). The modern <c>npc_portraits</c> pack is probed with that key
+    ///     first; on miss, falls back to <c>npcbase.dat</c> SPF lookup which only succeeds when the key happens to
+    ///     name a real SPF file in the archive. Returns null if neither path produces an image (caller falls through
+    ///     to the entity sprite portrait).
     /// </summary>
     private static Texture2D? TryLoadNpcIllustration(string npcName, byte variant)
     {
@@ -476,9 +480,15 @@ public sealed partial class WorldScreen
         if (variant >= filenames.Count)
             return null;
 
-        var spfFileName = filenames[variant];
+        var portraitKey = filenames[variant];
 
-        if (!DatArchives.Npcbase.TryGetValue(spfFileName, out var entry))
+        var portraitPack = AssetPackRegistry.GetNpcPortraitPack();
+
+        if (portraitPack is not null && portraitPack.TryGetIllustration(portraitKey, out var packImage) && packImage is not null)
+            using (packImage)
+                return TextureConverter.ToTexture2D(packImage);
+
+        if (!DatArchives.Npcbase.TryGetValue(portraitKey, out var entry))
             return null;
 
         var spf = SpfFile.FromEntry(entry);
@@ -1223,11 +1233,43 @@ public sealed partial class WorldScreen
 
     //--- exit / state ---
 
+    private const float EXIT_CONFIRM_SECONDS = 10f;
+    //buggy/older servers (e.g. Hybrasyl, which enqueues the Redirect with a 1200ms TransmitDelay and
+    //drops the user from WorldState before the queue flushes) close the socket without sending Redirect.
+    //this window says "if disconnect arrives within N seconds of us sending the confirm, treat it as a
+    //graceful exit instead of an unexpected drop."
+    private const float EXIT_IN_PROGRESS_GRACE_SECONDS = 10f;
+
+    private void BeginExit()
+    {
+        //guard against re-entry while the popup is already up
+        if (ExitConfirmPopup.Visible)
+            return;
+
+        //retail-compat signal: announce the exit dialog opened. server responds with a cosmetic 0x4C
+        //(no longer auto-confirms — user dismisses the popup or the timer expires before we send 0x0B [0]).
+        Game.Connection.RequestExit(true);
+
+        ExitConfirmPopup.Show("Logging out. Press OK to log out now.");
+        ExitConfirmSecondsRemaining = EXIT_CONFIRM_SECONDS;
+    }
+
+    private void ConfirmExit()
+    {
+        ExitConfirmSecondsRemaining = 0f;
+
+        if (ExitConfirmPopup.Visible)
+            ExitConfirmPopup.Hide();
+
+        Game.Connection.RequestExit(false);
+        ExitInProgressSecondsRemaining = EXIT_IN_PROGRESS_GRACE_SECONDS;
+    }
+
     private void HandleExitResponse(ExitResponseArgs args)
     {
-        //server confirmed exit — send the actual logout (isrequest=false triggers server-side redirect to login)
-        if (args.ExitConfirmed)
-            Game.Connection.RequestExit(false);
+        //server's 0x4C ack to the query phase. retail's 0x4C is a state-machine signal, not a control-flow
+        //trigger — the user's click on the confirmation popup (or its 10s timeout) drives the actual exit.
+        //hook left in place so phase 2 can update the popup text on server ack if desired.
     }
 
     private void HandleStateChanged(ConnectionState oldState, ConnectionState newState)
@@ -1237,14 +1279,28 @@ public sealed partial class WorldScreen
         if (newState == ConnectionState.Login)
         {
             RedirectInProgress = false;
+            ExitInProgressSecondsRemaining = 0f;
             PendingLoginSwitch = true;
 
             return;
         }
 
-        //unexpected disconnect — show reconnect prompt (skip if this is part of a redirect sequence)
         if ((newState == ConnectionState.Disconnected) && !RedirectInProgress)
+        {
+            //defensive: a disconnect arriving within the exit-in-progress grace window is the expected
+            //logout outcome on servers that drop the socket without flushing Redirect. transition to
+            //login instead of showing the unexpected-disconnect popup.
+            if (ExitInProgressSecondsRemaining > 0f)
+            {
+                ExitInProgressSecondsRemaining = 0f;
+                PendingLoginSwitch = true;
+
+                return;
+            }
+
+            //unexpected disconnect — show reconnect prompt
             DisconnectPopup.Show("Connection lost.");
+        }
     }
 
     //--- helpers ---
