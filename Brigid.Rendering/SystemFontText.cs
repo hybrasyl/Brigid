@@ -8,7 +8,7 @@ namespace Brigid.Rendering;
 
 /// <summary>
 ///     Rasterizes short strings using the operating system's default typeface (via SkiaSharp), with no dependency on
-///     Dark Ages font assets. Exists for the first-run setup screen, which must render before any <c>.dat</c> archive is
+///     Dark Ages font assets. Exists for the launcher screen, which must render before any <c>.dat</c> archive is
 ///     loaded — at which point the legacy/atlas path in <see cref="TextRenderer" /> (which reads
 ///     <c>DataContext.Fonts</c>) is not yet available. Not intended for in-world text.
 /// </summary>
@@ -49,5 +49,23 @@ public static class SystemFontText
         using var image = surface.Snapshot();
 
         return TextureConverter.ToTexture2D(image);
+    }
+
+    /// <summary>
+    ///     Returns the advance width (px) of <paramref name="text" /> at <paramref name="pixelSize" /> without rasterizing
+    ///     a texture — for layout/measurement that should not allocate (e.g. text clipping loops).
+    /// </summary>
+    public static int Measure(string text, float pixelSize)
+    {
+        if (string.IsNullOrEmpty(text))
+            return 0;
+
+        using var font = new SKFont(SKTypeface.Default, pixelSize)
+        {
+            Subpixel = true,
+            Edging = SKFontEdging.Antialias
+        };
+
+        return (int)MathF.Ceiling(font.MeasureText(text));
     }
 }

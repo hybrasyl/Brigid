@@ -30,7 +30,7 @@ public static class FolderPicker
                 return PickLinux(prompt, initialDirectory);
         } catch
         {
-            //any failure (tool missing, spawn error) → caller falls back to the typed field
+            //any unexpected failure → caller falls back to the typed field
         }
 
         return null;
@@ -38,14 +38,15 @@ public static class FolderPicker
 
     private static string? PickMacOs(string prompt, string? initialDirectory)
     {
-        //AppleScript 'choose folder' returns an alias; convert to a POSIX path. ArgumentList avoids shell quoting.
+        //AppleScript 'choose folder' returns an alias; convert to a POSIX path. ArgumentList avoids shell quoting; both
+        //the prompt and the directory are sanitized so neither can break out of the AppleScript string literal.
         var location = !string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory)
-            ? $" default location (POSIX file \"{initialDirectory}\")"
+            ? $" default location (POSIX file \"{Sanitize(initialDirectory)}\")"
             : string.Empty;
 
-        return RunForPath(
-            "osascript",
-            ["-e", $"POSIX path of (choose folder with prompt \"{Sanitize(prompt)}\"{location})"]);
+        TryRun("osascript", ["-e", $"POSIX path of (choose folder with prompt \"{Sanitize(prompt)}\"{location})"], out var path);
+
+        return path;
     }
 
     private static string? PickWindows(string prompt)
@@ -57,7 +58,9 @@ public static class FolderPicker
             + $"$d.Description = '{Sanitize(prompt)}'; "
             + "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($d.SelectedPath) }";
 
-        return RunForPath("powershell", ["-NoProfile", "-STA", "-Command", script]);
+        TryRun("powershell", ["-NoProfile", "-STA", "-Command", script], out var path);
+
+        return path;
     }
 
     private static string? PickLinux(string prompt, string? initialDirectory)
@@ -67,12 +70,24 @@ public static class FolderPicker
         if (!string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory))
             zenityArgs.Add($"--filename={initialDirectory.TrimEnd('/')}/");
 
-        return RunForPath("zenity", zenityArgs)
-               ?? RunForPath("kdialog", ["--getexistingdirectory", initialDirectory ?? "."]);
+        //only fall through to kdialog when zenity is *absent* (TryRun returns false); a zenity cancel must not pop kdialog
+        if (TryRun("zenity", zenityArgs, out var path))
+            return path;
+
+        TryRun("kdialog", ["--getexistingdirectory", initialDirectory ?? "."], out var kdialogPath);
+
+        return kdialogPath;
     }
 
-    private static string? RunForPath(string fileName, IReadOnlyList<string> arguments)
+    /// <summary>
+    ///     Runs <paramref name="fileName" /> and captures stdout as a path. Returns <c>false</c> only when the process
+    ///     could not be started (tool missing) — so callers can try a fallback tool; returns <c>true</c> when it ran, with
+    ///     <paramref name="path" /> set to the trimmed output or <c>null</c> for a non-zero exit (cancel) or empty output.
+    /// </summary>
+    private static bool TryRun(string fileName, IReadOnlyList<string> arguments, out string? path)
     {
+        path = null;
+
         var startInfo = new ProcessStartInfo
         {
             FileName = fileName,
@@ -85,20 +100,33 @@ public static class FolderPicker
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
 
-        using var process = Process.Start(startInfo);
+        Process? process;
+
+        try
+        {
+            process = Process.Start(startInfo);
+        } catch
+        {
+            //tool not installed / cannot launch → let the caller try the next option
+            return false;
+        }
 
         if (process is null)
-            return null;
+            return false;
 
-        var output = process.StandardOutput.ReadToEnd();
-        process.WaitForExit();
+        using (process)
+        {
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
 
-        if (process.ExitCode != 0)
-            return null;
+            if (process.ExitCode != 0)
+                return true; //ran, but the user cancelled — do not fall through to another tool
 
-        var path = output.Trim();
+            var trimmed = output.Trim();
+            path = string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
 
-        return string.IsNullOrWhiteSpace(path) ? null : path;
+            return true;
+        }
     }
 
     //strip the few characters that would break the embedded osascript/powershell string literal

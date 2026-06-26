@@ -15,8 +15,8 @@ namespace Brigid;
 ///     constructor performs the one-time initialization that does NOT require the asset path (encoding providers, text
 ///     colors, machine identity) and resolves the host/port/asset-path from environment variables and the saved
 ///     <see cref="LauncherConfig" />. Asset-path-dependent initialization (the data archives and repositories) is
-///     deferred to <see cref="InitializeDataContext" />, which the client calls once a usable asset path is known —
-///     either from config/env at startup, or from the first-run setup screen.
+///     deferred to <see cref="InitializeAssetData" />, which the client calls once a usable asset path is known —
+///     either from config/env at startup, or from the launcher screen.
 /// </summary>
 public static class GlobalSettings
 {
@@ -27,11 +27,11 @@ public static class GlobalSettings
 
     /// <summary>
     ///     The Dark Ages asset directory (the folder containing the <c>.dat</c> archives). Empty until resolved from
-    ///     env/config or chosen in the first-run setup screen.
+    ///     env/config or chosen in the launcher screen.
     /// </summary>
     public static string DataPath { get; set; } = "";
 
-    /// <summary>Lobby server host. Empty until resolved from env/config or first-run setup.</summary>
+    /// <summary>Lobby server host. Empty until resolved from env/config or the launcher screen.</summary>
     public static string LobbyHost { get; set; } = "";
 
     /// <summary>Lobby server port. Defaults to 2610.</summary>
@@ -112,9 +112,9 @@ public static class GlobalSettings
     ///     Loads the data archives and repositories for the resolved <see cref="DataPath" />, then initializes the
     ///     asset-derived color tables (<see cref="LegendColors" /> reads <c>legend.pal</c> via <c>LegendPalette</c>, so it
     ///     must run after the data context). Must be called exactly once, after a usable asset path is known. Separated
-    ///     from the static constructor so the first-run setup screen can run (and render) before any asset is loaded.
+    ///     from the static constructor so the launcher screen can run (and render) before any asset is loaded.
     /// </summary>
-    public static void InitializeDataContext()
+    public static void InitializeAssetData()
     {
         DataContext.Initialize(ClientVersion, DataPath, LobbyHost, LobbyPort);
 

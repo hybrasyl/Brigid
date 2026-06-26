@@ -409,12 +409,12 @@ public sealed class ChaosGame : Game
 
     /// <summary>
     ///     Completes the asset-path-dependent startup once a usable asset path is known (resolved from config/env at
-    ///     launch, or chosen in <see cref="FirstRunConfigScreen" />): loads the data context, client settings, fonts, and
+    ///     launch, or chosen in <see cref="LauncherScreen" />): loads the data context, client settings, fonts, and
     ///     cursor, then switches to the lobby/login screen. Called exactly once.
     /// </summary>
     public void FinishAssetInitialization()
     {
-        GlobalSettings.InitializeDataContext();
+        GlobalSettings.InitializeAssetData();
         Directory.CreateDirectory(MetaFilePath);
         ClientSettings.Load();
         FontAtlas.Initialize(GraphicsDevice);

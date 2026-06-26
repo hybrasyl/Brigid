@@ -54,6 +54,7 @@ public sealed class LauncherScreen : IScreen
     private static readonly Color BadColor = new(225, 130, 120);
 
     private readonly Dictionary<string, Texture2D> TextCache = new();
+    private readonly Dictionary<string, int> WidthCache = new();
     private readonly string[] AddText = new string[3];
     private readonly Rectangle[] AddFieldBounds = new Rectangle[3];
     private readonly List<(Rectangle Row, Rectangle Remove, ServerEntry Entry)> DropdownRows = [];
@@ -258,6 +259,7 @@ public sealed class LauncherScreen : IScreen
             if (remove.Contains(cursor))
             {
                 LauncherConfig.RemoveServer(entry);
+                LauncherConfig.Save();
 
                 return;
             }
@@ -577,7 +579,21 @@ public sealed class LauncherScreen : IScreen
         DrawText(shown, new Vector2(box.X + 6, box.Y + (box.Height - 16) / 2f + 2), color, size);
     }
 
-    private int Measure(string text, float size) => string.IsNullOrEmpty(text) ? 0 : GetText(text, Color.White, size).Width;
+    private int Measure(string text, float size)
+    {
+        if (string.IsNullOrEmpty(text))
+            return 0;
+
+        var key = $"{size:0.#}|{text}";
+
+        if (WidthCache.TryGetValue(key, out var width))
+            return width;
+
+        width = SystemFontText.Measure(text, size);
+        WidthCache[key] = width;
+
+        return width;
+    }
 
     private Texture2D GetText(string text, Color color, float size)
     {
