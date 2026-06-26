@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Chaos.Client</string>
+    <string>Brigid</string>
     <key>CFBundleDisplayName</key>
-    <string>Chaos.Client</string>
+    <string>Brigid</string>
     <key>CFBundleIdentifier</key>
-    <string>com.hybrasyl.chaosclient</string>
+    <string>co.eris.brigid</string>
     <key>CFBundleExecutable</key>
-    <string>Chaos.Client</string>
+    <string>Brigid</string>
     <key>CFBundleIconFile</key>
-    <string>Chaos.Client.icns</string>
+    <string>Brigid.icns</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleInfoDictionaryVersion</key>

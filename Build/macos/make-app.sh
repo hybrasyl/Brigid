@@ -10,7 +10,7 @@
 # the bundle layout and that the app launches past SDL init.
 #
 # Usage:
-#   make-app.sh --publish <dir> --version <x.y.z> --output <Chaos.Client.app> \
+#   make-app.sh --publish <dir> --version <x.y.z> --output <Brigid.app> \
 #               [--icon <icon.png>] [--rid osx-arm64]
 #
 set -euo pipefail
@@ -38,7 +38,7 @@ done
 [[ -d "$PUBLISH_DIR" ]] || { echo "publish dir not found: $PUBLISH_DIR" >&2; exit 1; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-EXECUTABLE="Chaos.Client"
+EXECUTABLE="Brigid"
 
 echo "==> Assembling $OUTPUT (rid=$RID, version=$VERSION)"
 
@@ -70,12 +70,12 @@ fi
 sed "s/@VERSION@/$VERSION/g" "$SCRIPT_DIR/Info.plist.in" > "$CONTENTS/Info.plist"
 
 # --- Icon -----------------------------------------------------------------
-# Generate Chaos.Client.icns from a high-res PNG source if one was provided.
+# Generate Brigid.icns from a high-res PNG source if one was provided.
 # Absent an icon, the bundle ships without one (default app icon) — the
 # workflow still produces a valid, signable, notarizable bundle.
 if [[ -n "$ICON_PNG" && -f "$ICON_PNG" ]]; then
     echo "==> Generating .icns from $ICON_PNG"
-    ICONSET="$(mktemp -d)/Chaos.Client.iconset"
+    ICONSET="$(mktemp -d)/Brigid.iconset"
     mkdir -p "$ICONSET"
     for size in 16 32 64 128 256 512 1024; do
         sips -z "$size" "$size" "$ICON_PNG" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
@@ -87,7 +87,7 @@ if [[ -n "$ICON_PNG" && -f "$ICON_PNG" ]]; then
     cp "$ICONSET/icon_512x512.png"   "$ICONSET/icon_256x256@2x.png"
     cp "$ICONSET/icon_1024x1024.png" "$ICONSET/icon_512x512@2x.png"
     rm -f "$ICONSET/icon_64x64.png" "$ICONSET/icon_1024x1024.png"
-    iconutil -c icns "$ICONSET" -o "$RES_DIR/Chaos.Client.icns"
+    iconutil -c icns "$ICONSET" -o "$RES_DIR/Brigid.icns"
 else
     echo "==> No icon provided; bundle will use the default app icon"
 fi
