@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      Hardened runtime entitlements required to notarize a self-contained .NET app.
+      - allow-jit / allow-unsigned-executable-memory: the CoreCLR JIT writes and
+        executes code at runtime; without these the hardened runtime kills it.
+      - disable-library-validation: we load third-party native dylibs (SDL2,
+        SDL2_mixer, SkiaSharp, openal) that are not part of our signing identity's
+        team. Even though we re-sign them with our Developer ID at package time,
+        this keeps load-time validation from rejecting them.
+    -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>
