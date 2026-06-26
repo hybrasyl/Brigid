@@ -166,7 +166,9 @@ public sealed class AislingRenderer : IDisposable
 
     private readonly Dictionary<uint, CompositeEntry> CompositeCache = [];
 
-    private readonly AislingDrawDataRepository DrawData = DataContext.AislingDrawData;
+    //lazy: resolved per access so the renderer can be constructed before DataContext.Initialize (first-run setup runs
+    //before any asset is loaded). Matches the access pattern of the sibling renderers and line 1391 below.
+    private static AislingDrawDataRepository DrawData => DataContext.AislingDrawData;
     private readonly Dictionary<Texture2D, Texture2D> GroupTintCache = [];
     private readonly Dictionary<Texture2D, Texture2D> HitTintCache = [];
     private readonly LayerInfo?[] RenderLayers = new LayerInfo?[(int)LayerSlot.Count];
