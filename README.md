@@ -1,10 +1,10 @@
 # Brigid
 
-(A fork of [Sichii's][Chaos.Client])
+(A fork of [Sichii's](https://github.com/sichii/Chaos.Client)
 
 A custom Dark Ages client written in C# (.NET 10) on top of MonoGame, [DALib](https://github.com/eriscorp/DALib), and
 the [Chaos.Networking](https://github.com/Sichii/Chaos-Server) layer. Works with [Chaos-Server](https://github.com/Sichii/Chaos-Server),
-[Hybrasyl Server][https://github.com/hybrasyl/server], and retail servers.
+[Hybrasyl Server](https://github.com/hybrasyl/server), and retail servers.
 
 Targets Dark Ages client version **7.4.1** for feature parity.
 
