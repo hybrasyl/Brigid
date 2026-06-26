@@ -10,7 +10,7 @@ public static class ClientSettings
     public static bool UseGroupWindow { get; set; } = true;
     public static int ChattingMode { get; set; }
     public static bool DoGroundAnimation { get; set; } = true;
-    public static bool EnableProfileClick { get; set; }
+    public static bool EnableProfileClick { get; set; } = true;
     public static bool GroupOpen { get; set; }
     public static int MusicVolume { get; set; } = 5;
     public static bool RecordNpcChat { get; set; } = true;

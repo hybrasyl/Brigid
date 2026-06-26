@@ -917,8 +917,7 @@ public sealed class AislingRenderer : IDisposable
         if (spriteId <= 0)
             return null;
 
-        // Shields always use the male override since the EPF file is loaded from khanmns.
-        var paletteOverride = typeLetter == 's' ? KhanPalOverrideType.Male : appearance.OverrideType;
+        var paletteOverride = ForceMaleArchive(typeLetter, spriteId) ? KhanPalOverrideType.Male : appearance.OverrideType;
 
         var cacheKey = new LayerCacheKey(
             typeLetter,
@@ -1240,11 +1239,7 @@ public sealed class AislingRenderer : IDisposable
         string anim,
         int idleFallbackFrame)
     {
-        // Shields always load from the male archive (khanmns.dat) regardless of gender.
-        // Retail hardcodes the filename prefix to 'm' for the shield slot; khanwns.dat
-        // only contains vestigial entries for 3 sprite IDs that the paperdoll builder
-        // never requests.
-        var useMale = typeLetter == 's' || appearance.IsMale;
+        var useMale = ForceMaleArchive(typeLetter, spriteId) || appearance.IsMale;
         var genderPrefix = useMale ? 'm' : 'w';
 
         var fileName = $"{genderPrefix}{typeLetter}{spriteId:D3}{anim}";
@@ -1269,6 +1264,24 @@ public sealed class AislingRenderer : IDisposable
     }
 
     private EpfView? TryLoadEpf(char typeLetter, bool isMale, string fileName) => DrawData.GetEquipmentEpf(typeLetter, isMale, fileName);
+
+    // Returns true when a layer must load from the male khan archive regardless of character
+    // gender. Other layers (hair, face, hat, armor, boots, accessories, pants, weapon) continue
+    // to honor appearance.IsMale and load from the female (w-prefix) archives for female chars.
+    //
+    // Cases:
+    //   - 's' (shield): retail hardcodes the male prefix; khanwns has only vestigial entries
+    //     for 3 sprite IDs that the paperdoll builder never requests.
+    //
+    //   - 'b' with spriteId == 3 (BodySprite.{Male,Female}Invis): asset bug. wb003 exists in
+    //     khanwad but contains wrong art (a "guard outfit"), not a female invisible body. mb003
+    //     is the correct invisible silhouette and is gender-neutral when invisible (no skin
+    //     shows), so it renders fine for female characters while w-prefix overlays continue to
+    //     apply. REMOVE this branch if a .datf asset pack ships a correct wb003 — at that point
+    //     wb003 should load normally via appearance.IsMale.
+    private static bool ForceMaleArchive(char typeLetter, int spriteId)
+        => typeLetter == 's'
+           || ((typeLetter == 'b') && (spriteId == 3));
 
     /// <summary>
     ///     Returns the maximum idle animation frame count (per direction) across all equipped layers that have an idle ("04")

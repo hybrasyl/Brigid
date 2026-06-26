@@ -1257,15 +1257,23 @@ public sealed partial class WorldScreen
                     {
                         var firstEmptySlot = WorldState.Inventory.GetFirstEmptySlot();
                         Game.Connection.PickupItem(entity.TileX, entity.TileY, firstEmptySlot);
-                    } else if ((entity.Type == ClientEntityType.Aisling) && (entity.Id == Game.Connection.AislingId))
-                    {
-                        //double-clicking self opens the local self-profile (paperdoll / equipment tab), same as alt+click
-                        SelfProfileRequested = true;
-                        SelfProfileRequestedTab = StatusBookTab.Equipment;
-                        Game.Connection.RequestSelfProfile();
-                    } else if ((entity.Type != ClientEntityType.Aisling) || ClientSettings.EnableProfileClick)
+                    } else if (entity.Type != ClientEntityType.Aisling)
                         Game.Connection.ClickEntity(entity.Id);
-                }
+                    else if (ClientSettings.EnableProfileClick)
+                    {
+                        if (entity.Id == Game.Connection.AislingId)
+                        {
+                            SelfProfileRequested = true;
+                            SelfProfileRequestedTab = StatusBookTab.Equipment;
+                            Game.Connection.RequestSelfProfile();
+                        } else
+                            Game.Connection.ClickEntity(entity.Id);
+                    }
+                } else if (TileHasForeground(tileX, tileY))
+                    //retail UX: messageboard signposts open on double-click. Signposts are tile-attached
+                    //(not broadcast as entities) so GetEntityAtScreen returns null. Send the 7-byte
+                    //coord click with the floor-aligned flag so retail's signpost dispatch resolves.
+                    Game.Connection.ClickFloorTile(tileX, tileY);
             }
 
             e.Handled = true;

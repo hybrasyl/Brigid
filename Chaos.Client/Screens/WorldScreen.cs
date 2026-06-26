@@ -319,7 +319,12 @@ public sealed partial class WorldScreen : IScreen
 
                         break;
                     case 12:
-                        //server-authoritative — send toggle, server responds with updated profile
+                        //optimistic local repaint — Hybrasyl's 0x2F handler doesn't push a profile back
+                        //unless the toggle actually leaves a group, and retail's response shape is unverified.
+                        //Legacy clients flip the indicator on click; we match that. Subsequent SelfProfile
+                        //updates (e.g., on next /stats) will reconcile if server state diverges.
+                        WorldHud.SetGroupOpen(value);
+                        StatusBook.SetGroupOpen(value);
                         Game.Connection.ToggleGroup();
 
                         return;
@@ -567,7 +572,8 @@ public sealed partial class WorldScreen : IScreen
         StatusBook.OnUnequip += slot => Game.Connection.Unequip(slot);
         StatusBook.OnClose += SavePlayerFamilyList;
 
-        StatusBook.OnGroupToggled += () => Game.Connection.ToggleGroup();
+        //route through UserOptions.Toggle so the F4 settings panel and HUD indicator stay in sync
+        StatusBook.OnGroupToggled += () => WorldState.UserOptions.Toggle(12);
 
         StatusBook.OnProfileTextClicked += () =>
         {

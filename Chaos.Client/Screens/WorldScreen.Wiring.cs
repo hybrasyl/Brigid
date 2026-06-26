@@ -777,7 +777,8 @@ public sealed partial class WorldScreen
             };
 
         if (hud.GroupIndicator is not null)
-            hud.GroupIndicator.Clicked += () => Game.Connection.ToggleGroup();
+            //route through UserOptions.Toggle so the F4 settings panel and StatusBook indicator stay in sync
+            hud.GroupIndicator.Clicked += () => WorldState.UserOptions.Toggle(12);
 
         if (hud.UsersButton is not null)
         {

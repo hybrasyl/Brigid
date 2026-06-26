@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(dotnet build *)",
-      "Read(//private/tmp/opcode-dump/**)",
-      "Bash(dotnet run *)"
-    ]
-  }
-}

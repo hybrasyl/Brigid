@@ -195,6 +195,32 @@ public sealed class ConnectionManager : IDisposable
     }
 
     /// <summary>
+    ///     Sends a coord click for a floor-aligned tile target (signpost, ground item, door frame, stair base).
+    ///     Matches the legacy DA wire shape verified in Comhaigne's 0x43 RE refresh (2026-04-29):
+    ///     <c>[0x43][0x03][u16 x BE][u16 y BE][u8 flag=1]</c>. The trailing flag byte is the
+    ///     <c>WorldObject_Static</c> anchor flag — <c>1</c> for floor-aligned sprites, <c>0</c> for
+    ///     above-tile sprites (door panels, awnings). Without this byte retail defaults to flag=0
+    ///     and the signpost dispatch silently drops. Hybrasyl ignores the trailing byte and resolves
+    ///     by <c>(x,y)</c> alone, so this works on both servers.
+    ///     Bypasses the sealed <c>ClickArgs</c>/<c>ClickConverter</c> in Chaos.Networking — see
+    ///     <c>chaos-networking-removal-direction.md</c> "Tactical workarounds (pre-removal)".
+    /// </summary>
+    public void ClickFloorTile(int x, int y)
+    {
+        if (State != ConnectionState.World)
+            return;
+
+        var writer = new SpanWriter(Encoding.GetEncoding(949), usePooling: true);
+        writer.WriteByte((byte)ClickType.TargetPoint);
+        writer.WriteUInt16((ushort)x);
+        writer.WriteUInt16((ushort)y);
+        writer.WriteByte(0x01); //floor-aligned anchor flag
+        var ownership = writer.TransferOwnership();
+        var packet = new Packet((byte)ClientOpCode.Click, ownership.Owner, ownership.Length);
+        Client.Send(ref packet);
+    }
+
+    /// <summary>
     ///     Sends a world map node click.
     /// </summary>
     public void ClickWorldMapNode(
@@ -1881,9 +1907,111 @@ public sealed class ConnectionManager : IDisposable
         OnDisplayExchange?.Invoke(args);
     }
 
+    /// <summary>
+    ///     Deserializes the <c>0x63 DisplayGroupInvite</c> server packet directly off the wire, bypassing
+    ///     <c>Chaos.Networking.DisplayGroupInviteConverter</c>. The upstream converter's
+    ///     <c>Deserialize</c> / <c>Serialize</c> branches are functionally swapped against the actual
+    ///     Hybrasyl/retail wire shape (<c>Invite=1</c> reads group-box info that isn't on the wire;
+    ///     <c>ShowGroupBox=4</c> ignores group-box info that is) and reads class slots in the wrong order
+    ///     (Monk before Rogue vs. the actual W/Wiz/R/P/M emission), so calling it produces garbage args.
+    ///     Wire shape is per <c>server/hybrasyl/Subsystems/Players/Grouping/UserGroup.cs</c>.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         <b>TACTICAL WORKAROUND</b> — second of three pre-removal bypasses logged in
+    ///         <c>chaos-networking-removal-direction.md</c> "Tactical workarounds (pre-removal)",
+    ///         alongside <see cref="ClickFloorTile"/> and the PR-6 <c>ClickDoor</c> path.
+    ///     </para>
+    ///     <para>
+    ///         <b>REMOVE WHEN</b> the new Hybrasyl networking library replaces Chaos.Networking and
+    ///         <c>DisplayGroupInviteArgs</c> / <c>DisplayGroupBoxInfo</c> are owned locally with a correct
+    ///         <c>IPacketConverter</c>. At that point this method collapses back to
+    ///         <c>Client.Deserialize&lt;DisplayGroupInviteArgs&gt;(in pkt)</c> and the subtype 2 / 5
+    ///         "log + drop" branches fold into the converter.
+    ///     </para>
+    /// </remarks>
     private void HandleDisplayGroupInvite(ServerPacket pkt)
     {
-        var args = Client.Deserialize<DisplayGroupInviteArgs>(in pkt);
+        var span = pkt.Data.AsSpan(0, pkt.Length);
+        var packet = new Packet(ref span, pkt.IsEncrypted);
+        var reader = new SpanReader(Encoding.GetEncoding(949), in packet.Buffer);
+
+        var subtype = reader.ReadByte();
+        DisplayGroupInviteArgs? args;
+
+        switch (subtype)
+        {
+            case 1: //Hybrasyl `Ask` — wire: [string8 source][0][0]. Map to Chaos enum Invite.
+            {
+                var source = reader.ReadString8();
+
+                args = new DisplayGroupInviteArgs
+                {
+                    ServerGroupSwitch = ServerGroupSwitch.Invite,
+                    SourceName = source
+                };
+
+                break;
+            }
+            case 2: //Hybrasyl `Member` — never emitted by Hybrasyl. TODO: capture retail wire shape before re-enabling.
+                NoticeDebugLog.Write($"0x63 subtype 0x02 (Member) unhandled — no retail capture yet. len={pkt.Length}");
+
+                return;
+            case 4: //Hybrasyl `RecruitInfo` — full WriteInfo block. Map to Chaos enum ShowGroupBox.
+            {
+                var recruiter = reader.ReadString8();
+                var name = reader.ReadString8();
+                var note = reader.ReadString8();
+                var minLevel = reader.ReadByte();
+                var maxLevel = reader.ReadByte();
+
+                //class-slot order on the wire (Hybrasyl WriteInfo): Warrior, Wizard, Rogue, Priest, Monk
+                var maxWarriors = reader.ReadByte();
+                var currWarriors = reader.ReadByte();
+                var maxWizards = reader.ReadByte();
+                var currWizards = reader.ReadByte();
+                var maxRogues = reader.ReadByte();
+                var currRogues = reader.ReadByte();
+                var maxPriests = reader.ReadByte();
+                var currPriests = reader.ReadByte();
+                var maxMonks = reader.ReadByte();
+                var currMonks = reader.ReadByte();
+
+                args = new DisplayGroupInviteArgs
+                {
+                    ServerGroupSwitch = ServerGroupSwitch.ShowGroupBox,
+                    SourceName = recruiter,
+                    GroupBoxInfo = new DisplayGroupBoxInfo
+                    {
+                        Name = name,
+                        Note = note,
+                        MinLevel = minLevel,
+                        MaxLevel = maxLevel,
+                        MaxWarriors = maxWarriors,
+                        CurrentWarriors = currWarriors,
+                        MaxWizards = maxWizards,
+                        CurrentWizards = currWizards,
+                        MaxRogues = maxRogues,
+                        CurrentRogues = currRogues,
+                        MaxPriests = maxPriests,
+                        CurrentPriests = currPriests,
+                        MaxMonks = maxMonks,
+                        CurrentMonks = currMonks
+                    }
+                };
+
+                break;
+            }
+            case 5: //Hybrasyl `RecruitAsk` — never emitted by Hybrasyl. TODO: capture retail wire shape before re-enabling.
+                NoticeDebugLog.Write($"0x63 subtype 0x05 (RecruitAsk) unhandled — no retail capture yet. len={pkt.Length}");
+
+                return;
+            default:
+                NoticeDebugLog.Write($"0x63 unknown subtype 0x{subtype:X2} len={pkt.Length}");
+
+                return;
+        }
+
         OnDisplayGroupInvite?.Invoke(args);
     }
 
