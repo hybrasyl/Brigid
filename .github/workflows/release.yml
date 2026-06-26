@@ -51,7 +51,7 @@ jobs:
       - name: Publish win-x64 (self-contained, no symbols)
         shell: bash
         run: |
-          dotnet publish Chaos.Client/Chaos.Client.csproj -c Release -r win-x64 \
+          dotnet publish Brigid/Brigid.csproj -c Release -r win-x64 \
             --self-contained true -o publish/win-x64 \
             -p:UseAppHost=true -p:DebugType=none -p:DebugSymbols=false -p:Version="$VERSION"
 
@@ -96,7 +96,7 @@ jobs:
 
       - name: Publish linux-x64 (self-contained, no symbols)
         run: |
-          dotnet publish Chaos.Client/Chaos.Client.csproj -c Release -r linux-x64 \
+          dotnet publish Brigid/Brigid.csproj -c Release -r linux-x64 \
             --self-contained true -o publish/linux-x64 \
             -p:UseAppHost=true -p:DebugType=none -p:DebugSymbols=false -p:Version="$VERSION"
 
@@ -129,7 +129,7 @@ jobs:
 
       - name: Publish osx-arm64 (self-contained, no symbols)
         run: |
-          dotnet publish Chaos.Client/Chaos.Client.csproj -c Release -r osx-arm64 \
+          dotnet publish Brigid/Brigid.csproj -c Release -r osx-arm64 \
             --self-contained true -o publish/osx-arm64 \
             -p:UseAppHost=true -p:DebugType=none -p:DebugSymbols=false -p:Version="$VERSION"
 

@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <ItemGroup>
+        <ProjectReference Include="..\Brigid.Data\Brigid.Data.csproj"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Chaos.DarkAges"/>
+        <PackageReference Include="MonoGame.Framework.DesktopGL"/>
+    </ItemGroup>
+</Project>

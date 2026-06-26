@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Chaos.Client is a Dark Ages MMORPG client built in C# (.NET 10.0) using MonoGame for windowing/graphics and DALib for Dark Ages file format handling. It is the Hybrasyl team's reference client: a clean, modern implementation of the Dark Ages protocol whose first meaningful dev target is the Hybrasyl server (`qa.hybrasyl.com:2610`). It speaks the standard, retail-compatible DA protocol, so it also interoperates with other compatible servers. Licensed under AGPL-3.0-or-later. v0.1.0.
+Brigid is a Dark Ages MMORPG client built in C# (.NET 10.0) using MonoGame for windowing/graphics and DALib for Dark Ages file format handling. It is the Hybrasyl team's reference client: a clean, modern implementation of the Dark Ages protocol whose first meaningful dev target is the Hybrasyl server (`qa.hybrasyl.com:2610`). It speaks the standard, retail-compatible DA protocol, so it also interoperates with other compatible servers. Licensed under AGPL-3.0-or-later. v0.1.0.
 
 ## Build & Run
 
 ```bash
-dotnet build Chaos.Client.slnx
-dotnet run --project Chaos.Client/Chaos.Client.csproj
+dotnet build Brigid.slnx
+dotnet run --project Brigid/Brigid.csproj
 ```
 
 The client requires a Dark Ages game-data directory (the folder containing `*.dat` archives). Point `GlobalSettings.DataPath` at that directory before running; `LobbyHost`/`LobbyPort` and `ClientVersion` also live in `GlobalSettings`.
@@ -20,11 +20,11 @@ No test projects exist currently.
 ## Solution Structure
 
 ```
-Chaos.Client.slnx (.NET 10.0, C# 14)
-├── Chaos.Client               — MonoGame Game class, screens, UI controls, systems, entry point
-├── Chaos.Client.Data           — Asset repositories, DALib integration, archive loading, caching
-├── Chaos.Client.Rendering      — Texture conversion, sprite renderers, map rendering, text, camera
-└── Chaos.Client.Networking     — TCP client, crypto, packet framing, connection state machine
+Brigid.slnx (.NET 10.0, C# 14)
+├── Brigid               — MonoGame Game class, screens, UI controls, systems, entry point
+├── Brigid.Data           — Asset repositories, DALib integration, archive loading, caching
+├── Brigid.Rendering      — Texture conversion, sprite renderers, map rendering, text, camera
+└── Brigid.Networking     — TCP client, crypto, packet framing, connection state machine
 ```
 
 DALib (Dark Ages file format support) is consumed as an external NuGet package, not a solution project.
@@ -69,7 +69,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 
 ## Architecture
 
-### Data Layer (`Chaos.Client.Data`)
+### Data Layer (`Brigid.Data`)
 - **`DataContext`** -- Static singleton exposing all repositories via `Initialize()`.
 - **`DatArchives`** -- Static holder for 22 game data archives loaded at startup via memory-mapped files.
 - **`RepositoryBase`** -- Abstract base with MemoryCache (15-min sliding expiration). Uses `GetOrCreate<T>(key, factory)`.
@@ -87,7 +87,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
   - `creature_sprites` -> `CreaturePack` -> `GetCreaturePack()` (per-creature auto-trim)
 - **`IconPack`** (`AssetPacks/`) -- Wraps a ZipArchive of `{prefix}_{id:D4}.png` entries. `TryGetIconImage(prefix, spriteId, out SKImage?)` case-insensitive lookup; decode failures treated as "not present" so renderer falls back cleanly to legacy.
 
-### Rendering Layer (`Chaos.Client.Rendering`)
+### Rendering Layer (`Brigid.Rendering`)
 - **`TextureConverter`** -- DALib `SKImage` -> MonoGame `Texture2D` (RGBA8888 premul). Entry points: `ConvertImage<T>()`, `ToTexture2D()`.
 - **`ImageUtil`** -- Static class of stateless CPU pixel-manipulation primitives: tint/blend variants (`Blend50`, `ApplyHoverTint`, `ApplyGroundTint`, `BuildGroupTinted`, `BuildHitTinted`, `BuildHoverTinted`, `BuildGroundTinted`, `BuildCooldownTintedCached`), checker pattern, vertical alpha gradient, filled border, rectangle fill, projected-quadrants raster, chat-bubble body + tail, 2x2 box downsampler (`SKColor[]`), comb-dissolve kernel. Naming convention: `Build*` returns a new `Texture2D` (or `CachedTexture2D`); `Apply*`/`Fill*`/`Draw*` mutate a `Color[]` in place. No global state -- all device-requiring helpers take an explicit `GraphicsDevice`.
 - **`PixelBufferScope`** -- `ref struct` RAII wrapper around `ArrayPool<Color>.Shared.Rent` + `Texture2D.GetData`/`SetData`. Use this instead of hand-rolling rent/get/set/return. Two constructors: `(Texture2D source)` reads the texture into a fresh buffer; `(int width, int height)` rents an **uninitialized** buffer (callers must `Array.Clear(scope.Pixels, 0, scope.Count)` if they depend on zeros). Exposes `Pixels`, `Count`, `Width`, `Height`, `AsSpan()` for bounds-safe iteration; `CommitTo(Texture2D)` uploads pixels back via `SetData`. This is the *only* place outside tests that should call `ArrayPool<Color>.Shared.Rent`.
@@ -112,16 +112,16 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 - **`IconTexture`** -- Record struct `(Texture2D Texture, int OffsetX, int OffsetY)` with `Legacy(t)`/`Modern(t)` factories and a `Draw(sb, pos, tint?)` helper. Wraps ability-icon returns from `UiRenderer.GetSkillIcon`/`GetSpellIcon` so modern 32×32 icons from `.datf` packs (offset -1/-1) can coexist with legacy 31×31 EPF icons (offset 0/0) in the same pipeline. Offset propagates through `UIImage.TextureOffset` and `UIButton.TextureOffset`.
 - **Asset pipeline:** `DatArchives -> Repository -> Palettized<T> -> DALib Graphics.RenderXxx() -> SKImage -> TextureConverter.ToTexture2D() -> Texture2D -> SpriteBatch.Draw()`
 
-### Networking Layer (`Chaos.Client.Networking`)
+### Networking Layer (`Brigid.Networking`)
 - **`GameClient`** -- Low-level TCP: crypto, packet framing (0xAA + 2-byte BE length), sequence tracking, `InboundQueue` via `DrainPackets()`. Auto-responds to HeartBeat/SynchronizeTicks.
 - **`ConnectionManager`** -- State machine (Disconnected->Connecting->Lobby->Login->World), array-indexed handler dispatch (60+ handlers), 48+ events. Full lobby/login/world-entry flows. Player action methods, communication, NPC/dialog, requests.
 - **`ServerTableData`** -- Zlib-compressed server list parser.
 - Protocol types come from the `Chaos.Networking` / `Chaos.DarkAges` NuGet packages (preview 1.11.0) — serialization, opcodes, and args types are all defined there rather than in this project.
 
-### Client Project (`Chaos.Client`) Internal Organization
+### Client Project (`Brigid`) Internal Organization
 
 ```
-Chaos.Client/
+Brigid/
 ├── ChaosGame.cs              — MonoGame Game class, entry point
 ├── Program.cs                — Process entry point (Main)
 ├── GlobalSettings.cs         — Static config (ClientVersion, DataPath, LobbyHost/Port)
@@ -173,7 +173,7 @@ Chaos.Client/
 
 **Viewport Overlays (`ViewPort/`):** ChatBubble, HealthBar, LoadingBar/MapLoadingBar, WorldMap/WorldMapNode, ChantText, GroupBox, SystemMessagePaneControl, PersistentMessageControl.
 
-### Game Systems (`Chaos.Client/Systems/`)
+### Game Systems (`Brigid/Systems/`)
 - **`AnimationSystem`** -- Pure methods for walk/body/creature animations, frame calculation, walk offset lerp.
 - **`CastingSystem`** -- Spell targeting + chant management.
 - **`SoundSystem`** -- SDL2_mixer-based audio. MP3s decoded to PCM once via `Mix_LoadWAV_RW` and cached as `Mix_Chunk` pointers; playback uses the mixer's channel pool with per-channel volume. Music streams via `Mix_LoadMUS` with `Mix_FadeOutMusic`/`Mix_FadeInMusic` for map transitions. Same-sound overlap ducks prior instances by -3 dB (equal-power) instead of voice-stealing.
@@ -188,7 +188,7 @@ Chaos.Client/
 - **`WorldEntity`** (`Models/`) -- Full entity data bag: position, direction, appearance, animation state, emotes.
 - **Other models:** `Animation`, `EntityRemovalAnimation`, `WorldFrameState`, `SlotDragPayload`, `PathfindingState`, `TileClickTracker`, `Projectile`, `MailEntry`, `LegendMarkEntry`, `WorldListEntry`.
 
-### ViewModel (`Chaos.Client/ViewModel/`)
+### ViewModel (`Brigid/ViewModel/`)
 Authoritative state objects exposed as static properties on WorldState, updated by server packets:
 - **`PlayerAttributes`** -- Stats, HP/MP, experience.
 - **`Inventory`** -- Items and gold.

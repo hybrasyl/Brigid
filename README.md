@@ -1,6 +1,6 @@
 # Brigid
 
-_A fork of [Chaos.Client](https://github.com/sichii/Chaos.Client)_
+_A fork of [Brigid](https://github.com/sichii/Brigid)_
 
 A custom Dark Ages client written in C# (.NET 10) on top of MonoGame, [DALib](https://github.com/eriscorp/DALib), and
 the [Chaos.Networking](https://github.com/Sichii/Chaos-Server) layer. Works with [Chaos-Server](https://github.com/Sichii/Chaos-Server),
@@ -101,17 +101,17 @@ This is not an exhaustive list, but other differences are likely too minor to bo
 | Project                     | Responsibility                                                                                                                                                                                                                                         |
 |-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **DALib**                   | Dark Ages file formats and SkiaSharp rendering.                                                                                                                                                                                                        |
-| **Chaos.Client.Data**       | Opens the `.dat` archives via memory-mapped files and exposes repositories for sprites, tiles, fonts, metafiles, UI prefabs, etc. Some repositories cache their entries with eviction policies appropriate to the asset type; others are pass-through. |
-| **Chaos.Client.Rendering**  | Converts DALib's SkiaSharp output into MonoGame `Texture2D` and owns the map, camera, darkness, tab map, and per-entity renderers.                                                                                                                     |
-| **Chaos.Client.Networking** | TCP, crypto, packet framing, and a state-machine `ConnectionManager` on top of the `Chaos.Networking` NuGet package. Packet handlers are registered into an opcode-indexed delegate array.                                                             |
-| **Chaos.Client**            | MonoGame `Game`, screens, UI controls, game systems, and world state.                                                                                                                                                                                  |
+| **Brigid.Data**       | Opens the `.dat` archives via memory-mapped files and exposes repositories for sprites, tiles, fonts, metafiles, UI prefabs, etc. Some repositories cache their entries with eviction policies appropriate to the asset type; others are pass-through. |
+| **Brigid.Rendering**  | Converts DALib's SkiaSharp output into MonoGame `Texture2D` and owns the map, camera, darkness, tab map, and per-entity renderers.                                                                                                                     |
+| **Brigid.Networking** | TCP, crypto, packet framing, and a state-machine `ConnectionManager` on top of the `Chaos.Networking` NuGet package. Packet handlers are registered into an opcode-indexed delegate array.                                                             |
+| **Brigid**            | MonoGame `Game`, screens, UI controls, game systems, and world state.                                                                                                                                                                                  |
 
 Dependency flow:
 
 ```
-DALib ──> Chaos.Client.Data ──────┐
-DALib ──> Chaos.Client.Rendering ─┼─> Chaos.Client
-         Chaos.Client.Networking ─┘
+DALib ──> Brigid.Data ──────┐
+DALib ──> Brigid.Rendering ─┼─> Brigid
+         Brigid.Networking ─┘
 ```
 
 ### World state
@@ -158,7 +158,7 @@ Each frame goes through three phases (see `WorldScreen.Draw.cs`):
 
 ## UI System
 
-All UI primitives live in `Chaos.Client/Controls/Components/`. A catalog of the prefab control files shipped in the dat
+All UI primitives live in `Brigid/Controls/Components/`. A catalog of the prefab control files shipped in the dat
 archives and their consuming classes is in `controlFileList.txt` at the solution root.
 
 | Component       | Purpose                                       | Notes                                                                                                                                                                                                                                                                                                                                                                  |
@@ -302,7 +302,7 @@ Depends on the layer you want to intercept at.
 
 ## Renderers
 
-All renderers live in `Chaos.Client.Rendering/`. Quick reference:
+All renderers live in `Brigid.Rendering/`. Quick reference:
 
 | Renderer                                                                | Purpose                                                                                                         |
 |-------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|
@@ -310,7 +310,7 @@ All renderers live in `Chaos.Client.Rendering/`. Quick reference:
 | `Camera`                                                                | Isometric world/screen/tile coordinate math.                                                                    |
 | `MapRenderer`                                                           | Background + foreground tile rendering, animated tile playback.                                                 |
 | `PaletteCyclingManager`                                                 | Palette shimmer for cycling-palette tiles. Owned by `MapRenderer`.                                              |
-| `LightingSystem`                                                        | Per-frame light source buffer. Feeds `DarknessRenderer` and `TabMapRenderer`. Lives in `Chaos.Client/Systems/`. |
+| `LightingSystem`                                                        | Per-frame light source buffer. Feeds `DarknessRenderer` and `TabMapRenderer`. Lives in `Brigid/Systems/`. |
 | `DarknessRenderer`                                                      | Light/dark overlay — light metadata lookup, HEA sampling, light sources.                                        |
 | `TabMapRenderer`                                                        | Custom Tab map (wall diamonds + entity dots) with fog-of-war on dark maps.                                      |
 | `WeatherRenderer`                                                       | Snow and rain overlay driven by the `MapFlags` low nibble.                                                      |
@@ -363,8 +363,8 @@ animation-frame switching lives in `MapRenderer`, not here. Owned by `MapRendere
 
 ### `LightingSystem`
 
-Centralized owner of the per-frame `LightSource` buffer. Lives in `Chaos.Client/Systems/` (not
-`Chaos.Client.Rendering/`) because it walks `WorldState` to build the buffer, but its single consumer audience is the
+Centralized owner of the per-frame `LightSource` buffer. Lives in `Brigid/Systems/` (not
+`Brigid.Rendering/`) because it walks `WorldState` to build the buffer, but its single consumer audience is the
 two renderers that read light sources — `DarknessRenderer` and `TabMapRenderer`. Both renderers treat the system as
 read-only and do **not** keep their own copy.
 
@@ -539,8 +539,8 @@ Requires the **.NET 10 SDK**. Builds and runs on Windows, macOS, and Linux.
 Then:
 
 ```bash
-dotnet build Chaos.Client.slnx
-dotnet run --project Chaos.Client/Chaos.Client.csproj
+dotnet build Brigid.slnx
+dotnet run --project Brigid/Brigid.csproj
 ```
 
 > [!NOTE]
@@ -562,7 +562,7 @@ dotnet run --project Chaos.Client/Chaos.Client.csproj
 
 ## Configuration
 
-Almost everything a fork needs to change is in `Chaos.Client/GlobalSettings.cs`:
+Almost everything a fork needs to change is in `Brigid/GlobalSettings.cs`:
 
 | Setting                | What it is                                                                                                                          |
 |------------------------|-------------------------------------------------------------------------------------------------------------------------------------|
@@ -589,7 +589,7 @@ The resolved lobby target (and the raw env-var values it was derived from) is wr
 ### Adding a UI panel
 
 1. Place the `.txt` + `.spf`/`.epf` prefab in an archive.
-2. Derive a class in `Chaos.Client/Controls/` from `PrefabPanel` and use `CreateXxx` to instantiate the children you
+2. Derive a class in `Brigid/Controls/` from `PrefabPanel` and use `CreateXxx` to instantiate the children you
    care about.
 3. If it's a popup, add it as a child of `WorldScreen.Root` and toggle with `Show()` / `Hide()`.
 4. Subscribe to any needed `ConnectionManager` events in `WorldScreen.Wiring.cs`.

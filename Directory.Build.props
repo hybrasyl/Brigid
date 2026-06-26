@@ -19,7 +19,7 @@
         <NeutralLanguage>en</NeutralLanguage>
         <Copyright>Copyright @ Sichi 2018-2023</Copyright>
         <PackageProjectUrl>https://www.hybrasyl.com/</PackageProjectUrl>
-        <RepositoryUrl>https://github.com/hybrasyl/Chaos.Client</RepositoryUrl>
+        <RepositoryUrl>https://github.com/hybrasyl/Brigid</RepositoryUrl>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>

@@ -169,8 +169,8 @@ Before shipping:
 ## Reference
 
 - Format spec: [asset-pack-format.md](asset-pack-format.md)
-- Pack class: [Chaos.Client.Data/AssetPacks/StaticTilePack.cs](../Chaos.Client.Data/AssetPacks/StaticTilePack.cs)
-- Renderer hook: `Phase 2.5` in `MapRenderer.PreloadMapTiles` ([MapRenderer.cs](../Chaos.Client.Rendering/MapRenderer.cs))
+- Pack class: [Brigid.Data/AssetPacks/StaticTilePack.cs](../Brigid.Data/AssetPacks/StaticTilePack.cs)
+- Renderer hook: `Phase 2.5` in `MapRenderer.PreloadMapTiles` ([MapRenderer.cs](../Brigid.Rendering/MapRenderer.cs))
 - Legacy sources:
   - Floor tiles: tileset entries from `seo*.dat` archives, palettized via `mpt` palette tables.
   - Wall tiles: `stc{tileId:D5}.hpf` entries in `Ia.dat`, palettized via `stc` palette tables.

@@ -405,7 +405,7 @@ FodyWeavers.xsd
 .serena
 CLAUDE.local.md
 .superpowers
-/.idea/.idea.Chaos.Client/.idea/workspace.xml
+/.idea/.idea.Brigid/.idea/workspace.xml
 *.stackdump
 
 # SDL / etc for non-Windows platforms
