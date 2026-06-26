@@ -1,0 +1,258 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 'true'
+  # Versioned macOS signing identity, shared across the Hybrasyl desktop apps.
+  MACOS_SIGN_IDENTITY: 'Developer ID Application: ERISCO LLC (D4Q96JRVKU)'
+
+jobs:
+  # Resolve the release version once. Tagged builds use the tag (v0.1.0 -> 0.1.0);
+  # manual runs fall back to the csproj <Version> with a -dev suffix.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            base="$(grep -oE '<Version>[^<]+' Directory.Build.props | head -1 | sed 's/<Version>//')"
+            version="${base:-0.0.0}-dev"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $version"
+
+  build-windows:
+    needs: prepare
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish win-x64 (self-contained, no symbols)
+        shell: bash
+        run: |
+          dotnet publish Chaos.Client/Chaos.Client.csproj -c Release -r win-x64 \
+            --self-contained true -o publish/win-x64 \
+            -p:UseAppHost=true -p:DebugType=none -p:DebugSymbols=false -p:Version="$VERSION"
+
+      - name: Restore runtimes/<rid>/native layout for the DllResolver
+        shell: bash
+        run: bash Build/fixup-sdl-runtimes.sh publish/win-x64 win-x64
+
+      - name: Sign Chaos.Client.exe (SSL.com eSigner)
+        uses: sslcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
+        with:
+          command: sign
+          username: ${{ secrets.ES_USERNAME }}
+          password: ${{ secrets.ES_PASSWORD }}
+          credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
+          totp_secret: ${{ secrets.ES_TOTP_SECRET }}
+          file_path: ${{ github.workspace }}/publish/win-x64/Chaos.Client.exe
+          override: true
+
+      - name: Package zip
+        shell: pwsh
+        run: |
+          $zip = "Chaos.Client-$env:VERSION-win-x64.zip"
+          Compress-Archive -Path publish/win-x64/* -DestinationPath $zip -Force
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: Chaos.Client-*-win-x64.zip
+          if-no-files-found: error
+
+  build-linux:
+    needs: prepare
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish linux-x64 (self-contained, no symbols)
+        run: |
+          dotnet publish Chaos.Client/Chaos.Client.csproj -c Release -r linux-x64 \
+            --self-contained true -o publish/linux-x64 \
+            -p:UseAppHost=true -p:DebugType=none -p:DebugSymbols=false -p:Version="$VERSION"
+
+      - name: Restore runtimes/<rid>/native layout for the DllResolver
+        run: bash Build/fixup-sdl-runtimes.sh publish/linux-x64 linux-x64
+
+      - name: Package tar.gz
+        run: |
+          chmod +x publish/linux-x64/Chaos.Client
+          tar -czf "Chaos.Client-$VERSION-linux-x64.tar.gz" -C publish/linux-x64 .
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-tarball
+          path: Chaos.Client-*-linux-x64.tar.gz
+          if-no-files-found: error
+
+  build-mac:
+    needs: prepare
+    # macos-latest is Apple Silicon (arm64) — native osx-arm64 build, no cross-compile.
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish osx-arm64 (self-contained, no symbols)
+        run: |
+          dotnet publish Chaos.Client/Chaos.Client.csproj -c Release -r osx-arm64 \
+            --self-contained true -o publish/osx-arm64 \
+            -p:UseAppHost=true -p:DebugType=none -p:DebugSymbols=false -p:Version="$VERSION"
+
+      - name: Assemble .app bundle
+        run: |
+          bash Build/macos/make-app.sh \
+            --publish publish/osx-arm64 \
+            --version "$VERSION" \
+            --output "Brigid.app" \
+            --icon Build/icon/Brigid.png
+
+      - name: Import Developer ID signing certificate
+        env:
+          MACOS_CERT_P12_BASE64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PWD="$(openssl rand -base64 24)"
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+
+          echo "$MACOS_CERT_P12_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PWD" "$KEYCHAIN"
+
+          security import "$CERT_PATH" -k "$KEYCHAIN" -P "$MACOS_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PWD" "$KEYCHAIN"
+
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          security default-keychain -s "$KEYCHAIN"
+
+          rm -f "$CERT_PATH"
+
+      - name: Write App Store Connect API key
+        id: asc
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey.p8"
+          echo "${{ secrets.APPLE_API_KEY_P8_BASE64 }}" | base64 --decode > "$KEY_PATH"
+          echo "key_path=$KEY_PATH" >> "$GITHUB_OUTPUT"
+
+      # Sign the whole bundle in one hardened-runtime pass. --deep is appropriate
+      # here: a single app, one shared entitlement set. The entitlements apply to
+      # the main executable; nested dylibs inherit the runtime hardening. (.pdb
+      # symbols were excluded at publish time so codesign sees no unsignable
+      # subcomponents in Contents/MacOS.)
+      - name: Sign .app
+        run: |
+          codesign --force --options runtime --timestamp --deep \
+            --entitlements Build/macos/entitlements.plist \
+            --sign "$MACOS_SIGN_IDENTITY" "Brigid.app"
+          codesign --verify --strict --verbose=2 "Brigid.app"
+
+      - name: Notarize + staple .app
+        env:
+          APPLE_API_KEY: ${{ steps.asc.outputs.key_path }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          ditto -c -k --keepParent "Brigid.app" "Brigid.app.zip"
+          xcrun notarytool submit "Brigid.app.zip" \
+            --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+          xcrun stapler staple "Brigid.app"
+          xcrun stapler validate "Brigid.app"
+
+      # Wrap the stapled .app in a dmg with an /Applications drop target, then
+      # sign + notarize + staple the dmg itself (a downloaded dmg trips Gatekeeper
+      # otherwise).
+      - name: Build, sign, notarize + staple dmg
+        env:
+          APPLE_API_KEY: ${{ steps.asc.outputs.key_path }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          DMG="Chaos.Client-$VERSION-osx-arm64.dmg"
+          STAGE="$RUNNER_TEMP/dmg-stage"
+          rm -rf "$STAGE"; mkdir -p "$STAGE"
+          cp -R "Brigid.app" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "Chaos.Client" -srcfolder "$STAGE" \
+            -ov -format UDZO "$DMG"
+          codesign --force --timestamp --sign "$MACOS_SIGN_IDENTITY" "$DMG"
+          xcrun notarytool submit "$DMG" \
+            --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: Chaos.Client-*-osx-arm64.dmg
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux, build-mac]
+    if: github.ref_type == 'tag'
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/*-win-x64.zip
+            artifacts/**/*-linux-x64.tar.gz
+            artifacts/**/*-osx-arm64.dmg
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+      - name: Notify Discord
+        if: success()
+        run: |
+          TAG="${{ github.ref_name }}"
+          REPO="${{ github.repository }}"
+          RELEASE_URL="https://github.com/$REPO/releases/tag/$TAG"
+          curl -sf -H "Content-Type: application/json" \
+            -d "{\"content\": \"**Chaos.Client $TAG** is now available!\n$RELEASE_URL\"}" \
+            "${{ secrets.DISCORD_WEBHOOK_URL }}"
