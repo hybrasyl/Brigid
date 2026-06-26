@@ -59,7 +59,7 @@ jobs:
         shell: bash
         run: bash Build/fixup-sdl-runtimes.sh publish/win-x64 win-x64
 
-      - name: Sign Chaos.Client.exe (SSL.com eSigner)
+      - name: Sign Brigid.exe (SSL.com eSigner)
         uses: sslcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
         with:
           command: sign
@@ -67,20 +67,20 @@ jobs:
           password: ${{ secrets.ES_PASSWORD }}
           credential_id: ${{ secrets.ES_CREDENTIAL_ID }}
           totp_secret: ${{ secrets.ES_TOTP_SECRET }}
-          file_path: ${{ github.workspace }}/publish/win-x64/Chaos.Client.exe
+          file_path: ${{ github.workspace }}/publish/win-x64/Brigid.exe
           override: true
 
       - name: Package zip
         shell: pwsh
         run: |
-          $zip = "Chaos.Client-$env:VERSION-win-x64.zip"
+          $zip = "Brigid-$env:VERSION-win-x64.zip"
           Compress-Archive -Path publish/win-x64/* -DestinationPath $zip -Force
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-zip
-          path: Chaos.Client-*-win-x64.zip
+          path: Brigid-*-win-x64.zip
           if-no-files-found: error
 
   build-linux:
@@ -105,14 +105,14 @@ jobs:
 
       - name: Package tar.gz
         run: |
-          chmod +x publish/linux-x64/Chaos.Client
-          tar -czf "Chaos.Client-$VERSION-linux-x64.tar.gz" -C publish/linux-x64 .
+          chmod +x publish/linux-x64/Brigid
+          tar -czf "Brigid-$VERSION-linux-x64.tar.gz" -C publish/linux-x64 .
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-tarball
-          path: Chaos.Client-*-linux-x64.tar.gz
+          path: Brigid-*-linux-x64.tar.gz
           if-no-files-found: error
 
   build-mac:
@@ -206,12 +206,12 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          DMG="Chaos.Client-$VERSION-osx-arm64.dmg"
+          DMG="Brigid-$VERSION-osx-arm64.dmg"
           STAGE="$RUNNER_TEMP/dmg-stage"
           rm -rf "$STAGE"; mkdir -p "$STAGE"
           cp -R "Brigid.app" "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
-          hdiutil create -volname "Chaos.Client" -srcfolder "$STAGE" \
+          hdiutil create -volname "Brigid" -srcfolder "$STAGE" \
             -ov -format UDZO "$DMG"
           codesign --force --timestamp --sign "$MACOS_SIGN_IDENTITY" "$DMG"
           xcrun notarytool submit "$DMG" \
@@ -223,7 +223,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
-          path: Chaos.Client-*-osx-arm64.dmg
+          path: Brigid-*-osx-arm64.dmg
           if-no-files-found: error
 
   release:
@@ -254,5 +254,5 @@ jobs:
           REPO="${{ github.repository }}"
           RELEASE_URL="https://github.com/$REPO/releases/tag/$TAG"
           curl -sf -H "Content-Type: application/json" \
-            -d "{\"content\": \"**Chaos.Client $TAG** is now available!\n$RELEASE_URL\"}" \
+            -d "{\"content\": \"**Brigid $TAG** is now available!\n$RELEASE_URL\"}" \
             "${{ secrets.DISCORD_WEBHOOK_URL }}"

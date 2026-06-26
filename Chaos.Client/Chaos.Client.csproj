@@ -2,6 +2,10 @@
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <IsPackable>false</IsPackable>
+        <!-- Product/user-facing name is Brigid; the codebase namespaces and
+             sibling assemblies remain Chaos.Client. This renames the apphost
+             and entry assembly (Brigid / Brigid.exe / Brigid.dll). -->
+        <AssemblyName>Brigid</AssemblyName>
         <ApplicationIcon>ChaosClientIcon.ico</ApplicationIcon>
     </PropertyGroup>
 
