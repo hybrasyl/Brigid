@@ -138,8 +138,8 @@ jobs:
           bash Build/macos/make-app.sh \
             --publish publish/osx-arm64 \
             --version "$VERSION" \
-            --output "Chaos.Client.app" \
-            --icon Build/icon/Chaos.Client.png
+            --output "Brigid.app" \
+            --icon Build/icon/Brigid.png
 
       - name: Import Developer ID signing certificate
         env:
@@ -182,8 +182,8 @@ jobs:
         run: |
           codesign --force --options runtime --timestamp --deep \
             --entitlements Build/macos/entitlements.plist \
-            --sign "$MACOS_SIGN_IDENTITY" "Chaos.Client.app"
-          codesign --verify --strict --verbose=2 "Chaos.Client.app"
+            --sign "$MACOS_SIGN_IDENTITY" "Brigid.app"
+          codesign --verify --strict --verbose=2 "Brigid.app"
 
       - name: Notarize + staple .app
         env:
@@ -191,11 +191,11 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          ditto -c -k --keepParent "Chaos.Client.app" "Chaos.Client.app.zip"
-          xcrun notarytool submit "Chaos.Client.app.zip" \
+          ditto -c -k --keepParent "Brigid.app" "Brigid.app.zip"
+          xcrun notarytool submit "Brigid.app.zip" \
             --key "$APPLE_API_KEY" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" --wait
-          xcrun stapler staple "Chaos.Client.app"
-          xcrun stapler validate "Chaos.Client.app"
+          xcrun stapler staple "Brigid.app"
+          xcrun stapler validate "Brigid.app"
 
       # Wrap the stapled .app in a dmg with an /Applications drop target, then
       # sign + notarize + staple the dmg itself (a downloaded dmg trips Gatekeeper
@@ -209,7 +209,7 @@ jobs:
           DMG="Chaos.Client-$VERSION-osx-arm64.dmg"
           STAGE="$RUNNER_TEMP/dmg-stage"
           rm -rf "$STAGE"; mkdir -p "$STAGE"
-          cp -R "Chaos.Client.app" "$STAGE/"
+          cp -R "Brigid.app" "$STAGE/"
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname "Chaos.Client" -srcfolder "$STAGE" \
             -ov -format UDZO "$DMG"
