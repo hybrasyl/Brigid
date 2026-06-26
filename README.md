@@ -1,14 +1,15 @@
-# Chaos.Client
+# Brigid
 
-A custom Dark Ages client written in C# (.NET 10) on top of MonoGame, [DALib](https://github.com/Sichii/DALib), and
-the [Chaos.Networking](https://github.com/Sichii/Chaos-Server) layer. Built to talk
-to [Chaos-Server](https://github.com/Sichii/Chaos-Server) (and any private server using the same networking layer), and
-intended as a baseline other private server projects can fork and modify. Compatibility with retail servers is not an
-explicit goal of this project, but it will probably work anyway.
+(A fork of [Sichii's][Chaos.Client])
+
+A custom Dark Ages client written in C# (.NET 10) on top of MonoGame, [DALib](https://github.com/eriscorp/DALib), and
+the [Chaos.Networking](https://github.com/Sichii/Chaos-Server) layer. Works with [Chaos-Server](https://github.com/Sichii/Chaos-Server),
+[Hybrasyl Server][https://github.com/hybrasyl/server], and retail servers.
 
 Targets Dark Ages client version **7.4.1** for feature parity.
 
-Runs on **Windows, macOS, and Linux** — anywhere the .NET 10 SDK and MonoGame's DesktopGL backend are supported.
+Runs on **Windows, macOS, and Linux** — anywhere the .NET 10 SDK and MonoGame's DesktopGL backend are supported. Signed / notarized apps
+are provided for multiple platforms.
 
 ## Contents
 
