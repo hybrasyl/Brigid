@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Restore the runtimes/<rid>/native/ layout that Chaos.Client's custom
+# Restore the runtimes/<rid>/native/ layout that Brigid's custom
 # DllResolver expects.
 #
 # A self-contained `dotnet publish` flattens MonoGame's SDL2 native to the
-# payload root, but DllResolver (Chaos.Client/DllResolver.cs) probes only
+# payload root, but DllResolver (Brigid/DllResolver.cs) probes only
 # AppContext.BaseDirectory/runtimes/<rid>/native/ (and .../runtimes/<platform>/
 # native/). Its last-ditch NativeLibrary.TryLoad(name) fallback can't match the
 # versioned SDL2 filenames on macOS/Linux. So copy the flattened SDL2 back into

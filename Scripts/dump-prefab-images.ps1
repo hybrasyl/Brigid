@@ -16,7 +16,7 @@ New-Item -ItemType Directory -Force -Path output | Out-Null
 
 $env:CHAOS_PREFAB_DUMP = '1'
 try {
-    dotnet run --project Chaos.Client/Chaos.Client.csproj 2>&1 | Tee-Object -FilePath output/prefab-dump.log
+    dotnet run --project Brigid/Brigid.csproj 2>&1 | Tee-Object -FilePath output/prefab-dump.log
 } finally {
     Remove-Item Env:\CHAOS_PREFAB_DUMP -ErrorAction SilentlyContinue
 }

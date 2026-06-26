@@ -15,4 +15,4 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p output
 
-CHAOS_PREFAB_DUMP=1 dotnet run --project Chaos.Client/Chaos.Client.csproj 2>&1 | tee output/prefab-dump.log
+CHAOS_PREFAB_DUMP=1 dotnet run --project Brigid/Brigid.csproj 2>&1 | tee output/prefab-dump.log

@@ -18,7 +18,7 @@ Hand-editable starting point for the Phase 1 / Stage 1 item-asset-pack test pack
 - `content_type: item_icons` registers this pack with `AssetPackRegistry.GetItemPack()`.
 - `covers.item_icons.dyeable` is the **opt-in list** of item IDs that participate in the runtime find-and-replace dye pass. The 45 IDs listed are the rule-passing dyeable items from sheets 1–2 per `Scripts/dump-item-palette/items-dyeable.csv` (`dyeable_loose=True`).
 - Items **not** in the `dyeable` list ignore the server's color byte and render as-is. The renderer also collapses the cache key to `color = 0` for them so a single decode is shared across every incoming color.
-- Items in the `dyeable` list run the canonical-purple find-and-replace via [ItemDyePass.cs](../../../Chaos.Client.Rendering/ItemDyePass.cs) when the server-sent color byte is non-zero.
+- Items in the `dyeable` list run the canonical-purple find-and-replace via [ItemDyePass.cs](../../../Brigid.Rendering/ItemDyePass.cs) when the server-sent color byte is non-zero.
 
 ## Adjusting the dyeable list
 
