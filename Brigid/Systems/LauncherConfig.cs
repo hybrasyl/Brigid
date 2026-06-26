@@ -148,23 +148,6 @@ public static class LauncherConfig
             SelectedServer = Servers.Count > 0 ? Servers[0].Key : null;
     }
 
-    /// <summary>
-    ///     A directory is a usable asset path when it exists and contains the core archives the client always loads
-    ///     (<c>khanpal.dat</c> for palettes, <c>legend.dat</c>). Matched case-insensitively because Dark Ages data
-    ///     directories vary in filename casing across platforms.
-    /// </summary>
-    public static bool IsValidAssetPath(string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
-            return false;
-
-        var present = Directory.EnumerateFiles(path)
-                               .Select(Path.GetFileName)
-                               .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        return present.Contains("khanpal.dat") && present.Contains("legend.dat");
-    }
-
     private sealed class Model
     {
         public List<ServerEntry>? Servers { get; set; }

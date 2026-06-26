@@ -143,6 +143,7 @@ Brigid/
 
 ### Screen System
 - **`IScreen`/`ScreenManager`** -- Stack-based screen management.
+- **`LauncherScreen`** -- Zero-config startup screen (server select + asset-folder picker + Connect), shown on every launch unless env vars (`DA_HOST`/`DA_ASSET_PATH`) fully specify a valid setup. **The one deliberately non-`UIElement` screen:** it renders before `DataContext.Initialize` (the asset path is what it exists to obtain), so it cannot use prefab panels/atlas fonts -- it draws with a 1x1 white texture + `SystemFontText` (OS typeface) and reads `InputBuffer` directly (`Root => null`, not in the `InputDispatcher` tree). `Connect` persists `LauncherConfig` then calls `ChaosGame.FinishAssetInitialization()` (the deferred asset-load seam) and switches to the lobby. If it grows past the add-server form, factor its primitive helpers into a shared asset-free UI helper rather than expanding the monolith.
 - **`LobbyLoginScreen`** -- Full login flow: lobby connect, server select, login, character creation, transition to world.
 - **`WorldScreen`** -- Main game screen, split into 7 partial class files:
   - `WorldScreen.cs` -- Base class, fields, construction

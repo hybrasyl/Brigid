@@ -24,7 +24,7 @@ public static class FolderPicker
                 return PickMacOs(prompt, initialDirectory);
 
             if (OperatingSystem.IsWindows())
-                return PickWindows(prompt);
+                return PickWindows(prompt, initialDirectory);
 
             if (OperatingSystem.IsLinux())
                 return PickLinux(prompt, initialDirectory);
@@ -49,13 +49,21 @@ public static class FolderPicker
         return path;
     }
 
-    private static string? PickWindows(string prompt)
+    private static string? PickWindows(string prompt, string? initialDirectory)
     {
+        //RootFolder = MyComputer roots the tree at "This PC" (drives), instead of the default Desktop view buried under
+        //Documents/Downloads/etc.; SelectedPath pre-expands to the current asset folder when we have a valid one.
+        var preselect = !string.IsNullOrWhiteSpace(initialDirectory) && Directory.Exists(initialDirectory)
+            ? $"$d.SelectedPath = '{Sanitize(initialDirectory)}'; "
+            : string.Empty;
+
         //STA is required for Windows Forms dialogs; emit the selected path on stdout, nothing on cancel.
         var script =
             "Add-Type -AssemblyName System.Windows.Forms; "
             + "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
             + $"$d.Description = '{Sanitize(prompt)}'; "
+            + "$d.RootFolder = [System.Environment+SpecialFolder]::MyComputer; "
+            + preselect
             + "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($d.SelectedPath) }";
 
         TryRun("powershell", ["-NoProfile", "-STA", "-Command", script], out var path);

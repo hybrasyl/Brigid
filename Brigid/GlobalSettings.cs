@@ -87,7 +87,7 @@ public static class GlobalSettings
         var envPath = Environment.GetEnvironmentVariable("DA_ASSET_PATH");
 
         var envHostSet = !string.IsNullOrWhiteSpace(envHost);
-        var envPathValid = LauncherConfig.IsValidAssetPath(envPath);
+        var envPathValid = DataContext.IsValidDataDirectory(envPath);
 
         if (envHostSet && envPathValid)
         {

@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Data;
 using Brigid.Rendering;
 using Brigid.Systems;
 using Brigid.Utilities;
@@ -390,7 +391,7 @@ public sealed class LauncherScreen : IScreen
         CurrentMode = Mode.Main;
     }
 
-    private void RevalidateAssetPath() => AssetPathValid = LauncherConfig.IsValidAssetPath(AssetPath?.Trim());
+    private void RevalidateAssetPath() => AssetPathValid = DataContext.IsValidDataDirectory(AssetPath?.Trim());
 
     private bool CanConnect() => LauncherConfig.GetSelectedServer() is not null && AssetPathValid;
 
