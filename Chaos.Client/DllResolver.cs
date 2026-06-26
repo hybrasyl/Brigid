@@ -70,15 +70,27 @@ internal static class DllResolver
         handle = IntPtr.Zero;
         foreach (var libraryName in libraryNames)
         {
-            // Try arch specific first, then native
-            var archSpecific = Path.Combine(AppContext.BaseDirectory, "runtimes", 
+            // The app base directory must be tried FIRST. In a self-contained publish the
+            // runtime flattens MonoGame's SDL2 to the app root, and MonoGame loads it from
+            // there. If we instead load SDL2 from a runtimes/<rid>/native copy, macOS dyld
+            // (which dedupes by path) ends up with two separate SDL2 images with independent
+            // state — our SDL_GetMouseState then queries an instance that has no window, so
+            // the mouse appears dead. Loading the same app-root file MonoGame uses keeps it a
+            // single shared instance. (In a framework-dependent run there's no SDL2 at the
+            // root, so this falls through to the runtimes/ paths below, same as before.)
+            var appRoot = Path.Combine(AppContext.BaseDirectory, libraryName);
+
+            // Then arch specific, then platform-independent native.
+            var archSpecific = Path.Combine(AppContext.BaseDirectory, "runtimes",
                 RuntimeIdentifier, "native", libraryName);
-            
-            var independent = Path.Combine(AppContext.BaseDirectory, "runtimes", 
+
+            var independent = Path.Combine(AppContext.BaseDirectory, "runtimes",
                 Platform, "native", libraryName);
 
-            if (NativeLibrary.TryLoad(archSpecific, out handle) ||
+            if (NativeLibrary.TryLoad(appRoot, out handle) ||
+                NativeLibrary.TryLoad(archSpecific, out handle) ||
                 NativeLibrary.TryLoad(independent, out handle)) return true;
+            NoticeDebugLog.Write($"DllResolver: tried {libraryName}: {appRoot}");
             NoticeDebugLog.Write($"DllResolver: tried {libraryName}: {archSpecific}");
             NoticeDebugLog.Write($"DllResolver: tried {libraryName}: {independent}");
             continue;
