@@ -75,7 +75,7 @@ public sealed class DoorContextMenu : UIPanel
             Height = BOX_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Center,
             PaddingLeft = 0,
-            TruncateWithEllipsis = false,
+            ShrinkToFit = false,
             Text = TITLE_TEXT,
             ForegroundColor = Color.White
         };
@@ -96,7 +96,7 @@ public sealed class DoorContextMenu : UIPanel
                 Text = string.Empty,
                 PaddingLeft = 0,
                 ForegroundColor = Color.White,
-                TruncateWithEllipsis = false
+                ShrinkToFit = false
             };
 
             AddChild(EntryLabels[i]);

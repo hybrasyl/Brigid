@@ -60,7 +60,7 @@ public sealed class ChatInputControl : UIPanel
             BackgroundColor = Color.Black,
             PaddingLeft = 1,
             PaddingTop = 1,
-            TruncateWithEllipsis = false,
+            ShrinkToFit = false,
             Visible = false
         };
 

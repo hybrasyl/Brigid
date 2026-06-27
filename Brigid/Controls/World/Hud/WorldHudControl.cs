@@ -154,7 +154,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         PlayerNameLabel = CreateLabel("SZ_ID", HorizontalAlignment.Center)!;
         ZoneNameLabel = CreateLabel("SZ_ZONE", HorizontalAlignment.Center)!;
         ZoneNameLabel.ForegroundColor = LegendColors.White;
-        ZoneNameLabel.TruncateWithEllipsis = false;
+        ZoneNameLabel.ShrinkToFit = false;
         ZoneNameLabel.X -= 10;
         ZoneNameLabel.Width += 15;
         
@@ -162,7 +162,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         WeightLabel.PaddingLeft = 0;
         WeightLabel.PaddingRight = 0;
         CoordsLabel = CreateLabel("SZ_XY", HorizontalAlignment.Center)!;
-        CoordsLabel.TruncateWithEllipsis = false;
+        CoordsLabel.ShrinkToFit = false;
         ServerNameLabel = CreateLabel("SZ_SERVER", HorizontalAlignment.Center);
         DescriptionLabel = CreateLabel("SZ_DESCRIPTION");
 

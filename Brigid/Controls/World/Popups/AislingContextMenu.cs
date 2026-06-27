@@ -75,7 +75,7 @@ public sealed class AislingContextMenu : UIPanel
             Height = BOX_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Center,
             PaddingLeft = 0,
-            TruncateWithEllipsis = false
+            ShrinkToFit = false
         };
 
         AddChild(NameLabel);
@@ -94,7 +94,7 @@ public sealed class AislingContextMenu : UIPanel
                 Text = OPTION_LABELS[i],
                 PaddingLeft = 0,
                 ForegroundColor = Color.White,
-                TruncateWithEllipsis = false
+                ShrinkToFit = false
             };
 
             AddChild(OptionLabels[i]);

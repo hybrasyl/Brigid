@@ -69,13 +69,13 @@ public sealed class OtherProfileEquipmentTab : PrefabPanel
         NameLabel = CreateLabel("NAME");
         ClassLabel = CreateLabel("CLASSTEXT");
         ClanLabel = CreateLabel("CLANTEXT");
-        ClanLabel?.TruncateWithEllipsis = false;
+        ClanLabel?.ShrinkToFit = false;
         
         ClanTitleLabel = CreateLabel("CLANTITLETEXT");
-        ClanTitleLabel?.TruncateWithEllipsis = false;
+        ClanTitleLabel?.ShrinkToFit = false;
         
         TitleLabel = CreateLabel("TITLETEXT");
-        TitleLabel?.TruncateWithEllipsis = false;
+        TitleLabel?.ShrinkToFit = false;
 
         //group button — sends group invite for the displayed player
         GroupBtn = CreateButton("GroupBtn");
