@@ -759,6 +759,23 @@ public sealed partial class WorldScreen
             hud.ExpandButton.Clicked += () => hud.ToggleExpand();
 
         //action buttons
+        //option button toggles the pause menu (Escape/Q also open it); reflects open state via IsSelected
+        if (hud.OptionButton is not null)
+        {
+            hud.OptionButton.Clicked += () =>
+            {
+                if (PauseMenu.Visible)
+                    PauseMenu.Hide();
+                else
+                {
+                    hud.OptionButton!.IsSelected = true;
+                    PauseMenu.Show();
+                }
+            };
+
+            PauseMenu.OnClose += () => hud.OptionButton.IsSelected = false;
+        }
+
         if (hud.HelpButton is not null)
             hud.HelpButton.Clicked += () => HotkeyHelp.Show();
 
