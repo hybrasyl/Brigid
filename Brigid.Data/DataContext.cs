@@ -22,7 +22,6 @@ public static class DataContext
     public static string DataPath { get; private set; } = null!;
 
     public static EffectsRepository Effects { get; private set; } = null!;
-    public static FontRepository Fonts { get; private set; } = null!;
 
     public static LightMaskRepository LightMasks { get; private set; } = null!;
 
@@ -63,7 +62,6 @@ public static class DataContext
         AislingDrawData = new AislingDrawDataRepository();
         CreatureSprites = new CreatureSpriteRepository();
         Effects = new EffectsRepository();
-        Fonts = new FontRepository();
         LightMasks = new LightMaskRepository();
         LocalPlayerSettings = new LocalPlayerSettingsRepository();
         MapsFiles = new MapFileRepository();
