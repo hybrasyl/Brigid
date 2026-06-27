@@ -6,5 +6,6 @@
     <ItemGroup>
         <PackageReference Include="Chaos.DarkAges"/>
         <PackageReference Include="MonoGame.Framework.DesktopGL"/>
+        <PackageReference Include="FontStashSharp.MonoGame"/>
     </ItemGroup>
 </Project>
