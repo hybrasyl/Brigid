@@ -332,6 +332,19 @@ public sealed class MapRenderer : IDisposable
         if (BgTextureCache.TryGetValue(tileId, out var cached))
             return cached;
 
+        //consult the static_tiles pack before legacy art so that pack-only floor ids (no legacy tileset entry) and
+        //pack-replaced ids resolve on the runtime fallback path too, not just during preload.
+        if (AssetPackRegistry.GetStaticTilePack() is { } pack && pack.TryGetFloorImage(tileId, out var packImage) && (packImage is not null))
+        {
+            using (packImage)
+            {
+                var packTexture = TextureConverter.ToTexture2D(packImage);
+                BgTextureCache[tileId] = packTexture;
+
+                return packTexture;
+            }
+        }
+
         var palettized = DataContext.Tiles.GetBackgroundTile(tileId);
 
         if (palettized is null)
@@ -348,6 +361,19 @@ public sealed class MapRenderer : IDisposable
     {
         if (FgTextureCache.TryGetValue(tileId, out var cached))
             return cached;
+
+        //consult the static_tiles pack before legacy art so that pack-only wall ids (no legacy stc*.hpf) and
+        //pack-replaced ids resolve on the runtime fallback path too — notably runtime-introduced door variants.
+        if (AssetPackRegistry.GetStaticTilePack() is { } pack && pack.TryGetWallImage(tileId, out var packImage) && (packImage is not null))
+        {
+            using (packImage)
+            {
+                var packTexture = TextureConverter.ToTexture2D(packImage);
+                FgTextureCache[tileId] = packTexture;
+
+                return packTexture;
+            }
+        }
 
         var palettized = DataContext.Tiles.GetForegroundTile(tileId);
 
@@ -490,24 +516,21 @@ public sealed class MapRenderer : IDisposable
         //the viewport edge.
         var maxFgHeight = 0;
 
-        //phase 2.5: static_tiles pack lookup. for each primary, non-cycled tile id, swap legacy archive data for
-        //a pack-decoded SKImage by writing directly into the image cache and removing the id from the dict that
-        //drives phase 3. cycled tiles are skipped because palette cycling overlays would visually overwrite the
-        //pack PNG anyway, wasting a decode.
+        //phase 2.5: static_tiles pack lookup. iterate the map-scanned primary id sets (not the legacy dict keys) so
+        //that pack-only ids — tiles with no legacy tileset/hpf counterpart — are also resolved ("add"), not just
+        //replaced. for an id that has legacy data, swap it for a pack-decoded SKImage and drop it from the dict that
+        //drives phase 3 ("replace"); cycled ids are skipped because palette cycling overlays would visually overwrite
+        //the pack PNG anyway. for a pack-only id (no legacy data) the cycling-table check is skipped entirely — its
+        //GetPaletteNumber(id+1) has no legacy entry — and the pack image, if present, simply seeds the cache.
         var staticTilePack = AssetPackRegistry.GetStaticTilePack();
 
         if (staticTilePack is not null)
         {
             var bgLookup = DataContext.Tiles.BackgroundPaletteLookup;
 
-            foreach (var tileId in bgTileData.Keys.ToArray())
+            foreach (var tileId in primaryBgIds)
             {
-                if (!primaryBgIds.Contains(tileId))
-                    continue;
-
-                var paletteNumber = bgLookup.Table.GetPaletteNumber(tileId + 1);
-
-                if (bgLookup.Table.GetCyclingEntries(paletteNumber) is not null)
+                if (bgTileData.ContainsKey(tileId) && bgLookup.Table.GetCyclingEntries(bgLookup.Table.GetPaletteNumber(tileId + 1)) is not null)
                     continue;
 
                 if (staticTilePack.TryGetFloorImage(tileId, out var packImage) && (packImage is not null))
@@ -519,14 +542,9 @@ public sealed class MapRenderer : IDisposable
 
             var fgLookup = DataContext.Tiles.ForegroundPaletteLookup;
 
-            foreach (var tileId in compressedFgData.Keys.ToArray())
+            foreach (var tileId in primaryFgIds)
             {
-                if (!primaryFgIds.Contains(tileId))
-                    continue;
-
-                var paletteNumber = fgLookup.Table.GetPaletteNumber(tileId + 1);
-
-                if (fgLookup.Table.GetCyclingEntries(paletteNumber) is not null)
+                if (compressedFgData.ContainsKey(tileId) && fgLookup.Table.GetCyclingEntries(fgLookup.Table.GetPaletteNumber(tileId + 1)) is not null)
                     continue;
 
                 if (staticTilePack.TryGetWallImage(tileId, out var packImage) && (packImage is not null))
