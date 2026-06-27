@@ -84,7 +84,7 @@ public sealed class FontEngine
             return 0;
 
         return (int)MathF.Round(GetFont()
-            .MeasureString(text).X);
+            .MeasureString(SanitizeSurrogates(text)).X);
     }
 
     /// <summary>
@@ -107,9 +107,74 @@ public sealed class FontEngine
         GetFont()
             .DrawText(
                 Renderer,
-                text,
+                SanitizeSurrogates(text),
                 new Vector2(position.X, position.Y + V_OFFSET),
                 color);
+    }
+
+    /// <summary>
+    ///     Replaces unpaired UTF-16 surrogates with the replacement character so FontStashSharp's codepoint decoder
+    ///     never sees malformed UTF-16. This happens routinely while typing astral characters (emoji): text input is
+    ///     delivered one <see cref="char" /> at a time, so the buffer transiently holds a lone surrogate, and
+    ///     <see cref="char.ConvertToUtf32(string, int)" /> throws on it. Returns the original string unchanged (no
+    ///     allocation) when it is already well-formed, which is the overwhelmingly common case.
+    /// </summary>
+    private static string SanitizeSurrogates(string text)
+    {
+        var needsFix = false;
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+
+            if (char.IsHighSurrogate(c))
+            {
+                if ((i + 1 < text.Length) && char.IsLowSurrogate(text[i + 1]))
+                {
+                    i++;                       // valid pair — skip the low half
+
+                    continue;
+                }
+
+                needsFix = true;               // lone high surrogate
+
+                break;
+            }
+
+            if (char.IsLowSurrogate(c))
+            {
+                needsFix = true;               // lone low surrogate
+
+                break;
+            }
+        }
+
+        if (!needsFix)
+            return text;
+
+        var chars = text.ToCharArray();
+
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var c = chars[i];
+
+            if (char.IsHighSurrogate(c))
+            {
+                if ((i + 1 < chars.Length) && char.IsLowSurrogate(chars[i + 1]))
+                {
+                    i++;
+
+                    continue;
+                }
+
+                chars[i] = '�';
+            } else if (char.IsLowSurrogate(c))
+            {
+                chars[i] = '�';
+            }
+        }
+
+        return new string(chars);
     }
 
     private DynamicSpriteFont GetFont()

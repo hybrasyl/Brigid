@@ -7,6 +7,7 @@ namespace Brigid.Tests;
 ///     Headless smoke checks for the FontStashSharp-backed <see cref="FontEngine" />: the bundled TTF parses and loads,
 ///     and metric queries (used by all UI layout) work without a GraphicsDevice — measurement happens off the render path.
 /// </summary>
+[Collection("FontEngine")]
 public class FontEngineSmokeTests
 {
     [Fact]
