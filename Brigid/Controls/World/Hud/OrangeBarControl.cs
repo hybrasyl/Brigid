@@ -16,6 +16,9 @@ public sealed class OrangeBarControl : UIPanel
 {
     private const int MAX_EXPAND_LINES = 10;
     private const int GLYPH_HEIGHT = 12;
+
+    //nudge the message lines up so they sit centered on the orange bar groove rather than low against its lower lip.
+    private const int LINE_Y_NUDGE = 4;
     private readonly UILabel[] Lines;
     private readonly Texture2D? PaneBg;
 
@@ -145,7 +148,7 @@ public sealed class OrangeBarControl : UIPanel
         }
 
         //textbounds.y is relative to the hud parent, wrapbounds.y is our own y — compute relative offset
-        var baseRelY = TextBounds.Y - WrapBounds.Y;
+        var baseRelY = TextBounds.Y - WrapBounds.Y - LINE_Y_NUDGE;
         var slot = 0;
 
         for (var i = history.Count - 1; (i >= 0) && (slot <= ExpandedLines); i--)
