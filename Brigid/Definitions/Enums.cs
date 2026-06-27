@@ -19,7 +19,10 @@ public enum ShadowStyle
     None,
     BottomLeft,
     BottomRight,
-    BothSides
+    BothSides,
+
+    //full dark outline (8-way) behind the glyphs — for text over busy/variable backgrounds (e.g. the world map)
+    Outline
 }
 
 public enum PopupStyle

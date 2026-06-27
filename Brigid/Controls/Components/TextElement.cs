@@ -81,11 +81,16 @@ public sealed class TextElement
         WrappedLines = null;
         var marginX = ShadowStyle switch
         {
-            ShadowStyle.BothSides                              => 2,
+            ShadowStyle.BothSides or ShadowStyle.Outline       => 2,
             ShadowStyle.BottomLeft or ShadowStyle.BottomRight  => 1,
             _                                                  => 0
         };
-        var marginY = ShadowStyle == ShadowStyle.None ? 0 : 1;
+        var marginY = ShadowStyle switch
+        {
+            ShadowStyle.None    => 0,
+            ShadowStyle.Outline => 2,
+            _                   => 1
+        };
         Width = TextRenderer.MeasureWidth(text) + marginX;
         Height = TextRenderer.CHAR_HEIGHT + marginY;
     }
@@ -122,6 +127,19 @@ public sealed class TextElement
                 DrawClipped(spriteBatch, position + new Vector2(2, 1), text, ShadowColor, clipRect, opacity);
                 DrawClipped(spriteBatch, position + new Vector2(0, 1), text, ShadowColor, clipRect, opacity);
                 DrawClipped(spriteBatch, position + new Vector2(1, 0), text, Color, clipRect, opacity);
+
+                break;
+            case ShadowStyle.Outline:
+                //8-way dark ring around the glyphs, then the glyph centered in the +1 margin on top
+                DrawClipped(spriteBatch, position + new Vector2(0, 0), text, ShadowColor, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(1, 0), text, ShadowColor, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(2, 0), text, ShadowColor, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(0, 1), text, ShadowColor, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(2, 1), text, ShadowColor, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(0, 2), text, ShadowColor, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(1, 2), text, ShadowColor, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(2, 2), text, ShadowColor, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(1, 1), text, Color, clipRect, opacity);
 
                 break;
         }
