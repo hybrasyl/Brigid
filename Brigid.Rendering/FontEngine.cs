@@ -11,9 +11,9 @@ namespace Brigid.Rendering;
 ///     Text rendering backend built on FontStashSharp. Loads real TTFs and rasterizes glyphs on demand into a dynamic
 ///     atlas (anti-aliased, full Unicode coverage), replacing the legacy Dark Ages <c>.fnt</c> bitmap fonts.
 ///     <para>
-///         Several selectable faces (<see cref="Faces" />) are loaded up front; the active one is chosen by
-///         <see cref="CycleFont" /> and persisted by the client. Each face carries its own glyph cache and a vertical
-///         offset that centers its line box in the legacy 12px layout band.
+///         Several selectable faces are loaded up front; the active one is chosen by <see cref="CycleFont" /> /
+///         <see cref="SetActiveFont" /> and persisted by the client. Each face carries its own glyph cache and a
+///         vertical offset that centers its line box in the legacy 12px layout band.
 ///     </para>
 ///     <para>
 ///         The render pixel size is decoupled from the UI layout cell height (<see cref="TextRenderer.CHAR_HEIGHT" />):
@@ -26,6 +26,12 @@ public sealed class FontEngine
 {
     /// <summary>Pixel size faces are rasterized at for virtual-space layout. Visual glyph size; not the line grid.</summary>
     public const int RENDER_SIZE = 15;
+
+    /// <summary>
+    ///     Global default letter-spacing (tracking) in virtual px, applied to all text in both measurement and draw so
+    ///     layout stays consistent. Negative tightens. Per-call <c>characterSpacing</c> (e.g. shrink-to-fit) stacks on top.
+    /// </summary>
+    public const float DEFAULT_TRACKING = -1f;
 
     private const string FONTS_DIR = "Content/Fonts";
 
@@ -53,6 +59,13 @@ public sealed class FontEngine
     //crisp text instead of a point-upscaled bitmap. Layout/measurement always stays in virtual (RENDER_SIZE) space.
     private float NativeScaleX = 1f;
     private float NativeScaleY = 1f;
+
+    //persistent virtual→native scale used by measurement (unlike NativeScale, which is toggled only during the native
+    //draw pass). UI text is always drawn at native size, so MeasureWidth must measure at that size — otherwise the
+    //size-15 measured width diverges from the size-(15·scale) drawn width by a per-glyph amount that accumulates and
+    //shows up as a right-edge buffer on right-aligned multi-glyph values. Set once per frame from the window ratio.
+    private float LayoutScaleX = 1f;
+    private float LayoutScaleY = 1f;
 
     public static FontEngine Instance { get; private set; } = null!;
 
@@ -121,7 +134,7 @@ public sealed class FontEngine
         ActiveIndex = Math.Clamp(initialIndex, 0, Faces.Length - 1);
     }
 
-    public static void Initialize(int initialFontIndex) => Instance = new FontEngine(initialFontIndex);
+    public static void Initialize(int initialFontIndex = 0) => Instance = new FontEngine(initialFontIndex);
 
     /// <summary>Advances to the next face (wrapping) and returns its index. Bumps <see cref="Generation" />.</summary>
     public int CycleFont()
@@ -147,14 +160,34 @@ public sealed class FontEngine
         Generation++;
     }
 
+    /// <summary>
+    ///     Sets the persistent virtual→native scale used by <see cref="MeasureWidth" /> so measured widths match what the
+    ///     native text pass actually draws. Call once per frame with the window/virtual ratio (constant unless resized).
+    /// </summary>
+    public void SetLayoutScale(float scaleX, float scaleY)
+    {
+        LayoutScaleX = scaleX;
+        LayoutScaleY = scaleY;
+    }
+
     /// <summary>Pixel width of <paramref name="text" /> as laid out by the font (single line, no color codes).</summary>
     public int MeasureWidth(string text)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
 
-        return (int)MathF.Round(GetFont(RENDER_SIZE)
-            .MeasureString(SanitizeSurrogates(text)).X);
+        var sanitized = SanitizeSurrogates(text);
+
+        if ((LayoutScaleX == 1f) && (LayoutScaleY == 1f))
+            return (int)MathF.Round(GetFont(RENDER_SIZE).MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING).X);
+
+        //mirror the native draw: measure at the native pixel size with native-scaled tracking, then divide back into
+        //virtual space. This is what makes the measured width equal the drawn width glyph-for-glyph.
+        var nativeSize = Math.Max(1, (int)MathF.Round(RENDER_SIZE * LayoutScaleY));
+        var nativeWidth = GetFont(nativeSize)
+            .MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING * LayoutScaleX).X;
+
+        return (int)MathF.Round(nativeWidth / LayoutScaleX);
     }
 
     /// <summary>
@@ -177,7 +210,8 @@ public sealed class FontEngine
         string text,
         Vector2 position,
         Color color,
-        Rectangle? clip)
+        Rectangle? clip,
+        float characterSpacing = 0f)
     {
         if (string.IsNullOrEmpty(text))
             return;
@@ -186,29 +220,33 @@ public sealed class FontEngine
         Renderer.Clip = clip;
 
         var sanitized = SanitizeSurrogates(text);
-        var pos = new Vector2(position.X, position.Y + Faces[ActiveIndex].VerticalOffset);
+        var active = Faces[ActiveIndex];
+        var pos = new Vector2(position.X, position.Y + active.VerticalOffset);
 
         if (NativeScaleX == 1f && NativeScaleY == 1f)
         {
-            GetFont(RENDER_SIZE)
-                .DrawText(Renderer, sanitized, pos, color);
+            active.GetFont(RENDER_SIZE)
+                  .DrawText(Renderer, sanitized, pos, color, 0f, Vector2.Zero, null, 0f, characterSpacing + DEFAULT_TRACKING);
 
             return;
         }
 
-        //native-resolution pass: rasterize glyphs at native pixel size, then scale the quads by the inverse of the
-        //pass transform so they land at the same virtual-space size — net 1:1 at native resolution, i.e. crisp.
+        //native-resolution pass: rasterize glyphs at native pixel size, then scale the quads by the inverse of the pass
+        //transform so they land at the right virtual-space size — crisp at native res. characterSpacing is in virtual
+        //px, so scale it into the native font's horizontal space.
         var nativeSize = Math.Max(1, (int)MathF.Round(RENDER_SIZE * NativeScaleY));
 
-        GetFont(nativeSize)
-            .DrawText(
-                Renderer,
-                sanitized,
-                pos,
-                color,
-                0f,
-                Vector2.Zero,
-                new Vector2(1f / NativeScaleX, 1f / NativeScaleY));
+        active.GetFont(nativeSize)
+              .DrawText(
+                  Renderer,
+                  sanitized,
+                  pos,
+                  color,
+                  0f,
+                  Vector2.Zero,
+                  new Vector2(1f / NativeScaleX, 1f / NativeScaleY),
+                  0f,
+                  (characterSpacing + DEFAULT_TRACKING) * NativeScaleX);
     }
 
     /// <summary>

@@ -30,8 +30,9 @@ public static class TextRenderer
         string text,
         Color color,
         bool colorCodesEnabled = true,
-        float opacity = 1f)
-        => DrawCore(spriteBatch, position, text, color, colorCodesEnabled, opacity, null);
+        float opacity = 1f,
+        float characterSpacing = 0f)
+        => DrawCore(spriteBatch, position, text, color, colorCodesEnabled, opacity, null, characterSpacing);
 
     /// <summary>
     ///     Draws a single line of text with a dual diagonal drop shadow. The shadow is drawn at (-1,+1) and (+1,+1)
@@ -64,8 +65,9 @@ public static class TextRenderer
         Color color,
         Rectangle clipRect,
         bool colorCodesEnabled = true,
-        float opacity = 1f)
-        => DrawCore(spriteBatch, position, text, color, colorCodesEnabled, opacity, clipRect);
+        float opacity = 1f,
+        float characterSpacing = 0f)
+        => DrawCore(spriteBatch, position, text, color, colorCodesEnabled, opacity, clipRect, characterSpacing);
 
     /// <summary>
     ///     Draws a list of text lines top-to-bottom, each on its own row (<see cref="CHAR_HEIGHT" /> line height).
@@ -117,7 +119,8 @@ public static class TextRenderer
         Color color,
         bool colorCodesEnabled,
         float opacity,
-        Rectangle? clip)
+        Rectangle? clip,
+        float characterSpacing = 0f)
     {
         if (string.IsNullOrEmpty(text))
             return;
@@ -129,7 +132,7 @@ public static class TextRenderer
 
         if (!colorCodesEnabled)
         {
-            engine.DrawLine(spriteBatch, text, new Vector2(cursorX, y), activeColor, clip);
+            engine.DrawLine(spriteBatch, text, new Vector2(cursorX, y), activeColor, clip, characterSpacing);
 
             return;
         }
@@ -144,8 +147,8 @@ public static class TextRenderer
             if (i > runStart)
             {
                 var run = text[runStart..i];
-                engine.DrawLine(spriteBatch, run, new Vector2(cursorX, y), activeColor, clip);
-                cursorX += engine.MeasureWidth(run);
+                engine.DrawLine(spriteBatch, run, new Vector2(cursorX, y), activeColor, clip, characterSpacing);
+                cursorX += engine.MeasureWidth(run) + characterSpacing * run.Length;
             }
 
             var codeColor = GetColorCode(text[i + 2])!.Value;
@@ -155,7 +158,7 @@ public static class TextRenderer
         }
 
         if (runStart < text.Length)
-            engine.DrawLine(spriteBatch, text[runStart..], new Vector2(cursorX, y), activeColor, clip);
+            engine.DrawLine(spriteBatch, text[runStart..], new Vector2(cursorX, y), activeColor, clip, characterSpacing);
     }
     #endregion
 
