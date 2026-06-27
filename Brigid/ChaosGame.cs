@@ -46,7 +46,7 @@ public sealed class ChaosGame : Game
     private RenderTarget2D RenderTarget = null!;
     private bool ResizingInProgress;
     private CancellationTokenSource? LatencyPollCts;
-    private int WindowSizeMultiplier = DEFAULT_WINDOW_MULTIPLIER;
+    private int WindowSizeMultiplier;
     private SpriteBatch SpriteBatch = null!;
 
     /// <summary>
@@ -105,10 +105,16 @@ public sealed class ChaosGame : Game
             | Sdl.SDL_INIT_HAPTIC
             | Sdl.SDL_INIT_SENSOR);
 
+        //open at the user's saved window size (chosen in the launcher), falling back to the default multiple of 640×480.
+        //the display can't be queried yet (no window exists), so this isn't clamped here — the launcher's selector is the
+        //display-aware path, and the OS clamps an oversized window if the saved size no longer fits.
+        var startupMultiplier = Math.Max(1, LauncherConfig.WindowMultiplier ?? DEFAULT_WINDOW_MULTIPLIER);
+        WindowSizeMultiplier = startupMultiplier;
+
         Graphics = new GraphicsDeviceManager(this)
         {
-            PreferredBackBufferWidth = VIRTUAL_WIDTH * DEFAULT_WINDOW_MULTIPLIER,
-            PreferredBackBufferHeight = VIRTUAL_HEIGHT * DEFAULT_WINDOW_MULTIPLIER,
+            PreferredBackBufferWidth = VIRTUAL_WIDTH * startupMultiplier,
+            PreferredBackBufferHeight = VIRTUAL_HEIGHT * startupMultiplier,
             PreferredDepthStencilFormat = DepthFormat.Depth24Stencil8,
             SynchronizeWithVerticalRetrace = false
         };
@@ -461,29 +467,32 @@ public sealed class ChaosGame : Game
     }
 
     #region Window Sizing
+    /// <summary>Current window size as an integer multiple of the 640×480 virtual resolution.</summary>
+    internal int CurrentWindowMultiplier => WindowSizeMultiplier;
+
     /// <summary>
-    ///     Cycles the window through integer multipliers of the virtual resolution (640x480).
-    ///     Advances to the next multiplier if it fits on the current monitor, otherwise wraps to 1x.
+    ///     Largest integer multiple of the virtual resolution whose window still fits the current display, or
+    ///     <see cref="DEFAULT_WINDOW_MULTIPLIER" /> as a fallback when the display can't be queried (never below 1).
     /// </summary>
-    internal void CycleWindowSize()
+    internal int MaxWindowMultiplierForDisplay()
     {
         var displayIndex = Sdl.SDL_GetWindowDisplayIndex(Window.Handle);
 
         if ((displayIndex < 0) || (Sdl.SDL_GetDisplayBounds(displayIndex, out var bounds) < 0))
-            return;
+            return DEFAULT_WINDOW_MULTIPLIER;
 
-        var nextMultiplier = WindowSizeMultiplier + 1;
-        var nextWidth = VIRTUAL_WIDTH * nextMultiplier;
-        var nextHeight = VIRTUAL_HEIGHT * nextMultiplier;
+        return Math.Max(1, Math.Min(bounds.W / VIRTUAL_WIDTH, bounds.H / VIRTUAL_HEIGHT));
+    }
 
-        if ((nextWidth > bounds.W) || (nextHeight > bounds.H))
-        {
-            nextMultiplier = 1;
-            nextWidth = VIRTUAL_WIDTH;
-            nextHeight = VIRTUAL_HEIGHT;
-        }
+    /// <summary>
+    ///     Resizes the window to <paramref name="multiplier" />× the 640×480 virtual resolution, clamped to what fits the
+    ///     current display. Leaves any maximized state so the OS window actually resizes. Returns the applied multiplier.
+    /// </summary>
+    internal int SetWindowMultiplier(int multiplier)
+    {
+        var clamped = Math.Clamp(multiplier, 1, MaxWindowMultiplierForDisplay());
 
-        WindowSizeMultiplier = nextMultiplier;
+        WindowSizeMultiplier = clamped;
 
         ResizingInProgress = true;
 
@@ -491,10 +500,26 @@ public sealed class ChaosGame : Game
         if ((Sdl.SDL_GetWindowFlags(Window.Handle) & Sdl.SDL_WINDOW_MAXIMIZED) != 0)
             Sdl.SDL_RestoreWindow(Window.Handle);
 
-        Graphics.PreferredBackBufferWidth = nextWidth;
-        Graphics.PreferredBackBufferHeight = nextHeight;
+        Graphics.PreferredBackBufferWidth = VIRTUAL_WIDTH * clamped;
+        Graphics.PreferredBackBufferHeight = VIRTUAL_HEIGHT * clamped;
         Graphics.ApplyChanges();
         ResizingInProgress = false;
+
+        return clamped;
+    }
+
+    /// <summary>
+    ///     Cycles the window through integer multipliers of the virtual resolution (640×480).
+    ///     Advances to the next multiplier if it fits on the current monitor, otherwise wraps to 1×.
+    /// </summary>
+    internal void CycleWindowSize()
+    {
+        var next = WindowSizeMultiplier + 1;
+
+        if (next > MaxWindowMultiplierForDisplay())
+            next = 1;
+
+        SetWindowMultiplier(next);
     }
 
     /// <summary>

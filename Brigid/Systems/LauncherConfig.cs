@@ -49,6 +49,12 @@ public static class LauncherConfig
     public static string? AssetPath { get; set; }
 
     /// <summary>
+    ///     Window size as an integer multiple of the 640×480 virtual resolution (e.g. 2 = 1280×960). Null when the user
+    ///     has never chosen one, in which case the client falls back to its default multiplier. Persisted across launches.
+    /// </summary>
+    public static int? WindowMultiplier { get; set; }
+
+    /// <summary>
     ///     <c>%AppData%\Brigid</c> (Windows), <c>~/.config/Brigid</c> (Linux/macOS via .NET's
     ///     <see cref="Environment.SpecialFolder.ApplicationData" /> mapping). The obvious, user-writable, cross-platform
     ///     home for the config file.
@@ -79,6 +85,7 @@ public static class LauncherConfig
         Servers = model?.Servers ?? [];
         SelectedServer = model?.SelectedServer;
         AssetPath = model?.AssetPath;
+        WindowMultiplier = model?.WindowMultiplier;
 
         //migrate the pre-server-list shape: a single Host/Port becomes a list entry
         if (!string.IsNullOrWhiteSpace(model?.Host))
@@ -102,7 +109,8 @@ public static class LauncherConfig
             {
                 Servers = Servers,
                 SelectedServer = SelectedServer,
-                AssetPath = AssetPath
+                AssetPath = AssetPath,
+                WindowMultiplier = WindowMultiplier
             };
 
             File.WriteAllText(FilePath, JsonSerializer.Serialize(model, SerializerOptions));
@@ -153,6 +161,7 @@ public static class LauncherConfig
         public List<ServerEntry>? Servers { get; set; }
         public string? SelectedServer { get; set; }
         public string? AssetPath { get; set; }
+        public int? WindowMultiplier { get; set; }
 
         //legacy (pre-server-list) fields, migrated into Servers on load
         public string? Host { get; set; }
