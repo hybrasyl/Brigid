@@ -612,8 +612,41 @@ public sealed class LobbyLoginScreen : IScreen
         var rawBytes = decompressed.ToArray();
         CachedNoticeCheckSum = Crc.Generate32(rawBytes);
 
-        return Encoding.GetEncoding(949)
-                       .GetString(rawBytes);
+        var text = Encoding.GetEncoding(949)
+                           .GetString(rawBytes);
+
+        //only Kru's retail Dark Ages sends the legacy fixed-width notice; Hybrasyl and other modern
+        //hosts send clean newline-delimited text that should be displayed verbatim.
+        return GlobalSettings.IsCursed ? NormalizeNoticeText(text) : text;
+    }
+
+    // Kru's retail login notice uses the legacy fixed-width server.msg layout: logical lines are
+    // separated by TAB and each is right-padded with spaces to a fixed column width. Blank lines are
+    // encoded as literal "." lines, and a RUN of consecutive TABs is a single hard break (not one per
+    // tab). Brigid word-wraps the agreement text, so without normalization the trailing space padding
+    // overflows into blank lines and each tab in a run becomes its own blank line. Collapse tab runs
+    // to a single break, convert to newlines, strip each line's trailing padding, and (per Kedian)
+    // turn the "." spacer lines into real blank lines so wrapping reproduces a clean retail layout.
+    private static string NormalizeNoticeText(string text)
+    {
+        text = text.Replace("\r\n", "\n");
+
+        //a run of consecutive TABs is one line break, mirroring the legacy renderer
+        while (text.Contains("\t\t"))
+            text = text.Replace("\t\t", "\t");
+
+        var lines = text.Replace('\t', '\n')
+                        .Split('\n');
+
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimEnd(' ');
+
+            //a line whose only content is "." is a blank-line spacer in this format
+            lines[i] = line == "." ? string.Empty : line;
+        }
+
+        return string.Join('\n', lines);
     }
 
     private void OnLoginControlReceived(LoginControlArgs args)
