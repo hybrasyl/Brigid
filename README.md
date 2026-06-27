@@ -103,7 +103,7 @@ This is not an exhaustive list, but other differences are likely too minor to bo
 | **DALib**                   | Dark Ages file formats and SkiaSharp rendering.                                                                                                                                                                                                        |
 | **Brigid.Data**       | Opens the `.dat` archives via memory-mapped files and exposes repositories for sprites, tiles, fonts, metafiles, UI prefabs, etc. Some repositories cache their entries with eviction policies appropriate to the asset type; others are pass-through. |
 | **Brigid.Rendering**  | Converts DALib's SkiaSharp output into MonoGame `Texture2D` and owns the map, camera, darkness, tab map, and per-entity renderers.                                                                                                                     |
-| **Brigid.Networking** | TCP, crypto, packet framing, and a state-machine `ConnectionManager` on top of the `Chaos.Networking` NuGet package. Packet handlers are registered into an opcode-indexed delegate array.                                                             |
+| **Chaos.Networking** | TCP, crypto, packet framing, and a state-machine `ConnectionManager` on top of the `Chaos.Networking` NuGet package. Packet handlers are registered into an opcode-indexed delegate array.                                                             |
 | **Brigid**            | MonoGame `Game`, screens, UI controls, game systems, and world state.                                                                                                                                                                                  |
 
 Dependency flow:
@@ -111,7 +111,7 @@ Dependency flow:
 ```
 DALib ──> Brigid.Data ──────┐
 DALib ──> Brigid.Rendering ─┼─> Brigid
-         Brigid.Networking ─┘
+         Chaos.Networking ─┘
 ```
 
 ### World state
