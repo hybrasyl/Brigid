@@ -26,6 +26,13 @@ public interface IScreen : IDisposable
     void Draw(SpriteBatch spriteBatch, GameTime gameTime);
 
     /// <summary>
+    ///     Draws the screen's UI layer — its <see cref="Root" /> panel and any topmost overlays. Called after the world
+    ///     render target has been upscaled to the window, with the SpriteBatch already begun under a virtual→native
+    ///     scale transform so UI text renders crisply at native resolution. The screen must NOT begin/end the batch here.
+    /// </summary>
+    void DrawUi(SpriteBatch spriteBatch);
+
+    /// <summary>
     ///     Called once when the screen is first pushed onto the screen stack. Use this to subscribe to events, set up state,
     ///     and allocate non-graphics resources.
     /// </summary>

@@ -27,9 +27,6 @@ public sealed class FontEngine
     /// <summary>Pixel size the primary face is rasterized at. Visual glyph size; not the line-grid spacing.</summary>
     public const int RENDER_SIZE = 15;
 
-    /// <summary>Vertical nudge (px) applied to every line so the glyph ink centers in the 12px layout row.</summary>
-    public const int V_OFFSET = -1;
-
     private const string FONTS_DIR = "Content/Fonts";
     private const string PRIMARY_FONT = "CrimsonPro-SemiBold.ttf";
 
@@ -44,10 +41,22 @@ public sealed class FontEngine
     private readonly ClippingFontRenderer Renderer = new();
     private readonly FontSystem System;
 
+    //virtual→native scale of the active draw pass. When both are 1 (the default), text is drawn into the 640×480
+    //render target exactly as laid out. When the UI renders directly to the backbuffer under a Scale(sx,sy) transform,
+    //these are set so glyphs rasterize at native pixel size and the per-glyph quad scale cancels the pass transform —
+    //crisp text instead of a point-upscaled bitmap. Layout/measurement always stays in virtual (RENDER_SIZE) space.
+    private float NativeScaleX = 1f;
+    private float NativeScaleY = 1f;
+
+    //vertical nudge (virtual px) that centers the font's line box inside the legacy CHAR_HEIGHT (12px) layout band.
+    //UILabel lays text out assuming a 12px-tall line; the TTF's line height is taller and FontStashSharp anchors by
+    //the line top, so without this every label would sit low (bottom-aligned). Computed from the face's metrics.
+    private int VerticalOffset;
+
     public static FontEngine Instance { get; private set; } = null!;
 
-    /// <summary>The font line height in pixels at <see cref="RENDER_SIZE" />.</summary>
-    public int LineHeight => (int)MathF.Round(GetFont().LineHeight);
+    /// <summary>The font line height in pixels at <see cref="RENDER_SIZE" /> (virtual space).</summary>
+    public int LineHeight => (int)MathF.Round(GetFont(RENDER_SIZE).LineHeight);
 
     private FontEngine()
     {
@@ -73,6 +82,9 @@ public sealed class FontEngine
             if (File.Exists(path))
                 System.AddFont(File.ReadAllBytes(path));
         }
+
+        //center the line box in the 12px layout band: offset = (band - lineHeight) / 2 (negative, nudges text up)
+        VerticalOffset = (int)MathF.Round((TextRenderer.CHAR_HEIGHT - GetFont(RENDER_SIZE).LineHeight) / 2f);
     }
 
     public static void Initialize() => Instance = new FontEngine();
@@ -83,8 +95,19 @@ public sealed class FontEngine
         if (string.IsNullOrEmpty(text))
             return 0;
 
-        return (int)MathF.Round(GetFont()
+        return (int)MathF.Round(GetFont(RENDER_SIZE)
             .MeasureString(SanitizeSurrogates(text)).X);
+    }
+
+    /// <summary>
+    ///     Sets the virtual→native scale for subsequent <see cref="DrawLine" /> calls. Pass <c>(1, 1)</c> to draw at
+    ///     virtual resolution (into the render target); pass the window's backbuffer/virtual ratio to draw crisply at
+    ///     native resolution under a matching <c>Scale(sx, sy)</c> SpriteBatch transform.
+    /// </summary>
+    public void SetNativeScale(float scaleX, float scaleY)
+    {
+        NativeScaleX = scaleX;
+        NativeScaleY = scaleY;
     }
 
     /// <summary>
@@ -104,12 +127,30 @@ public sealed class FontEngine
         Renderer.SpriteBatch = spriteBatch;
         Renderer.Clip = clip;
 
-        GetFont()
+        var sanitized = SanitizeSurrogates(text);
+        var pos = new Vector2(position.X, position.Y + VerticalOffset);
+
+        if (NativeScaleX == 1f && NativeScaleY == 1f)
+        {
+            GetFont(RENDER_SIZE)
+                .DrawText(Renderer, sanitized, pos, color);
+
+            return;
+        }
+
+        //native-resolution pass: rasterize glyphs at native pixel size, then scale the quads by the inverse of the
+        //pass transform so they land at the same virtual-space size — net 1:1 at native resolution, i.e. crisp.
+        var nativeSize = Math.Max(1, (int)MathF.Round(RENDER_SIZE * NativeScaleY));
+
+        GetFont(nativeSize)
             .DrawText(
                 Renderer,
-                SanitizeSurrogates(text),
-                new Vector2(position.X, position.Y + V_OFFSET),
-                color);
+                sanitized,
+                pos,
+                color,
+                0f,
+                Vector2.Zero,
+                new Vector2(1f / NativeScaleX, 1f / NativeScaleY));
     }
 
     /// <summary>
@@ -177,12 +218,12 @@ public sealed class FontEngine
         return new string(chars);
     }
 
-    private DynamicSpriteFont GetFont()
+    private DynamicSpriteFont GetFont(int size)
     {
-        if (!Fonts.TryGetValue(RENDER_SIZE, out var font))
+        if (!Fonts.TryGetValue(size, out var font))
         {
-            font = System.GetFont(RENDER_SIZE);
-            Fonts[RENDER_SIZE] = font;
+            font = System.GetFont(size);
+            Fonts[size] = font;
         }
 
         return font;

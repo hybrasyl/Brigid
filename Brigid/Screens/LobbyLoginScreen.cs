@@ -59,10 +59,14 @@ public sealed class LobbyLoginScreen : IScreen
     /// <inheritdoc />
     public void Draw(SpriteBatch spriteBatch, GameTime gameTime)
     {
-        spriteBatch.Begin(samplerState: GlobalSettings.Sampler);
-        Root!.Draw(spriteBatch);
-        spriteBatch.End();
+        //the lobby/login screen has no world layer — its background and controls live in Root and render in the
+        //native-resolution UI pass (DrawUi). Nothing is drawn into the world render target here.
+    }
 
+    /// <inheritdoc />
+    public void DrawUi(SpriteBatch spriteBatch)
+    {
+        Root!.Draw(spriteBatch);
         DebugOverlay.SnapshotDrawCount();
     }
 

@@ -34,6 +34,11 @@ public sealed class ScreenManager : IDisposable
     public void Draw(SpriteBatch spriteBatch, GameTime gameTime) => ActiveScreen?.Draw(spriteBatch, gameTime);
 
     /// <summary>
+    ///     Delegates the native-resolution UI draw to the active screen.
+    /// </summary>
+    public void DrawUi(SpriteBatch spriteBatch) => ActiveScreen?.DrawUi(spriteBatch);
+
+    /// <summary>
     ///     Removes and disposes the topmost screen, returning control to the screen below it. Does nothing if the stack is
     ///     empty.
     /// </summary>

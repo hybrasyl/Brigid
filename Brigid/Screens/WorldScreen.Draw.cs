@@ -240,11 +240,17 @@ public sealed partial class WorldScreen
             }
         }
 
-        //pass 2: ui overlay — full screen, no transform
-        spriteBatch.Begin(samplerState: GlobalSettings.Sampler);
+    }
+
+    /// <summary>
+    ///     Draws the world HUD/UI at native resolution. The SpriteBatch is begun by the game under a virtual→native
+    ///     scale transform; world overlays (bubbles, name tags) remain on the render target, but all HUD/panel/dialog
+    ///     text renders crisply here.
+    /// </summary>
+    public void DrawUi(SpriteBatch spriteBatch)
+    {
         Root!.Draw(spriteBatch);
         DrawDragIcon(spriteBatch);
-        spriteBatch.End();
     }
 
     #region Swimming
