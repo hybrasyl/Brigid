@@ -136,6 +136,11 @@ public sealed class LauncherScreen : IScreen
         spriteBatch.End();
     }
 
+    //the launcher runs before any Dark Ages asset (or the FontEngine) is loaded, so it draws everything itself in the
+    //virtual-resolution Draw pass above — backdrop, panels, and SystemFontText labels all go into the render target and
+    //point-upscale to the window. There is nothing to render in the native-resolution UI pass.
+    public void DrawNative(SpriteBatch spriteBatch, float scaleX, float scaleY) { }
+
     public void UnloadContent()
     {
         Pixel?.Dispose();

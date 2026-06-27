@@ -132,6 +132,21 @@ public sealed class FontEngine
         return ActiveIndex;
     }
 
+    /// <summary>
+    ///     Selects a face by index (clamped to the valid range). Bumps <see cref="Generation" /> when the active face
+    ///     actually changes so cached text measurements invalidate. Used to apply the persisted face at startup.
+    /// </summary>
+    public void SetActiveFont(int index)
+    {
+        var clamped = Math.Clamp(index, 0, Faces.Length - 1);
+
+        if (clamped == ActiveIndex)
+            return;
+
+        ActiveIndex = clamped;
+        Generation++;
+    }
+
     /// <summary>Pixel width of <paramref name="text" /> as laid out by the font (single line, no color codes).</summary>
     public int MeasureWidth(string text)
     {

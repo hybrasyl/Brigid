@@ -410,6 +410,9 @@ public sealed class ChaosGame : Game
         Screens = new ScreenManager(this);
 
         TextureConverter.Device = GraphicsDevice;
+        //construct FontEngine up front: the per-frame native pass needs a non-null FontEngine.Instance even while the
+        //launcher is up (it draws via SystemFontText, not FontEngine). FontIndex isn't loaded yet, so this uses the
+        //default face; the saved face is applied via SetActiveFont in FinishAssetInitialization once ClientSettings loads.
         FontEngine.Initialize(ClientSettings.FontIndex);
         UiRenderer.Instance = new UiRenderer(GraphicsDevice);
 
@@ -431,7 +434,9 @@ public sealed class ChaosGame : Game
         GlobalSettings.InitializeAssetData();
         Directory.CreateDirectory(MetaFilePath);
         ClientSettings.Load();
-        FontAtlas.Initialize(GraphicsDevice);
+        //LoadContent constructed FontEngine early (with the default face) so the launcher's frames have a non-null
+        //Instance; now that ClientSettings is loaded, switch to the user's saved face before the lobby appears.
+        FontEngine.Instance.SetActiveFont(ClientSettings.FontIndex);
         LoadCustomCursor();
         Screens.Switch(new LobbyLoginScreen());
     }
