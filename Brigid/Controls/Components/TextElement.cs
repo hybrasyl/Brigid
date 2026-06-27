@@ -13,6 +13,7 @@ namespace Brigid.Controls.Components;
 public sealed class TextElement
 {
     private int LastWrapWidth;
+    private int LastFontGeneration = -1;
     private ShadowStyle LastShadowStyle;
 
     public bool ColorCodesEnabled { get; set; } = true;
@@ -46,13 +47,18 @@ public sealed class TextElement
     /// </summary>
     public void Update(string text, Color color)
     {
-        if ((text == Text) && (color == Color) && (WrapWidth == LastWrapWidth) && (ShadowStyle == LastShadowStyle))
+        //re-measure when the active font changes (cycling fonts) so cached widths/wraps don't go stale
+        var fontGeneration = Rendering.FontEngine.Instance.Generation;
+
+        if ((text == Text) && (color == Color) && (WrapWidth == LastWrapWidth) && (ShadowStyle == LastShadowStyle)
+            && (fontGeneration == LastFontGeneration))
             return;
 
         Text = text;
         Color = color;
         LastWrapWidth = WrapWidth;
         LastShadowStyle = ShadowStyle;
+        LastFontGeneration = fontGeneration;
 
         if (string.IsNullOrEmpty(text))
         {

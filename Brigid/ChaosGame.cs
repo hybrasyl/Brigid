@@ -159,7 +159,7 @@ public sealed class ChaosGame : Game
 
     protected override void Draw(GameTime gameTime)
     {
-        //render everything at virtual resolution
+        //world / background layer — rendered at virtual 640×480 resolution into the render target
         GraphicsDevice.SetRenderTarget(RenderTarget);
         GraphicsDevice.Clear(Color.Black);
         Screens.Draw(SpriteBatch, gameTime);
@@ -167,20 +167,8 @@ public sealed class ChaosGame : Game
         if (DebugOverlay.IsActive)
             DebugOverlay.DrawStats(SpriteBatch);
 
-        //custom cursor — drawn in virtual space so it aligns with game content
-        if (CursorTexture is not null)
-        {
-            var activeCursor = UseHandCursor && HandCursorTexture is not null ? HandCursorTexture : CursorTexture;
-            var offsetX = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetX : CursorOffsetX;
-            var offsetY = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetY : CursorOffsetY;
-
-            SpriteBatch.Begin(samplerState: GlobalSettings.Sampler);
-            SpriteBatch.Draw(activeCursor, new Vector2(InputBuffer.MouseX - offsetX, InputBuffer.MouseY - offsetY), Color.White);
-            SpriteBatch.End();
-        }
-
-        //capture screenshot while the render target is still bound — DiscardContents may
-        //invalidate pixel data after SetRenderTarget(null) on some drivers
+        //capture screenshot while the render target is still bound — this grabs the world layer only (the stylized
+        //"lod" capture is intentionally UI-free). DiscardContents may invalidate pixel data after SetRenderTarget(null).
         if (ScreenshotRequested)
         {
             ScreenshotRequested = false;
@@ -194,6 +182,31 @@ public sealed class ChaosGame : Game
         SpriteBatch.Begin(samplerState: GlobalSettings.Sampler);
         SpriteBatch.Draw(RenderTarget, GraphicsDevice.Viewport.Bounds, Color.White);
         SpriteBatch.End();
+
+        //native layer — world-anchored overlays and the UI are drawn directly to the backbuffer at native resolution
+        //so text is crisp rather than sharing the render target's point-upscale. Panel/overlay sprites point-scale
+        //identically under the transform; FontEngine rasterizes glyphs at native size and cancels the transform per
+        //glyph (see FontEngine.DrawLine). The screen issues its own passes; we just set the scale and draw the cursor.
+        var pp = GraphicsDevice.PresentationParameters;
+        var scaleX = (float)pp.BackBufferWidth / VIRTUAL_WIDTH;
+        var scaleY = (float)pp.BackBufferHeight / VIRTUAL_HEIGHT;
+
+        FontEngine.Instance.SetNativeScale(scaleX, scaleY);
+        Screens.DrawNative(SpriteBatch, scaleX, scaleY);
+
+        //custom cursor — topmost, in virtual space; the pass transform scales it to native like the rest of the UI
+        if (CursorTexture is not null)
+        {
+            var activeCursor = UseHandCursor && HandCursorTexture is not null ? HandCursorTexture : CursorTexture;
+            var offsetX = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetX : CursorOffsetX;
+            var offsetY = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetY : CursorOffsetY;
+
+            SpriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: Matrix.CreateScale(scaleX, scaleY, 1f));
+            SpriteBatch.Draw(activeCursor, new Vector2(InputBuffer.MouseX - offsetX, InputBuffer.MouseY - offsetY), Color.White);
+            SpriteBatch.End();
+        }
+
+        FontEngine.Instance.SetNativeScale(1f, 1f);
 
         base.Draw(gameTime);
 
@@ -397,6 +410,7 @@ public sealed class ChaosGame : Game
         Screens = new ScreenManager(this);
 
         TextureConverter.Device = GraphicsDevice;
+        FontEngine.Initialize(ClientSettings.FontIndex);
         UiRenderer.Instance = new UiRenderer(GraphicsDevice);
 
         //the launcher (server select + asset path) renders without any DA assets and is shown on every normal launch;

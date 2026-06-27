@@ -1,6 +1,8 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Extensions;
+using Brigid.Rendering;
+using Brigid.Systems;
 using Brigid.Utilities;
 using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
@@ -104,6 +106,53 @@ public sealed class SettingsControl : PrefabPanel
             RefreshLabel(i);
 
         Options.SettingChanged += (index, _) => RefreshLabel(index);
+
+        CreateFontCycle(cache);
+    }
+
+    //font cycle — placed at slot 20 (bottom of the right column). Not a UserOptions toggle: clicking cycles the active
+    //UI face in FontEngine, persists the choice, and updates the label. The numbered button uses the slot-20 spf frames.
+    private void CreateFontCycle(UiRenderer cache)
+    {
+        const int row = ROWS_PER_COLUMN - 1; // 9 — bottom row
+        const int col = 1;                   // right column
+        const int slot = ROWS_PER_COLUMN + row; // 19 → displayed "20"
+
+        var button = new UIButton
+        {
+            Name = "FontCycle",
+            X = BUTTON_X + col * COLUMN_OFFSET,
+            Y = BUTTON_Y + row * ROW_HEIGHT,
+            Width = BUTTON_SIZE,
+            Height = BUTTON_SIZE,
+            NormalTexture = cache.GetSpfTexture("_nsettb.spf", slot * 2),
+            PressedTexture = cache.GetSpfTexture("_nsettb.spf", slot * 2 + 1)
+        };
+
+        var label = new UILabel
+        {
+            Name = "FontCycleLabel",
+            X = LABEL_X + col * COLUMN_OFFSET,
+            Y = LABEL_Y + row * ROW_HEIGHT,
+            Width = LABEL_WIDTH,
+            Height = 12,
+            PaddingLeft = 0,
+            PaddingTop = 0,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            ForegroundColor = TextColors.Default,
+            Text = $"Font : {FontEngine.Instance.ActiveFontName}"
+        };
+
+        button.Clicked += () =>
+        {
+            FontEngine.Instance.CycleFont();
+            ClientSettings.FontIndex = FontEngine.Instance.ActiveFontIndex;
+            ClientSettings.Save();
+            label.Text = $"Font : {FontEngine.Instance.ActiveFontName}";
+        };
+
+        AddChild(button);
+        AddChild(label);
     }
 
     private void Close()

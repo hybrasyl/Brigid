@@ -26,6 +26,14 @@ public interface IScreen : IDisposable
     void Draw(SpriteBatch spriteBatch, GameTime gameTime);
 
     /// <summary>
+    ///     Draws everything that should render at native window resolution, after the world render target has been
+    ///     upscaled to the window: world-anchored overlays (bubbles, name tags) and the <see cref="Root" /> UI panel.
+    ///     The screen issues its own SpriteBatch Begin/End for each native pass; <paramref name="scaleX" />/
+    ///     <paramref name="scaleY" /> are the virtual→backbuffer ratios to build the scale transform from.
+    /// </summary>
+    void DrawNative(SpriteBatch spriteBatch, float scaleX, float scaleY);
+
+    /// <summary>
     ///     Called once when the screen is first pushed onto the screen stack. Use this to subscribe to events, set up state,
     ///     and allocate non-graphics resources.
     /// </summary>
