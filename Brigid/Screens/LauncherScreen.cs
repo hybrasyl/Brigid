@@ -25,6 +25,7 @@ public sealed class LauncherScreen : IScreen
     {
         Main,
         Dropdown,
+        ResolutionDropdown,
         AddServer
     }
 
@@ -41,7 +42,7 @@ public sealed class LauncherScreen : IScreen
     private const int ROW_HEIGHT = 24;
     private const int MAX_PORT_DIGITS = 5;
 
-    private static readonly Rectangle Panel = new(110, 110, 420, 250);
+    private static readonly Rectangle Panel = new(110, 90, 420, 290);
     private static readonly Color Backdrop = new(10, 12, 20);
     private static readonly Color PanelFill = new(28, 32, 44);
     private static readonly Color PanelBorder = new(80, 90, 110);
@@ -59,10 +60,16 @@ public sealed class LauncherScreen : IScreen
     private readonly string[] AddText = new string[3];
     private readonly Rectangle[] AddFieldBounds = new Rectangle[3];
     private readonly List<(Rectangle Row, Rectangle Remove, ServerEntry Entry)> DropdownRows = [];
+    private readonly List<(Rectangle Row, int Multiplier)> ResolutionRows = [];
 
     private ChaosGame Game = null!;
     private SpriteBatch ActiveBatch = null!;
     private Texture2D Pixel = null!;
+
+    //virtual→native draw scale for the current frame; text is rasterized at native size and drawn back down to virtual
+    private float NativeScaleX = 1f;
+    private float NativeScaleY = 1f;
+    private float LastNativeScaleY = 1f;
 
     private Mode CurrentMode = Mode.Main;
     private AddField AddFocused = AddField.Host;
@@ -74,6 +81,7 @@ public sealed class LauncherScreen : IScreen
 
     //recomputed each frame from current state
     private Rectangle DropdownButton;
+    private Rectangle ResolutionButton;
     private Rectangle AssetButton;
     private Rectangle ConnectButton;
     private Rectangle AddRow;
@@ -119,12 +127,32 @@ public sealed class LauncherScreen : IScreen
         }
     }
 
-    public void Draw(SpriteBatch spriteBatch, GameTime gameTime)
-    {
-        ActiveBatch = spriteBatch;
-        spriteBatch.Begin(samplerState: GlobalSettings.Sampler);
+    //the world/render-target pass is unused: the launcher has no world layer and draws entirely in the native pass so its
+    //SystemFontText labels render crisp at the window resolution instead of sharing the 640×480 render target's upscale.
+    public void Draw(SpriteBatch spriteBatch, GameTime gameTime) { }
 
-        FillRect(new Rectangle(0, 0, 640, 480), Backdrop);
+    public void DrawNative(SpriteBatch spriteBatch, float scaleX, float scaleY)
+    {
+        //text textures are rasterized at native pixel size (see GetText/DrawText); flush the cache when the scale changes
+        //(e.g. via the resolution selector) so stale-size glyphs are re-rendered crisp at the new size.
+        if (scaleY != LastNativeScaleY)
+        {
+            foreach (var texture in TextCache.Values)
+                texture.Dispose();
+
+            TextCache.Clear();
+            LastNativeScaleY = scaleY;
+        }
+
+        NativeScaleX = scaleX;
+        NativeScaleY = scaleY;
+        ActiveBatch = spriteBatch;
+
+        //virtual 640×480 layout drawn under a Scale(sx,sy) transform: solid rects point-scale crisply, and text cancels
+        //the transform per draw (rasterized at native size) so it stays sharp. Mirrors the main UI's native pass.
+        spriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: Matrix.CreateScale(scaleX, scaleY, 1f));
+
+        FillRect(new Rectangle(0, 0, ChaosGame.VIRTUAL_WIDTH, ChaosGame.VIRTUAL_HEIGHT), Backdrop);
         FillRect(Panel, PanelFill);
         BorderRect(Panel, PanelBorder);
 
@@ -135,11 +163,6 @@ public sealed class LauncherScreen : IScreen
 
         spriteBatch.End();
     }
-
-    //the launcher runs before any Dark Ages asset (or the FontEngine) is loaded, so it draws everything itself in the
-    //virtual-resolution Draw pass above — backdrop, panels, and SystemFontText labels all go into the render target and
-    //point-upscale to the window. There is nothing to render in the native-resolution UI pass.
-    public void DrawNative(SpriteBatch spriteBatch, float scaleX, float scaleY) { }
 
     public void UnloadContent()
     {
@@ -160,9 +183,11 @@ public sealed class LauncherScreen : IScreen
     {
         DropdownButton = new Rectangle(Panel.X + 90, Panel.Y + 52, Panel.Right - 20 - (Panel.X + 90), ROW_HEIGHT);
         AssetButton = new Rectangle(Panel.Right - 100, Panel.Y + 150, 80, ROW_HEIGHT);
+        ResolutionButton = new Rectangle(Panel.X + 90, Panel.Y + 186, Panel.Right - 20 - (Panel.X + 90), ROW_HEIGHT);
         ConnectButton = new Rectangle(Panel.Right - 120, Panel.Bottom - 40, 100, 26);
 
         DropdownRows.Clear();
+        ResolutionRows.Clear();
 
         if (CurrentMode == Mode.Dropdown)
         {
@@ -177,6 +202,18 @@ public sealed class LauncherScreen : IScreen
             }
 
             AddRow = new Rectangle(DropdownButton.X, y, DropdownButton.Width, ROW_HEIGHT);
+        }
+
+        if (CurrentMode == Mode.ResolutionDropdown)
+        {
+            var max = Game.MaxWindowMultiplierForDisplay();
+            var y = ResolutionButton.Bottom;
+
+            for (var m = 1; m <= max; m++)
+            {
+                ResolutionRows.Add((new Rectangle(ResolutionButton.X, y, ResolutionButton.Width, ROW_HEIGHT), m));
+                y += ROW_HEIGHT;
+            }
         }
 
         if (CurrentMode == Mode.AddServer)
@@ -223,6 +260,11 @@ public sealed class LauncherScreen : IScreen
 
                 break;
 
+            case Mode.ResolutionDropdown:
+                HandleResolutionDropdownClick(cursor);
+
+                break;
+
             case Mode.AddServer:
                 HandleAddClick(cursor);
 
@@ -246,8 +288,41 @@ public sealed class LauncherScreen : IScreen
             return;
         }
 
+        if (ResolutionButton.Contains(cursor))
+        {
+            CurrentMode = Mode.ResolutionDropdown;
+
+            return;
+        }
+
         if (ConnectButton.Contains(cursor) && CanConnect())
             Connect();
+    }
+
+    private void HandleResolutionDropdownClick(Point cursor)
+    {
+        //clicking the button again closes the open dropdown
+        if (ResolutionButton.Contains(cursor))
+        {
+            CurrentMode = Mode.Main;
+
+            return;
+        }
+
+        foreach (var (row, multiplier) in ResolutionRows)
+            if (row.Contains(cursor))
+            {
+                //apply live so the window resizes immediately, then persist the (display-clamped) result
+                var applied = Game.SetWindowMultiplier(multiplier);
+                LauncherConfig.WindowMultiplier = applied;
+                LauncherConfig.Save();
+                CurrentMode = Mode.Main;
+
+                return;
+            }
+
+        //click anywhere else closes the dropdown
+        CurrentMode = Mode.Main;
     }
 
     private void HandleDropdownClick(Point cursor)
@@ -439,11 +514,40 @@ public sealed class LauncherScreen : IScreen
         DrawDownTriangle(DropdownButton.Right - 14, DropdownButton.Y + 10, LabelColor);
 
         DrawAssetRow();
+        DrawResolutionRow();
         DrawButton(ConnectButton, "Connect", CanConnect(), new Color(60, 110, 70), new Color(110, 180, 120));
 
         if (CurrentMode == Mode.Dropdown)
             DrawDropdownList();
+
+        if (CurrentMode == Mode.ResolutionDropdown)
+            DrawResolutionDropdownList();
     }
+
+    private void DrawResolutionRow()
+    {
+        DrawText("Resolution", new Vector2(Panel.X + 20, ResolutionButton.Y + 5), LabelColor, TEXT_SIZE);
+
+        FillRect(ResolutionButton, FieldFill);
+        BorderRect(ResolutionButton, FieldBorder);
+
+        var labelBox = new Rectangle(ResolutionButton.X, ResolutionButton.Y, ResolutionButton.Width - 18, ResolutionButton.Height);
+        DrawClippedEnd(ResolutionLabel(Game.CurrentWindowMultiplier), labelBox, Color.White, TEXT_SIZE);
+        DrawDownTriangle(ResolutionButton.Right - 14, ResolutionButton.Y + 10, LabelColor);
+    }
+
+    private void DrawResolutionDropdownList()
+    {
+        foreach (var (row, multiplier) in ResolutionRows)
+        {
+            var isSelected = multiplier == Game.CurrentWindowMultiplier;
+            FillRect(row, isSelected ? FieldFocusFill : FieldFill);
+            BorderRect(row, FieldBorder);
+            DrawClippedEnd(ResolutionLabel(multiplier), row, Color.White, TEXT_SIZE);
+        }
+    }
+
+    private static string ResolutionLabel(int multiplier) => $"{ChaosGame.VIRTUAL_WIDTH * multiplier}×{ChaosGame.VIRTUAL_HEIGHT * multiplier}";
 
     private void DrawAssetRow()
     {
@@ -548,7 +652,18 @@ public sealed class LauncherScreen : IScreen
         if (string.IsNullOrEmpty(text))
             return;
 
-        ActiveBatch.Draw(GetText(text, color, size), position, Color.White);
+        //the texture is rasterized at native pixel size; cancel the pass transform per draw (scale by its inverse) so it
+        //lands at the virtual size but with crisp native detail — the FontEngine native-pass trick, applied to SystemFontText.
+        ActiveBatch.Draw(
+            GetText(text, color, size),
+            position,
+            null,
+            Color.White,
+            0f,
+            Vector2.Zero,
+            new Vector2(1f / NativeScaleX, 1f / NativeScaleY),
+            SpriteEffects.None,
+            0f);
     }
 
     //left-aligned within box, trimming the FRONT so the tail (e.g. the end of a path) stays visible
@@ -608,7 +723,9 @@ public sealed class LauncherScreen : IScreen
         if (TextCache.TryGetValue(key, out var cached))
             return cached;
 
-        var texture = SystemFontText.Render(text, size, color);
+        //rasterize at native pixel size so the glyph is sharp at the window resolution; DrawText scales it back down to the
+        //virtual size. Keyed by virtual size — valid because DrawNative flushes the cache whenever the native scale changes.
+        var texture = SystemFontText.Render(text, size * NativeScaleY, color);
         TextCache[key] = texture;
 
         return texture;
