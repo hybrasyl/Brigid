@@ -64,10 +64,12 @@ public sealed class LobbyLoginScreen : IScreen
     }
 
     /// <inheritdoc />
-    public void DrawUi(SpriteBatch spriteBatch)
+    public void DrawNative(SpriteBatch spriteBatch, float scaleX, float scaleY)
     {
+        spriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: Matrix.CreateScale(scaleX, scaleY, 1f));
         Root!.Draw(spriteBatch);
         DebugOverlay.SnapshotDrawCount();
+        spriteBatch.End();
     }
 
     /// <inheritdoc />

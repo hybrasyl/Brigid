@@ -18,7 +18,7 @@ public sealed class OrangeBarControl : UIPanel
     private const int GLYPH_HEIGHT = 12;
 
     //nudge the message lines up so they sit centered on the orange bar groove rather than low against its lower lip.
-    private const int LINE_Y_NUDGE = 4;
+    private const int LINE_Y_NUDGE = 2;
     private readonly UILabel[] Lines;
     private readonly Texture2D? PaneBg;
 

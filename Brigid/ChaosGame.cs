@@ -186,16 +186,16 @@ public sealed class ChaosGame : Game
         SpriteBatch.Draw(RenderTarget, GraphicsDevice.Viewport.Bounds, Color.White);
         SpriteBatch.End();
 
-        //UI layer — drawn directly to the backbuffer at native resolution so text is crisp rather than sharing the
-        //render target's point-upscale. Panel sprites point-scale identically under the transform; FontEngine
-        //rasterizes glyphs at native size and cancels the transform per-glyph (see FontEngine.DrawLine).
+        //native layer — world-anchored overlays and the UI are drawn directly to the backbuffer at native resolution
+        //so text is crisp rather than sharing the render target's point-upscale. Panel/overlay sprites point-scale
+        //identically under the transform; FontEngine rasterizes glyphs at native size and cancels the transform per
+        //glyph (see FontEngine.DrawLine). The screen issues its own passes; we just set the scale and draw the cursor.
         var pp = GraphicsDevice.PresentationParameters;
         var scaleX = (float)pp.BackBufferWidth / VIRTUAL_WIDTH;
         var scaleY = (float)pp.BackBufferHeight / VIRTUAL_HEIGHT;
 
         FontEngine.Instance.SetNativeScale(scaleX, scaleY);
-        SpriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: Matrix.CreateScale(scaleX, scaleY, 1f));
-        Screens.DrawUi(SpriteBatch);
+        Screens.DrawNative(SpriteBatch, scaleX, scaleY);
 
         //custom cursor — topmost, in virtual space; the pass transform scales it to native like the rest of the UI
         if (CursorTexture is not null)
@@ -203,10 +203,12 @@ public sealed class ChaosGame : Game
             var activeCursor = UseHandCursor && HandCursorTexture is not null ? HandCursorTexture : CursorTexture;
             var offsetX = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetX : CursorOffsetX;
             var offsetY = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetY : CursorOffsetY;
+
+            SpriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: Matrix.CreateScale(scaleX, scaleY, 1f));
             SpriteBatch.Draw(activeCursor, new Vector2(InputBuffer.MouseX - offsetX, InputBuffer.MouseY - offsetY), Color.White);
+            SpriteBatch.End();
         }
 
-        SpriteBatch.End();
         FontEngine.Instance.SetNativeScale(1f, 1f);
 
         base.Draw(gameTime);

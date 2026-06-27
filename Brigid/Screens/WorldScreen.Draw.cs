@@ -147,19 +147,8 @@ public sealed partial class WorldScreen
                 }
             }
 
-            //entity overlays (chat bubbles, health bars, name tags, chant text) — drawn after darkness
-            //so light level doesn't tint them, and after blind so they remain visible while blinded
-            spriteBatch.Begin(
-                SpriteSortMode.Immediate,
-                BlendState.AlphaBlend,
-                GlobalSettings.Sampler,
-                null,
-                ScissorRasterizerState,
-                null,
-                transform);
-
-            Overlays.Draw(spriteBatch, Camera, MapFile.Height);
-            spriteBatch.End();
+            //entity overlays (chat bubbles, health bars, name tags, chant text) are drawn in DrawNative at native
+            //resolution so their text is crisp; only the world tiles/entities render into the upscaled target here.
 
             //snapshot draw count before debug draws so the reported count excludes debug visualizations
             DebugOverlay.SnapshotDrawCount();
@@ -243,14 +232,40 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>
-    ///     Draws the world HUD/UI at native resolution. The SpriteBatch is begun by the game under a virtual→native
-    ///     scale transform; world overlays (bubbles, name tags) remain on the render target, but all HUD/panel/dialog
-    ///     text renders crisply here.
+    ///     Draws everything that should render at native window resolution (after the world target is upscaled): the
+    ///     world-anchored overlays (chat bubbles, name tags, chant, health bars) and then the HUD/UI. Each pass begins
+    ///     its own batch. Overlay positions are viewport-relative, so its transform adds the viewport offset then scales
+    ///     to native — matching where the world target was blitted — and the scissor clips to the scaled viewport.
     /// </summary>
-    public void DrawUi(SpriteBatch spriteBatch)
+    public void DrawNative(SpriteBatch spriteBatch, float scaleX, float scaleY)
     {
+        var nativeScale = Matrix.CreateScale(scaleX, scaleY, 1f);
+
+        if (MapFile is not null && MapPreloaded)
+        {
+            var vr = WorldHud.ViewportBounds;
+            Device.ScissorRectangle = new Rectangle(
+                (int)(vr.X * scaleX),
+                (int)(vr.Y * scaleY),
+                (int)(vr.Width * scaleX),
+                (int)(vr.Height * scaleY));
+
+            spriteBatch.Begin(
+                SpriteSortMode.Immediate,
+                BlendState.AlphaBlend,
+                GlobalSettings.Sampler,
+                null,
+                ScissorRasterizerState,
+                null,
+                Matrix.CreateTranslation(vr.X, vr.Y, 0f) * nativeScale);
+            Overlays.Draw(spriteBatch, Camera, MapFile.Height);
+            spriteBatch.End();
+        }
+
+        spriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: nativeScale);
         Root!.Draw(spriteBatch);
         DrawDragIcon(spriteBatch);
+        spriteBatch.End();
     }
 
     #region Swimming
