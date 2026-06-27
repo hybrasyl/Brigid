@@ -11,6 +11,9 @@ public static class ClientSettings
     public static int ChattingMode { get; set; }
     public static bool DoGroundAnimation { get; set; } = true;
     public static bool EnableProfileClick { get; set; } = true;
+
+    //index into FontEngine's selectable UI faces; persisted in the legacy "EngFont" slot.
+    public static int FontIndex { get; set; }
     public static bool GroupOpen { get; set; }
     public static int MusicVolume { get; set; } = 5;
     public static bool RecordNpcChat { get; set; } = true;
@@ -107,6 +110,12 @@ public static class ClientSettings
                             Speed = spd;
 
                         break;
+
+                    case "EngFont":
+                        if (int.TryParse(value, out var ef) && ef >= 0)
+                            FontIndex = ef;
+
+                        break;
                 }
             }
         } catch
@@ -129,7 +138,7 @@ public static class ClientSettings
             writer.WriteLine("KeyBoard: 0");
             writer.WriteLine("Tel: 1");
             writer.WriteLine("HanFont: 0");
-            writer.WriteLine("EngFont: 0");
+            writer.WriteLine($"EngFont: {FontIndex}");
             writer.WriteLine("Tel1: \"Nexus\",\"1\"");
             writer.WriteLine("Tel2: \"Nexus\",\"2\"");
             writer.WriteLine("Tel3: \"Nexus\",\"3\"");

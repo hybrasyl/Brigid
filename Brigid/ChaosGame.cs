@@ -413,7 +413,7 @@ public sealed class ChaosGame : Game
         Screens = new ScreenManager(this);
 
         TextureConverter.Device = GraphicsDevice;
-        FontEngine.Initialize();
+        FontEngine.Initialize(ClientSettings.FontIndex);
         UiRenderer.Instance = new UiRenderer(GraphicsDevice);
 
         LoadCustomCursor();

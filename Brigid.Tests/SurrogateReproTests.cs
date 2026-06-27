@@ -26,7 +26,7 @@ public class SurrogateReproTests
     [Fact]
     public void FontEngine_MeasureWidth_FullEmoji()
     {
-        FontEngine.Initialize();
+        FontEngine.Initialize(0);
         var w = FontEngine.Instance.MeasureWidth(Emoji);
         Assert.True(w >= 0);
     }
@@ -34,7 +34,7 @@ public class SurrogateReproTests
     [Fact]
     public void FontEngine_MeasureWidth_LoneSurrogates()
     {
-        FontEngine.Initialize();
+        FontEngine.Initialize(0);
         Assert.True(FontEngine.Instance.MeasureWidth(LoneHigh) >= 0);
         Assert.True(FontEngine.Instance.MeasureWidth(LoneLow) >= 0);
     }
@@ -42,7 +42,7 @@ public class SurrogateReproTests
     [Fact]
     public void TextRenderer_MeasureCharWidth_LoneSurrogate()
     {
-        FontEngine.Initialize();
+        FontEngine.Initialize(0);
         // single lone surrogate char — what MeasureCharWidth receives during hit-test/wrap
         Assert.True(TextRenderer.MeasureCharWidth('\uD83D') >= 0);
     }
@@ -50,7 +50,7 @@ public class SurrogateReproTests
     [Fact]
     public void TextRenderer_MeasureWidth_And_Wrap_Emoji()
     {
-        FontEngine.Initialize();
+        FontEngine.Initialize(0);
         Assert.True(TextRenderer.MeasureWidth(Emoji) >= 0);
         Assert.True(TextRenderer.MeasureWidth("hi " + Emoji + " there") >= 0);
         _ = TextRenderer.FindLineBreak(Emoji, 40);

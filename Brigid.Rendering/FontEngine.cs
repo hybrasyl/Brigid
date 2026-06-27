@@ -8,38 +8,44 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Brigid.Rendering;
 
 /// <summary>
-///     Text rendering backend built on FontStashSharp. Loads a real TTF and rasterizes glyphs on demand into a
-///     dynamic atlas (anti-aliased, full Unicode coverage), replacing the legacy Dark Ages <c>.fnt</c> bitmap fonts.
+///     Text rendering backend built on FontStashSharp. Loads real TTFs and rasterizes glyphs on demand into a dynamic
+///     atlas (anti-aliased, full Unicode coverage), replacing the legacy Dark Ages <c>.fnt</c> bitmap fonts.
 ///     <para>
-///         The render pixel size is intentionally decoupled from the UI layout cell height
-///         (<see cref="TextRenderer.CHAR_HEIGHT" />). Layout still positions lines on the legacy 12px grid; the glyph
-///         ink is rasterized at <see cref="RENDER_SIZE" /> and nudged by <see cref="V_OFFSET" /> to sit in the row.
-///         Both are single knobs, tunable without touching panel code.
+///         Several selectable faces (<see cref="Faces" />) are loaded up front; the active one is chosen by
+///         <see cref="CycleFont" /> and persisted by the client. Each face carries its own glyph cache and a vertical
+///         offset that centers its line box in the legacy 12px layout band.
 ///     </para>
 ///     <para>
-///         Additional faces dropped into <c>Content/Fonts</c> and listed in <see cref="FallbackFonts" /> are added to
-///         the same <see cref="FontSystem" /> as a fallback chain — FontStashSharp consults them automatically when the
-///         primary face lacks a codepoint (CJK, symbols, etc.), which is what retires the legacy EUC-KR Korean path.
+///         The render pixel size is decoupled from the UI layout cell height (<see cref="TextRenderer.CHAR_HEIGHT" />):
+///         layout positions lines on the 12px grid while glyphs rasterize at <see cref="RENDER_SIZE" /> (or native size
+///         during the native pass). Optional CJK fallback faces are added to every face's <see cref="FontSystem" /> so
+///         codepoints the primary lacks resolve automatically — what retires the legacy EUC-KR Korean path.
 ///     </para>
 /// </summary>
 public sealed class FontEngine
 {
-    /// <summary>Pixel size the primary face is rasterized at. Visual glyph size; not the line-grid spacing.</summary>
+    /// <summary>Pixel size faces are rasterized at for virtual-space layout. Visual glyph size; not the line grid.</summary>
     public const int RENDER_SIZE = 15;
 
     private const string FONTS_DIR = "Content/Fonts";
-    private const string PRIMARY_FONT = "CrimsonPro-SemiBold.ttf";
 
-    //optional fallback faces for codepoints the primary lacks (CJK etc.). Loaded only if present in Content/Fonts.
+    //selectable UI faces, cycled in order. The first is the default/required; later entries load only if present.
+    private static readonly (string Name, string File)[] FaceDefs =
+    [
+        ("Crimson Pro", "CrimsonPro-SemiBold.ttf"),
+        ("Noto Sans Mono", "NotoSansMono-Regular.ttf")
+    ];
+
+    //optional fallback faces for codepoints the primaries lack (CJK etc.), added to every face. Loaded if present.
     private static readonly string[] FallbackFonts =
     [
         "NotoSansCJK-Regular.ttf",
         "NotoSansKR-Regular.ttf"
     ];
 
-    private readonly Dictionary<int, DynamicSpriteFont> Fonts = [];
+    private readonly Face[] Faces;
     private readonly ClippingFontRenderer Renderer = new();
-    private readonly FontSystem System;
+    private int ActiveIndex;
 
     //virtual→native scale of the active draw pass. When both are 1 (the default), text is drawn into the 640×480
     //render target exactly as laid out. When the UI renders directly to the backbuffer under a Scale(sx,sy) transform,
@@ -48,23 +54,26 @@ public sealed class FontEngine
     private float NativeScaleX = 1f;
     private float NativeScaleY = 1f;
 
-    //vertical nudge (virtual px) that centers the font's line box inside the legacy CHAR_HEIGHT (12px) layout band.
-    //UILabel lays text out assuming a 12px-tall line; the TTF's line height is taller and FontStashSharp anchors by
-    //the line top, so without this every label would sit low (bottom-aligned). Computed from the face's metrics.
-    private int VerticalOffset;
-
     public static FontEngine Instance { get; private set; } = null!;
 
-    /// <summary>The font line height in pixels at <see cref="RENDER_SIZE" /> (virtual space).</summary>
+    /// <summary>Number of selectable faces.</summary>
+    public int FontCount => Faces.Length;
+
+    /// <summary>Index of the active face (persisted by the client).</summary>
+    public int ActiveFontIndex => ActiveIndex;
+
+    /// <summary>Display name of the active face.</summary>
+    public string ActiveFontName => Faces[ActiveIndex].Name;
+
+    /// <summary>Bumped whenever the active face changes, so cached text measurements can invalidate.</summary>
+    public int Generation { get; private set; }
+
+    /// <summary>The active face's line height in pixels at <see cref="RENDER_SIZE" /> (virtual space).</summary>
     public int LineHeight => (int)MathF.Round(GetFont(RENDER_SIZE).LineHeight);
 
-    private FontEngine()
+    private FontEngine(int initialIndex)
     {
         var dir = Path.Combine(AppContext.BaseDirectory, FONTS_DIR);
-        var primaryPath = Path.Combine(dir, PRIMARY_FONT);
-
-        if (!File.Exists(primaryPath))
-            throw new FileNotFoundException($"Primary UI font not found: {primaryPath}");
 
         var settings = new FontSystemSettings
         {
@@ -72,22 +81,56 @@ public sealed class FontEngine
             PremultiplyAlpha = true
         };
 
-        System = new FontSystem(settings);
-        System.AddFont(File.ReadAllBytes(primaryPath));
+        //load CJK fallback bytes once, shared across every face's FontSystem
+        var fallbackBytes = new List<byte[]>();
 
         foreach (var fallback in FallbackFonts)
         {
             var path = Path.Combine(dir, fallback);
 
             if (File.Exists(path))
-                System.AddFont(File.ReadAllBytes(path));
+                fallbackBytes.Add(File.ReadAllBytes(path));
         }
 
-        //center the line box in the 12px layout band: offset = (band - lineHeight) / 2 (negative, nudges text up)
-        VerticalOffset = (int)MathF.Round((TextRenderer.CHAR_HEIGHT - GetFont(RENDER_SIZE).LineHeight) / 2f);
+        var faces = new List<Face>();
+
+        foreach (var (name, file) in FaceDefs)
+        {
+            var path = Path.Combine(dir, file);
+
+            if (!File.Exists(path))
+                continue;
+
+            var system = new FontSystem(settings);
+            system.AddFont(File.ReadAllBytes(path));
+
+            foreach (var bytes in fallbackBytes)
+                system.AddFont(bytes);
+
+            var face = new Face(name, system);
+
+            //center the line box in the 12px layout band: offset = (band - lineHeight) / 2 (negative, nudges up)
+            face.VerticalOffset = (int)MathF.Round((TextRenderer.CHAR_HEIGHT - face.GetFont(RENDER_SIZE).LineHeight) / 2f);
+            faces.Add(face);
+        }
+
+        if (faces.Count == 0)
+            throw new FileNotFoundException($"No UI fonts found in {dir}");
+
+        Faces = [.. faces];
+        ActiveIndex = Math.Clamp(initialIndex, 0, Faces.Length - 1);
     }
 
-    public static void Initialize() => Instance = new FontEngine();
+    public static void Initialize(int initialFontIndex) => Instance = new FontEngine(initialFontIndex);
+
+    /// <summary>Advances to the next face (wrapping) and returns its index. Bumps <see cref="Generation" />.</summary>
+    public int CycleFont()
+    {
+        ActiveIndex = (ActiveIndex + 1) % Faces.Length;
+        Generation++;
+
+        return ActiveIndex;
+    }
 
     /// <summary>Pixel width of <paramref name="text" /> as laid out by the font (single line, no color codes).</summary>
     public int MeasureWidth(string text)
@@ -128,7 +171,7 @@ public sealed class FontEngine
         Renderer.Clip = clip;
 
         var sanitized = SanitizeSurrogates(text);
-        var pos = new Vector2(position.X, position.Y + VerticalOffset);
+        var pos = new Vector2(position.X, position.Y + Faces[ActiveIndex].VerticalOffset);
 
         if (NativeScaleX == 1f && NativeScaleY == 1f)
         {
@@ -218,15 +261,25 @@ public sealed class FontEngine
         return new string(chars);
     }
 
-    private DynamicSpriteFont GetFont(int size)
-    {
-        if (!Fonts.TryGetValue(size, out var font))
-        {
-            font = System.GetFont(size);
-            Fonts[size] = font;
-        }
+    private DynamicSpriteFont GetFont(int size) => Faces[ActiveIndex].GetFont(size);
 
-        return font;
+    /// <summary>A selectable UI face: its own FontSystem, per-size glyph cache, and line-band centering offset.</summary>
+    private sealed class Face(string name, FontSystem system)
+    {
+        private readonly Dictionary<int, DynamicSpriteFont> Cache = [];
+        public readonly string Name = name;
+        public int VerticalOffset;
+
+        public DynamicSpriteFont GetFont(int size)
+        {
+            if (!Cache.TryGetValue(size, out var font))
+            {
+                font = system.GetFont(size);
+                Cache[size] = font;
+            }
+
+            return font;
+        }
     }
 
     /// <summary>

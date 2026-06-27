@@ -13,7 +13,7 @@ public class FontEngineSmokeTests
     [Fact]
     public void Initialize_LoadsPrimaryFont()
     {
-        FontEngine.Initialize();
+        FontEngine.Initialize(0);
 
         Assert.NotNull(FontEngine.Instance);
     }
@@ -21,7 +21,7 @@ public class FontEngineSmokeTests
     [Fact]
     public void MeasureWidth_ReturnsPositiveForText_AndZeroForEmpty()
     {
-        FontEngine.Initialize();
+        FontEngine.Initialize(0);
 
         Assert.Equal(0, FontEngine.Instance.MeasureWidth(string.Empty));
 
@@ -35,7 +35,7 @@ public class FontEngineSmokeTests
     [Fact]
     public void LineHeight_IsSane()
     {
-        FontEngine.Initialize();
+        FontEngine.Initialize(0);
 
         var lineHeight = FontEngine.Instance.LineHeight;
         Assert.InRange(lineHeight, 1, 64);
