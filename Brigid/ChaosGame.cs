@@ -28,7 +28,7 @@ public sealed class ChaosGame : Game
     private const float ASPECT_RATIO = (float)VIRTUAL_WIDTH / VIRTUAL_HEIGHT;
 
     private readonly GraphicsDeviceManager Graphics;
-    private readonly string MetaFilePath = Path.Combine(GlobalSettings.DataPath, "metafile");
+    private string MetaFilePath => Path.Combine(GlobalSettings.DataPath, "metafile");
     private readonly Dictionary<string, uint> MetaPendingChecksums = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ServerPacket> PacketBuffer = [];
     private int CursorOffsetX;
@@ -102,8 +102,6 @@ public sealed class ChaosGame : Game
             | Sdl.SDL_INIT_HAPTIC
             | Sdl.SDL_INIT_SENSOR);
 
-        ClientSettings.Load();
-
         Graphics = new GraphicsDeviceManager(this)
         {
             PreferredBackBufferWidth = VIRTUAL_WIDTH,
@@ -117,7 +115,6 @@ public sealed class ChaosGame : Game
         InactiveSleepTime = TimeSpan.Zero;
 
         Connection = new ConnectionManager();
-        Directory.CreateDirectory(MetaFilePath);
         Connection.OnMetaData += HandleMetaData;
         Connection.OnWorldEntryComplete += () => Connection.SendMetaDataRequest(MetaDataRequestType.AllCheckSums);
         Connection.StateChanged += OnConnectionStateChanged;
@@ -416,8 +413,26 @@ public sealed class ChaosGame : Game
         FontEngine.Initialize(ClientSettings.FontIndex);
         UiRenderer.Instance = new UiRenderer(GraphicsDevice);
 
-        LoadCustomCursor();
+        //the launcher (server select + asset path) renders without any DA assets and is shown on every normal launch;
+        //the asset-dependent startup is deferred to FinishAssetInitialization until the user connects with a usable path.
+        if (GlobalSettings.ShowLauncher)
+            Screens.Switch(new LauncherScreen());
+        else
+            FinishAssetInitialization();
+    }
 
+    /// <summary>
+    ///     Completes the asset-path-dependent startup once a usable asset path is known (resolved from config/env at
+    ///     launch, or chosen in <see cref="LauncherScreen" />): loads the data context, client settings, fonts, and
+    ///     cursor, then switches to the lobby/login screen. Called exactly once.
+    /// </summary>
+    public void FinishAssetInitialization()
+    {
+        GlobalSettings.InitializeAssetData();
+        Directory.CreateDirectory(MetaFilePath);
+        ClientSettings.Load();
+        FontAtlas.Initialize(GraphicsDevice);
+        LoadCustomCursor();
         Screens.Switch(new LobbyLoginScreen());
     }
 

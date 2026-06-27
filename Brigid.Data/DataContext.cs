@@ -70,4 +70,22 @@ public static class DataContext
         Tiles = new TileRepository();
         UserControls = new UiComponentRepository();
     }
+
+    /// <summary>
+    ///     True when <paramref name="path" /> is a usable Dark Ages data directory: it exists and contains the core
+    ///     archives the client always loads (<c>khanpal.dat</c> for palettes, <c>legend.dat</c>). Matched
+    ///     case-insensitively because data directories vary in filename casing across platforms. Used to validate a
+    ///     candidate asset path before <see cref="Initialize" /> loads from it.
+    /// </summary>
+    public static bool IsValidDataDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            return false;
+
+        var present = Directory.EnumerateFiles(path)
+                               .Select(Path.GetFileName)
+                               .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return present.Contains("khanpal.dat") && present.Contains("legend.dat");
+    }
 }
