@@ -24,6 +24,18 @@ public sealed class LoginNoticeControl : PrefabPanel
         Visible = false;
         UsesControlStack = true;
 
+        //banner title — _nagree's 'CONTROL' region (rect 198,7 95x12) is the plaque title slot.
+        //The legacy client draws "Notification." here; the prefab carries no text of its own.
+        var titleLabel = CreateLabel("CONTROL", HorizontalAlignment.Center);
+
+        if (titleLabel is not null)
+        {
+            titleLabel.Text = "Notification";
+
+            //baked nudge offset (F11 live-nudge): shift -17px to center the title on the banner plaque
+            titleLabel.X -= 17;
+        }
+
         //buttons — _nagree is one of the few prefabs with actual type 3 controls
         OkButton = CreateButton("OK");
         CancelButton = CreateButton("CANCEL");
