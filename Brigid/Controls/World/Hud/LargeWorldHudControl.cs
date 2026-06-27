@@ -84,6 +84,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
     public UIButton?[] InventoryTabButtons { get; } = new UIButton?[6];
     public UIButton? LegendButton { get; }
     public MailButton? MailButton { get; }
+    public UIButton? OptionButton { get; }
     public UIButton? ScreenshotButton { get; }
     public UIButton? SettingsButton { get; }
     public UIButton? TownMapButton { get; }
@@ -178,6 +179,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         AddChild(EffectBar);
 
         //buttons
+        OptionButton = CreateButton("BTN_OPTION");
         BulletinButton = CreateButton("BTN_BULLETIN");
         UsersButton = CreateButton("BTN_USERS");
         ExpandButton = CreateButton("BTN_EXPAND");
