@@ -1,6 +1,8 @@
 #region
 using Brigid.Controls.Components;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.LobbyLogin;
@@ -86,7 +88,8 @@ public sealed class LobbyLoginControl : PrefabPanel
 
         //version label — type 7, 0 images
         VersionLabel = CreateLabel("Version", HorizontalAlignment.Right);
-        VersionLabel?.Text = "Chaos v0.1.0";
+        VersionLabel?.Text = "Brigid v0.1.0";
+        VersionLabel?.ForegroundColor = Color.Blue;
     }
 
     public void EnableButtons() => SetButtonsEnabled(true);
