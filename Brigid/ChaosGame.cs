@@ -636,6 +636,27 @@ public sealed class ChaosGame : Game
         if (InputBuffer.WasKeyPressed(Keys.F11))
             DebugOverlay.Toggle();
 
+        //debug key layer — numpad acts as per-feature toggles, but only while the overlay is up. Gating the reads on
+        //IsActive keeps the numpad free for normal use when debug is off.
+        if (DebugOverlay.IsActive)
+        {
+            if (InputBuffer.WasKeyPressed(Keys.NumPad1))
+                DebugOverlay.ShowUiBoxes ^= true;
+
+            if (InputBuffer.WasKeyPressed(Keys.NumPad2))
+                DebugOverlay.ShowUiNames ^= true;
+
+            if (InputBuffer.WasKeyPressed(Keys.NumPad3))
+                DebugOverlay.ShowWorld ^= true;
+
+            if (InputBuffer.WasKeyPressed(Keys.NumPad4))
+                DebugOverlay.ShowPerf ^= true;
+
+            //numpad 0 — restore all sub-toggles (escape hatch after muting individual layers)
+            if (InputBuffer.WasKeyPressed(Keys.NumPad0))
+                DebugOverlay.ShowUiBoxes = DebugOverlay.ShowUiNames = DebugOverlay.ShowWorld = DebugOverlay.ShowPerf = true;
+        }
+
         //f12 — screenshot
         if (InputBuffer.WasKeyPressed(Keys.F12))
             RequestScreenshot();

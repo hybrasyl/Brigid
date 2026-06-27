@@ -154,7 +154,7 @@ public sealed partial class WorldScreen
             DebugOverlay.SnapshotDrawCount();
 
             //debug overlay: entity hitboxes, tile grid, etc.
-            if (DebugOverlay.IsActive)
+            if (DebugOverlay.IsActive && DebugOverlay.ShowWorld)
             {
                 spriteBatch.Begin(
                     SpriteSortMode.Deferred,

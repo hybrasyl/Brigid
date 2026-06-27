@@ -6,6 +6,7 @@ using Brigid.Rendering;
 using Brigid.Systems;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.Generic;
@@ -21,7 +22,7 @@ public static class DebugOverlay
     private const float GRAPH_WIDTH = 180;
     private const float GRAPH_HEIGHT = 36;
     private const float GEN2_FLASH_DURATION_MS = 1000;
-    private const int STATS_LINE_COUNT = 7;
+    private const int STATS_LINE_COUNT = 8;
     private const int STATS_LINE_PITCH = TextRenderer.CHAR_HEIGHT + 1;
     private const int STATS_BG_HEIGHT = STATS_LINE_COUNT * STATS_LINE_PITCH + 4;
 
@@ -37,6 +38,14 @@ public static class DebugOverlay
     private static GCLatencyMode StatsPrevGcMode = (GCLatencyMode)(-1);
     //sentinel `long.MinValue` distinguishes "never set" from a legitimate null reading
     private static long? StatsPrevNetMs = long.MinValue;
+    private static int StatsPrevResW = -1;
+    private static int StatsPrevResH = -1;
+
+    //live nudge tool — the grabbed element, its rect at grab time (to report cumulative deltas), and the readout cache.
+    private static UIElement? NudgeTarget;
+    private static int NudgeOrigX, NudgeOrigY, NudgeOrigW, NudgeOrigH;
+    private static string NudgeLastPrint = "";
+    private static TextElement? NudgeReadout;
 
     private static readonly float[] FrameTimeHistory = new float[FRAME_TIME_HISTORY];
     private static readonly Stopwatch FrameStopwatch = new();
@@ -55,7 +64,23 @@ public static class DebugOverlay
     private static long SnappedDrawCount;
     private static long DebugDrawCount;
 
+    /// <summary>Master toggle (F11). When false the whole debug layer is inert and the numpad sub-toggles do nothing.</summary>
     public static bool IsActive { get; set; }
+
+    /// <summary>Sub-toggle: colored element border rectangles. Gated under <see cref="IsActive" />.</summary>
+    public static bool ShowUiBoxes { get; set; } = true;
+
+    /// <summary>Sub-toggle: centered element name labels. Gated under <see cref="IsActive" />.</summary>
+    public static bool ShowUiNames { get; set; } = true;
+
+    /// <summary>Sub-toggle: world-space overlays (tile outlines, hitboxes, crosshair, hover tile). Gated under <see cref="IsActive" />.</summary>
+    public static bool ShowWorld { get; set; } = true;
+
+    /// <summary>Sub-toggle: performance stats (frame graph, GC, heap, net). Gated under <see cref="IsActive" />.</summary>
+    public static bool ShowPerf { get; set; } = true;
+
+    /// <summary>True while an element is grabbed by the live nudge tool. Consumers (e.g. world movement) suppress arrow keys.</summary>
+    public static bool HasNudgeSelection => NudgeTarget is not null;
 
     /// <summary>
     ///     Screen X position for the debug overlay.
@@ -97,6 +122,75 @@ public static class DebugOverlay
         StatsPrevG2 = -1;
         StatsPrevGcMode = (GCLatencyMode)(-1);
         StatsPrevNetMs = long.MinValue;
+        StatsPrevResW = -1;
+        StatsPrevResH = -1;
+
+        //release any grabbed element so toggling the overlay off ends the nudge session
+        NudgeTarget = null;
+    }
+
+    /// <summary>
+    ///     Live UI nudge tool. While the overlay is up, NumPad5 grabs/releases the element under the cursor; arrow keys then
+    ///     move it (X/Y) and Shift+arrows resize it (W/H), one virtual px per press. The cumulative (dx, dy, dw, dh) prints
+    ///     to the console as a paste-ready <c>Rectangle</c> so a baked prefab rect can be corrected without a rebuild loop.
+    ///     Driven per-frame from <see cref="InputDispatcher.ProcessInput" />, which supplies the active screen's root + mouse.
+    /// </summary>
+    public static void UpdateNudge(UIPanel root, int mouseX, int mouseY)
+    {
+        if (!IsActive)
+            return;
+
+        //NumPad5 toggles the grab: release if holding one, else grab the deepest element under the cursor.
+        if (InputBuffer.WasKeyPressed(Keys.NumPad5))
+        {
+            if (NudgeTarget is not null)
+                NudgeTarget = null;
+            else if (InputDispatcher.HitTest(root, mouseX, mouseY) is { } hit)
+            {
+                NudgeTarget = hit;
+                NudgeOrigX = hit.X;
+                NudgeOrigY = hit.Y;
+                NudgeOrigW = hit.Width;
+                NudgeOrigH = hit.Height;
+                NudgeLastPrint = "";
+            }
+        }
+
+        if (NudgeTarget is null)
+            return;
+
+        //drop the grab if the element went away (panel hidden, relayout, screen switch)
+        if (!NudgeTarget.Visible)
+        {
+            NudgeTarget = null;
+
+            return;
+        }
+
+        var resize = InputBuffer.IsKeyHeld(Keys.LeftShift) || InputBuffer.IsKeyHeld(Keys.RightShift);
+
+        //arrows move (X/Y); shift+arrows resize (W/H). Right/Down are positive on both axes.
+        if (InputBuffer.WasKeyPressed(Keys.Right))
+            if (resize) NudgeTarget.Width++; else NudgeTarget.X++;
+
+        if (InputBuffer.WasKeyPressed(Keys.Left))
+            if (resize) NudgeTarget.Width--; else NudgeTarget.X--;
+
+        if (InputBuffer.WasKeyPressed(Keys.Down))
+            if (resize) NudgeTarget.Height++; else NudgeTarget.Y++;
+
+        if (InputBuffer.WasKeyPressed(Keys.Up))
+            if (resize) NudgeTarget.Height--; else NudgeTarget.Y--;
+
+        var name = NudgeTarget.Name.Length > 0 ? NudgeTarget.Name : NudgeTarget.GetType().Name;
+        var print = $"[\"{name}\"] = new Rectangle({NudgeTarget.X - NudgeOrigX}, {NudgeTarget.Y - NudgeOrigY}, "
+                  + $"{NudgeTarget.Width - NudgeOrigW}, {NudgeTarget.Height - NudgeOrigH})";
+
+        if (print != NudgeLastPrint)
+        {
+            NudgeLastPrint = print;
+            Console.WriteLine($"[nudge] {print}");
+        }
     }
 
     /// <summary>
@@ -106,6 +200,12 @@ public static class DebugOverlay
     public static void DrawElement(SpriteBatch spriteBatch, UIElement element)
     {
         if (!IsActive || !element.Visible)
+            return;
+
+        var isNudgeTarget = ReferenceEquals(element, NudgeTarget);
+
+        //the grabbed element always draws (highlight + name) even when the box/name sub-toggles are off
+        if (!ShowUiBoxes && !ShowUiNames && !isNudgeTarget)
             return;
 
         var sx = element.ScreenX;
@@ -133,14 +233,22 @@ public static class DebugOverlay
             _         => Color.White
         };
 
-        UIElement.DrawBorder(
-            spriteBatch,
-            new Rectangle(
-                sx,
-                sy,
-                w,
-                h),
-            color * 0.8f);
+        if (ShowUiBoxes || isNudgeTarget)
+            UIElement.DrawBorder(
+                spriteBatch,
+                new Rectangle(
+                    sx,
+                    sy,
+                    w,
+                    h),
+                isNudgeTarget ? Color.White : color * 0.8f);
+
+        //grabbed element: a bright outset border so it reads as selected regardless of the box color
+        if (isNudgeTarget)
+            UIElement.DrawBorder(spriteBatch, new Rectangle(sx - 1, sy - 1, w + 2, h + 2), Color.Yellow);
+
+        if (!ShowUiNames && !isNudgeTarget)
+            return;
 
         var name = element.Name.Length > 0
             ? element.Name
@@ -372,6 +480,26 @@ public static class DebugOverlay
                 .Update(netText, netColor);
         }
 
+        //line 7 — client resolution: actual window/backbuffer size and its scale over the virtual 640x480 target
+        var pp = ChaosGame.Device.PresentationParameters;
+        var resW = pp.BackBufferWidth;
+        var resH = pp.BackBufferHeight;
+
+        if ((StatsPrevResW != resW) || (StatsPrevResH != resH))
+        {
+            StatsPrevResW = resW;
+            StatsPrevResH = resH;
+
+            var scaleX = (float)resW / ChaosGame.VIRTUAL_WIDTH;
+            var scaleY = (float)resH / ChaosGame.VIRTUAL_HEIGHT;
+
+            //single scale when the aspect is locked (per-axis equal); show both axes when maximized off-ratio
+            var scaleText = MathF.Abs(scaleX - scaleY) < 0.01f ? $"{scaleX:F2}x" : $"{scaleX:F2}x{scaleY:F2}";
+
+            StatsTextElement[7]
+                .Update($"Res: {resW}x{resH}  ({scaleText} of {ChaosGame.VIRTUAL_WIDTH}x{ChaosGame.VIRTUAL_HEIGHT})", Color.White);
+        }
+
         var y = StatsY;
 
         for (var i = 0; i < StatsTextElement.Length; i++)
@@ -393,12 +521,44 @@ public static class DebugOverlay
 
         spriteBatch.Begin(samplerState: GlobalSettings.Sampler);
 
-        DrawPerformanceStatsGeometry(spriteBatch);
-        DrawPerformanceStatsText(spriteBatch);
+        if (ShowPerf)
+        {
+            DrawPerformanceStatsGeometry(spriteBatch);
+            DrawPerformanceStatsText(spriteBatch);
+        }
+
+        //nudge readout draws whenever something is grabbed, independent of the perf sub-toggle
+        DrawNudgeReadout(spriteBatch);
 
         spriteBatch.End();
 
         DebugDrawCount = ChaosGame.Device.Metrics.DrawCount - SnappedDrawCount;
+    }
+
+    //paste-ready (dx, dy, dw, dh) readout for the grabbed element, plus the key legend. Drawn under the stats block.
+    private static void DrawNudgeReadout(SpriteBatch spriteBatch)
+    {
+        if (NudgeTarget is null)
+            return;
+
+        var name = NudgeTarget.Name.Length > 0 ? NudgeTarget.Name : NudgeTarget.GetType().Name;
+        var text = $"NUDGE {name}  d({NudgeTarget.X - NudgeOrigX},{NudgeTarget.Y - NudgeOrigY},"
+                 + $"{NudgeTarget.Width - NudgeOrigW},{NudgeTarget.Height - NudgeOrigH})  arrows=move shift=size num5=drop";
+
+        NudgeReadout ??= new TextElement();
+        NudgeReadout.Update(text, Color.Yellow);
+
+        if (!NudgeReadout.HasContent)
+            return;
+
+        var ry = (int)(ShowPerf ? StatsY + STATS_BG_HEIGHT + 4 : GraphY);
+
+        UIElement.DrawRect(
+            spriteBatch,
+            new Rectangle((int)StatsX - 2, ry - 1, NudgeReadout.Width + 4, NudgeReadout.Height + 2),
+            Color.Black * 0.66f);
+
+        NudgeReadout.Draw(spriteBatch, new Vector2(StatsX, ry));
     }
 
     /// <summary>

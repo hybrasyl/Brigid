@@ -591,6 +591,15 @@ public sealed partial class WorldScreen
     /// </summary>
     private void OnRootKeyDown(KeyDownEvent e)
     {
+        //while a UI element is grabbed by the debug nudge tool, arrow keys drive the nudge — swallow them here so they
+        //don't also move the player or scroll panels.
+        if (Controls.Generic.DebugOverlay.HasNudgeSelection && e.Key is Keys.Up or Keys.Down or Keys.Left or Keys.Right)
+        {
+            e.Handled = true;
+
+            return;
+        }
+
         //alt+enter — cycle window size
         if ((e.Key == Keys.Enter) && e.Modifiers.HasFlag(KeyModifiers.Alt))
         {
