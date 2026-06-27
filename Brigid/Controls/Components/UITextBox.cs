@@ -311,7 +311,7 @@ public class UITextBox : UIElement
         {
             var cLineText = GetLineText(cursorLine);
             var colOffset = Math.Min(CursorPosition - LineStarts[cursorLine], cLineText.Length);
-            var cursorX = textX + (colOffset > 0 ? TextRenderer.MeasureWidth(cLineText[..colOffset]) + 1 : 0);
+            var cursorX = textX + (colOffset > 0 ? TextRenderer.MeasureWidth(cLineText[..colOffset]) : 0);
             var cursorY = textY + (cursorLine - firstLine) * TextRenderer.CHAR_HEIGHT;
 
             DrawRectClipped(
@@ -399,7 +399,7 @@ public class UITextBox : UIElement
         var clampedPos = Math.Min(CursorPosition, displayText.Length);
 
         if (clampedPos > 0)
-            cursorX += TextRenderer.MeasureWidth(displayText[..clampedPos]) + 1;
+            cursorX += TextRenderer.MeasureWidth(displayText[..clampedPos]);
 
         DrawRectClipped(
             spriteBatch,

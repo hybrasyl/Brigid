@@ -27,12 +27,12 @@ public sealed class EventMetadataEntryControl : PrefabPanel
         NameLabel?.ForegroundColor = LegendColors.White;
         NameLabel?.PaddingLeft = 0;
         NameLabel?.PaddingRight = 0;
-        NameLabel?.TruncateWithEllipsis = false;
+        NameLabel?.ShrinkToFit = false;
         
         LevelLabel = CreateLabel("LEVEL");
         LevelLabel?.Width = 150;
         LevelLabel?.ForegroundColor = LegendColors.White;
-        LevelLabel?.TruncateWithEllipsis = false;
+        LevelLabel?.ShrinkToFit = false;
     }
 
     public void Clear()

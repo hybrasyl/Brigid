@@ -410,10 +410,10 @@ public sealed class ChaosGame : Game
         Screens = new ScreenManager(this);
 
         TextureConverter.Device = GraphicsDevice;
-        //construct FontEngine up front: the per-frame native pass needs a non-null FontEngine.Instance even while the
-        //launcher is up (it draws via SystemFontText, not FontEngine). FontIndex isn't loaded yet, so this uses the
-        //default face; the saved face is applied via SetActiveFont in FinishAssetInitialization once ClientSettings loads.
-        FontEngine.Initialize(ClientSettings.FontIndex);
+        //construct FontEngine up front so the per-frame native UI pass always has a non-null FontEngine.Instance, even
+        //while the launcher is up (it draws via SystemFontText, not FontEngine). Starts on the default face; the saved
+        //face is applied in FinishAssetInitialization once ClientSettings has loaded.
+        FontEngine.Initialize();
         UiRenderer.Instance = new UiRenderer(GraphicsDevice);
 
         //the launcher (server select + asset path) renders without any DA assets and is shown on every normal launch;
@@ -626,12 +626,36 @@ public sealed class ChaosGame : Game
         var scaleY = (float)ppt.BackBufferHeight / VIRTUAL_HEIGHT;
         InputBuffer.SetVirtualScale(scaleX, scaleY);
 
+        //keep text measurement in sync with the native draw size so right-aligned multi-glyph values land flush
+        FontEngine.Instance.SetLayoutScale(scaleX, scaleY);
+
         //freeze buffered input for this frame before anything reads it
         InputBuffer.Update(IsActive);
 
         //f11 — toggle debug overlay (handled globally before screen update)
         if (InputBuffer.WasKeyPressed(Keys.F11))
             DebugOverlay.Toggle();
+
+        //debug key layer — numpad acts as per-feature toggles, but only while the overlay is up. Gating the reads on
+        //IsActive keeps the numpad free for normal use when debug is off.
+        if (DebugOverlay.IsActive)
+        {
+            if (InputBuffer.WasKeyPressed(Keys.NumPad1))
+                DebugOverlay.ShowUiBoxes ^= true;
+
+            if (InputBuffer.WasKeyPressed(Keys.NumPad2))
+                DebugOverlay.ShowUiNames ^= true;
+
+            if (InputBuffer.WasKeyPressed(Keys.NumPad3))
+                DebugOverlay.ShowWorld ^= true;
+
+            if (InputBuffer.WasKeyPressed(Keys.NumPad4))
+                DebugOverlay.ShowPerf ^= true;
+
+            //numpad 0 — restore all sub-toggles (escape hatch after muting individual layers)
+            if (InputBuffer.WasKeyPressed(Keys.NumPad0))
+                DebugOverlay.ShowUiBoxes = DebugOverlay.ShowUiNames = DebugOverlay.ShowWorld = DebugOverlay.ShowPerf = true;
+        }
 
         //f12 — screenshot
         if (InputBuffer.WasKeyPressed(Keys.F12))

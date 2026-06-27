@@ -53,15 +53,18 @@ public sealed class WorldMapNode : UIPanel
         Width = BOX_SIZE + BOX_GAP + textWidth;
         Height = Math.Max(BOX_SIZE, GLYPH_HEIGHT);
 
+        //offset -1 / size +2 gives the 8-way Outline ring room inside the label's own clip; the glyph (drawn at the
+        //+1 margin) still lands at the original position, so only the dark halo extends 1px past the old bounds.
         Label = new UILabel
         {
             Name = "NodeLabel",
-            X = BOX_SIZE + BOX_GAP,
-            Y = Height - GLYPH_HEIGHT,
-            Width = textWidth,
-            Height = GLYPH_HEIGHT,
+            X = BOX_SIZE + BOX_GAP - 1,
+            Y = Height - GLYPH_HEIGHT - 1,
+            Width = textWidth + 2,
+            Height = GLYPH_HEIGHT + 2,
             Text = text,
             ForegroundColor = Color.White,
+            ShadowStyle = ShadowStyle.Outline,
             PaddingLeft = 0,
             PaddingRight = 0
         };

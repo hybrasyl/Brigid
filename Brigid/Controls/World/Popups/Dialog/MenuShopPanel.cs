@@ -207,7 +207,7 @@ public sealed class MenuShopPanel : PrefabPanel
         PageLabel?.PaddingLeft = 0;
         PageLabel?.PaddingRight = 0;
         PageLabel?.HorizontalAlignment = HorizontalAlignment.Center;
-        PageLabel?.TruncateWithEllipsis = false;
+        PageLabel?.ShrinkToFit = false;
         PageLabel?.ForegroundColor = LegendColors.White;
     }
 

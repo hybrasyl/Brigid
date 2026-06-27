@@ -16,6 +16,9 @@ namespace Brigid.Controls.Components;
 // ReSharper disable once ClassCanBeSealed.Global
 public class UILabel : UIElement
 {
+    //tightest letter spacing (px) shrink-to-fit will pull in before giving up and letting the clip trim the overflow.
+    private const float MIN_CHAR_SPACING = -4f;
+
     private readonly TextElement TextElement = new();
     private int CursorPosition;
     private int SelectionAnchor;
@@ -48,7 +51,20 @@ public class UILabel : UIElement
     /// </summary>
     public int ScrollOffset { get; set; }
 
-    public ShadowStyle ShadowStyle { get; set; }
+    //delegate to TextElement and re-invalidate on change so the shadow/outline takes effect immediately — even when set
+    //after Text in an object initializer (otherwise the glyphs stay measured/cached without it until the next invalidate).
+    public ShadowStyle ShadowStyle
+    {
+        get => TextElement.ShadowStyle;
+        set
+        {
+            if (TextElement.ShadowStyle == value)
+                return;
+
+            TextElement.ShadowStyle = value;
+            Invalidate(TextElement.Text, TextElement.Color);
+        }
+    }
 
     public string Text
     {
@@ -58,21 +74,17 @@ public class UILabel : UIElement
 
     public float Opacity { get; set; } = 1f;
     public VerticalAlignment VerticalAlignment { get; set; }
-    public bool TruncateWithEllipsis { get; set; } = true;
+    /// <summary>
+    ///     When a single (non-wrapped) line overflows its box, shrink the whole text to fit instead of letting it
+    ///     overflow/clip. Set false where natural overflow is wanted (e.g. scrolling labels, fixed-width columns).
+    /// </summary>
+    public bool ShrinkToFit { get; set; } = true;
     public bool WordWrap { get; set; }
 
     /// <summary>
     ///     Total pixel height of the rendered content. For wrapped text, this may exceed the label bounds.
     /// </summary>
     public int ContentHeight => TextElement.Height;
-
-    public UILabel()
-    {
-        PaddingLeft = 1;
-        PaddingRight = 1;
-        PaddingTop = 1;
-        PaddingBottom = 1;
-    }
 
     public override void Draw(SpriteBatch spriteBatch)
     {
@@ -115,19 +127,30 @@ public class UILabel : UIElement
                 if (TextElement.WrappedLines[lineIdx].Length > 0)
                     TextElement.Draw(spriteBatch, new Vector2(innerX, lineY), ClipRect, TextElement.WrappedLines[lineIdx], Opacity);
             }
-        } else if (TruncateWithEllipsis && (TextElement.Width > innerW))
+        } else if (ShrinkToFit && (TextElement.Width > innerW))
         {
-            //ellipsis truncation — find longest prefix that fits with "..."
-            var text = TextElement.Text;
-            var ellipsisWidth = TextRenderer.MeasureWidth("...");
-            var maxTextWidth = innerW - ellipsisWidth;
-            var truncLen = text.Length;
+            //fit by tightening the letter spacing (negative tracking) so the whole text shows, rather than truncating
+            //with an ellipsis. Floored so glyphs don't pile up; the clip trims any remainder. Keeps glyph size.
+            //Spread the tightening over the glyph COUNT, not n-1 gaps: FontStashSharp applies characterSpacing once per
+            //glyph (matching TextRenderer's per-run advance), so sizing over n-1 makes fittedWidth overshoot the real
+            //draw width and leaves ~1px of slack on the right while the text pins left. Over n, predicted == drawn.
+            var units = Math.Max(1, PlainText.Length);
+            var spacing = Math.Max(MIN_CHAR_SPACING, (float)(innerW - TextElement.Width) / units);
+            var fittedWidth = TextElement.Width + spacing * units;
 
-            while ((truncLen > 0) && (TextRenderer.MeasureWidth(text[..truncLen]) > maxTextWidth))
-                truncLen--;
+            var textX = HorizontalAlignment switch
+            {
+                HorizontalAlignment.Center => innerX + (int)((innerW - fittedWidth) / 2f),
+                HorizontalAlignment.Right  => innerX + (int)(innerW - fittedWidth),
+                _                          => innerX
+            };
+            var textY = innerY + (int)(((VerticalAlignment == VerticalAlignment.Top ? TextElement.Height : innerH) - TextRenderer.CHAR_HEIGHT) / 2f);
+            var pos = new Vector2(textX, textY);
 
-            var truncated = truncLen > 0 ? text[..truncLen] + "..." : "...";
-            TextElement.Draw(spriteBatch, new Vector2(innerX, innerY + (int)(((VerticalAlignment == VerticalAlignment.Top ? TextElement.Height : innerH) - TextRenderer.CHAR_HEIGHT) / 2f)), ClipRect, truncated, Opacity);
+            if (ClipRect.IsEmpty)
+                TextRenderer.DrawText(spriteBatch, pos, TextElement.Text, TextElement.Color, ColorCodesEnabled, Opacity, spacing);
+            else
+                TextRenderer.DrawTextClipped(spriteBatch, pos, TextElement.Text, TextElement.Color, ClipRect, ColorCodesEnabled, Opacity, spacing);
         } else
         {
             var bounds = new Rectangle(

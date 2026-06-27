@@ -95,34 +95,34 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
 
         //stat labels — right-aligned numeric values
         StrLabel = CreateLabel("N_STR", HorizontalAlignment.Right);
-        StrLabel?.TruncateWithEllipsis = false;
+        StrLabel?.ShrinkToFit = false;
         
         IntLabel = CreateLabel("N_INT", HorizontalAlignment.Right);
-        IntLabel?.TruncateWithEllipsis = false;
+        IntLabel?.ShrinkToFit = false;
         
         WisLabel = CreateLabel("N_WIS", HorizontalAlignment.Right);
-        WisLabel?.TruncateWithEllipsis = false;
+        WisLabel?.ShrinkToFit = false;
         
         ConLabel = CreateLabel("N_CON", HorizontalAlignment.Right);
-        ConLabel?.TruncateWithEllipsis = false;
+        ConLabel?.ShrinkToFit = false;
         
         DexLabel = CreateLabel("N_DEX", HorizontalAlignment.Right);
-        DexLabel?.TruncateWithEllipsis = false;
+        DexLabel?.ShrinkToFit = false;
         
         AcLabel = CreateLabel("N_AC", HorizontalAlignment.Right);
-        AcLabel?.TruncateWithEllipsis = false;
+        AcLabel?.ShrinkToFit = false;
 
         //player info labels — left-aligned text
         NameLabel = CreateLabel("NAME");
         ClassLabel = CreateLabel("CLASSTEXT");
         ClanLabel = CreateLabel("CLANTEXT");
-        ClanLabel?.TruncateWithEllipsis = false;
+        ClanLabel?.ShrinkToFit = false;
         
         ClanTitleLabel = CreateLabel("CLANTITLETEXT");
-        ClanTitleLabel?.TruncateWithEllipsis = false;
+        ClanTitleLabel?.ShrinkToFit = false;
         
         TitleLabel = CreateLabel("TITLETEXT");
-        TitleLabel?.TruncateWithEllipsis = false;
+        TitleLabel?.ShrinkToFit = false;
 
         //group button — single button that swaps textures based on groupopen state.
         //groupbtn prefab has the "open/recruiting" images, groupbtn_disabled has the "closed" images.

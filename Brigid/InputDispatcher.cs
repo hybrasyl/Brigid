@@ -229,6 +229,9 @@ public sealed class InputDispatcher
         var mouseY = InputBuffer.MouseY;
         var modifiers = InputBuffer.CurrentModifiers;
 
+        //live UI nudge tool (F11 debug layer) — grabs/moves/resizes the element under the cursor against the art
+        Controls.Generic.DebugOverlay.UpdateNudge(root, mouseX, mouseY);
+
         //mouse blocking: when a textbox has explicit focus, restrict mouse events
         //to the panel containing the focused textbox. clicks outside are consumed.
         var mouseBlocked = false;
