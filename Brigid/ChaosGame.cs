@@ -27,6 +27,9 @@ public sealed class ChaosGame : Game
     public const int VIRTUAL_HEIGHT = 480;
     private const float ASPECT_RATIO = (float)VIRTUAL_WIDTH / VIRTUAL_HEIGHT;
 
+    //the window opens at this integer multiple of the virtual resolution (2 → 1280×960); the F-key cycle continues from here
+    private const int DEFAULT_WINDOW_MULTIPLIER = 2;
+
     private readonly GraphicsDeviceManager Graphics;
     private string MetaFilePath => Path.Combine(GlobalSettings.DataPath, "metafile");
     private readonly Dictionary<string, uint> MetaPendingChecksums = new(StringComparer.OrdinalIgnoreCase);
@@ -43,7 +46,7 @@ public sealed class ChaosGame : Game
     private RenderTarget2D RenderTarget = null!;
     private bool ResizingInProgress;
     private CancellationTokenSource? LatencyPollCts;
-    private int WindowSizeMultiplier = 1;
+    private int WindowSizeMultiplier = DEFAULT_WINDOW_MULTIPLIER;
     private SpriteBatch SpriteBatch = null!;
 
     /// <summary>
@@ -104,8 +107,8 @@ public sealed class ChaosGame : Game
 
         Graphics = new GraphicsDeviceManager(this)
         {
-            PreferredBackBufferWidth = VIRTUAL_WIDTH,
-            PreferredBackBufferHeight = VIRTUAL_HEIGHT,
+            PreferredBackBufferWidth = VIRTUAL_WIDTH * DEFAULT_WINDOW_MULTIPLIER,
+            PreferredBackBufferHeight = VIRTUAL_HEIGHT * DEFAULT_WINDOW_MULTIPLIER,
             PreferredDepthStencilFormat = DepthFormat.Depth24Stencil8,
             SynchronizeWithVerticalRetrace = false
         };
