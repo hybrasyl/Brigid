@@ -4,7 +4,6 @@ using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
-using Chaos.Networking.Entities.Server;
 using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;

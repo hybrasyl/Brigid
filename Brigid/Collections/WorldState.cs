@@ -243,6 +243,9 @@ public static class WorldState
             {
                 case CreatureWorldObject creature:
                     entity.Type = ClientEntityType.Creature;
+                    //wire creature sprites carry the 0x4000 creature-range offset; strip it so mns/asset-pack
+                    //lookups (which use the real sprite id) resolve.
+                    entity.SpriteId = (ushort)(creature.Sprite - 0x4000);
                     entity.CreatureType = (CreatureType)creature.Type;
                     entity.Direction = (Direction)creature.Direction;
                     entity.Name = creature.Name;

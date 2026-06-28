@@ -6,9 +6,9 @@ using Chaos.DarkAges.Definitions;
 using Chaos.Geometry;
 using Chaos.Geometry.Abstractions;
 using Chaos.Pathfinding;
-using DALib.Cryptography;
 using DALib.Data;
 using DALib.Networking.Packets.Server;
+using DALib.Networking.Wire;
 using DALib.Extensions;
 using Pathfinder = Chaos.Pathfinding.Pathfinder;
 using TileFlags = DALib.Definitions.TileFlags;
@@ -311,7 +311,7 @@ public sealed partial class WorldScreen
             if (fileBytes.Length != (width * height * 6))
                 return null;
 
-            if (CRC16.Calculate(fileBytes) != serverCheckSum)
+            if (CrcCcitt.Compute(fileBytes) != serverCheckSum)
                 return null;
 
             //parse in-place — file format is le int16 x3 per tile, y-major x-minor

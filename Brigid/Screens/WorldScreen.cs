@@ -139,7 +139,7 @@ public sealed partial class WorldScreen : IScreen
     private GroupTabControl GroupPanel = null!;
     private HotkeyHelpControl HotkeyHelp = null!;
     private PanelSlot? HoveredInventorySlot;
-    private bool IsGameMaster;
+    private bool IsGameMaster => WorldState.Attributes.IsGameMaster;
     private ItemTooltipControl ItemTooltip = null!;
     private LargeWorldHudControl LargeHud = null!;
     private TileClickTracker LeftClickTracker;

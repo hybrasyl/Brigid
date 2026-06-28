@@ -1,5 +1,4 @@
 #region
-using Chaos.Networking.Entities.Server;
 using DALib.Networking.Packets.Server;
 #endregion
 

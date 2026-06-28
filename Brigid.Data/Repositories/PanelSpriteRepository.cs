@@ -36,6 +36,9 @@ public sealed class PanelSpriteRepository : RepositoryBase
 
     public Palettized<EpfFrame>? GetItemSprite(int itemId)
     {
+        //server-sent item sprites carry the 0x8000 "item display" flag; strip it to get the EPF index.
+        itemId &= 0x7FFF;
+
         if (itemId == 0)
             return null;
 
@@ -43,7 +46,7 @@ public sealed class PanelSpriteRepository : RepositoryBase
         var spriteSheet = GetItemSpriteSheet(fileId);
         var frameId = (itemId - 1) % ITEMS_PER_FILE;
 
-        if (!spriteSheet.TryGetValue(frameId, out var frame))
+        if (spriteSheet is null || !spriteSheet.TryGetValue(frameId, out var frame))
             return null;
 
         return new Palettized<EpfFrame>
@@ -53,8 +56,10 @@ public sealed class PanelSpriteRepository : RepositoryBase
         };
     }
 
-    private EpfView GetItemSpriteSheet(int fileId)
-        => GetOrCreate(ConstructKeyForItemSpriteSheet(fileId), () => EpfView.FromArchive($"item{fileId:D3}", DatArchives.Legend));
+    private EpfView? GetItemSpriteSheet(int fileId)
+        => DatArchives.Legend.TryGetValue($"item{fileId:D3}.epf", out var entry)
+            ? GetOrCreate(ConstructKeyForItemSpriteSheet(fileId), () => EpfView.FromEntry(entry))
+            : null;
 
     public Palettized<EpfFrame>? GetSkillIcon(int spriteId) => GetIconFrame(spriteId, "skill001");
     public Palettized<EpfFrame>? GetSpellIcon(int spriteId) => GetIconFrame(spriteId, "spell001");

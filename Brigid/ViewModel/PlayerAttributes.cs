@@ -61,6 +61,12 @@ public sealed class PlayerAttributes
     public bool HasUnreadMail { get; private set; }
 
     /// <summary>
+    ///     True when the 0x08 flag byte's movement-mode bits (high pair) are set. Hybrasyl sets these via
+    ///     <c>GameMasterA</c> when collisions are disabled; gates GM wall-clip and pathfinding bypass.
+    /// </summary>
+    public bool IsGameMaster { get; private set; }
+
+    /// <summary>
     ///     Fired when attributes are updated by the server.
     /// </summary>
     public event ChangedHandler? Changed;
@@ -122,6 +128,7 @@ public sealed class PlayerAttributes
         }
 
         HasUnreadMail = pkt.UnreadMail;
+        IsGameMaster = pkt.MovementMode != 0;
 
         Changed?.Invoke();
     }
