@@ -6,6 +6,7 @@ using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Chaos.Extensions.Common;
 using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -446,30 +447,31 @@ public sealed class MenuShopPanel : PrefabPanel
     public event ItemHoverExitHandler? OnItemHoverExit;
     public event ItemSelectedHandler? OnItemSelected;
 
-    private void PopulateItems(DisplayMenuArgs args)
+    private void PopulateItems(NpcMenuPacket pkt)
     {
-        if (args.Items is null)
+        if (pkt.Menu is not ItemListMenu menu)
             return;
 
-        var itemList = args.Items as IList<ItemInfo> ?? args.Items.ToList();
-        var names = new string[itemList.Count];
+        var items = menu.Items;
+        var names = new string[items.Count];
 
-        for (var i = 0; i < itemList.Count; i++)
-            names[i] = itemList[i].Name;
+        for (var i = 0; i < items.Count; i++)
+            names[i] = items[i].Name;
 
         var metadata = DataContext.MetaFiles.GetItemMetadata(names);
+        byte slot = 1;
 
-        foreach (var item in itemList)
+        foreach (var item in items)
         {
-            var icon = UiRenderer.Instance!.GetItemIcon(item.Sprite, item.Color);
+            var icon = UiRenderer.Instance!.GetItemIcon(item.Sprite, (DisplayColor)item.Color);
             metadata.TryGetValue(item.Name, out var meta);
 
             Entries.Add(
                 new MerchantEntry(
                     item.Name,
                     icon,
-                    item.Cost ?? 0,
-                    item.Slot,
+                    (int)item.Cost,
+                    slot++,
                     meta?.Category ?? string.Empty,
                     meta?.Description ?? string.Empty,
                     meta?.Level,
@@ -478,15 +480,15 @@ public sealed class MenuShopPanel : PrefabPanel
         }
     }
 
-    private void PopulatePlayerItems(DisplayMenuArgs args)
+    private void PopulatePlayerItems(NpcMenuPacket pkt)
     {
-        if (args.Slots is null)
+        if (pkt.Menu is not PlayerItemListMenu menu)
             return;
 
         //collect names for metadata batch lookup
         var names = new List<string>();
 
-        foreach (var slot in args.Slots)
+        foreach (var slot in menu.Slots)
         {
             ref readonly var slotData = ref WorldState.Inventory.GetSlot(slot);
 
@@ -496,7 +498,7 @@ public sealed class MenuShopPanel : PrefabPanel
 
         var metadata = DataContext.MetaFiles.GetItemMetadata(names.ToArray());
 
-        foreach (var slot in args.Slots)
+        foreach (var slot in menu.Slots)
         {
             ref readonly var slotData = ref WorldState.Inventory.GetSlot(slot);
 
@@ -561,39 +563,43 @@ public sealed class MenuShopPanel : PrefabPanel
         }
     }
 
-    private void PopulateSkills(DisplayMenuArgs args)
+    private void PopulateSkills(NpcMenuPacket pkt)
     {
-        if (args.Skills is null)
+        if (pkt.Menu is not SkillListMenu menu)
             return;
 
-        foreach (var skill in args.Skills)
+        byte slot = 1;
+
+        foreach (var skill in menu.Skills)
         {
-            var icon = UiRenderer.Instance!.GetSkillIcon(skill.Sprite).Texture;
+            var icon = UiRenderer.Instance!.GetSkillIcon(skill.Icon).Texture;
 
             Entries.Add(
                 new MerchantEntry(
                     skill.Name,
                     icon,
                     0,
-                    skill.Slot));
+                    slot++));
         }
     }
 
-    private void PopulateSpells(DisplayMenuArgs args)
+    private void PopulateSpells(NpcMenuPacket pkt)
     {
-        if (args.Spells is null)
+        if (pkt.Menu is not SpellListMenu menu)
             return;
 
-        foreach (var spell in args.Spells)
+        byte slot = 1;
+
+        foreach (var spell in menu.Spells)
         {
-            var icon = UiRenderer.Instance!.GetSpellIcon(spell.Sprite).Texture;
+            var icon = UiRenderer.Instance!.GetSpellIcon(spell.Icon).Texture;
 
             Entries.Add(
                 new MerchantEntry(
                     spell.Name,
                     icon,
                     0,
-                    spell.Slot));
+                    slot++));
         }
     }
 
@@ -625,34 +631,34 @@ public sealed class MenuShopPanel : PrefabPanel
     /// <summary>
     ///     Shows the merchant panel for a DisplayMenuArgs with one of the 6 merchant menu types.
     /// </summary>
-    public void ShowMerchant(DisplayMenuArgs args)
+    public void ShowMerchant(NpcMenuPacket pkt)
     {
-        CurrentMenuType = args.MenuType;
-        CurrentNpcName = args.Name;
+        CurrentMenuType = (MenuType)(byte)pkt.MenuType;
+        CurrentNpcName = pkt.Name;
 
         ClearEntries();
         CurrentPage = 0;
         SelectedIndex = -1;
 
-        switch (args.MenuType)
+        switch ((MenuType)(byte)pkt.MenuType)
         {
             case MenuType.ShowItems:
-                PopulateItems(args);
+                PopulateItems(pkt);
 
                 break;
 
             case MenuType.ShowPlayerItems:
-                PopulatePlayerItems(args);
+                PopulatePlayerItems(pkt);
 
                 break;
 
             case MenuType.ShowSkills:
-                PopulateSkills(args);
+                PopulateSkills(pkt);
 
                 break;
 
             case MenuType.ShowSpells:
-                PopulateSpells(args);
+                PopulateSpells(pkt);
 
                 break;
 

@@ -2,7 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Data;
 using Chaos.DarkAges.Definitions;
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using SkiaSharp;
@@ -236,19 +236,19 @@ public sealed class OtherProfileEquipmentTab : PrefabPanel
     /// <summary>
     ///     Populates all equipment slots from the packet data.
     /// </summary>
-    public void SetEquipment(IDictionary<EquipmentSlot, ItemInfo?> equipment)
+    public void SetEquipment(IList<ProfileEquipmentSlot> equipment)
     {
         ClearAllSlots();
 
-        foreach ((var slot, var item) in equipment)
+        foreach (var slot in equipment)
         {
-            if (item is null || (item.Sprite == 0))
+            if (slot.Sprite == 0)
                 continue;
 
-            if (!SlotVisuals.TryGetValue(slot, out var visual))
+            if (!SlotVisuals.TryGetValue((EquipmentSlot)(byte)slot.Slot, out var visual))
                 continue;
 
-            var texture = UiRenderer.Instance!.GetItemIcon(item.Sprite, item.Color);
+            var texture = UiRenderer.Instance!.GetItemIcon(slot.Sprite, (DisplayColor)slot.Color);
             visual.ItemTexture = texture;
             visual.Image.Texture = texture;
         }

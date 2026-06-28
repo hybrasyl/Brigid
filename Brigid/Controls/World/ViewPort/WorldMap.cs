@@ -1,7 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Networking;
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -87,7 +87,7 @@ public sealed class WorldMap : UIPanel
 
     private Texture2D LoadFieldImage(string fieldName) => UiRenderer.Instance!.GetFieldImage(fieldName);
 
-    public void Show(WorldMapArgs args)
+    public void Show(WorldMapPacket args)
     {
         ClearNodes();
         ClearBackground();
@@ -105,12 +105,12 @@ public sealed class WorldMap : UIPanel
                 i,
                 node.Text,
                 node.MapId,
-                node.DestinationPoint.X,
-                node.DestinationPoint.Y,
+                node.DestinationX,
+                node.DestinationY,
                 node.CheckSum)
             {
-                X = node.ScreenPosition.X,
-                Y = node.ScreenPosition.Y
+                X = node.X,
+                Y = node.Y
             };
 
             NodeControls.Add(control);

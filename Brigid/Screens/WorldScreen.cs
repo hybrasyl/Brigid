@@ -744,7 +744,6 @@ public sealed partial class WorldScreen : IScreen
         Game.Connection.OnDisplayAisling -= HandleDisplayAisling;
         Game.Connection.OnRemoveEntity -= HandleRemoveEntity;
         Game.Connection.OnClientWalkResponse -= HandleClientWalkResponse;
-        Game.Connection.OnAttributes -= HandleAttributes;
         Game.Connection.OnDisplayPublicMessage -= HandleDisplayPublicMessage;
         Game.Connection.OnServerMessage -= HandleServerMessage;
         WorldState.NpcInteraction.DialogChanged -= HandleDialogChanged;

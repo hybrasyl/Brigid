@@ -1,6 +1,6 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Networking;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 #endregion
 
@@ -14,7 +14,7 @@ public sealed class ServerSelectControl : PrefabPanel
     private const int DESC_X = 108;
     private List<(UILabel Name, UILabel Description)> ServerLabels = [];
 
-    private List<ServerTableEntry> Servers = [];
+    private IList<ServerEntry> Servers = [];
 
     public ServerSelectControl()
         : base("_nsvr")
@@ -25,7 +25,7 @@ public sealed class ServerSelectControl : PrefabPanel
 
     public event ServerSelectedHandler? OnServerSelected;
 
-    public void SetServers(List<ServerTableEntry> entries)
+    public void SetServers(IList<ServerEntry> entries)
     {
         //remove previous server labels
         foreach ((var nameLabel, var descLabel) in ServerLabels)
@@ -61,7 +61,7 @@ public sealed class ServerSelectControl : PrefabPanel
                 Y = FIRST_ROW_Y + i * ROW_HEIGHT,
                 Width = Width - DESC_X,
                 Height = ROW_HEIGHT,
-                Text = server.Description,
+                Text = string.Empty,
                 ForegroundColor = Color.LightGray,
                 PaddingLeft = 0,
                 PaddingTop = 0

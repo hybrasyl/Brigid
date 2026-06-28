@@ -15,8 +15,8 @@ using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Chaos.Extensions.Common;
 using Chaos.Geometry.Abstractions.Definitions;
-using Chaos.Networking.Entities.Server;
 using DALib.Drawing;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -28,7 +28,7 @@ public sealed partial class WorldScreen
     #region Server Event Handlers
     //--- entity display / removal ---
 
-    private void HandleDisplayAisling(DisplayAislingArgs args)
+    private void HandleDisplayAisling(DisplayUserPacket args)
     {
         //update player name in hud when the player's own aisling is displayed
         if (args.Id == Game.Connection.AislingId)
@@ -207,17 +207,14 @@ public sealed partial class WorldScreen
 
     //--- attributes ---
 
-    private void HandleAttributes(AttributesArgs args)
-        => IsGameMaster = args.StatUpdateType.HasFlag(StatUpdateType.GameMasterA)
-                          || args.StatUpdateType.HasFlag(StatUpdateType.GameMasterB);
-
     //--- chat / messages ---
 
-    private void HandleDisplayPublicMessage(DisplayPublicMessageArgs args)
+    private void HandleDisplayPublicMessage(PublicMessagePacket args)
     {
+        var messageType = (PublicMessageType)args.Type;
         var entityExists = WorldState.GetEntity(args.SourceId) is not null;
 
-        if (args.PublicMessageType == PublicMessageType.Chant)
+        if (messageType == PublicMessageType.Chant)
         {
             if (entityExists)
                 Overlays.AddChantOverlay(args.SourceId, args.Message);
@@ -228,7 +225,7 @@ public sealed partial class WorldScreen
         var entity = WorldState.GetEntity(args.SourceId);
         var isNpc = entity is not null && entity.Type is not ClientEntityType.Aisling;
 
-        var color = args.PublicMessageType switch
+        var color = messageType switch
         {
             PublicMessageType.Shout => TextColors.Shout,
             _                       => LegendColors.White
@@ -240,13 +237,13 @@ public sealed partial class WorldScreen
         if (entity is null)
             return;
 
-        var isShout = args.PublicMessageType == PublicMessageType.Shout;
+        var isShout = messageType == PublicMessageType.Shout;
         Overlays.AddChatBubble(args.SourceId, args.Message, isShout);
     }
 
-    private void HandleServerMessage(ServerMessageArgs args)
+    private void HandleServerMessage(SystemMessagePacket args)
     {
-        switch (args.ServerMessageType)
+        switch ((ServerMessageType)(byte)args.MessageType)
         {
             case ServerMessageType.Whisper:
                 WorldState.Chat.AddMessage(args.Message, TextColors.Whisper);
@@ -384,7 +381,7 @@ public sealed partial class WorldScreen
     {
         var dialog = WorldState.NpcInteraction.CurrentDialog;
 
-        if (dialog is null || (dialog.DialogType == DialogType.CloseDialog))
+        if (dialog is null || (dialog.DialogType == NpcDialogType.Close))
         {
             NpcSession.HideAll();
 
@@ -646,17 +643,27 @@ public sealed partial class WorldScreen
 
     private void HandleGroupInviteReceived()
     {
-        var invite = WorldState.GroupInvite.Current;
-
-        if (invite is null)
+        if (WorldState.GroupInvite.Current is not { } response)
             return;
 
-        var sourceName = invite.SourceName;
-
-        switch (invite.ServerGroupSwitch)
+        switch (response)
         {
-            case ServerGroupSwitch.Invite:
+            case GroupPromptPacket prompt:
             {
+                var sourceName = prompt.SourceName;
+
+                //RecruitAsk: request-to-join. Retail behavior: the leader's client silently
+                //auto-forwards as TryInvite with no UI prompt. Ref: docs/research/group-ui-original-re.md
+                //§5.1 / §7.1 (verified round-2). The orange-bar notice is a QoL addition retail omits.
+                if (prompt.ResponseType == GroupResponseType.RecruitAsk)
+                {
+                    WorldState.Chat.AddOrangeBarMessage($"{sourceName} wants to join your group.");
+                    Game.Connection.SendGroupInvite(ClientGroupSwitch.TryInvite, sourceName);
+
+                    break;
+                }
+
+                //Ask: a standard group invitation.
                 WorldState.Chat.AddOrangeBarMessage($"{sourceName} invites you to join a group.");
 
                 if (!ClientSettings.UseGroupWindow)
@@ -671,32 +678,17 @@ public sealed partial class WorldScreen
                 break;
             }
 
-            case ServerGroupSwitch.RequestToJoin:
+            case GroupRecruitInfoPacket recruit:
             {
-                // Retail behavior: the leader's client silently auto-forwards as TryInvite
-                // with no UI prompt. Ref: docs/research/group-ui-original-re.md §5.1 / §7.1
-                // (verified round-2). The orange-bar notice is a QoL addition retail omits.
-                WorldState.Chat.AddOrangeBarMessage($"{sourceName} wants to join your group.");
-                Game.Connection.SendGroupInvite(ClientGroupSwitch.TryInvite, sourceName);
-
-                break;
-            }
-
-            case ServerGroupSwitch.ShowGroupBox:
-            {
-                if (invite.GroupBoxInfo is not { } groupBoxInfo)
-                {
-                    WorldState.Chat.AddOrangeBarMessage($"{sourceName} has an open group box.");
-
-                    break;
-                }
+                var info = recruit.Info;
+                var sourceName = info.RecruiterName;
 
                 if (sourceName.EqualsI(WorldState.PlayerName))
                 {
                     WorldState.Group.MarkGroupBoxActive();
-                    GroupPanel.ShowRecruitOwnerEdit(groupBoxInfo);
+                    GroupPanel.ShowRecruitOwnerEdit(info);
                 } else
-                    GroupBoxViewer.ShowAsViewer(sourceName, groupBoxInfo);
+                    GroupBoxViewer.ShowAsViewer(sourceName, info);
 
                 break;
             }
@@ -774,12 +766,13 @@ public sealed partial class WorldScreen
         File.WriteAllText(profilePath, text);
     }
 
-    private void HandleSelfProfile(SelfProfileArgs args)
+    private void HandleSelfProfile(SelfProfilePacket args)
     {
-        WorldState.IsMaster = args.EnableMasterQuestMetaData;
+        //DALib's self-profile carries no master-quest flag; default off.
+        WorldState.IsMaster = false;
 
         //nation emblem and text
-        StatusBook.SetNation((byte)args.Nation);
+        StatusBook.SetNation(args.NationFlag);
 
         //social status display
         var status = SocialStatusPicker.CurrentStatus;
@@ -788,24 +781,24 @@ public sealed partial class WorldScreen
         //populate and show the status book
         StatusBook.SetPlayerInfo(
             WorldHud.PlayerName,
-            args.DisplayClass,
-            args.GuildName ?? string.Empty,
-            args.GuildRank ?? string.Empty,
-            args.Title ?? string.Empty);
+            args.ClassName,
+            args.GuildName,
+            args.GuildRank,
+            args.CurrentTitle);
 
         //legend marks
-        var marks = args.LegendMarks
+        var marks = args.Legend
                         .Select(m => new LegendMarkEntry(
                             m.Text,
-                            MapMarkColor(m.Color),
-                            (byte)m.Icon,
-                            m.Key))
+                            MapMarkColor((MarkColor)m.Color),
+                            m.Icon,
+                            m.Prefix))
                         .ToList();
 
         StatusBook.SetLegendMarks(marks);
 
         //ability metadata (skills/spells from sclass file)
-        var abilityMetadata = DataContext.MetaFiles.GetAbilityMetadata((byte)args.BaseClass);
+        var abilityMetadata = DataContext.MetaFiles.GetAbilityMetadata(args.Class);
 
         if (abilityMetadata is not null)
             StatusBook.SetAbilityMetadata(abilityMetadata);
@@ -820,19 +813,19 @@ public sealed partial class WorldScreen
             //build a set of completed event ids from legend marks for o(1) lookup
             var completedEventIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var mark in args.LegendMarks)
-                completedEventIds.Add(mark.Key);
+            foreach (var mark in args.Legend)
+                completedEventIds.Add(mark.Prefix);
 
             StatusBook.SetEvents(
                 eventMetadata,
                 completedEventIds,
-                args.BaseClass,
-                args.EnableMasterQuestMetaData);
+                (BaseClass)args.Class,
+                false);
         } else
             StatusBook.ClearEvents();
 
-        //family info
-        StatusBook.SetFamilyInfo(args.SpouseName ?? string.Empty);
+        //family info — DALib self-profile has no spouse field; derived below from the group string.
+        StatusBook.SetFamilyInfo(string.Empty);
         LoadPlayerFamilyList();
 
         //paperdoll — render the player's full aisling at south-facing idle
@@ -842,18 +835,18 @@ public sealed partial class WorldScreen
             StatusBook.SetPaperdoll(Game.AislingRenderer, in appearance);
 
         //group open state — server is source of truth, sync all ui
-        StatusBook.SetGroupOpen(args.GroupOpen);
-        WorldState.UserOptions.SetValue(12, args.GroupOpen);
-        WorldHud.SetGroupOpen(args.GroupOpen);
+        StatusBook.SetGroupOpen(args.CanGroup);
+        WorldState.UserOptions.SetValue(12, args.CanGroup);
+        WorldHud.SetGroupOpen(args.CanGroup);
 
         //group members — parse groupstring into state, ui subscribes via event
-        if (!string.IsNullOrEmpty(args.GroupString))
+        if (!string.IsNullOrEmpty(args.GroupStatusText))
         {
-            if (args.GroupString.StartsWithI(GROUP_MEMBERS_PREFIX))
-                WorldState.Group.ParseAndSet(args.GroupString);
-            else if (args.GroupString.StartsWithI(SPOUSE_PREFIX))
+            if (args.GroupStatusText.StartsWithI(GROUP_MEMBERS_PREFIX))
+                WorldState.Group.ParseAndSet(args.GroupStatusText);
+            else if (args.GroupStatusText.StartsWithI(SPOUSE_PREFIX))
             {
-                var spouseName = args.GroupString[SPOUSE_PREFIX.Length..]
+                var spouseName = args.GroupStatusText[SPOUSE_PREFIX.Length..]
                                      .Trim();
                 StatusBook.SetFamilyInfo(spouseName);
                 WorldState.Group.Clear();
@@ -917,14 +910,14 @@ public sealed partial class WorldScreen
         StatusBook.Show();
     }
 
-    private void HandleOtherProfile(OtherProfileArgs args)
+    private void HandleOtherProfile(ProfilePacket args)
     {
-        var marks = args.LegendMarks
+        var marks = args.Legend
                         .Select(m => new LegendMarkEntry(
                             m.Text,
-                            MapMarkColor(m.Color),
-                            (byte)m.Icon,
-                            m.Key))
+                            MapMarkColor((MarkColor)m.Color),
+                            m.Icon,
+                            m.Prefix))
                         .ToList();
 
         OtherProfile.Show(args, marks, Game.AislingRenderer);
@@ -932,7 +925,7 @@ public sealed partial class WorldScreen
 
     //--- animations / effects / sound ---
 
-    private void HandleBodyAnimation(BodyAnimationArgs args)
+    private void HandleBodyAnimation(PlayerAnimationPacket args)
     {
         var entity = WorldState.GetEntity(args.SourceId);
 
@@ -943,6 +936,8 @@ public sealed partial class WorldScreen
         if ((entity.AnimState == EntityAnimState.BodyAnim) || (entity.ActiveEmoteFrame >= 0))
             return;
 
+        var bodyAnimation = (BodyAnimation)args.Animation;
+
         //creatures use their mpffile attack frame counts; aislings use epf suffix-based frame counts
         if (entity.Type == ClientEntityType.Creature)
         {
@@ -951,23 +946,23 @@ public sealed partial class WorldScreen
             if (animInfo is { } info)
                 AnimationSystem.StartCreatureBodyAnimation(
                     entity,
-                    args.BodyAnimation,
-                    args.AnimationSpeed,
+                    bodyAnimation,
+                    args.Speed,
                     in info);
         } else
         {
-            (_, var framesPerDir, _, _) = AnimationSystem.ResolveBodyAnimParams(args.BodyAnimation);
+            (_, var framesPerDir, _, _) = AnimationSystem.ResolveBodyAnimParams(bodyAnimation);
 
             if (framesPerDir > 0)
             {
-                if (entity.Appearance.HasValue && !Game.AislingRenderer.HasArmorAnimation(entity.Appearance.Value, args.BodyAnimation))
+                if (entity.Appearance.HasValue && !Game.AislingRenderer.HasArmorAnimation(entity.Appearance.Value, bodyAnimation))
                     return;
 
-                AnimationSystem.StartBodyAnimation(entity, args.BodyAnimation, args.AnimationSpeed);
-            } else if (DataUtilities.IsEmote(args.BodyAnimation))
+                AnimationSystem.StartBodyAnimation(entity, bodyAnimation, args.Speed);
+            } else if (DataUtilities.IsEmote(bodyAnimation))
             {
                 //emote overlay — face/bubble icon composited into the aisling sprite
-                (var startFrame, var frameCount, var durationMs) = AnimationSystem.ResolveEmoteFrames(args.BodyAnimation);
+                (var startFrame, var frameCount, var durationMs) = AnimationSystem.ResolveEmoteFrames(bodyAnimation);
 
                 if (startFrame >= 0)
                 {
@@ -980,9 +975,6 @@ public sealed partial class WorldScreen
                 }
             }
         }
-
-        if (args.Sound.HasValue)
-            Game.SoundSystem.PlaySound(args.Sound.Value);
     }
 
     //TargetAnimation values in [PROJECTILE_ANIMATION_BASE, PROJECTILE_ANIMATION_MAX_EXCLUSIVE) are MEFC projectiles;
@@ -990,34 +982,36 @@ public sealed partial class WorldScreen
     private const int PROJECTILE_ANIMATION_BASE = 10000;
     private const int PROJECTILE_ANIMATION_MAX_EXCLUSIVE = 12000;
 
-    private void HandleAnimation(AnimationArgs args)
+    private void HandleAnimation(SpellAnimationPacket args)
     {
-        if (args is { SourceId: > 0, TargetId: > 0, TargetAnimation: >= PROJECTILE_ANIMATION_BASE and < PROJECTILE_ANIMATION_MAX_EXCLUSIVE })
+        //projectile (MEFC): targeted form with a projectile-range target animation
+        if (!args.IsAreaEffect
+            && args is { SourceId: > 0, TargetAnimation: >= PROJECTILE_ANIMATION_BASE and < PROJECTILE_ANIMATION_MAX_EXCLUSIVE })
         {
             var meffectId = args.TargetAnimation - PROJECTILE_ANIMATION_BASE;
-            CreateProjectile(meffectId, args.SourceId.Value, args.TargetId.Value);
+            CreateProjectile(meffectId, args.SourceId, args.TargetId);
 
-            if (args is { SourceAnimation: > 0 })
-                CreateEffect(args.SourceAnimation, args.AnimationSpeed, args.SourceId.Value);
+            if (args.SourceAnimation > 0)
+                CreateEffect(args.SourceAnimation, args.Speed, args.SourceId);
 
             return;
         }
 
-        //ground-targeted effect
-        if (args is { TargetPoint: not null, TargetAnimation: > 0 })
+        //ground-targeted (area) effect
+        if (args.IsAreaEffect && (args.TargetAnimation > 0))
             CreateEffect(
                 args.TargetAnimation,
-                args.AnimationSpeed,
-                targetTileX: args.TargetPoint.Value.X,
-                targetTileY: args.TargetPoint.Value.Y);
+                args.Speed,
+                targetTileX: args.X,
+                targetTileY: args.Y);
 
         //entity-targeted effect on target
-        if (args is { TargetId: > 0, TargetAnimation: > 0 })
-            CreateEffect(args.TargetAnimation, args.AnimationSpeed, args.TargetId.Value);
+        if (!args.IsAreaEffect && args is { TargetId: > 0, TargetAnimation: > 0 })
+            CreateEffect(args.TargetAnimation, args.Speed, args.TargetId);
 
         //source-side effect (caster visual)
-        if (args is { SourceId: > 0, SourceAnimation: > 0 })
-            CreateEffect(args.SourceAnimation, args.AnimationSpeed, args.SourceId.Value);
+        if (!args.IsAreaEffect && args is { SourceId: > 0, SourceAnimation: > 0 })
+            CreateEffect(args.SourceAnimation, args.Speed, args.SourceId);
     }
 
     private void CreateProjectile(int meffectId, uint sourceEntityId, uint targetEntityId)
@@ -1113,26 +1107,28 @@ public sealed partial class WorldScreen
             });
     }
 
-    private void HandleSound(SoundArgs args)
+    private void HandleSound(PlaySoundPacket args)
     {
         if (args.IsMusic)
-            Game.SoundSystem.PlayMusic(args.Sound);
-        else
+        {
+            if (args.MusicTrack is { } track)
+                Game.SoundSystem.PlayMusic(track);
+        } else
             Game.SoundSystem.PlaySound(args.Sound);
     }
 
     //--- world / map / doors ---
 
-    private void HandleWorldMap(WorldMapArgs args) => WorldMap.Show(args);
+    private void HandleWorldMap(WorldMapPacket args) => WorldMap.Show(args);
 
-    private void HandleDoor(DoorArgs args)
+    private void HandleDoor(DoorPacket args)
     {
-        if (MapFile is null || args.Doors is null)
+        if (MapFile is null)
             return;
 
         foreach (var door in args.Doors)
         {
-            if ((door.X < 0) || (door.X >= MapFile.Width) || (door.Y < 0) || (door.Y >= MapFile.Height))
+            if (door.X >= MapFile.Width || door.Y >= MapFile.Height)
                 continue;
 
             //record the server-authoritative state for the Alt+right-click door menu's Open/Close label.
@@ -1187,17 +1183,18 @@ public sealed partial class WorldScreen
 
     //--- health / effects / light ---
 
-    private void HandleEffect(EffectArgs args) => WorldHud.EffectBar.SetEffect(args.EffectIcon, args.EffectColor);
+    private void HandleEffect(StatusBarPacket args)
+        => WorldHud.EffectBar.SetEffect((byte)args.Icon, (EffectColor)(byte)args.Color);
 
-    private void HandleHealthBar(HealthBarArgs args)
+    private void HandleHealthBar(HealthBarPacket args)
     {
         Overlays.AddOrResetHealthBar(args.SourceId, args.HealthPercent);
 
-        if (args.Sound.HasValue)
-            Game.SoundSystem.PlaySound(args.Sound.Value);
+        if (args.Sound != 0xFF)
+            Game.SoundSystem.PlaySound(args.Sound);
     }
 
-    private void HandleLightLevel(LightLevelArgs args) => DarknessRenderer.OnLightLevel(args.LightLevel);
+    private void HandleLightLevel(LightLevelPacket args) => DarknessRenderer.OnLightLevel((LightLevel)args.LightLevel);
 
     private void HandleMetaDataSyncComplete()
     {
@@ -1208,27 +1205,27 @@ public sealed partial class WorldScreen
 
     //--- notepad ---
 
-    private void HandleDisplayReadonlyNotepad(DisplayReadonlyNotepadArgs args)
+    private void HandleDisplayReadonlyNotepad(ReadonlyPaperPacket args)
     {
         ItemTooltip.Hide();
 
         Notepad.ShowReadonly(
-            (byte)args.NotepadType,
+            (byte)args.Type,
             args.Width,
             args.Height,
-            args.Message);
+            args.Text);
     }
 
-    private void HandleDisplayEditableNotepad(DisplayEditableNotepadArgs args)
+    private void HandleDisplayEditableNotepad(EditablePaperPacket args)
     {
         ItemTooltip.Hide();
 
         Notepad.ShowEditable(
             args.Slot,
-            (byte)args.NotepadType,
+            (byte)args.Type,
             args.Width,
             args.Height,
-            args.Message);
+            args.Text);
     }
 
     //--- exit / state ---
@@ -1265,7 +1262,7 @@ public sealed partial class WorldScreen
         ExitInProgressSecondsRemaining = EXIT_IN_PROGRESS_GRACE_SECONDS;
     }
 
-    private void HandleExitResponse(ExitResponseArgs args)
+    private void HandleExitResponse(ConfirmExitPacket args)
     {
         //server's 0x4C ack to the query phase. retail's 0x4C is a state-machine signal, not a control-flow
         //trigger — the user's click on the confirmation popup (or its 10s timeout) drives the actual exit.

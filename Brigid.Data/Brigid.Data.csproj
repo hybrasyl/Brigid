@@ -3,7 +3,7 @@
         <PackageReference Include="Chaos.Common"/>
         <PackageReference Include="Chaos.DarkAges"/>
         <PackageReference Include="Chaos.Geometry"/>
-        <PackageReference Include="DALib" />
+        <ProjectReference Include="..\..\dalib\DALib\DALib.csproj" />
         <PackageReference Include="Microsoft.Extensions.Caching.Memory"/>
     </ItemGroup>
 </Project>

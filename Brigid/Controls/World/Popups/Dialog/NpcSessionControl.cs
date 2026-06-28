@@ -4,6 +4,7 @@ using Brigid.Controls.Generic;
 using Brigid.Rendering.Models;
 using Chaos.DarkAges.Definitions;
 using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -514,46 +515,54 @@ public sealed class NpcSessionControl : PrefabPanel
     /// <summary>
     ///     Shows the container for a DisplayDialog packet (opcode 0x30).
     /// </summary>
-    public void ShowDialog(DisplayDialogArgs args)
+    public void ShowDialog(NpcDialogPacket pkt)
     {
-        if (args.DialogType is DialogType.CloseDialog)
+        if (pkt.DialogType is NpcDialogType.Close)
         {
             HideAll();
 
             return;
         }
 
+        //Chaos DialogType and DALib NpcDialogType share wire byte values; convert and reuse the existing switch.
+        var dialogType = (DialogType)(byte)pkt.DialogType;
+
         IsDialogOpcode = true;
-        CurrentDialogType = args.DialogType;
+        CurrentDialogType = dialogType;
         CurrentMenuType = null;
-        SourceEntityType = args.EntityType;
-        SourceId = args.SourceId;
-        PursuitId = args.PursuitId ?? 0;
-        DialogId = args.DialogId;
-        NpcName = args.Name;
-        PortraitSpriteId = args.Sprite;
-        PortraitColor = args.Color;
-        IllustrationIndex = args.IllustrationIndex;
+        SourceEntityType = pkt.ObjectType switch
+        {
+            NpcDialogPacket.ObjectTypeItem => EntityType.Item,
+            _                              => EntityType.Creature,
+        };
+        SourceId = pkt.SourceId;
+        PursuitId = pkt.PursuitId;
+        DialogId = pkt.DialogId;
+        NpcName = pkt.Name;
+        PortraitSpriteId = pkt.Sprite;
+        PortraitColor = (DisplayColor)pkt.Color;
+        //Hybrasyl sends no illustration-index byte; 0 = "first variant". §B verify for retail multi-variant NPCs.
+        IllustrationIndex = 0;
 
         HideAllSubPanels();
-        SetDialogText(args.Text);
-        SetNavigationButtons(args.HasNextButton, args.HasPreviousButton);
+        SetDialogText(pkt.Text);
+        SetNavigationButtons(pkt.HasNextButton, pkt.HasPreviousButton);
         MenuArgs = null;
         SpeakPrompt = null;
         SpeakEpilog = null;
 
-        switch (args.DialogType)
+        switch (dialogType)
         {
             case DialogType.Normal:
                 break;
 
             case DialogType.DialogMenu:
             case DialogType.CreatureMenu:
-                if (args.Options is not null && (args.Options.Count > 0))
+                if (pkt.Body is OptionsDialog optionsBody && (optionsBody.Options.Count > 0))
                 {
-                    var options = args.Options
-                                      .Select(o => (o, (ushort)0))
-                                      .ToList();
+                    var options = optionsBody.Options
+                                             .Select(o => (o, (ushort)0))
+                                             .ToList();
                     DialogOption.ShowOptions(options);
                 }
 
@@ -563,22 +572,23 @@ public sealed class NpcSessionControl : PrefabPanel
             case DialogType.Speak:
                 HideNavigationButtons();
 
-                var prompt = args.TextBoxPrompt ?? string.Empty;
-                var epilog = string.Empty;
+                var input = pkt.Body as TextInputDialog;
+                var prompt = input?.TopCaption ?? string.Empty;
+                var epilog = input?.BottomCaption ?? string.Empty;
 
-                if (args.DialogType is DialogType.Speak)
+                if (dialogType is DialogType.Speak)
                 {
                     SpeakPrompt = prompt;
                     SpeakEpilog = epilog;
                 }
 
-                DialogTextEntry.ShowTextEntry(prompt, (byte)(args.TextBoxLength ?? 255), epilog);
+                DialogTextEntry.ShowTextEntry(prompt, (byte)(input?.InputLength ?? 255), epilog);
 
                 break;
 
             case DialogType.Protected:
                 HideNavigationButtons();
-                DialogProtectedTextEntry.ShowProtected(args.Text);
+                DialogProtectedTextEntry.ShowProtected(pkt.Text);
 
                 break;
 
@@ -588,7 +598,7 @@ public sealed class NpcSessionControl : PrefabPanel
 
         if (NpcNameLabel is not null)
         {
-            NpcNameLabel.Text = args.Name;
+            NpcNameLabel.Text = pkt.Name;
             NpcNameLabel.ForegroundColor = new Color(0, 255, 0);
         }
 
@@ -598,34 +608,52 @@ public sealed class NpcSessionControl : PrefabPanel
     /// <summary>
     ///     Shows the container for a DisplayMenu packet (opcode 0x2F).
     /// </summary>
-    public void ShowMenu(DisplayMenuArgs args)
+    public void ShowMenu(NpcMenuPacket pkt)
     {
+        var menuType = (MenuType)(byte)pkt.MenuType;
+
         IsDialogOpcode = false;
         CurrentDialogType = null;
-        CurrentMenuType = args.MenuType;
-        SourceEntityType = args.EntityType;
-        SourceId = args.SourceId;
-        PursuitId = args.PursuitId;
+        CurrentMenuType = menuType;
+        SourceEntityType = pkt.EntityType switch
+        {
+            2 => EntityType.Item,
+            _ => EntityType.Creature,
+        };
+        SourceId = pkt.SourceId;
+        PursuitId = MenuPursuitId(pkt.Menu);
         DialogId = 0;
-        NpcName = args.Name;
-        PortraitSpriteId = args.Sprite;
-        PortraitColor = args.Color;
-        IllustrationIndex = args.IllustrationIndex;
+        NpcName = pkt.Name;
+        PortraitSpriteId = pkt.Sprite;
+        PortraitColor = (DisplayColor)pkt.Color;
+        IllustrationIndex = pkt.IllustrationIndex;
 
-        MenuArgs = args.Args;
+        MenuArgs = pkt.Menu switch
+        {
+            OptionsWithArgumentMenu m   => m.Argument,
+            TextEntryWithArgumentMenu m => m.Argument,
+            _                           => null,
+        };
         HideAllSubPanels();
         HideNavigationButtons();
-        SetDialogText(args.Text);
+        SetDialogText(pkt.Text);
 
-        switch (args.MenuType)
+        switch (menuType)
         {
             case MenuType.Menu:
             case MenuType.MenuWithArgs:
-                if (args.Options is not null && (args.Options.Count > 0))
+                var menuOptions = pkt.Menu switch
                 {
-                    var options = args.Options
-                                      .Select(o => (o.Text, o.Pursuit))
-                                      .ToList();
+                    OptionsMenu m             => m.Options,
+                    OptionsWithArgumentMenu m => m.Options,
+                    _                         => null,
+                };
+
+                if (menuOptions is { Count: > 0 })
+                {
+                    var options = menuOptions
+                                  .Select(o => (o.Text, o.Pursuit))
+                                  .ToList();
                     DialogOption.ShowOptions(options);
                 }
 
@@ -637,12 +665,12 @@ public sealed class NpcSessionControl : PrefabPanel
                 break;
 
             case MenuType.TextEntryWithArgs:
-                MenuTextEntry.ShowTextEntry(args.Args);
+                MenuTextEntry.ShowTextEntry(MenuArgs);
 
                 break;
 
             case MenuType.ShowItems:
-                MenuShop.ShowMerchant(args);
+                MenuShop.ShowMerchant(pkt);
 
                 break;
 
@@ -651,7 +679,7 @@ public sealed class NpcSessionControl : PrefabPanel
             case MenuType.ShowSpells:
             case MenuType.ShowPlayerSkills:
             case MenuType.ShowPlayerSpells:
-                MenuList.ShowList(args);
+                MenuList.ShowList(pkt);
 
                 break;
 
@@ -673,12 +701,28 @@ public sealed class NpcSessionControl : PrefabPanel
 
         if (NpcNameLabel is not null)
         {
-            NpcNameLabel.Text = args.Name;
+            NpcNameLabel.Text = pkt.Name;
             NpcNameLabel.ForegroundColor = LegendColors.Lime;
         }
 
         Show();
     }
+
+    //The menu's pursuit id lives on the body (the prefix carries none); options menus use per-option pursuits.
+    private static ushort MenuPursuitId(NpcMenu menu) => menu switch
+    {
+        TextEntryMenu m             => m.PursuitId,
+        TextEntryWithArgumentMenu m => m.PursuitId,
+        ItemListMenu m              => m.PursuitId,
+        ServerItemMenu              => ServerItemMenu.ServerItemPursuit,
+        PlayerItemListMenu m        => m.PursuitId,
+        PlayerItemHandleMenu        => PlayerItemHandleMenu.HandlePursuit,
+        SpellListMenu m             => m.PursuitId,
+        SkillListMenu m             => m.PursuitId,
+        PlayerSpellListMenu m       => m.PursuitId,
+        PlayerSkillListMenu m       => m.PursuitId,
+        _                           => (ushort)0,
+    };
 
     public override void Update(GameTime gameTime)
     {

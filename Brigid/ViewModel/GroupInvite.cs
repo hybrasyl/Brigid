@@ -1,5 +1,5 @@
 #region
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 #endregion
 
 namespace Brigid.ViewModel;
@@ -10,9 +10,9 @@ namespace Brigid.ViewModel;
 public sealed class GroupInvite
 {
     /// <summary>
-    ///     The current group invite args, or null if no invite is pending.
+    ///     The current group response packet, or null if no invite is pending.
     /// </summary>
-    public DisplayGroupInviteArgs? Current { get; private set; }
+    public GroupResponsePacket? Current { get; private set; }
 
     public void Clear() => Current = null;
 
@@ -21,9 +21,9 @@ public sealed class GroupInvite
     /// </summary>
     public event GroupInviteReceivedHandler? Received;
 
-    public void Set(DisplayGroupInviteArgs args)
+    public void Set(GroupResponsePacket response)
     {
-        Current = args;
+        Current = response;
         Received?.Invoke();
     }
 }

@@ -2,7 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Data.Models;
 using Chaos.DarkAges.Definitions;
-using Chaos.Networking.Entities.Server;
+using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -294,7 +294,7 @@ public sealed class StatsPanel : ExpandablePanel
         base.Update(gameTime);
     }
 
-    public void UpdateAttributes(AttributesArgs attrs)
+    public void UpdateAttributes(PlayerAttributes attrs)
     {
         TrySetLabel(IDX_STR, attrs.Str);
         TrySetLabel(IDX_INT, attrs.Int);
@@ -302,9 +302,9 @@ public sealed class StatsPanel : ExpandablePanel
         TrySetLabel(IDX_CON, attrs.Con);
         TrySetLabel(IDX_DEX, attrs.Dex);
         TrySetLabel(IDX_HP, attrs.CurrentHp);
-        TrySetLabel(IDX_HP_MAX, attrs.MaximumHp);
+        TrySetLabel(IDX_HP_MAX, attrs.MaxHp);
         TrySetLabel(IDX_MP, attrs.CurrentMp);
-        TrySetLabel(IDX_MP_MAX, attrs.MaximumMp);
+        TrySetLabel(IDX_MP_MAX, attrs.MaxMp);
         TrySetLabel(IDX_EXP, attrs.TotalExp);
         TrySetLabel(IDX_AB_EXP, attrs.TotalAbility);
         TrySetLabel(IDX_GOLD, attrs.Gold);

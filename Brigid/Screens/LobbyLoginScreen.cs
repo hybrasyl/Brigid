@@ -12,8 +12,9 @@ using Brigid.Networking.Definitions;
 using Brigid.Systems;
 using Chaos.Cryptography;
 using Chaos.DarkAges.Definitions;
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
+using ServerEntry = DALib.Networking.Packets.Server.ServerEntry;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -40,7 +41,7 @@ public sealed class LobbyLoginScreen : IScreen
     private PasswordChangeControl PasswordChangeControl = null!;
     private bool PendingWorldSwitch;
     private OkPopupMessageControl LobbyLoginPopupMessage = null!;
-    private IReadOnlyList<ServerTableEntry> ServerList = [];
+    private IList<ServerEntry> ServerList = [];
     private ServerSelectControl ServerSelectControl = null!;
 
     private UIButton? LastClickedButton;
@@ -408,23 +409,21 @@ public sealed class LobbyLoginScreen : IScreen
 
     private void OnConnectionError(string error) => Connecting = false;
 
-    private void OnServerTableReceived(ServerTableData data)
+    private void OnServerTableReceived(IList<ServerEntry> servers)
     {
-        ServerList = data.Servers;
+        ServerList = servers;
 
-        if (data is { ShowServerList: true, Servers.Count: > 1 })
+        //DALib's ServerTableDataPacket exposes the parsed entries directly; the legacy ShowServerList
+        //flag is no longer carried, so show the picker whenever more than one server is advertised.
+        if (servers.Count > 1)
         {
-            //select a server
-            ServerSelectControl.SetServers(data.Servers);
+            ServerSelectControl.SetServers(servers);
             ServerSelectControl.Visible = true;
-        } else if (data.Servers.Count > 0)
+        } else if (servers.Count > 0)
         {
             //auto-select the first (or only) server
-            Game.Connection.ServerName = data.Servers[0].Name;
-            Game.Connection.SelectServer(data.Servers[0].Id);
-        } else
-        {
-            //no servers available
+            Game.Connection.ServerName = servers[0].Name;
+            Game.Connection.SelectServer(servers[0].Id);
         }
     }
 
@@ -433,23 +432,25 @@ public sealed class LobbyLoginScreen : IScreen
         //following redirect...
     }
 
-    private void OnLoginMessage(LoginMessageArgs args)
+    private void OnLoginMessage(LoginMessagePacket pkt)
     {
+        var messageType = (LoginMessageType)pkt.Type;
+
         if (CreatingCharacter)
         {
-            HandleCharCreateMessage(args);
+            HandleCharCreateMessage(pkt);
 
             return;
         }
 
         if (ChangingPassword)
         {
-            HandlePasswordChangeMessage(args);
+            HandlePasswordChangeMessage(pkt);
 
             return;
         }
 
-        if (args.LoginMessageType == LoginMessageType.Confirm)
+        if (messageType == LoginMessageType.Confirm)
 
             //login accepted. waiting for redirect...
             return;
@@ -464,12 +465,14 @@ public sealed class LobbyLoginScreen : IScreen
             LoginControl.PasswordField.IsFocused = true;
         }
 
-        LobbyLoginPopupMessage.Show(args.Message ?? "Login failed.");
+        LobbyLoginPopupMessage.Show(pkt.Message ?? "Login failed.");
     }
 
-    private void HandleCharCreateMessage(LoginMessageArgs args)
+    private void HandleCharCreateMessage(LoginMessagePacket pkt)
     {
-        if (args.LoginMessageType == LoginMessageType.Confirm)
+        var messageType = (LoginMessageType)pkt.Type;
+
+        if (messageType == LoginMessageType.Confirm)
         {
             if (!AwaitingCharFinalize)
             {
@@ -497,7 +500,7 @@ public sealed class LobbyLoginScreen : IScreen
         Connecting = false;
         AwaitingCharFinalize = false;
 
-        switch (args.LoginMessageType)
+        switch (messageType)
         {
             case LoginMessageType.ClearNameMessage:
                 CharCreateControl.NameField?.Text = string.Empty;
@@ -518,15 +521,15 @@ public sealed class LobbyLoginScreen : IScreen
                 throw new ArgumentOutOfRangeException();
         }
 
-        LobbyLoginPopupMessage.Show(args.Message ?? "Character creation failed.");
+        LobbyLoginPopupMessage.Show(pkt.Message ?? "Character creation failed.");
     }
 
-    private void HandlePasswordChangeMessage(LoginMessageArgs args)
+    private void HandlePasswordChangeMessage(LoginMessagePacket pkt)
     {
         Connecting = false;
         ChangingPassword = false;
 
-        if (args.LoginMessageType == LoginMessageType.Confirm)
+        if ((LoginMessageType)pkt.Type == LoginMessageType.Confirm)
         {
             PasswordChangeControl.Hide();
             LobbyLoginPopupMessage.Show("Password has been changed.");
@@ -534,12 +537,16 @@ public sealed class LobbyLoginScreen : IScreen
             return;
         }
 
-        LobbyLoginPopupMessage.Show(args.Message ?? "Password change failed.");
+        LobbyLoginPopupMessage.Show(pkt.Message ?? "Password change failed.");
     }
 
-    private void OnLoginNotice(LoginNoticeArgs args)
+    private void OnLoginNotice(LoginNotificationPacket pkt)
     {
-        NoticeDebugLog.Write($"OnLoginNotice IsFull={args.IsFullResponse} CRC={args.CheckSum:X8} DataLen={args.Data?.Length} Returning={ReturningFromWorld}");
+        var checkSum = (pkt.Form as NotificationChecksumForm)?.Checksum;
+        var data = (pkt.Form as NotificationDataForm)?.Data;
+        var isFullResponse = pkt.Form is NotificationDataForm;
+
+        NoticeDebugLog.Write($"OnLoginNotice IsFull={isFullResponse} CRC={checkSum:X8} DataLen={data?.Length} Returning={ReturningFromWorld}");
 
         //returning from world — already accepted the eula this session, skip entirely
         if (ReturningFromWorld)
@@ -549,10 +556,10 @@ public sealed class LobbyLoginScreen : IScreen
             return;
         }
 
-        if (!args.IsFullResponse)
+        if (!isFullResponse)
         {
             //checksum-only probe — request full notice if we don't have a cached match
-            if (CachedNoticeCheckSum.HasValue && (CachedNoticeCheckSum.Value == args.CheckSum))
+            if (CachedNoticeCheckSum.HasValue && (CachedNoticeCheckSum.Value == checkSum))
             {
                 //already accepted this notice, skip display and enable buttons
                 NoticeDebugLog.Write("  checksum cache hit, enabling buttons");
@@ -568,7 +575,7 @@ public sealed class LobbyLoginScreen : IScreen
         }
 
         //full response — decompress and display
-        if (args.Data is null or { Length: 0 })
+        if (data is null or { Length: 0 })
         {
             NoticeDebugLog.Write("  !!! full response with empty data — UI would be soft-locked");
             return;
@@ -577,7 +584,7 @@ public sealed class LobbyLoginScreen : IScreen
         string noticeText;
         try
         {
-            noticeText = DecompressNotice(args.Data);
+            noticeText = DecompressNotice(data);
             NoticeDebugLog.Write($"  decompressed ok, text length={noticeText.Length}");
         }
         catch (Exception ex)
@@ -616,10 +623,11 @@ public sealed class LobbyLoginScreen : IScreen
                        .GetString(rawBytes);
     }
 
-    private void OnLoginControlReceived(LoginControlArgs args)
+    private void OnLoginControlReceived(UrlPacket pkt)
     {
-        if (args.LoginControlsType == LoginControlsType.Homepage)
-            HomepageUrl = args.Message;
+        //subtype 3 (SetUrlForm) carries the homepage / account URL.
+        if (pkt.Form is SetUrlForm setUrl)
+            HomepageUrl = setUrl.Url;
     }
     #endregion
 

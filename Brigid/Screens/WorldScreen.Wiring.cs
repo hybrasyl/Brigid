@@ -36,8 +36,6 @@ public sealed partial class WorldScreen
         Game.Connection.OnRemoveEntity += HandleRemoveEntity;
         Game.Connection.OnClientWalkResponse += HandleClientWalkResponse;
 
-        //hud data events
-        Game.Connection.OnAttributes += HandleAttributes;
 
         //chat events
         Game.Connection.OnDisplayPublicMessage += HandleDisplayPublicMessage;
