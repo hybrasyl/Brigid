@@ -76,7 +76,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 - **11 repositories** (exposed on `DataContext` by these accessor names): AislingDrawData, CreatureSprites, Effects, Fonts, LightMasks, LocalPlayerSettings, MapsFiles, MetaFiles, PanelSprites, Tiles, UserControls (the UI-component repository).
 - **`ControlPrefab`/`ControlPrefabSet`** -- Wraps DALib Control definitions + pre-rendered SKImage arrays. First control (Anchor) defines panel bounds.
 - Control file catalog in `controlFileList.txt` at solution root.
-- **`AssetPackRegistry`** (`AssetPacks/`) -- Static registry. On `Initialize()`, scans the per-user erisco assets directory (`AppPaths.AssetsDir`) for `*.datf` files (ZIP archives with modern asset overrides), reads each one's `_manifest.json`, validates `schema_version`, and registers a single pack per `content_type`. On first launch it performs a one-time best-effort migration of legacy `{DataContext.DataPath}/hybrasyl-data/` packs (the `LEGACY_PACK_SUBFOLDER`) into the assets directory. Lookups return null when no pack is registered; the renderer/audio layer falls through to legacy. See `asset-pack-format.md` in the document repo for the artist-facing format spec. Ten content types are supported, each with a typed accessor:
+- **`AssetPackRegistry`** (`AssetPacks/`) -- Static registry. On `Initialize()`, scans the per-user erisco assets directory (`AppPaths.AssetsDir`) for `*.datf` files (ZIP archives with modern asset overrides), reads each one's `_manifest.json`, validates `schema_version`, and registers a single pack per `content_type`. On first launch it performs a one-time best-effort migration of legacy `{DataContext.DataPath}/hybrasyl-data/` packs (the `LEGACY_PACK_SUBFOLDER`) into the assets directory. Lookups return null when no pack is registered; the renderer/audio layer falls through to legacy. See `asset-pack-format.md` in the document repo for the artist-facing format spec. Eleven content types are supported, each with a typed accessor:
   - `ability_icons` -> `IconPack` -> `GetIconPack()`
   - `item_icons` -> `ItemPack` -> `GetItemPack()`
   - `nation_badges` -> `NationBadgePack` -> `GetNationBadgePack()`
@@ -87,6 +87,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
   - `creature_sprites` -> `CreaturePack` -> `GetCreaturePack()` (per-creature auto-trim)
   - `music` -> `MusicPack` -> `GetMusicPack()` (streamed; entries `music_{id}.{ext}`)
   - `sound_effects` -> `SfxPack` -> `GetSfxPack()` (decoded; entries `sfx_{id}.{ext}`)
+  - `world_maps` -> `WorldMapPack` -> `GetWorldMapPack()` (overworld field backgrounds; entries `{fieldName}.png`)
 - **`AudioPack`** (`AssetPacks/`) -- Shared base for `MusicPack`/`SfxPack`. Entries named `{prefix}_{id}.{ext}` at the archive root; builds an extension-agnostic `id -> entry` map at construction and returns raw bytes via `TryGetAudioBytes` (no decode — the audio layer hands bytes to SDL_mixer). `MusicPack` overrides loose `{DataPath}/music/{id}.mus`; `SfxPack` overrides `legend.dat` `{id}.mp3`. A present id = replace, a new id = add.
 - **`IconPack`** (`AssetPacks/`) -- Wraps a ZipArchive of `{prefix}_{id:D4}.png` entries. `TryGetIconImage(prefix, spriteId, out SKImage?)` case-insensitive lookup; decode failures treated as "not present" so renderer falls back cleanly to legacy.
 

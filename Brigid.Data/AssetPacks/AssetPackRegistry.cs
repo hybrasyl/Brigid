@@ -39,7 +39,8 @@ public static class AssetPackRegistry
         ["ui_sprite_overrides"] = static (a, m) => new UiSpriteOverridePack(a, m),
         ["creature_sprites"]    = static (a, m) => new CreaturePack(a, m),
         ["music"]               = static (a, m) => new MusicPack(a, m),
-        ["sound_effects"]       = static (a, m) => new SfxPack(a, m)
+        ["sound_effects"]       = static (a, m) => new SfxPack(a, m),
+        ["world_maps"]          = static (a, m) => new WorldMapPack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -199,6 +200,12 @@ public static class AssetPackRegistry
     ///     is present.
     /// </summary>
     public static SfxPack? GetSfxPack() => Packs.GetValueOrDefault("sound_effects") as SfxPack;
+
+    /// <summary>
+    ///     Returns the currently-registered world-map pack, or null if no pack of <c>content_type: world_maps</c> is
+    ///     present.
+    /// </summary>
+    public static WorldMapPack? GetWorldMapPack() => Packs.GetValueOrDefault("world_maps") as WorldMapPack;
 
     private static void TryRegisterPack(string path)
     {
