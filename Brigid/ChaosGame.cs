@@ -9,8 +9,8 @@ using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
 using Brigid.Systems;
-using Chaos.Cryptography;
 using Chaos.DarkAges.Definitions;
+using DALib.Cryptography;
 using DALib.Extensions;
 using DALib.Networking.Wire;
 using ServerPackets = DALib.Networking.Packets.Server;
@@ -720,7 +720,7 @@ public sealed class ChaosGame : Game
 
             zlibStream.CopyTo(memoryStream);
 
-            return Crc.Generate32(memoryStream.ToArray());
+            return CRC32.Calculate(memoryStream.ToArray(), finalXor: false);
         } catch
         {
             return 0;

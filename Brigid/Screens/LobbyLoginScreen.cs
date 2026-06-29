@@ -10,8 +10,8 @@ using Brigid.Data;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Systems;
-using Chaos.Cryptography;
 using Chaos.DarkAges.Definitions;
+using DALib.Cryptography;
 using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using ServerEntry = DALib.Networking.Packets.Server.ServerEntry;
@@ -617,7 +617,7 @@ public sealed class LobbyLoginScreen : IScreen
         decompressor.CopyTo(decompressed);
 
         var rawBytes = decompressed.ToArray();
-        CachedNoticeCheckSum = Crc.Generate32(rawBytes);
+        CachedNoticeCheckSum = CRC32.Calculate(rawBytes, finalXor: false);
 
         return Encoding.GetEncoding(949)
                        .GetString(rawBytes);

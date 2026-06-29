@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <ItemGroup>
-        <PackageReference Include="Chaos.Networking"/>
+        <PackageReference Include="Chaos.DarkAges"/>
+        <PackageReference Include="Chaos.Geometry"/>
         <ProjectReference Include="..\..\dalib\DALib\DALib.csproj"/>
     </ItemGroup>
 </Project>
