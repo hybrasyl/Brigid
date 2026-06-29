@@ -6,10 +6,11 @@ using System.Text.Json;
 namespace Brigid.Data.AssetPacks;
 
 /// <summary>
-///     Discovers and registers <c>.datf</c> asset packs from <c>{DataPath}/hybrasyl-data/</c> at startup. Packs are
-///     identified by the <c>content_type</c> field in their embedded <c>_manifest.json</c> and exposed via typed
-///     accessors (e.g. <see cref="GetIconPack" />). Missing manifests, malformed JSON, or unsupported schema
-///     versions cause the pack to be skipped with a warning rather than failing startup.
+///     Discovers and registers <c>.datf</c> asset packs from the per-user erisco assets directory
+///     (<see cref="AppPaths.AssetsDir" />) at startup. Packs are identified by the <c>content_type</c> field in their
+///     embedded <c>_manifest.json</c> and exposed via typed accessors (e.g. <see cref="GetIconPack" />). Missing
+///     manifests, malformed JSON, or unsupported schema versions cause the pack to be skipped with a warning rather
+///     than failing startup.
 ///     <para>
 ///     The registry stores packs through the <see cref="IAssetPack" /> interface in a content-type-keyed dictionary;
 ///     adding a new pack type is one factory entry in <see cref="Factories" /> plus one typed accessor. Per-type
@@ -20,7 +21,10 @@ public static class AssetPackRegistry
 {
     private const int SUPPORTED_SCHEMA_VERSION = 1;
     private const string MANIFEST_ENTRY_NAME = "_manifest.json";
-    private const string PACK_SUBFOLDER = "hybrasyl-data";
+
+    //the pre-erisco pack location, relative to the retail data path. Packs found here are migrated once into
+    //AppPaths.AssetsDir on first launch after the move, smoothing existing manual installs.
+    private const string LEGACY_PACK_SUBFOLDER = "hybrasyl-data";
 
     //factories know how to build each pack type from a (ZipArchive, AssetPackManifest) pair. Adding a new content
     //type = add one line here + write the pack class. Keyed by manifest.content_type.
@@ -42,8 +46,10 @@ public static class AssetPackRegistry
     private static bool Initialized;
 
     /// <summary>
-    ///     Scans <c>{<see cref="DataContext.DataPath" />}/hybrasyl-data/</c> for <c>*.datf</c> files and registers
-    ///     each pack by its declared content type. Idempotent; subsequent calls are no-ops.
+    ///     Scans <see cref="AppPaths.AssetsDir" /> for <c>*.datf</c> files and registers each pack by its declared
+    ///     content type. Ensures the directory exists and migrates any legacy <c>{DataPath}/hybrasyl-data/</c> packs
+    ///     into it once. Idempotent; subsequent calls are no-ops. An empty/absent directory is a clean no-op — renderers
+    ///     then fall through to legacy assets.
     /// </summary>
     public static void Initialize()
     {
@@ -52,7 +58,17 @@ public static class AssetPackRegistry
 
         Initialized = true;
 
-        var packDir = Path.Combine(DataContext.DataPath, PACK_SUBFOLDER);
+        var packDir = AppPaths.AssetsDir;
+
+        try
+        {
+            Directory.CreateDirectory(packDir);
+        } catch
+        {
+            //best effort — if the dir can't be created, the enumerate below simply finds nothing
+        }
+
+        TryMigrateLegacyPacks(packDir);
 
         if (!Directory.Exists(packDir))
         {
@@ -78,6 +94,49 @@ public static class AssetPackRegistry
         }
 
         LogInfo($"registered {Packs.Count - registeredBefore} asset pack(s) from '{packDir}'");
+    }
+
+    /// <summary>
+    ///     One-time, best-effort copy of legacy <c>{DataPath}/hybrasyl-data/*.datf</c> packs into
+    ///     <paramref name="assetsDir" />, run only when the new directory holds no packs yet so launcher-managed content
+    ///     is never clobbered. Packs are normally managed by the launcher; this only smooths existing manual installs.
+    ///     Never throws.
+    /// </summary>
+    private static void TryMigrateLegacyPacks(string assetsDir)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(DataContext.DataPath))
+                return;
+
+            //migrate only into an empty assets dir — never overwrite content already placed here
+            if (!Directory.Exists(assetsDir) || Directory.EnumerateFiles(assetsDir, "*.datf", SearchOption.TopDirectoryOnly).Any())
+                return;
+
+            var legacyDir = Path.Combine(DataContext.DataPath, LEGACY_PACK_SUBFOLDER);
+
+            if (!Directory.Exists(legacyDir))
+                return;
+
+            var migrated = 0;
+
+            foreach (var src in Directory.EnumerateFiles(legacyDir, "*.datf", SearchOption.TopDirectoryOnly))
+            {
+                var dst = Path.Combine(assetsDir, Path.GetFileName(src));
+
+                if (File.Exists(dst))
+                    continue;
+
+                File.Copy(src, dst);
+                migrated++;
+            }
+
+            if (migrated > 0)
+                LogInfo($"migrated {migrated} legacy asset pack(s) from '{legacyDir}' to '{assetsDir}'");
+        } catch
+        {
+            //best effort — a failed copy just means nothing migrated; the launcher can re-fetch packs
+        }
     }
 
     /// <summary>
