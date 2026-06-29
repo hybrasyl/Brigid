@@ -1,6 +1,7 @@
 #region
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Brigid.Data;
 #endregion
 
 namespace Brigid.Systems;
@@ -55,14 +56,20 @@ public static class LauncherConfig
     public static int? WindowMultiplier { get; set; }
 
     /// <summary>
-    ///     <c>%AppData%\Brigid</c> (Windows), <c>~/.config/Brigid</c> (Linux/macOS via .NET's
-    ///     <see cref="Environment.SpecialFolder.ApplicationData" /> mapping). The obvious, user-writable, cross-platform
-    ///     home for the config file.
+    ///     <c>%LOCALAPPDATA%\erisco\Brigid</c> (Windows), <c>~/.config/erisco/Brigid</c> (Linux/macOS) via
+    ///     <see cref="AppPaths" /> — the user-writable, cross-platform home shared by the Erisco toolset. Must live
+    ///     <em>outside</em> the asset path because it is what tells the client where the asset path is.
     /// </summary>
-    public static string ConfigDirectory =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Brigid");
+    public static string ConfigDirectory => AppPaths.AppRoot;
 
-    public static string FilePath => Path.Combine(ConfigDirectory, FILE_NAME);
+    public static string FilePath => AppPaths.ConfigFile;
+
+    /// <summary>
+    ///     The pre-Erisco config location (<c>%AppData%\Brigid</c> on Windows, <c>~/.config/Brigid</c> on Unix). Read once
+    ///     on first launch after the move so an existing user's server list and asset path migrate to the new home.
+    /// </summary>
+    private static string LegacyFilePath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Brigid", FILE_NAME);
 
     /// <summary>
     ///     Loads the config file into the static state. Missing/corrupt files yield a fresh default list. Always ensures at
@@ -71,6 +78,8 @@ public static class LauncherConfig
     /// </summary>
     public static void Load()
     {
+        TryMigrateLegacyConfig();
+
         Model? model = null;
 
         if (File.Exists(FilePath))
@@ -97,6 +106,26 @@ public static class LauncherConfig
 
         if (GetSelectedServer() is null)
             SelectedServer = Servers[0].Key;
+    }
+
+    /// <summary>
+    ///     One-time, best-effort copy of the pre-Erisco config into the new <see cref="AppPaths.AppRoot" /> home. No-op
+    ///     once the new file exists or when there is nothing to migrate. Never throws — a failed migration just falls
+    ///     through to default config on first launch.
+    /// </summary>
+    private static void TryMigrateLegacyConfig()
+    {
+        try
+        {
+            if (File.Exists(FilePath) || !File.Exists(LegacyFilePath))
+                return;
+
+            Directory.CreateDirectory(ConfigDirectory);
+            File.Copy(LegacyFilePath, FilePath);
+        } catch
+        {
+            //best effort — a missing/locked legacy file just means a fresh default config
+        }
     }
 
     public static void Save()
