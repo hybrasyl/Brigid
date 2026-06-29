@@ -683,6 +683,9 @@ public sealed class NpcSessionControl : PrefabPanel
                 break;
 
             default:
+                Console.WriteLine(
+                    $"[NpcMenu] unhandled menu type 0x{(byte)pkt.MenuType:X2} (body {pkt.Menu?.GetType().Name ?? "null"}) -- not displayed");
+
                 return;
         }
 

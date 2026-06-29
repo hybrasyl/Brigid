@@ -449,7 +449,12 @@ public sealed class MenuShopPanel : PrefabPanel
     private void PopulateItems(NpcMenuPacket pkt)
     {
         if (pkt.Menu is not ItemListMenu menu)
+        {
+            Console.WriteLine(
+                $"[NpcMenu] ShowItems body is {pkt.Menu?.GetType().Name ?? "null"} (expected ItemListMenu); rich ServerItemMenu (0x4B) rendering is unimplemented -- not displayed");
+
             return;
+        }
 
         var items = menu.Items;
         var names = new string[items.Count];

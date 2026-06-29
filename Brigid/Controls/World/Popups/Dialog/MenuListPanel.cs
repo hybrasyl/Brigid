@@ -205,7 +205,12 @@ public sealed class MenuListPanel : FramedDialogPanelBase
     private void PopulatePlayerItems(NpcMenuPacket pkt)
     {
         if (pkt.Menu is not PlayerItemListMenu menu)
+        {
+            Console.WriteLine(
+                $"[NpcMenu] ShowPlayerItems body is {pkt.Menu?.GetType().Name ?? "null"} (expected PlayerItemListMenu); PlayerItemHandleMenu (0x4E) rendering is unimplemented -- not displayed");
+
             return;
+        }
 
         var renderer = UiRenderer.Instance!;
 

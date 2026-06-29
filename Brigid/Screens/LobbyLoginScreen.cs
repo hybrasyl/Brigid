@@ -413,8 +413,9 @@ public sealed class LobbyLoginScreen : IScreen
     {
         ServerList = servers;
 
-        //DALib's ServerTableDataPacket exposes the parsed entries directly; the legacy ShowServerList
-        //flag is no longer carried, so show the picker whenever more than one server is advertised.
+        //The 0x56 wire format is [count][entries] with no server-list flag (verified against the retail
+        //parser); the old ShowServerList byte was a misread. Show the picker whenever more than one
+        //server is advertised, else auto-select the only one.
         if (servers.Count > 1)
         {
             ServerSelectControl.SetServers(servers);
