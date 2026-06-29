@@ -65,6 +65,14 @@ internal static partial class SdlMixer
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial nint Mix_LoadMUS(string file);
 
+    //Mix_LoadMUS_RW opens a streaming music handle from an in-memory RWops (used for music supplied by a .datf pack).
+    //Unlike Mix_LoadWAV_RW it does NOT fully decode up front — SDL_mixer streams from the RWops's backing memory for
+    //the life of playback, so the caller must keep that memory pinned until Mix_FreeMusic. freesrc=1 frees the RWops
+    //when the music is freed.
+    [LibraryImport("SDL2_mixer")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial nint Mix_LoadMUS_RW(nint src, int freesrc);
+
     [LibraryImport("SDL2_mixer")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial void Mix_FreeChunk(nint chunk);

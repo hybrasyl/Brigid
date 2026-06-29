@@ -38,6 +38,41 @@ public abstract class AssetPack : IAssetPack
     protected bool HasEntry(string entryName) => EntryIndex.ContainsKey(entryName);
 
     /// <summary>
+    ///     The full names of every entry in the archive. Lets subclasses with an extension-agnostic naming convention
+    ///     (e.g. audio packs keyed by an integer id where the file extension varies) build their own lookup index.
+    /// </summary>
+    protected IReadOnlyCollection<string> EntryNames => EntryIndex.Keys;
+
+    /// <summary>
+    ///     Reads the raw, undecoded bytes of the entry with the given name. Swallows read failures (treats them as
+    ///     "not present") so callers can fall back to legacy content cleanly. For non-image content (e.g. audio handed
+    ///     straight to SDL_mixer) where <see cref="TryGetImage" />'s PNG decode does not apply.
+    /// </summary>
+    protected bool TryGetEntryBytes(string entryName, out byte[]? bytes)
+    {
+        bytes = null;
+
+        if (!EntryIndex.TryGetValue(entryName, out var entry))
+            return false;
+
+        try
+        {
+            using var entryStream = entry.Open();
+            using var ms = new MemoryStream();
+            entryStream.CopyTo(ms);
+            bytes = ms.ToArray();
+
+            return true;
+        }
+        catch
+        {
+            bytes = null;
+
+            return false;
+        }
+    }
+
+    /// <summary>
     ///     Decodes the PNG entry with the given name. Swallows decode failures (treats corrupt or non-PNG entries as
     ///     "not present") so the caller can fall back to legacy art cleanly. Caller owns disposal of the returned
     ///     image.

@@ -37,7 +37,9 @@ public static class AssetPackRegistry
         ["static_tiles"]        = static (a, m) => new StaticTilePack(a, m),
         ["legend_mark_icons"]   = static (a, m) => new LegendMarkIconPack(a, m),
         ["ui_sprite_overrides"] = static (a, m) => new UiSpriteOverridePack(a, m),
-        ["creature_sprites"]    = static (a, m) => new CreaturePack(a, m)
+        ["creature_sprites"]    = static (a, m) => new CreaturePack(a, m),
+        ["music"]               = static (a, m) => new MusicPack(a, m),
+        ["sound_effects"]       = static (a, m) => new SfxPack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -186,6 +188,17 @@ public static class AssetPackRegistry
     ///     <c>content_type: creature_sprites</c> is present.
     /// </summary>
     public static CreaturePack? GetCreaturePack() => Packs.GetValueOrDefault("creature_sprites") as CreaturePack;
+
+    /// <summary>
+    ///     Returns the currently-registered music pack, or null if no pack of <c>content_type: music</c> is present.
+    /// </summary>
+    public static MusicPack? GetMusicPack() => Packs.GetValueOrDefault("music") as MusicPack;
+
+    /// <summary>
+    ///     Returns the currently-registered sound-effects pack, or null if no pack of <c>content_type: sound_effects</c>
+    ///     is present.
+    /// </summary>
+    public static SfxPack? GetSfxPack() => Packs.GetValueOrDefault("sound_effects") as SfxPack;
 
     private static void TryRegisterPack(string path)
     {

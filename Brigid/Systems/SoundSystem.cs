@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Brigid.Data;
+using Brigid.Data.AssetPacks;
 #endregion
 
 namespace Brigid.Systems;
@@ -52,6 +53,10 @@ public sealed class SoundSystem : IDisposable
     private readonly HashSet<int> PlayedThisFrame = [];
 
     private int CurrentMusicId = -1;
+    //pins the pack-supplied byte[] backing a streamed Mix_LoadMUS_RW handle; SDL streams from this memory for the
+    //life of playback, so it must stay pinned until the matching Mix_FreeMusic. Default (not allocated) when the
+    //current track came from a loose file via Mix_LoadMUS. Freed in lockstep with CurrentMusicPtr by FreeCurrentMusic.
+    private GCHandle CurrentMusicPin;
     private nint CurrentMusicPtr;
     private bool Initialized;
     private bool IsDisposed;
@@ -84,11 +89,7 @@ public sealed class SoundSystem : IDisposable
         SdlMixer.Mix_HaltChannel(SdlMixer.MIX_DEFAULT_CHANNEL);
         SdlMixer.Mix_HaltMusic();
 
-        if (CurrentMusicPtr != nint.Zero)
-        {
-            SdlMixer.Mix_FreeMusic(CurrentMusicPtr);
-            CurrentMusicPtr = nint.Zero;
-        }
+        FreeCurrentMusic();
 
         foreach (var entry in SoundCache.Values)
             if (entry.Chunk != nint.Zero)
@@ -298,11 +299,7 @@ public sealed class SoundSystem : IDisposable
         {
             MusicFadingOut = false;
 
-            if (CurrentMusicPtr != nint.Zero)
-            {
-                SdlMixer.Mix_FreeMusic(CurrentMusicPtr);
-                CurrentMusicPtr = nint.Zero;
-            }
+            FreeCurrentMusic();
 
             CurrentMusicId = -1;
 
@@ -373,6 +370,12 @@ public sealed class SoundSystem : IDisposable
 
     private static nint LoadChunk(int soundId)
     {
+        //prefer a .datf sound-effects pack override; a present id replaces the legend.dat sound, a new id adds one
+        var pack = AssetPackRegistry.GetSfxPack();
+
+        if ((pack is not null) && pack.TryGetSfxBytes(soundId, out var packBytes) && (packBytes is { Length: > 0 }))
+            return LoadChunkFromBytes(packBytes);
+
         if (!DatArchives.Legend.TryGetValue($"{soundId}.mp3", out var entry))
             return nint.Zero;
 
@@ -423,20 +426,67 @@ public sealed class SoundSystem : IDisposable
         if (musicId == 0)
             return;
 
-        var path = Path.Combine(DataContext.DataPath, "music", $"{musicId}.mus");
+        var handle = nint.Zero;
+        var pin = default(GCHandle);
 
-        if (!File.Exists(path))
-            return;
+        //prefer a .datf music pack override; a present id replaces the legacy loose .mus, a new id adds a track
+        var pack = AssetPackRegistry.GetMusicPack();
 
-        var handle = SdlMixer.Mix_LoadMUS(path);
+        if ((pack is not null) && pack.TryGetMusicBytes(musicId, out var bytes) && (bytes is { Length: > 0 }))
+        {
+            //SDL streams from this memory for the life of playback, so keep it pinned until Mix_FreeMusic
+            pin = GCHandle.Alloc(bytes, GCHandleType.Pinned);
+            var rw = Sdl.SDL_RWFromConstMem(pin.AddrOfPinnedObject(), bytes.Length);
+
+            if (rw != nint.Zero)
+                //freesrc=1 frees the RWops at Mix_FreeMusic time; the backing byte[] stays pinned via `pin`
+                handle = SdlMixer.Mix_LoadMUS_RW(rw, 1);
+
+            if (handle == nint.Zero)
+            {
+                //pack load failed — release the pin and fall through to the legacy loose-file path
+                pin.Free();
+                pin = default;
+            }
+        }
 
         if (handle == nint.Zero)
+        {
+            var path = Path.Combine(DataContext.DataPath, "music", $"{musicId}.mus");
+
+            if (File.Exists(path))
+                handle = SdlMixer.Mix_LoadMUS(path);
+        }
+
+        if (handle == nint.Zero)
+        {
+            if (pin.IsAllocated)
+                pin.Free();
+
             return;
+        }
 
         CurrentMusicPtr = handle;
+        CurrentMusicPin = pin; //default (not allocated) for the loose-file path
         CurrentMusicId = musicId;
 
         //Mix_FadeInMusic ramps from silence up to the current Mix_VolumeMusic over ms milliseconds
         SdlMixer.Mix_FadeInMusic(handle, -1, MUSIC_FADE_MS);
+    }
+
+    //frees the current streaming music handle and, if the track came from a .datf pack, the pinned byte[] backing it.
+    //the order matters: Mix_FreeMusic releases SDL's hold on the RWops (and thus the memory) before we unpin
+    private void FreeCurrentMusic()
+    {
+        if (CurrentMusicPtr != nint.Zero)
+        {
+            SdlMixer.Mix_FreeMusic(CurrentMusicPtr);
+            CurrentMusicPtr = nint.Zero;
+        }
+
+        if (CurrentMusicPin.IsAllocated)
+            CurrentMusicPin.Free();
+
+        CurrentMusicPin = default;
     }
 }
