@@ -34,7 +34,9 @@ public static class LauncherConfig
     public const int DEFAULT_PORT = 2610;
     public const string DEFAULT_HOST = "da0.kru.com";
 
-    private const string FILE_NAME = "config.json";
+    //frozen: the config filename in the pre-Erisco home, used only to locate the file to migrate FROM. The live
+    //config name is owned by AppPaths.ConfigFile and may diverge from this without affecting migration.
+    private const string LEGACY_FILE_NAME = "config.json";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -69,7 +71,7 @@ public static class LauncherConfig
     ///     on first launch after the move so an existing user's server list and asset path migrate to the new home.
     /// </summary>
     private static string LegacyFilePath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Brigid", FILE_NAME);
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Brigid", LEGACY_FILE_NAME);
 
     /// <summary>
     ///     Loads the config file into the static state. Missing/corrupt files yield a fresh default list. Always ensures at
@@ -117,11 +119,17 @@ public static class LauncherConfig
     {
         try
         {
-            if (File.Exists(FilePath) || !File.Exists(LegacyFilePath))
+            if (!File.Exists(LegacyFilePath))
+                return;
+
+            //migrate when the new config is absent OR a 0-byte artifact of a crashed first Save (File.WriteAllText
+            //truncates before writing, so a mid-write crash leaves an empty file). A present, non-empty file is
+            //authoritative and left untouched — the overwrite below only ever replaces the empty placeholder.
+            if (File.Exists(FilePath) && (new FileInfo(FilePath).Length > 0))
                 return;
 
             Directory.CreateDirectory(ConfigDirectory);
-            File.Copy(LegacyFilePath, FilePath);
+            File.Copy(LegacyFilePath, FilePath, true);
         } catch
         {
             //best effort — a missing/locked legacy file just means a fresh default config

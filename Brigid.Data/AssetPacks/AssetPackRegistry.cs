@@ -26,6 +26,12 @@ public static class AssetPackRegistry
     //AppPaths.AssetsDir on first launch after the move, smoothing existing manual installs.
     private const string LEGACY_PACK_SUBFOLDER = "hybrasyl-data";
 
+    //sentinel dropped in the assets dir after the one-and-only legacy-migration attempt. Gates migration on
+    //"has it ever run" instead of "is the dir empty", so (a) a launcher-placed pack of one type no longer blocks
+    //migrating legacy packs of other types, and (b) clearing the assets dir to force a launcher re-fetch never
+    //resurrects stale legacy packs. Not a .datf, so pack discovery ignores it.
+    private const string MIGRATION_MARKER_NAME = ".legacy-migrated";
+
     //factories know how to build each pack type from a (ZipArchive, AssetPackManifest) pair. Adding a new content
     //type = add one line here + write the pack class. Keyed by manifest.content_type.
     private static readonly Dictionary<string, Func<ZipArchive, AssetPackManifest, IAssetPack>> Factories = new()
@@ -101,9 +107,10 @@ public static class AssetPackRegistry
 
     /// <summary>
     ///     One-time, best-effort copy of legacy <c>{DataPath}/hybrasyl-data/*.datf</c> packs into
-    ///     <paramref name="assetsDir" />, run only when the new directory holds no packs yet so launcher-managed content
-    ///     is never clobbered. Packs are normally managed by the launcher; this only smooths existing manual installs.
-    ///     Never throws.
+    ///     <paramref name="assetsDir" />, run at most once ever (gated by <see cref="MIGRATION_MARKER_NAME" />). A
+    ///     per-file <c>File.Exists</c> skip means launcher-placed content is never clobbered, so the whole set can
+    ///     migrate even when a pack of some other type already lives here. Packs are normally managed by the launcher;
+    ///     this only smooths existing manual installs. Never throws.
     /// </summary>
     private static void TryMigrateLegacyPacks(string assetsDir)
     {
@@ -112,33 +119,62 @@ public static class AssetPackRegistry
             if (string.IsNullOrEmpty(DataContext.DataPath))
                 return;
 
-            //migrate only into an empty assets dir — never overwrite content already placed here
-            if (!Directory.Exists(assetsDir) || Directory.EnumerateFiles(assetsDir, "*.datf", SearchOption.TopDirectoryOnly).Any())
+            var marker = Path.Combine(assetsDir, MIGRATION_MARKER_NAME);
+
+            //already attempted once — never run again, even if the assets dir was later cleared
+            if (File.Exists(marker))
                 return;
 
             var legacyDir = Path.Combine(DataContext.DataPath, LEGACY_PACK_SUBFOLDER);
 
-            if (!Directory.Exists(legacyDir))
-                return;
-
-            var migrated = 0;
-
-            foreach (var src in Directory.EnumerateFiles(legacyDir, "*.datf", SearchOption.TopDirectoryOnly))
+            if (Directory.Exists(legacyDir))
             {
-                var dst = Path.Combine(assetsDir, Path.GetFileName(src));
+                Directory.CreateDirectory(assetsDir);
 
-                if (File.Exists(dst))
-                    continue;
+                var migrated = 0;
 
-                File.Copy(src, dst);
-                migrated++;
+                foreach (var src in Directory.EnumerateFiles(legacyDir, "*.datf", SearchOption.TopDirectoryOnly))
+                {
+                    var dst = Path.Combine(assetsDir, Path.GetFileName(src));
+
+                    if (File.Exists(dst))
+                        continue;
+
+                    try
+                    {
+                        //copy to a temp sibling then move into place, so an interrupted copy never leaves a
+                        //truncated .datf that would fail ZipFile.OpenRead on every subsequent launch. One locked
+                        //or unreadable source skips just that pack instead of aborting the rest of the set.
+                        var tmp = dst + ".tmp";
+                        File.Copy(src, tmp, true);
+                        File.Move(tmp, dst, true);
+                        migrated++;
+                    } catch
+                    {
+                        //skip this pack — a locked/unreadable source shouldn't block the others
+                    }
+                }
+
+                if (migrated > 0)
+                    LogInfo($"migrated {migrated} legacy asset pack(s) from '{legacyDir}' to '{assetsDir}'");
             }
 
-            if (migrated > 0)
-                LogInfo($"migrated {migrated} legacy asset pack(s) from '{legacyDir}' to '{assetsDir}'");
+            //drop the marker whether or not anything was found, so we don't re-scan the legacy dir every launch
+            TryWriteMigrationMarker(marker);
         } catch
         {
-            //best effort — a failed copy just means nothing migrated; the launcher can re-fetch packs
+            //best effort — a failed migration just means nothing migrated; the launcher can re-fetch packs
+        }
+    }
+
+    private static void TryWriteMigrationMarker(string markerPath)
+    {
+        try
+        {
+            File.WriteAllText(markerPath, string.Empty);
+        } catch
+        {
+            //non-fatal — worst case migration is re-attempted next launch, and per-file skips keep that idempotent
         }
     }
 

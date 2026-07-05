@@ -30,7 +30,15 @@ public static class AppPaths
                 ? Environment.SpecialFolder.LocalApplicationData
                 : Environment.SpecialFolder.ApplicationData;
 
-            return Path.Combine(Environment.GetFolderPath(special), VENDOR);
+            var baseDir = Environment.GetFolderPath(special);
+
+            //GetFolderPath returns "" when the special folder is undefined (stripped-env / service contexts, or
+            //Unix with HOME unset). Path.Combine("", VENDOR) would yield a CWD-relative "erisco" that scatters
+            //config and packs across whatever directory the process launched from; anchor to the install dir instead.
+            if (string.IsNullOrEmpty(baseDir))
+                baseDir = AppContext.BaseDirectory;
+
+            return Path.Combine(baseDir, VENDOR);
         }
     }
 

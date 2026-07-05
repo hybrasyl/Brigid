@@ -374,7 +374,16 @@ public sealed class SoundSystem : IDisposable
         var pack = AssetPackRegistry.GetSfxPack();
 
         if ((pack is not null) && pack.TryGetSfxBytes(soundId, out var packBytes) && (packBytes is { Length: > 0 }))
-            return LoadChunkFromBytes(packBytes);
+        {
+            var packChunk = LoadChunkFromBytes(packBytes);
+
+            if (packChunk != nint.Zero)
+                return packChunk;
+
+            //pack entry present but undecodable (corrupt, or a codec the bundled SDL2_mixer wasn't built with —
+            //only mp3/wav are guaranteed) — fall through to the legacy sound rather than going silent, matching
+            //StartMusic's pack-decode-failure fallback and the image packs' "decode failure = not present" contract
+        }
 
         if (!DatArchives.Legend.TryGetValue($"{soundId}.mp3", out var entry))
             return nint.Zero;

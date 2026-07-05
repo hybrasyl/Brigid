@@ -81,26 +81,14 @@ public abstract class AssetPack : IAssetPack
     {
         image = null;
 
-        if (!EntryIndex.TryGetValue(entryName, out var entry))
+        //share the single entry-read-and-swallow path; SKImage.FromEncodedData returns null on non-PNG/corrupt
+        //data, so a decode failure is reported as "not present" just like a read failure
+        if (!TryGetEntryBytes(entryName, out var bytes) || bytes is null)
             return false;
 
-        try
-        {
-            using var entryStream = entry.Open();
-            using var ms = new MemoryStream();
-            entryStream.CopyTo(ms);
-            ms.Position = 0;
-            image = SKImage.FromEncodedData(ms);
+        image = SKImage.FromEncodedData(bytes);
 
-            return image is not null;
-        }
-        catch
-        {
-            image?.Dispose();
-            image = null;
-
-            return false;
-        }
+        return image is not null;
     }
 
     public virtual void Dispose() => Archive.Dispose();

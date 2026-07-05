@@ -1,4 +1,5 @@
 #region
+using System.Globalization;
 using System.IO.Compression;
 #endregion
 
@@ -47,16 +48,16 @@ public abstract class AudioPack : AssetPack
 
             var idText = name[marker.Length..dot];
 
-            if (!int.TryParse(idText, out var id) || (id <= 0))
+            //NumberStyles.None + invariant culture: accept only plain digits (zero-padding is fine; id 0 is a legal
+            //legacy sound) and reject sign/whitespace/culture-specific forms so "sfx_+1"/"sfx_ 1" can't silently
+            //alias id 1 and pick a winner by zip order
+            if (!int.TryParse(idText, NumberStyles.None, CultureInfo.InvariantCulture, out var id))
                 continue;
 
             //last writer wins on the (pack-author error) case of two extensions for one id
             IdToEntry[id] = name;
         }
     }
-
-    /// <summary>True if this pack carries an entry for <paramref name="id" /> — dictionary lookup only, no read.</summary>
-    protected bool HasAudio(int id) => IdToEntry.ContainsKey(id);
 
     /// <summary>
     ///     Returns the raw bytes of the audio entry for <paramref name="id" />, or false if this pack has no entry for
