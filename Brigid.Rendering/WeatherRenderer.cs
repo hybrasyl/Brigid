@@ -74,6 +74,13 @@ public sealed class WeatherRenderer : IDisposable
     public bool IsActive => WeatherNibble is 0x01 or 0x02;
 
     /// <summary>
+    ///     Whether the map-flags byte encodes rain (low nibble 2). Static — deliberately independent of this
+    ///     renderer's asset state, because the flag stays authoritative for non-visual consumers (rain
+    ///     ambience) even when the rain texture failed to load and the instance deactivated itself.
+    /// </summary>
+    public static bool IsRain(MapFlags flags) => ((byte)flags & 0x0F) == 0x02;
+
+    /// <summary>
     ///     Call on map change. Compares nibbles; if the weather mode changed, releases old textures
     ///     and loads new ones.
     /// </summary>
