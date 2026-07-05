@@ -62,6 +62,11 @@ public sealed partial class WorldScreen : IScreen
     private const string SPOUSE_PREFIX = "Spouse: ";
     private const string GROUP_MEMBERS_PREFIX = "Group members";
 
+    //sound id for the looping rain ambience on rain-flagged maps. reserved for .datf sfx packs: retail
+    //legend.dat sound ids are small numerics, so this id can never resolve from legacy data — without a
+    //pack entry the loop is a silent no-op
+    private const int RAIN_AMBIENT_SOUND_ID = 10000;
+
     private readonly CastingSystem CastingSystem = new();
 
     private readonly WorldDebugRenderer DebugRenderer = new();
@@ -788,6 +793,10 @@ public sealed partial class WorldScreen : IScreen
         WorldHud.SpellBookAlt.OnSlotClicked -= HandleSpellSlotClicked;
         WorldHud.Tools.WorldSkills.OnSlotClicked -= HandleSkillSlotClicked;
         WorldHud.Tools.WorldSpells.OnSlotClicked -= HandleSpellSlotClicked;
+
+        //first in the teardown chain: unlike the disposals below, a skipped stop is a permanently audible
+        //artifact (the loop would keep playing over the lobby), and StopAmbientLoop cannot throw
+        Game.SoundSystem.StopAmbientLoop();
 
         WorldState.ResetAll();
 

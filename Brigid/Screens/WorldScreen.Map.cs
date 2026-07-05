@@ -41,6 +41,7 @@ public sealed partial class WorldScreen
                 CurrentMapFlags = newFlags;
                 DarknessRenderer.OnMapChanged(args.MapId, CurrentMapFlags.HasFlag(MapFlags.Darkness));
                 WeatherRenderer.OnMapChanged(CurrentMapFlags);
+                UpdateWeatherAmbience();
             }
 
             UpdateHuds(HudOps.SetZoneName, args.Name);
@@ -85,9 +86,20 @@ public sealed partial class WorldScreen
         //reset darkness state and load hea light map for the new map
         DarknessRenderer.OnMapChanged(args.MapId, CurrentMapFlags.HasFlag(MapFlags.Darkness));
         WeatherRenderer.OnMapChanged(CurrentMapFlags);
+        UpdateWeatherAmbience();
 
         UpdateHuds(HudOps.SetZoneName, args.Name);
         UpdateHuds(HudOps.ShowPersistentMessage, string.Empty);
+    }
+
+    //rain maps get a looping ambient bed; any other weather nibble stops it. StartAmbientLoop's same-id
+    //no-op keeps rain-to-rain transitions seamless, and the id only resolves from a .datf sfx pack
+    private void UpdateWeatherAmbience()
+    {
+        if (WeatherRenderer.IsRain(CurrentMapFlags))
+            Game.SoundSystem.StartAmbientLoop(RAIN_AMBIENT_SOUND_ID);
+        else
+            Game.SoundSystem.StopAmbientLoop();
     }
 
     private void ClearTransientState()
