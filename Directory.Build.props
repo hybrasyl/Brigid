@@ -27,10 +27,9 @@
         <PackageTags>darkages; doomvas; private server;</PackageTags>
         <Version>0.1.0</Version>
 
-        <!-- DALib is consumed from the sibling checkout until a release with the networking layer
-             is published; flip the default to false (NuGet) when that ships. Override per-build
-             with -p:UseLocalDALib=false. -->
-        <UseLocalDALib Condition="'$(UseLocalDALib)' == ''">true</UseLocalDALib>
+        <!-- DALib is consumed from the pinned NuGet package by default. Opt into the sibling checkout
+             with -p:UseLocalDALib=true when co-developing DALib alongside Brigid. -->
+        <UseLocalDALib Condition="'$(UseLocalDALib)' == ''">false</UseLocalDALib>
         <LocalDALibProjectPath Condition="'$(LocalDALibProjectPath)' == ''">$(MSBuildThisFileDirectory)..\dalib\DALib\DALib.csproj</LocalDALibProjectPath>
     </PropertyGroup>
 
