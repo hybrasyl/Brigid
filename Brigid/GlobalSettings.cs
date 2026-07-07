@@ -38,6 +38,14 @@ public static class GlobalSettings
     public static int LobbyPort { get; set; } = 2610;
 
     /// <summary>
+    ///     True when the connected lobby host is Kru's retail Dark Ages (e.g. <c>da0.kru.com</c>). Kru's login notice uses a
+    ///     legacy fixed-width, TAB-delimited layout with literal "." spacer lines that must be reflowed for display; Hybrasyl
+    ///     (and other modern hosts) send clean newline-delimited notices that should be shown verbatim. Used to gate the
+    ///     retail-only notice normalization.
+    /// </summary>
+    public static bool IsCursed => LobbyHost.EndsWith("kru.com", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     ///     True when the launcher screen should be shown at startup (the normal case). False only when environment
     ///     variables fully specify a valid host + asset path, in which case the client auto-connects without the launcher
     ///     (for CI / scripted launches).

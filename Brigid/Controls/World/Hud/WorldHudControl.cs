@@ -99,6 +99,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
     public MailButton? MailButton { get; }
 
     //buttons — right side
+    public UIButton? OptionButton { get; }
     public UIButton? ScreenshotButton { get; }
     public UIButton? SettingsButton { get; }
     public UIButton? TownMapButton { get; }
@@ -193,6 +194,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         AddChild(EffectBar);
 
         //buttons — right side
+        OptionButton = CreateButton("BTN_OPTION");
         BulletinButton = CreateButton("BTN_BULLETIN");
         UsersButton = CreateButton("BTN_USERS");
         ExpandButton = CreateButton("BTN_EXPAND");

@@ -223,6 +223,20 @@ public sealed class UiRenderer : IDisposable
         if (Cache.TryGetValue(key, out var cached))
             return cached;
 
+        //modern path: world_maps .datf pack PNG decoded via SkiaSharp. Reuse the same Convert + Cache flow as the
+        //legacy path so the cached texture's ownership/disposal contract is identical (WorldMap.ClearBackground
+        //disposes whatever is cached here).
+        var pack = AssetPackRegistry.GetWorldMapPack();
+
+        if ((pack is not null) && pack.TryGetFieldImage(fieldName, out var modern) && (modern is not null))
+            using (modern)
+            {
+                var modernTexture = Convert(modern);
+                Cache[key] = modernTexture;
+
+                return modernTexture;
+            }
+
         using var image = DataContext.UserControls.GetFieldImage(fieldName);
 
         if (image is null)
