@@ -38,13 +38,19 @@ public abstract class AssetPack : IAssetPack
     protected bool HasEntry(string entryName) => EntryIndex.ContainsKey(entryName);
 
     /// <summary>
-    ///     Decodes the PNG entry with the given name. Swallows decode failures (treats corrupt or non-PNG entries as
-    ///     "not present") so the caller can fall back to legacy art cleanly. Caller owns disposal of the returned
-    ///     image.
+    ///     The full names of every entry in the archive. Lets subclasses with an extension-agnostic naming convention
+    ///     (e.g. audio packs keyed by an integer id where the file extension varies) build their own lookup index.
     /// </summary>
-    protected bool TryGetImage(string entryName, out SKImage? image)
+    protected IReadOnlyCollection<string> EntryNames => EntryIndex.Keys;
+
+    /// <summary>
+    ///     Reads the raw, undecoded bytes of the entry with the given name. Swallows read failures (treats them as
+    ///     "not present") so callers can fall back to legacy content cleanly. For non-image content (e.g. audio handed
+    ///     straight to SDL_mixer) where <see cref="TryGetImage" />'s PNG decode does not apply.
+    /// </summary>
+    protected bool TryGetEntryBytes(string entryName, out byte[]? bytes)
     {
-        image = null;
+        bytes = null;
 
         if (!EntryIndex.TryGetValue(entryName, out var entry))
             return false;
@@ -54,18 +60,35 @@ public abstract class AssetPack : IAssetPack
             using var entryStream = entry.Open();
             using var ms = new MemoryStream();
             entryStream.CopyTo(ms);
-            ms.Position = 0;
-            image = SKImage.FromEncodedData(ms);
+            bytes = ms.ToArray();
 
-            return image is not null;
+            return true;
         }
         catch
         {
-            image?.Dispose();
-            image = null;
+            bytes = null;
 
             return false;
         }
+    }
+
+    /// <summary>
+    ///     Decodes the PNG entry with the given name. Swallows decode failures (treats corrupt or non-PNG entries as
+    ///     "not present") so the caller can fall back to legacy art cleanly. Caller owns disposal of the returned
+    ///     image.
+    /// </summary>
+    protected bool TryGetImage(string entryName, out SKImage? image)
+    {
+        image = null;
+
+        //share the single entry-read-and-swallow path; SKImage.FromEncodedData returns null on non-PNG/corrupt
+        //data, so a decode failure is reported as "not present" just like a read failure
+        if (!TryGetEntryBytes(entryName, out var bytes) || bytes is null)
+            return false;
+
+        image = SKImage.FromEncodedData(bytes);
+
+        return image is not null;
     }
 
     public virtual void Dispose() => Archive.Dispose();

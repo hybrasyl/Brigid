@@ -6,10 +6,11 @@ using System.Text.Json;
 namespace Brigid.Data.AssetPacks;
 
 /// <summary>
-///     Discovers and registers <c>.datf</c> asset packs from <c>{DataPath}/hybrasyl-data/</c> at startup. Packs are
-///     identified by the <c>content_type</c> field in their embedded <c>_manifest.json</c> and exposed via typed
-///     accessors (e.g. <see cref="GetIconPack" />). Missing manifests, malformed JSON, or unsupported schema
-///     versions cause the pack to be skipped with a warning rather than failing startup.
+///     Discovers and registers <c>.datf</c> asset packs from the per-user erisco assets directory
+///     (<see cref="AppPaths.AssetsDir" />) at startup. Packs are identified by the <c>content_type</c> field in their
+///     embedded <c>_manifest.json</c> and exposed via typed accessors (e.g. <see cref="GetIconPack" />). Missing
+///     manifests, malformed JSON, or unsupported schema versions cause the pack to be skipped with a warning rather
+///     than failing startup.
 ///     <para>
 ///     The registry stores packs through the <see cref="IAssetPack" /> interface in a content-type-keyed dictionary;
 ///     adding a new pack type is one factory entry in <see cref="Factories" /> plus one typed accessor. Per-type
@@ -20,7 +21,16 @@ public static class AssetPackRegistry
 {
     private const int SUPPORTED_SCHEMA_VERSION = 1;
     private const string MANIFEST_ENTRY_NAME = "_manifest.json";
-    private const string PACK_SUBFOLDER = "hybrasyl-data";
+
+    //the pre-erisco pack location, relative to the retail data path. Packs found here are migrated once into
+    //AppPaths.AssetsDir on first launch after the move, smoothing existing manual installs.
+    private const string LEGACY_PACK_SUBFOLDER = "hybrasyl-data";
+
+    //sentinel dropped in the assets dir after the one-and-only legacy-migration attempt. Gates migration on
+    //"has it ever run" instead of "is the dir empty", so (a) a launcher-placed pack of one type no longer blocks
+    //migrating legacy packs of other types, and (b) clearing the assets dir to force a launcher re-fetch never
+    //resurrects stale legacy packs. Not a .datf, so pack discovery ignores it.
+    private const string MIGRATION_MARKER_NAME = ".legacy-migrated";
 
     //factories know how to build each pack type from a (ZipArchive, AssetPackManifest) pair. Adding a new content
     //type = add one line here + write the pack class. Keyed by manifest.content_type.
@@ -33,7 +43,10 @@ public static class AssetPackRegistry
         ["static_tiles"]        = static (a, m) => new StaticTilePack(a, m),
         ["legend_mark_icons"]   = static (a, m) => new LegendMarkIconPack(a, m),
         ["ui_sprite_overrides"] = static (a, m) => new UiSpriteOverridePack(a, m),
-        ["creature_sprites"]    = static (a, m) => new CreaturePack(a, m)
+        ["creature_sprites"]    = static (a, m) => new CreaturePack(a, m),
+        ["music"]               = static (a, m) => new MusicPack(a, m),
+        ["sound_effects"]       = static (a, m) => new SfxPack(a, m),
+        ["world_maps"]          = static (a, m) => new WorldMapPack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -42,8 +55,10 @@ public static class AssetPackRegistry
     private static bool Initialized;
 
     /// <summary>
-    ///     Scans <c>{<see cref="DataContext.DataPath" />}/hybrasyl-data/</c> for <c>*.datf</c> files and registers
-    ///     each pack by its declared content type. Idempotent; subsequent calls are no-ops.
+    ///     Scans <see cref="AppPaths.AssetsDir" /> for <c>*.datf</c> files and registers each pack by its declared
+    ///     content type. Ensures the directory exists and migrates any legacy <c>{DataPath}/hybrasyl-data/</c> packs
+    ///     into it once. Idempotent; subsequent calls are no-ops. An empty/absent directory is a clean no-op — renderers
+    ///     then fall through to legacy assets.
     /// </summary>
     public static void Initialize()
     {
@@ -52,7 +67,17 @@ public static class AssetPackRegistry
 
         Initialized = true;
 
-        var packDir = Path.Combine(DataContext.DataPath, PACK_SUBFOLDER);
+        var packDir = AppPaths.AssetsDir;
+
+        try
+        {
+            Directory.CreateDirectory(packDir);
+        } catch
+        {
+            //best effort — if the dir can't be created, the enumerate below simply finds nothing
+        }
+
+        TryMigrateLegacyPacks(packDir);
 
         if (!Directory.Exists(packDir))
         {
@@ -78,6 +103,79 @@ public static class AssetPackRegistry
         }
 
         LogInfo($"registered {Packs.Count - registeredBefore} asset pack(s) from '{packDir}'");
+    }
+
+    /// <summary>
+    ///     One-time, best-effort copy of legacy <c>{DataPath}/hybrasyl-data/*.datf</c> packs into
+    ///     <paramref name="assetsDir" />, run at most once ever (gated by <see cref="MIGRATION_MARKER_NAME" />). A
+    ///     per-file <c>File.Exists</c> skip means launcher-placed content is never clobbered, so the whole set can
+    ///     migrate even when a pack of some other type already lives here. Packs are normally managed by the launcher;
+    ///     this only smooths existing manual installs. Never throws.
+    /// </summary>
+    private static void TryMigrateLegacyPacks(string assetsDir)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(DataContext.DataPath))
+                return;
+
+            var marker = Path.Combine(assetsDir, MIGRATION_MARKER_NAME);
+
+            //already attempted once — never run again, even if the assets dir was later cleared
+            if (File.Exists(marker))
+                return;
+
+            var legacyDir = Path.Combine(DataContext.DataPath, LEGACY_PACK_SUBFOLDER);
+
+            if (Directory.Exists(legacyDir))
+            {
+                Directory.CreateDirectory(assetsDir);
+
+                var migrated = 0;
+
+                foreach (var src in Directory.EnumerateFiles(legacyDir, "*.datf", SearchOption.TopDirectoryOnly))
+                {
+                    var dst = Path.Combine(assetsDir, Path.GetFileName(src));
+
+                    if (File.Exists(dst))
+                        continue;
+
+                    try
+                    {
+                        //copy to a temp sibling then move into place, so an interrupted copy never leaves a
+                        //truncated .datf that would fail ZipFile.OpenRead on every subsequent launch. One locked
+                        //or unreadable source skips just that pack instead of aborting the rest of the set.
+                        var tmp = dst + ".tmp";
+                        File.Copy(src, tmp, true);
+                        File.Move(tmp, dst, true);
+                        migrated++;
+                    } catch
+                    {
+                        //skip this pack — a locked/unreadable source shouldn't block the others
+                    }
+                }
+
+                if (migrated > 0)
+                    LogInfo($"migrated {migrated} legacy asset pack(s) from '{legacyDir}' to '{assetsDir}'");
+            }
+
+            //drop the marker whether or not anything was found, so we don't re-scan the legacy dir every launch
+            TryWriteMigrationMarker(marker);
+        } catch
+        {
+            //best effort — a failed migration just means nothing migrated; the launcher can re-fetch packs
+        }
+    }
+
+    private static void TryWriteMigrationMarker(string markerPath)
+    {
+        try
+        {
+            File.WriteAllText(markerPath, string.Empty);
+        } catch
+        {
+            //non-fatal — worst case migration is re-attempted next launch, and per-file skips keep that idempotent
+        }
     }
 
     /// <summary>
@@ -127,6 +225,23 @@ public static class AssetPackRegistry
     ///     <c>content_type: creature_sprites</c> is present.
     /// </summary>
     public static CreaturePack? GetCreaturePack() => Packs.GetValueOrDefault("creature_sprites") as CreaturePack;
+
+    /// <summary>
+    ///     Returns the currently-registered music pack, or null if no pack of <c>content_type: music</c> is present.
+    /// </summary>
+    public static MusicPack? GetMusicPack() => Packs.GetValueOrDefault("music") as MusicPack;
+
+    /// <summary>
+    ///     Returns the currently-registered sound-effects pack, or null if no pack of <c>content_type: sound_effects</c>
+    ///     is present.
+    /// </summary>
+    public static SfxPack? GetSfxPack() => Packs.GetValueOrDefault("sound_effects") as SfxPack;
+
+    /// <summary>
+    ///     Returns the currently-registered world-map pack, or null if no pack of <c>content_type: world_maps</c> is
+    ///     present.
+    /// </summary>
+    public static WorldMapPack? GetWorldMapPack() => Packs.GetValueOrDefault("world_maps") as WorldMapPack;
 
     private static void TryRegisterPack(string path)
     {

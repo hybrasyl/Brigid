@@ -35,8 +35,8 @@ public sealed class AssetPackManifest
     ///     <c>Factories</c> dictionary lists every recognized value; manifests declaring an unknown content type are
     ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>nation_badges</c>,
     ///     <c>item_icons</c>, <c>npc_portraits</c>, <c>static_tiles</c>, <c>legend_mark_icons</c>,
-    ///     <c>ui_sprite_overrides</c>, <c>creature_sprites</c>. Future content types land as additions to that
-    ///     dictionary.
+    ///     <c>ui_sprite_overrides</c>, <c>creature_sprites</c>, <c>music</c>, <c>sound_effects</c>, <c>world_maps</c>.
+    ///     Future content types land as additions to that dictionary.
     /// </summary>
     [JsonPropertyName("content_type")]
     public string ContentType { get; init; } = string.Empty;
