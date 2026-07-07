@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Extensions;
 using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 #endregion
@@ -40,6 +41,7 @@ public sealed class ServerSelectControl : PrefabPanel
         for (var i = 0; i < entries.Count; i++)
         {
             var server = entries[i];
+            var (serverName, serverDescription) = server.SplitNameDescription();
 
             var nameLabel = new UILabel
             {
@@ -48,7 +50,7 @@ public sealed class ServerSelectControl : PrefabPanel
                 Y = FIRST_ROW_Y + i * ROW_HEIGHT,
                 Width = DESC_X - NAME_X,
                 Height = ROW_HEIGHT,
-                Text = server.Name,
+                Text = serverName,
                 ForegroundColor = LegendColors.White,
                 PaddingLeft = 0,
                 PaddingTop = 0
@@ -61,7 +63,7 @@ public sealed class ServerSelectControl : PrefabPanel
                 Y = FIRST_ROW_Y + i * ROW_HEIGHT,
                 Width = Width - DESC_X,
                 Height = ROW_HEIGHT,
-                Text = string.Empty,
+                Text = serverDescription,
                 ForegroundColor = Color.LightGray,
                 PaddingLeft = 0,
                 PaddingTop = 0

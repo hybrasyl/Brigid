@@ -121,18 +121,10 @@ public sealed class ConnectionManager : IDisposable
     public void ClickTile(int x, int y) => SendIfWorld(Cli.ClickPacket.Point((ushort)x, (ushort)y, 1));
 
     /// <summary>
-    ///     Sends a click on a door tile. Door panels are above-tile sprites, so the anchor flag is 0.
+    ///     Sends a click on a door tile. Door panels are above-tile sprites, so the anchor flag is 0
+    ///     (per the retail 0x43 point-click wire model; see comhaigne 0x43-point-click).
     /// </summary>
-    /// <remarks>
-    ///     The legacy LFG/RFG <paramref name="layer" /> distinction is no longer carried on the wire; the DALib
-    ///     <c>ClickPacket.Point</c> anchor flag (0 = above-tile) covers door dispatch on both retail and Hybrasyl.
-    ///     The parameter is retained for caller compatibility but ignored.
-    /// </remarks>
-    public void ClickDoor(int x, int y, byte layer = 0)
-    {
-        _ = layer;
-        SendIfWorld(Cli.ClickPacket.Point((ushort)x, (ushort)y, 0));
-    }
+    public void ClickDoor(int x, int y) => SendIfWorld(Cli.ClickPacket.Point((ushort)x, (ushort)y, 0));
 
     /// <summary>
     ///     Sends a coord click for a floor-aligned tile target (signpost, ground item, door frame, stair base).
@@ -342,12 +334,8 @@ public sealed class ConnectionManager : IDisposable
             });
     }
 
-    //--- inventory ---
-
     /// <summary>Fired when an item is added to the inventory pane.</summary>
     public event Action<Server.AddItemPacket>? OnAddItemToPane;
-
-    //--- skills / spells ---
 
     /// <summary>Fired when a skill is added to the skill pane.</summary>
     public event Action<Server.AddSkillPacket>? OnAddSkillToPane;
@@ -397,8 +385,6 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>Fired when a group invite/recruit packet is received.</summary>
     public event Action<Server.GroupResponsePacket>? OnDisplayGroupInvite;
 
-    //--- npc interaction ---
-
     /// <summary>Fired when an NPC menu should be displayed.</summary>
     public event Action<Server.NpcMenuPacket>? OnDisplayMenu;
 
@@ -420,8 +406,6 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>Fired when a status effect icon is applied or removed.</summary>
     public event Action<Server.StatusBarPacket>? OnEffect;
 
-    //--- equipment ---
-
     /// <summary>Fired when an equipment slot is updated.</summary>
     public event Action<Server.AddEquipmentPacket>? OnEquipment;
 
@@ -431,12 +415,8 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>Fired when a logout response is received.</summary>
     public event Action<Server.ConfirmExitPacket>? OnExitResponse;
 
-    //--- visual / audio ---
-
     /// <summary>Fired when an entity's health bar should be displayed.</summary>
     public event Action<Server.HealthBarPacket>? OnHealthBar;
-
-    //--- world state ---
 
     /// <summary>Fired when the ambient light level changes (time of day).</summary>
     public event Action<Server.LightLevelPacket>? OnLightLevel;
@@ -491,8 +471,6 @@ public sealed class ConnectionManager : IDisposable
 
     /// <summary>Fired when the player's own profile is received.</summary>
     public event Action<Server.SelfProfilePacket>? OnSelfProfile;
-
-    //--- chat / messages ---
 
     /// <summary>Fired when a system message is received (yellow text, overhead, etc.).</summary>
     public event Action<Server.SystemMessagePacket>? OnServerMessage;
@@ -665,9 +643,7 @@ public sealed class ConnectionManager : IDisposable
         string? subject = null,
         string? message = null)
     {
-        _ = controls;
-
-        Cli.BoardRequestPacket packet = requestType switch
+        Cli.BoardRequestPacket? packet = requestType switch
         {
             BoardRequestType.BoardList => new Cli.BoardListPacket(),
             BoardRequestType.ViewBoard => new Cli.ViewBoardPacket
@@ -676,11 +652,12 @@ public sealed class ConnectionManager : IDisposable
                 StartPostId = startPostId,
                 Offset = -16
             },
+            //offset drives server-side prev/next navigation: 0 = exact post, 1 = newer, -1 = older
             BoardRequestType.ViewPost => new Cli.ViewPostPacket
             {
                 BoardId = boardId,
                 PostId = postId,
-                Offset = 0
+                Offset = (sbyte)(controls ?? BoardControls.RequestPost)
             },
             BoardRequestType.NewPost => new Cli.NewPostPacket
             {
@@ -705,8 +682,15 @@ public sealed class ConnectionManager : IDisposable
                 BoardId = boardId,
                 PostId = postId
             },
-            _ => new Cli.BoardListPacket()
+            _ => null
         };
+
+        if (packet is null)
+        {
+            NoticeDebugLog.Write($"SendBoardInteraction: unmapped BoardRequestType {requestType} -- not sent");
+
+            return;
+        }
 
         SendIfWorld(packet);
     }
@@ -747,7 +731,7 @@ public sealed class ConnectionManager : IDisposable
     ///     Sends a dialog interaction response (Next/Prev/Close, option select, text input).
     /// </summary>
     public void SendDialogResponse(
-        EntityType entityType,
+        byte objectType,
         uint entityId,
         ushort pursuitId,
         ushort dialogId,
@@ -759,7 +743,7 @@ public sealed class ConnectionManager : IDisposable
         {
             DialogArgsType.MenuResponse => new Cli.DialogOptionResponsePacket
             {
-                ObjectType = (byte)entityType,
+                ObjectType = objectType,
                 ObjectId = entityId,
                 PursuitId = pursuitId,
                 PursuitIndex = dialogId,
@@ -767,7 +751,7 @@ public sealed class ConnectionManager : IDisposable
             },
             DialogArgsType.TextResponse => new Cli.DialogTextResponsePacket
             {
-                ObjectType = (byte)entityType,
+                ObjectType = objectType,
                 ObjectId = entityId,
                 PursuitId = pursuitId,
                 PursuitIndex = dialogId,
@@ -775,7 +759,7 @@ public sealed class ConnectionManager : IDisposable
             },
             _ => new Cli.DialogNavigationPacket
             {
-                ObjectType = (byte)entityType,
+                ObjectType = objectType,
                 ObjectId = entityId,
                 PursuitId = pursuitId,
                 PursuitIndex = dialogId
@@ -817,7 +801,7 @@ public sealed class ConnectionManager : IDisposable
         byte? itemCount = null,
         int? goldAmount = null)
     {
-        Cli.ExchangePacket packet = type switch
+        Cli.ExchangePacket? packet = type switch
         {
             ExchangeRequestType.StartExchange => new Cli.StartExchangePacket { OtherUserId = otherId },
             ExchangeRequestType.AddItem => new Cli.AddExchangeItemPacket
@@ -838,8 +822,15 @@ public sealed class ConnectionManager : IDisposable
             },
             ExchangeRequestType.Cancel => new Cli.CancelExchangePacket { OtherUserId = otherId },
             ExchangeRequestType.Accept => new Cli.AcceptExchangePacket { OtherUserId = otherId },
-            _ => new Cli.CancelExchangePacket { OtherUserId = otherId }
+            _ => null
         };
+
+        if (packet is null)
+        {
+            NoticeDebugLog.Write($"SendExchangeInteraction: unmapped ExchangeRequestType {type} -- not sent");
+
+            return;
+        }
 
         SendIfWorld(packet);
     }
@@ -851,7 +842,7 @@ public sealed class ConnectionManager : IDisposable
     {
         var name = targetName ?? string.Empty;
 
-        IClientPacket packet = action switch
+        IClientPacket? packet = action switch
         {
             ClientGroupSwitch.TryInvite => Cli.GroupRequestPacket.TryInvite(name),
             ClientGroupSwitch.AcceptInvite => Cli.GroupRequestPacket.AcceptInvite(name),
@@ -861,8 +852,15 @@ public sealed class ConnectionManager : IDisposable
             //ViewGroupBox = Hybrasyl group stage 5 (RecruitInfo); DALib's GroupRequestPacket has no stage-5 factory,
             //so it is emitted via a raw stage-5 group packet ([5][string8 name]).
             ClientGroupSwitch.ViewGroupBox => new ViewRecruitInfoPacket(name),
-            _ => Cli.GroupRequestPacket.TryInvite(name)
+            _ => null
         };
+
+        if (packet is null)
+        {
+            NoticeDebugLog.Write($"SendGroupInvite: unmapped ClientGroupSwitch {action} -- not sent");
+
+            return;
+        }
 
         SendIfWorld(packet);
     }
@@ -876,14 +874,12 @@ public sealed class ConnectionManager : IDisposable
     ///     Sends a menu interaction response (pursuit selection / text / option).
     /// </summary>
     public void SendMenuResponse(
-        EntityType entityType,
+        byte objectType,
         uint entityId,
         ushort pursuitId,
         byte? slot = null,
         string[]? args = null)
     {
-        var objectType = (byte)entityType;
-
         Cli.NpcMainMenuPacket packet;
 
         if (slot is { } slotValue)
@@ -1117,6 +1113,9 @@ public sealed class ConnectionManager : IDisposable
 
     private void IndexHandlers()
     {
+        //0x1F (old MapChangeComplete) is deliberately unregistered: HandleMapInfo synthesizes that
+        //entry flag unconditionally, and Hybrasyl never emits 0x1F (DALib names it ChangeWeather).
+
         //lobby
         PacketHandlers[(byte)ServerOpcode.AcceptConnection] = HandleAcceptConnection;
         PacketHandlers[(byte)ServerOpcode.CryptoKey] = HandleConnectionInfo;
@@ -1516,8 +1515,10 @@ internal sealed record RawClientPacket(byte ForcedOpcode, byte[] Body) : ClientP
 
 /// <summary>
 ///     The Hybrasyl group stage-5 "view recruit info" request (<c>[0x2E][5][string8 name]</c>). DALib's
-///     <see cref="DALib.Networking.Packets.Cli.GroupRequestPacket" /> models stages 2/3/4/6/7 but not stage 5, so this
-///     local packet covers <see cref="Chaos.DarkAges.Definitions.ClientGroupSwitch.ViewGroupBox" />.
+///     <see cref="DALib.Networking.Packets.Client.GroupRequestPacket" /> models stages 2/3/4/6/7 but not stage 5, so this
+///     local packet covers <see cref="Chaos.DarkAges.Definitions.ClientGroupSwitch.ViewGroupBox" />. Not expressible via
+///     <c>GroupRequestPacket { Stage = 5 }</c>: its simple form appends a trailing zero byte that stage 5 omits.
+///     Candidate for an upstream DALib stage-5 factory.
 /// </summary>
 internal sealed record ViewRecruitInfoPacket(string Name) : ClientPacket
 {

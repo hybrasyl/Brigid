@@ -163,7 +163,9 @@ public static class WorldState
         {
             //morph mode (creature form)
             case CreatureSpriteAppearance creatureForm:
-                entity.SpriteId = creatureForm.Sprite;
+                //wire creature sprites carry the 0x4000 creature-range offset; strip it (see the creature
+                //branch in AddOrUpdateVisibleEntities)
+                entity.SpriteId = (ushort)(creatureForm.Sprite - 0x4000);
                 entity.Appearance = null;
                 entity.IsHidden = false;
                 entity.IsTransparent = false;
@@ -178,12 +180,13 @@ public static class WorldState
             case EquipmentAppearance eq:
                 entity.SpriteId = 0;
 
-                var bodySprite = (BodySprite)eq.BodySprite;
+                //wire body byte: high nibble = body form, low nibble = pants dye (0 = undyed)
+                var pantsColor = (byte)(eq.BodySprite & 0x0F);
+                var bodySprite = (BodySprite)(eq.BodySprite & 0xF0);
 
-                entity.IsHidden = eq.IsHidden;
-
-                //DALib carries no separate transparency bit; follow the hidden flag.
+                //the wire bool means translucent-visible (Hide); fully hidden only for the bodiless form
                 entity.IsTransparent = eq.IsHidden;
+                entity.IsHidden = eq.IsHidden && eq.BodySprite == 0;
                 entity.IsDead = bodySprite is BodySprite.MaleGhost or BodySprite.FemaleGhost;
                 entity.LanternSize = (LanternSize)eq.LanternSize;
                 entity.RestPosition = (RestPosition)eq.RestPosition;
@@ -209,7 +212,8 @@ public static class WorldState
                     Accessory2Sprite = eq.AccessorySprite2,
                     Accessory2Color = (DisplayColor)eq.AccessoryColor2,
                     Accessory3Sprite = eq.AccessorySprite3,
-                    Accessory3Color = (DisplayColor)eq.AccessoryColor3
+                    Accessory3Color = (DisplayColor)eq.AccessoryColor3,
+                    PantsColor = pantsColor == 0 ? null : (DisplayColor)pantsColor
                 };
 
                 break;
@@ -254,6 +258,8 @@ public static class WorldState
 
                 case ItemWorldObject groundItem:
                     entity.Type = ClientEntityType.GroundItem;
+                    //wire item sprites carry the 0x8000 item-range flag; strip it so pack lookups resolve
+                    entity.SpriteId = (ushort)(entity.SpriteId & 0x7FFF);
                     entity.ItemColor = groundItem.Color;
 
                     break;
@@ -710,10 +716,10 @@ public static class WorldState
 
                     break;
 
-                //DALib carries no PersistExchange flag; treat an empty message as
-                //"other side accepted" and a non-empty message as completion.
+                //confirm byte: 1 = the other side accepted (exchange still open), 0 = completed
+                //(Hybrasyl ServerPackets/Exchange.cs writes Side ? 0 : 1; the message rides both forms)
                 case AcceptExchangeResponsePacket accept:
-                    if (string.IsNullOrEmpty(accept.Message))
+                    if (accept.RightSide)
                         Exchange.SetOtherAccepted();
                     else
                         Exchange.Close(accept.Message);
@@ -769,7 +775,9 @@ public static class WorldState
                         break;
                     }
 
-                    //DALib carries no EnablePrevBtn; default to false.
+                    //RefreshFlag is the enable-prev-button byte (Hybrasyl sends 0x03 for mail)
+                    NoticeDebugLog.Write(
+                        $"[Board] post id={post.PostId} type={post.ResponseType} refreshFlag=0x{post.RefreshFlag:X2}");
                     Board.ShowPost(
                         (short)post.PostId,
                         post.Author,
@@ -777,7 +785,7 @@ public static class WorldState
                         post.Day,
                         post.Subject,
                         post.Body,
-                        false);
+                        post.RefreshFlag != 0);
 
                     break;
 
@@ -794,13 +802,15 @@ public static class WorldState
         //world list (online players)
         connection.OnWorldList += args =>
         {
+            //class byte: bits 0-2 = base class, bit 3 = guilded (Hybrasyl sends a plain class byte;
+            //Chaos-convention servers pack the guild bit)
             var entries = args.Users
                               .Select(m => new WorldListEntry(
                                   m.Name,
                                   m.Title,
-                                  (BaseClass)m.Class,
+                                  (BaseClass)(m.Class & 7),
                                   m.IsMaster,
-                                  false,
+                                  (m.Class & 8) != 0,
                                   (WorldListColor)m.Color,
                                   (Chaos.DarkAges.Definitions.SocialStatus)(byte)m.SocialStatus))
                               .ToList();

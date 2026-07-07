@@ -344,6 +344,7 @@ public sealed partial class WorldScreen
     private void SaveMapFile(int mapId)
     {
         var path = Path.Combine(DataContext.DataPath, "maps", $"lod{mapId}.map");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         MapFile!.Save(path);
     }
 

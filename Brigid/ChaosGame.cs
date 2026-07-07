@@ -720,7 +720,8 @@ public sealed class ChaosGame : Game
 
             zlibStream.CopyTo(memoryStream);
 
-            return CRC32.Calculate(memoryStream.ToArray(), finalXor: false);
+            //retail + Hybrasyl both send standard (inverted) CRC-32 — verified against the retail checksum routine
+            return CRC32.Calculate(memoryStream.ToArray());
         } catch
         {
             return 0;

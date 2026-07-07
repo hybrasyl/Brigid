@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Networking;
 using Brigid.Rendering.Models;
 using Chaos.DarkAges.Definitions;
 using DALib.Networking.Packets.Server;
@@ -75,6 +76,14 @@ public sealed class NpcSessionControl : PrefabPanel
 
     //session state
     public EntityType SourceEntityType { get; private set; }
+
+    /// <summary>
+    ///     The raw wire object-type byte (creature 1, item 2, reactor 4, castable 5, async 0xFE). Echoed verbatim
+    ///     in 0x39/0x3A responses — the server branches its lookup on it, so it must not be collapsed to
+    ///     <see cref="SourceEntityType" /> (which only covers rendering).
+    /// </summary>
+    public byte SourceObjectType { get; private set; }
+
     public uint? SourceId { get; private set; }
 
     //speak dialog: prompt prefix and epilog suffix for the say broadcast
@@ -534,13 +543,14 @@ public sealed class NpcSessionControl : PrefabPanel
             NpcDialogPacket.ObjectTypeItem => EntityType.Item,
             _                              => EntityType.Creature,
         };
+        SourceObjectType = pkt.ObjectType;
         SourceId = pkt.SourceId;
         PursuitId = pkt.PursuitId;
         DialogId = pkt.DialogId;
         NpcName = pkt.Name;
         PortraitSpriteId = pkt.Sprite;
         PortraitColor = (DisplayColor)pkt.Color;
-        //Hybrasyl sends no illustration-index byte; 0 = "first variant". §B verify for retail multi-variant NPCs.
+        //the 0x30 wire carries no illustration-index byte (unlike 0x2F); 0 = "first variant"
         IllustrationIndex = 0;
 
         HideAllSubPanels();
@@ -592,6 +602,9 @@ public sealed class NpcSessionControl : PrefabPanel
                 break;
 
             default:
+                NoticeDebugLog.Write(
+                    $"[NpcDialog] unhandled dialog type 0x{(byte)dialogType:X2} (body {pkt.Body.GetType().Name}) -- not displayed");
+
                 return;
         }
 
@@ -619,6 +632,7 @@ public sealed class NpcSessionControl : PrefabPanel
             2 => EntityType.Item,
             _ => EntityType.Creature,
         };
+        SourceObjectType = pkt.EntityType;
         SourceId = pkt.SourceId;
         PursuitId = MenuPursuitId(pkt.Menu);
         DialogId = 0;
@@ -683,7 +697,7 @@ public sealed class NpcSessionControl : PrefabPanel
                 break;
 
             default:
-                Console.WriteLine(
+                NoticeDebugLog.Write(
                     $"[NpcMenu] unhandled menu type 0x{(byte)pkt.MenuType:X2} (body {pkt.Menu?.GetType().Name ?? "null"}) -- not displayed");
 
                 return;

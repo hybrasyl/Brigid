@@ -7,6 +7,7 @@ using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.LobbyLogin;
 using Brigid.Data;
+using Brigid.Extensions;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Systems;
@@ -14,9 +15,10 @@ using Chaos.DarkAges.Definitions;
 using DALib.Cryptography;
 using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
-using ServerEntry = DALib.Networking.Packets.Server.ServerEntry;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+//disambiguates from Brigid.Systems.ServerEntry (the launcher's server-list model)
+using ServerEntry = DALib.Networking.Packets.Server.ServerEntry;
 #endregion
 
 namespace Brigid.Screens;
@@ -368,7 +370,7 @@ public sealed class LobbyLoginScreen : IScreen
         var server = ServerList.FirstOrDefault(s => s.Id == serverId);
 
         if (server is not null)
-            Game.Connection.ServerName = server.Name;
+            Game.Connection.ServerName = server.SplitNameDescription().Name;
 
         Game.Connection.SelectServer(serverId);
     }
@@ -413,9 +415,8 @@ public sealed class LobbyLoginScreen : IScreen
     {
         ServerList = servers;
 
-        //The 0x56 wire format is [count][entries] with no server-list flag (verified against the retail
-        //parser); the old ShowServerList byte was a misread. Show the picker whenever more than one
-        //server is advertised, else auto-select the only one.
+        //the 0x56 wire is [count][entries] with no server-list flag (retail-verified); show the picker
+        //whenever more than one server is advertised, else auto-select the only one
         if (servers.Count > 1)
         {
             ServerSelectControl.SetServers(servers);
@@ -423,7 +424,7 @@ public sealed class LobbyLoginScreen : IScreen
         } else if (servers.Count > 0)
         {
             //auto-select the first (or only) server
-            Game.Connection.ServerName = servers[0].Name;
+            Game.Connection.ServerName = servers[0].SplitNameDescription().Name;
             Game.Connection.SelectServer(servers[0].Id);
         }
     }
@@ -618,7 +619,8 @@ public sealed class LobbyLoginScreen : IScreen
         decompressor.CopyTo(decompressed);
 
         var rawBytes = decompressed.ToArray();
-        CachedNoticeCheckSum = CRC32.Calculate(rawBytes, finalXor: false);
+        //retail + Hybrasyl both send standard (inverted) CRC-32 — verified against the retail checksum routine
+        CachedNoticeCheckSum = CRC32.Calculate(rawBytes);
 
         return Encoding.GetEncoding(949)
                        .GetString(rawBytes);
