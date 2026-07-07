@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Data;
+using Brigid.Networking;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Chaos.Extensions.Common;
@@ -450,7 +451,7 @@ public sealed class MenuShopPanel : PrefabPanel
     {
         if (pkt.Menu is not ItemListMenu menu)
         {
-            Console.WriteLine(
+            NoticeDebugLog.Write(
                 $"[NpcMenu] ShowItems body is {pkt.Menu?.GetType().Name ?? "null"} (expected ItemListMenu); rich ServerItemMenu (0x4B) rendering is unimplemented -- not displayed");
 
             return;

@@ -26,6 +26,12 @@
         <Authors>Sichi</Authors>
         <PackageTags>darkages; doomvas; private server;</PackageTags>
         <Version>0.1.0</Version>
+
+        <!-- DALib is consumed from the sibling checkout until a release with the networking layer
+             is published; flip the default to false (NuGet) when that ships. Override per-build
+             with -p:UseLocalDALib=false. -->
+        <UseLocalDALib Condition="'$(UseLocalDALib)' == ''">true</UseLocalDALib>
+        <LocalDALibProjectPath Condition="'$(LocalDALibProjectPath)' == ''">$(MSBuildThisFileDirectory)..\dalib\DALib\DALib.csproj</LocalDALibProjectPath>
     </PropertyGroup>
 
     <ItemGroup>

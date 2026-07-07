@@ -3,7 +3,8 @@
         <PackageReference Include="Chaos.Common"/>
         <PackageReference Include="Chaos.DarkAges"/>
         <PackageReference Include="Chaos.Geometry"/>
-        <ProjectReference Include="..\..\dalib\DALib\DALib.csproj" />
+        <PackageReference Include="DALib" Condition="'$(UseLocalDALib)' != 'true'" />
+        <ProjectReference Include="$(LocalDALibProjectPath)" Condition="'$(UseLocalDALib)' == 'true'" />
         <PackageReference Include="Microsoft.Extensions.Caching.Memory"/>
     </ItemGroup>
 </Project>

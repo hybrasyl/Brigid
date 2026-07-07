@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Networking;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using DALib.Networking.Packets.Server;
@@ -206,7 +207,7 @@ public sealed class MenuListPanel : FramedDialogPanelBase
     {
         if (pkt.Menu is not PlayerItemListMenu menu)
         {
-            Console.WriteLine(
+            NoticeDebugLog.Write(
                 $"[NpcMenu] ShowPlayerItems body is {pkt.Menu?.GetType().Name ?? "null"} (expected PlayerItemListMenu); PlayerItemHandleMenu (0x4E) rendering is unimplemented -- not displayed");
 
             return;

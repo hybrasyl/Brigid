@@ -4,7 +4,7 @@
     <PackageVersion Include="Chaos.DarkAges" Version="1.11.0-preview-0007-g1c0297d942" />
     <PackageVersion Include="Chaos.Geometry" Version="1.11.0-preview-0007-g1c0297d942" />
     <PackageVersion Include="Chaos.Pathfinding" Version="1.11.0-preview-0007-g1c0297d942" />
-    <PackageVersion Include="DALib" Version="0.7.0" />
+    <PackageVersion Include="DALib" Version="1.0.0-alpha1" />
     <PackageVersion Include="FontStashSharp.MonoGame" Version="1.5.6" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.5" />
     <PackageVersion Include="TextCopy" Version="6.2.1" />
