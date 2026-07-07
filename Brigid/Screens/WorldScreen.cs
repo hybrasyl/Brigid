@@ -139,7 +139,7 @@ public sealed partial class WorldScreen : IScreen
     private GroupTabControl GroupPanel = null!;
     private HotkeyHelpControl HotkeyHelp = null!;
     private PanelSlot? HoveredInventorySlot;
-    private bool IsGameMaster;
+    private bool IsGameMaster => WorldState.Attributes.IsGameMaster;
     private ItemTooltipControl ItemTooltip = null!;
     private LargeWorldHudControl LargeHud = null!;
     private TileClickTracker LeftClickTracker;
@@ -744,7 +744,6 @@ public sealed partial class WorldScreen : IScreen
         Game.Connection.OnDisplayAisling -= HandleDisplayAisling;
         Game.Connection.OnRemoveEntity -= HandleRemoveEntity;
         Game.Connection.OnClientWalkResponse -= HandleClientWalkResponse;
-        Game.Connection.OnAttributes -= HandleAttributes;
         Game.Connection.OnDisplayPublicMessage -= HandleDisplayPublicMessage;
         Game.Connection.OnServerMessage -= HandleServerMessage;
         WorldState.NpcInteraction.DialogChanged -= HandleDialogChanged;

@@ -1,6 +1,6 @@
 #region
 using Brigid.Controls.Components;
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -248,15 +248,15 @@ public sealed class GroupRecruitPanel : PrefabPanel
         return byte.TryParse(field.Text, out var value) ? value : defaultValue;
     }
 
-    private void PopulateFromGroupBoxInfo(DisplayGroupBoxInfo info)
+    private void PopulateFromGroupBoxInfo(GroupRecruitInfo info)
     {
-        TitleField?.Text = info.Name;
+        TitleField?.Text = info.GroupName;
 
         ExtraField?.Text = info.Note;
 
-        MinLevelField?.Text = info.MinLevel.ToString();
+        MinLevelField?.Text = info.StartingLevel.ToString();
 
-        MaxLevelField?.Text = info.MaxLevel.ToString();
+        MaxLevelField?.Text = info.EndingLevel.ToString();
 
         byte[] currentCounts =
         [
@@ -269,11 +269,11 @@ public sealed class GroupRecruitPanel : PrefabPanel
 
         byte[] maxCounts =
         [
-            info.MaxWarriors,
-            info.MaxWizards,
-            info.MaxRogues,
-            info.MaxPriests,
-            info.MaxMonks
+            info.WarriorsWanted,
+            info.WizardsWanted,
+            info.RoguesWanted,
+            info.PriestsWanted,
+            info.MonksWanted
         ];
 
         var totalCurrent = 0;
@@ -416,7 +416,7 @@ public sealed class GroupRecruitPanel : PrefabPanel
     /// <summary>
     ///     Shows the panel in owner mode for editing an existing group box.
     /// </summary>
-    public void ShowAsOwnerEdit(DisplayGroupBoxInfo info)
+    public void ShowAsOwnerEdit(GroupRecruitInfo info)
     {
         ViewerSourceName = null;
 
@@ -428,7 +428,7 @@ public sealed class GroupRecruitPanel : PrefabPanel
     /// <summary>
     ///     Shows the panel in viewer mode populated from server GroupBox data.
     /// </summary>
-    public void ShowAsViewer(string sourceName, DisplayGroupBoxInfo info)
+    public void ShowAsViewer(string sourceName, GroupRecruitInfo info)
     {
         ViewerSourceName = sourceName;
 

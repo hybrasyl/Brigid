@@ -2,9 +2,10 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Networking;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -202,14 +203,19 @@ public sealed class MenuListPanel : FramedDialogPanelBase
     public event CloseHandler? OnClose;
     public event ItemSelectedHandler? OnItemSelected;
 
-    private void PopulatePlayerItems(DisplayMenuArgs args)
+    private void PopulatePlayerItems(NpcMenuPacket pkt)
     {
-        if (args.Slots is null)
+        if (pkt.Menu is not PlayerItemListMenu menu)
+        {
+            NoticeDebugLog.Write(
+                $"[NpcMenu] ShowPlayerItems body is {pkt.Menu?.GetType().Name ?? "null"} (expected PlayerItemListMenu); PlayerItemHandleMenu (0x4E) rendering is unimplemented -- not displayed");
+
             return;
+        }
 
         var renderer = UiRenderer.Instance!;
 
-        foreach (var slot in args.Slots)
+        foreach (var slot in menu.Slots)
         {
             ref readonly var slotData = ref WorldState.Inventory.GetSlot(slot);
 
@@ -253,42 +259,44 @@ public sealed class MenuListPanel : FramedDialogPanelBase
         }
     }
 
-    private void PopulateSkills(DisplayMenuArgs args)
+    private void PopulateSkills(NpcMenuPacket pkt)
     {
-        if (args.Skills is null)
+        if (pkt.Menu is not SkillListMenu menu)
             return;
 
         var renderer = UiRenderer.Instance!;
+        byte index = 1;
 
-        foreach (var skill in args.Skills)
+        foreach (var skill in menu.Skills)
         {
-            var icon = renderer.GetSkillIcon(skill.Sprite).Texture;
-            AddEntry(skill.Name, skill.Slot, icon);
+            var icon = renderer.GetSkillIcon(skill.Icon).Texture;
+            AddEntry(skill.Name, index++, icon);
         }
     }
 
-    private void PopulateSpells(DisplayMenuArgs args)
+    private void PopulateSpells(NpcMenuPacket pkt)
     {
-        if (args.Spells is null)
+        if (pkt.Menu is not SpellListMenu menu)
             return;
 
         var renderer = UiRenderer.Instance!;
+        byte index = 1;
 
-        foreach (var spell in args.Spells)
+        foreach (var spell in menu.Spells)
         {
-            var icon = renderer.GetSpellIcon(spell.Sprite).Texture;
-            AddEntry(spell.Name, spell.Slot, icon);
+            var icon = renderer.GetSpellIcon(spell.Icon).Texture;
+            AddEntry(spell.Name, index++, icon);
         }
     }
 
-    public void ShowList(DisplayMenuArgs args)
+    public void ShowList(NpcMenuPacket pkt)
     {
         Hide();
 
-        switch (args.MenuType)
+        switch ((MenuType)(byte)pkt.MenuType)
         {
             case MenuType.ShowPlayerItems:
-                PopulatePlayerItems(args);
+                PopulatePlayerItems(pkt);
 
                 break;
 
@@ -303,12 +311,12 @@ public sealed class MenuListPanel : FramedDialogPanelBase
                 break;
 
             case MenuType.ShowSkills:
-                PopulateSkills(args);
+                PopulateSkills(pkt);
 
                 break;
 
             case MenuType.ShowSpells:
-                PopulateSpells(args);
+                PopulateSpells(pkt);
 
                 break;
         }

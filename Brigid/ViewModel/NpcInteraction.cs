@@ -1,5 +1,5 @@
 #region
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 #endregion
 
 namespace Brigid.ViewModel;
@@ -13,12 +13,12 @@ public sealed class NpcInteraction
     /// <summary>
     ///     The current dialog args, or null if no dialog is active.
     /// </summary>
-    public DisplayDialogArgs? CurrentDialog { get; private set; }
+    public NpcDialogPacket? CurrentDialog { get; private set; }
 
     /// <summary>
     ///     The current menu args, or null if no menu is active.
     /// </summary>
-    public DisplayMenuArgs? CurrentMenu { get; private set; }
+    public NpcMenuPacket? CurrentMenu { get; private set; }
 
     /// <summary>
     ///     Whether a dialog or menu is currently active.
@@ -42,14 +42,14 @@ public sealed class NpcInteraction
     /// </summary>
     public event MenuChangedHandler? MenuChanged;
 
-    public void ShowDialog(DisplayDialogArgs args)
+    public void ShowDialog(NpcDialogPacket args)
     {
         CurrentMenu = null;
         CurrentDialog = args;
         DialogChanged?.Invoke();
     }
 
-    public void ShowMenu(DisplayMenuArgs args)
+    public void ShowMenu(NpcMenuPacket args)
     {
         CurrentDialog = null;
         CurrentMenu = args;

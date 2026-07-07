@@ -1,6 +1,6 @@
 #region
 using Brigid.Models;
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 #endregion
 
 namespace Brigid.ViewModel;
@@ -16,7 +16,7 @@ public sealed class Board
     /// <summary>
     ///     The available boards list (from BoardList response).
     /// </summary>
-    public ICollection<BoardInfo>? AvailableBoards { get; private set; }
+    public ICollection<(ushort BoardId, string Name)>? AvailableBoards { get; private set; }
 
     /// <summary>
     ///     The currently viewed board ID.
@@ -123,9 +123,11 @@ public sealed class Board
     /// </summary>
     public event SessionClosedHandler? SessionClosed;
 
-    public void ShowBoardList(ICollection<BoardInfo> boards)
+    public void ShowBoardList(IList<BoardListEntry> boards)
     {
-        AvailableBoards = boards;
+        AvailableBoards = boards
+                          .Select(b => (b.Id, b.Name))
+                          .ToList();
         BoardListReceived?.Invoke();
     }
 

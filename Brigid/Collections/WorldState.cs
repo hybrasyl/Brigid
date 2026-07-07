@@ -12,7 +12,7 @@ using Chaos.Extensions.Common;
 using Chaos.Geometry;
 using Chaos.Geometry.Abstractions;
 using Chaos.Geometry.Abstractions.Definitions;
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 #endregion
 
 namespace Brigid.Collections;
@@ -136,7 +136,7 @@ public static class WorldState
     /// <summary>
     ///     Adds or updates an aisling entity from a DisplayAisling packet.
     /// </summary>
-    public static void AddOrUpdateAisling(DisplayAislingArgs args)
+    public static void AddOrUpdateAisling(DisplayUserPacket args)
     {
         if (!Entities.TryGetValue(args.Id, out var entity))
         {
@@ -154,53 +154,69 @@ public static class WorldState
         entity.Type = ClientEntityType.Aisling;
         entity.TileX = args.X;
         entity.TileY = args.Y;
-        entity.Direction = args.Direction;
+        entity.Direction = (Direction)(byte)args.Direction;
         entity.Name = args.Name;
-        entity.IsHidden = args.IsHidden;
-        entity.IsTransparent = args.IsTransparent;
-        entity.IsDead = args.IsDead;
-        entity.LanternSize = args.LanternSize;
-        entity.NameTagStyle = args.NameTagStyle;
-        entity.RestPosition = args.RestPosition;
-        entity.GroupBoxText = args.GroupBoxText;
+        entity.NameTagStyle = (NameTagStyle)args.NameTagStyle;
+        entity.GroupBoxText = args.GroupName;
 
-        //check for morph mode (creature form)
-        if (args.Sprite.HasValue)
+        switch (args.Appearance)
         {
-            entity.SpriteId = args.Sprite.Value;
-            entity.Appearance = null;
+            //morph mode (creature form)
+            case CreatureSpriteAppearance creatureForm:
+                //wire creature sprites carry the 0x4000 creature-range offset; strip it (see the creature
+                //branch in AddOrUpdateVisibleEntities)
+                entity.SpriteId = (ushort)(creatureForm.Sprite - 0x4000);
+                entity.Appearance = null;
+                entity.IsHidden = false;
+                entity.IsTransparent = false;
+                entity.IsDead = false;
 
-            //sprite-form players default to a small lantern when the server hasn't sent one
-            if (entity.LanternSize == LanternSize.None)
-                entity.LanternSize = LanternSize.Small;
-        } else
-        {
-            entity.SpriteId = 0;
+                //sprite-form players default to a small lantern when the server hasn't sent one
+                if (entity.LanternSize == LanternSize.None)
+                    entity.LanternSize = LanternSize.Small;
 
-            entity.Appearance = new AislingAppearance
-            {
-                Gender = DataUtilities.DetermineGender(args.BodySprite),
-                BodySpriteId = GetBodySpriteId(args.BodySprite),
-                BodyColor = (int)args.BodyColor,
-                HeadSprite = args.HeadSprite,
-                HeadColor = args.HeadColor,
-                FaceSprite = args.FaceSprite,
-                ArmorSprite = args.ArmorSprite1,
-                ArmorColor = DisplayColor.Default,
-                OvercoatSprite = args.OvercoatSprite,
-                OvercoatColor = args.OvercoatColor,
-                BootsSprite = args.BootsSprite,
-                BootsColor = args.BootsColor,
-                WeaponSprite = args.WeaponSprite,
-                ShieldSprite = args.ShieldSprite,
-                Accessory1Sprite = args.AccessorySprite1,
-                Accessory1Color = args.AccessoryColor1,
-                Accessory2Sprite = args.AccessorySprite2,
-                Accessory2Color = args.AccessoryColor2,
-                Accessory3Sprite = args.AccessorySprite3,
-                Accessory3Color = args.AccessoryColor3,
-                PantsColor = args.PantsColor
-            };
+                break;
+
+            case EquipmentAppearance eq:
+                entity.SpriteId = 0;
+
+                //wire body byte: high nibble = body form, low nibble = pants dye (0 = undyed)
+                var pantsColor = (byte)(eq.BodySprite & 0x0F);
+                var bodySprite = (BodySprite)(eq.BodySprite & 0xF0);
+
+                //the wire bool means translucent-visible (Hide); fully hidden only for the bodiless form
+                entity.IsTransparent = eq.IsHidden;
+                entity.IsHidden = eq.IsHidden && eq.BodySprite == 0;
+                entity.IsDead = bodySprite is BodySprite.MaleGhost or BodySprite.FemaleGhost;
+                entity.LanternSize = (LanternSize)eq.LanternSize;
+                entity.RestPosition = (RestPosition)eq.RestPosition;
+
+                entity.Appearance = new AislingAppearance
+                {
+                    Gender = DataUtilities.DetermineGender(bodySprite),
+                    BodySpriteId = GetBodySpriteId(bodySprite),
+                    BodyColor = eq.BodyColor,
+                    HeadSprite = eq.HeadSprite,
+                    HeadColor = (DisplayColor)eq.HeadColor,
+                    FaceSprite = eq.FaceSprite,
+                    ArmorSprite = eq.ArmorSprite1,
+                    ArmorColor = DisplayColor.Default,
+                    OvercoatSprite = eq.OvercoatSprite,
+                    OvercoatColor = (DisplayColor)eq.OvercoatColor,
+                    BootsSprite = eq.BootsSprite,
+                    BootsColor = (DisplayColor)eq.BootsColor,
+                    WeaponSprite = eq.WeaponSprite,
+                    ShieldSprite = eq.ShieldSprite,
+                    Accessory1Sprite = eq.AccessorySprite1,
+                    Accessory1Color = (DisplayColor)eq.AccessoryColor1,
+                    Accessory2Sprite = eq.AccessorySprite2,
+                    Accessory2Color = (DisplayColor)eq.AccessoryColor2,
+                    Accessory3Sprite = eq.AccessorySprite3,
+                    Accessory3Color = (DisplayColor)eq.AccessoryColor3,
+                    PantsColor = pantsColor == 0 ? null : (DisplayColor)pantsColor
+                };
+
+                break;
         }
 
         AnimationSystem.CancelAllAnimations(entity);
@@ -209,9 +225,9 @@ public static class WorldState
     /// <summary>
     ///     Adds or updates visible entities (creatures + ground items) from a batch packet.
     /// </summary>
-    public static void AddOrUpdateVisibleEntities(DisplayVisibleEntitiesArgs args)
+    public static void AddOrUpdateVisibleEntities(DrawObjectsPacket args)
     {
-        foreach (var obj in args.VisibleObjects)
+        foreach (var obj in args.Objects)
         {
             if (!Entities.TryGetValue(obj.Id, out var entity))
             {
@@ -229,17 +245,22 @@ public static class WorldState
 
             switch (obj)
             {
-                case CreatureInfo creature:
+                case CreatureWorldObject creature:
                     entity.Type = ClientEntityType.Creature;
-                    entity.CreatureType = creature.CreatureType;
-                    entity.Direction = creature.Direction;
-                    entity.Name = creature.Name ?? string.Empty;
+                    //wire creature sprites carry the 0x4000 creature-range offset; strip it so mns/asset-pack
+                    //lookups (which use the real sprite id) resolve.
+                    entity.SpriteId = (ushort)(creature.Sprite - 0x4000);
+                    entity.CreatureType = (CreatureType)creature.Type;
+                    entity.Direction = (Direction)creature.Direction;
+                    entity.Name = creature.Name;
 
                     break;
 
-                case GroundItemInfo groundItem:
+                case ItemWorldObject groundItem:
                     entity.Type = ClientEntityType.GroundItem;
-                    entity.ItemColor = (byte)groundItem.Color;
+                    //wire item sprites carry the 0x8000 item-range flag; strip it so pack lookups resolve
+                    entity.SpriteId = (ushort)(entity.SpriteId & 0x7FFF);
+                    entity.ItemColor = groundItem.Color;
 
                     break;
             }
@@ -597,12 +618,12 @@ public static class WorldState
     {
         connection.OnAddSkillToPane += args =>
         {
-            var chant = LookupSkillChant(args.Skill.PanelName);
+            var chant = LookupSkillChant(args.Name);
 
             SkillBook.SetSlot(
-                args.Skill.Slot,
-                args.Skill.Sprite,
-                args.Skill.PanelName,
+                args.Slot,
+                args.Icon,
+                args.Name,
                 chant);
         };
 
@@ -610,15 +631,15 @@ public static class WorldState
 
         connection.OnAddSpellToPane += args =>
         {
-            var chants = LookupSpellChants(args.Spell.PanelName);
+            var chants = LookupSpellChants(args.Name);
 
             SpellBook.SetSlot(
-                args.Spell.Slot,
-                args.Spell.Sprite,
-                args.Spell.PanelName,
-                args.Spell.SpellType,
-                args.Spell.Prompt,
-                args.Spell.CastLines,
+                args.Slot,
+                args.Icon,
+                args.Name,
+                (SpellType)(byte)args.UseType,
+                args.Prompt,
+                args.CastLines,
                 chants);
         };
 
@@ -627,85 +648,86 @@ public static class WorldState
         connection.OnCooldown += args =>
         {
             if (args.IsSkill)
-                SkillBook.SetCooldown(args.Slot, args.CooldownSecs);
+                SkillBook.SetCooldown(args.Slot, args.Seconds);
             else
-                SpellBook.SetCooldown(args.Slot, args.CooldownSecs);
+                SpellBook.SetCooldown(args.Slot, args.Seconds);
         };
 
         //inventory
         connection.OnAddItemToPane += args => Inventory.SetSlot(
-            args.Item.Slot,
-            args.Item.Sprite,
-            args.Item.Color,
-            args.Item.Name,
-            args.Item.Stackable,
-            args.Item.Count ?? 0,
-            args.Item.MaxDurability,
-            args.Item.CurrentDurability);
+            args.Slot,
+            args.Sprite,
+            (DisplayColor)args.Color,
+            args.Name,
+            args.Stackable,
+            args.Count,
+            (int)args.MaxDurability,
+            (int)args.CurrentDurability);
 
         connection.OnRemoveItemFromPane += args => Inventory.ClearSlot(args.Slot);
 
         //equipment
         connection.OnEquipment += args => Equipment.SetSlot(
-            args.Slot,
-            args.Item.Sprite,
-            args.Item.Color,
-            args.Item.Name,
-            args.Item.MaxDurability,
-            args.Item.CurrentDurability);
+            (EquipmentSlot)(byte)args.Slot,
+            args.Sprite,
+            (DisplayColor)args.Color,
+            args.Name,
+            (int)args.MaxDurability,
+            (int)args.CurrentDurability);
 
-        connection.OnDisplayUnequip += args => Equipment.ClearSlot(args.EquipmentSlot);
+        connection.OnDisplayUnequip += args => Equipment.ClearSlot((EquipmentSlot)(byte)args.Slot);
 
         //attributes (stats, hp/mp, etc.) — gold also routed to inventory
         connection.OnAttributes += args =>
         {
             Attributes.Update(args);
-            Inventory.SetGold(args.Gold);
+
+            if (args.Experience is { } exp)
+                Inventory.SetGold(exp.Gold);
         };
 
         //exchange
         connection.OnDisplayExchange += args =>
         {
-            switch (args.ExchangeResponseType)
+            switch (args)
             {
-                case ExchangeResponseType.StartExchange:
-                    Exchange.Start(args.OtherUserId!.Value, args.OtherUserName);
+                case StartExchangeResponsePacket start:
+                    Exchange.Start(start.OtherUserId, start.OtherUserName);
 
                     break;
 
-                case ExchangeResponseType.RequestAmount:
-                    if (args.FromSlot.HasValue)
-                        Exchange.RequestAmount(args.FromSlot.Value);
+                case RequestExchangeAmountPacket req:
+                    Exchange.RequestAmount(req.SourceSlot);
 
                     break;
 
-                case ExchangeResponseType.AddItem:
-                    if (args is { RightSide: not null, ExchangeIndex: not null, ItemSprite: not null })
-                        Exchange.AddItem(
-                            args.RightSide.Value,
-                            args.ExchangeIndex.Value,
-                            args.ItemSprite.Value,
-                            args.ItemColor ?? DisplayColor.Default,
-                            args.ItemName);
+                case AddExchangeItemResponsePacket add:
+                    Exchange.AddItem(
+                        add.RightSide,
+                        add.ExchangeIndex,
+                        add.Sprite,
+                        (DisplayColor)add.Color,
+                        add.Name);
 
                     break;
 
-                case ExchangeResponseType.SetGold:
-                    if (args is { RightSide: not null, GoldAmount: not null })
-                        Exchange.SetGold(args.RightSide.Value, args.GoldAmount.Value);
+                case SetExchangeGoldResponsePacket gold:
+                    Exchange.SetGold(gold.RightSide, (int)gold.GoldAmount);
 
                     break;
 
-                case ExchangeResponseType.Accept:
-                    if (args.PersistExchange == true)
+                //confirm byte: 1 = the other side accepted (exchange still open), 0 = completed
+                //(Hybrasyl ServerPackets/Exchange.cs writes Side ? 0 : 1; the message rides both forms)
+                case AcceptExchangeResponsePacket accept:
+                    if (accept.RightSide)
                         Exchange.SetOtherAccepted();
                     else
-                        Exchange.Close(args.Message);
+                        Exchange.Close(accept.Message);
 
                     break;
 
-                case ExchangeResponseType.Cancel:
-                    Exchange.Close(args.Message);
+                case CancelExchangeResponsePacket cancel:
+                    Exchange.Close(cancel.Message);
 
                     break;
             }
@@ -718,67 +740,57 @@ public static class WorldState
         //board/mail
         connection.OnDisplayBoard += args =>
         {
-            switch (args.Type)
+            switch (args)
             {
-                case BoardOrResponseType.BoardList:
-                    if (args.Boards is not null)
-                        Board.ShowBoardList(args.Boards);
+                case BoardListPacket list:
+                    Board.ShowBoardList(list.Boards);
 
                     break;
 
-                case BoardOrResponseType.PublicBoard or BoardOrResponseType.MailBoard:
+                case BoardIndexPacket index:
                     Board.IsBoardListPending = false;
 
-                    if (args.Board is not null)
-                    {
-                        var isPublic = args.Type == BoardOrResponseType.PublicBoard;
+                    var isPublic = index.ResponseType == BoardResponseType.PublicBoard;
 
-                        var entries = args.Board
-                                          .Posts
-                                          .Select(p => new MailEntry(
-                                              p.PostId,
-                                              p.Author,
-                                              p.MonthOfYear,
-                                              p.DayOfMonth,
-                                              p.Subject,
-                                              p.IsHighlighted))
-                                          .ToList();
+                    var entries = index.Messages
+                                       .Select(m => new MailEntry(
+                                           (short)m.PostId,
+                                           m.Author,
+                                           m.Month,
+                                           m.Day,
+                                           m.Subject,
+                                           m.Highlight))
+                                       .ToList();
 
-                        if (args.StartPostId.HasValue)
-                            Board.AppendPosts(entries);
-                        else
-                            Board.ShowPostList(args.Board.BoardId, entries, isPublic);
-                    }
+                    //DALib carries no append cursor (old StartPostId); always replace.
+                    Board.ShowPostList(index.BoardId, entries, isPublic);
 
                     break;
 
-                case BoardOrResponseType.PublicPost or BoardOrResponseType.MailPost:
-                    if (args.Post is not null)
+                case BoardPostPacket post:
+                    if (post.PostId == 0)
                     {
-                        if (args.Post.PostId == 0)
-                        {
-                            Board.HandleResponse("No such post.", false);
+                        Board.HandleResponse("No such post.", false);
 
-                            break;
-                        }
-
-                        Board.ShowPost(
-                            args.Post.PostId,
-                            args.Post.Author,
-                            args.Post.MonthOfYear,
-                            args.Post.DayOfMonth,
-                            args.Post.Subject,
-                            args.Post.Message,
-                            args.EnablePrevBtn);
+                        break;
                     }
+
+                    //RefreshFlag is the enable-prev-button byte (Hybrasyl sends 0x03 for mail)
+                    NoticeDebugLog.Write(
+                        $"[Board] post id={post.PostId} type={post.ResponseType} refreshFlag=0x{post.RefreshFlag:X2}");
+                    Board.ShowPost(
+                        (short)post.PostId,
+                        post.Author,
+                        post.Month,
+                        post.Day,
+                        post.Subject,
+                        post.Body,
+                        post.RefreshFlag != 0);
 
                     break;
 
-                case BoardOrResponseType.SubmitPostResponse
-                     or BoardOrResponseType.DeletePostResponse
-                     or BoardOrResponseType.HighlightPostResponse:
-                    if (args.ResponseMessage is not null)
-                        Board.HandleResponse(args.ResponseMessage, args.Success is true);
+                case BoardResultPacket result:
+                    Board.HandleResponse(result.Message, result.Success);
 
                     break;
             }
@@ -790,18 +802,20 @@ public static class WorldState
         //world list (online players)
         connection.OnWorldList += args =>
         {
-            var entries = args.CountryList
+            //class byte: bits 0-2 = base class, bit 3 = guilded (Hybrasyl sends a plain class byte;
+            //Chaos-convention servers pack the guild bit)
+            var entries = args.Users
                               .Select(m => new WorldListEntry(
                                   m.Name,
                                   m.Title,
-                                  m.BaseClass,
+                                  (BaseClass)(m.Class & 7),
                                   m.IsMaster,
-                                  m.IsGuilded,
-                                  m.Color,
-                                  m.SocialStatus))
+                                  (m.Class & 8) != 0,
+                                  (WorldListColor)m.Color,
+                                  (Chaos.DarkAges.Definitions.SocialStatus)(byte)m.SocialStatus))
                               .ToList();
 
-            WorldList.Update(entries, args.WorldMemberCount);
+            WorldList.Update(entries, (ushort)args.Users.Count);
         };
     }
 

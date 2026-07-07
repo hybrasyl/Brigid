@@ -1,6 +1,6 @@
 #region
 using Brigid.Controls.Components;
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -135,7 +135,7 @@ public sealed class GroupTabControl : PrefabPanel
     /// <summary>
     ///     Shows the window on the recruit tab in owner-edit mode, populated from server data.
     /// </summary>
-    public void ShowRecruitOwnerEdit(DisplayGroupBoxInfo info)
+    public void ShowRecruitOwnerEdit(GroupRecruitInfo info)
     {
         SwitchTab(1);
         RecruitPanel.ShowAsOwnerEdit(info);
@@ -145,7 +145,7 @@ public sealed class GroupTabControl : PrefabPanel
     /// <summary>
     ///     Shows the window on the recruit tab in viewer mode, populated from server data.
     /// </summary>
-    public void ShowRecruitViewer(string sourceName, DisplayGroupBoxInfo info)
+    public void ShowRecruitViewer(string sourceName, GroupRecruitInfo info)
     {
         SwitchTab(1);
         RecruitPanel.ShowAsViewer(sourceName, info);

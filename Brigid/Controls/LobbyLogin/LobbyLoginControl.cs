@@ -1,4 +1,5 @@
 #region
+using System.Reflection;
 using Brigid.Controls.Components;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -88,8 +89,23 @@ public sealed class LobbyLoginControl : PrefabPanel
 
         //version label — type 7, 0 images
         VersionLabel = CreateLabel("Version", HorizontalAlignment.Right);
-        VersionLabel?.Text = "Brigid v0.1.0";
+        VersionLabel?.Text = $"Brigid v{GetDisplayVersion()}";
         VersionLabel?.ForegroundColor = Color.Blue;
+    }
+
+    //informational version carries the prerelease tag (e.g. 1.0.0-alpha1); strip any +commit metadata
+    private static string GetDisplayVersion()
+    {
+        var info = typeof(LobbyLoginControl).Assembly
+                                            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                                            ?.InformationalVersion;
+
+        if (string.IsNullOrEmpty(info))
+            return typeof(LobbyLoginControl).Assembly.GetName().Version?.ToString(3) ?? "?";
+
+        var metadata = info.IndexOf('+');
+
+        return metadata < 0 ? info : info[..metadata];
     }
 
     public void EnableButtons() => SetButtonsEnabled(true);

@@ -9,10 +9,11 @@ using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
 using Brigid.Systems;
-using Chaos.Cryptography;
 using Chaos.DarkAges.Definitions;
-using Chaos.Networking.Entities.Server;
+using DALib.Cryptography;
 using DALib.Extensions;
+using DALib.Networking.Wire;
+using ServerPackets = DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -33,7 +34,7 @@ public sealed class ChaosGame : Game
     private readonly GraphicsDeviceManager Graphics;
     private string MetaFilePath => Path.Combine(GlobalSettings.DataPath, "metafile");
     private readonly Dictionary<string, uint> MetaPendingChecksums = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<ServerPacket> PacketBuffer = [];
+    private readonly List<IServerPacket> PacketBuffer = [];
     private int CursorOffsetX;
     private int CursorOffsetY;
     private Texture2D? CursorTexture;
@@ -719,30 +720,31 @@ public sealed class ChaosGame : Game
 
             zlibStream.CopyTo(memoryStream);
 
-            return Crc.Generate32(memoryStream.ToArray());
+            //retail + Hybrasyl both send standard (inverted) CRC-32 — verified against the retail checksum routine
+            return CRC32.Calculate(memoryStream.ToArray());
         } catch
         {
             return 0;
         }
     }
 
-    private void HandleMetaData(MetaDataArgs args)
+    private void HandleMetaData(ServerPackets.MetafilePacket pkt)
     {
-        switch (args.MetaDataRequestType)
+        switch (pkt)
         {
-            case MetaDataRequestType.AllCheckSums:
-                HandleMetaDataCheckSums(args.MetaDataCollection);
+            case ServerPackets.MetafileChecksumsPacket checksums:
+                HandleMetaDataCheckSums(checksums.Entries);
 
                 break;
 
-            case MetaDataRequestType.DataByName:
-                HandleMetaDataFileData(args.MetaDataInfo);
+            case ServerPackets.MetafileDataPacket data:
+                HandleMetaDataFileData(data);
 
                 break;
         }
     }
 
-    private void HandleMetaDataCheckSums(ICollection<MetaDataInfo>? collection)
+    private void HandleMetaDataCheckSums(IList<ServerPackets.MetafileEntry>? collection)
     {
         if (collection is null || (collection.Count == 0))
         {
@@ -758,8 +760,8 @@ public sealed class ChaosGame : Game
         {
             var localCheckSum = ComputeLocalMetaCheckSum(info.Name);
 
-            if (localCheckSum != info.CheckSum)
-                MetaPendingChecksums[info.Name] = info.CheckSum;
+            if (localCheckSum != info.Checksum)
+                MetaPendingChecksums[info.Name] = info.Checksum;
         }
 
         foreach (var name in MetaPendingChecksums.Keys)
@@ -769,9 +771,9 @@ public sealed class ChaosGame : Game
             OnMetaDataSyncComplete?.Invoke();
     }
 
-    private void HandleMetaDataFileData(MetaDataInfo? info)
+    private void HandleMetaDataFileData(ServerPackets.MetafileDataPacket info)
     {
-        if (info is null || string.IsNullOrEmpty(info.Name) || (info.Data.Length == 0))
+        if (string.IsNullOrEmpty(info.Name) || (info.Data.Length == 0))
             return;
 
         File.WriteAllBytes(Path.Combine(MetaFilePath, info.Name), info.Data);

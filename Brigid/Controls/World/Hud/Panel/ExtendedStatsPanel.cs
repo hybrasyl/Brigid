@@ -3,7 +3,7 @@ using Brigid.Controls.Components;
 using Brigid.Data.Models;
 using Brigid.Extensions;
 using Chaos.DarkAges.Definitions;
-using Chaos.Networking.Entities.Server;
+using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -245,7 +245,7 @@ public sealed class ExtendedStatsPanel : ExpandablePanel
             label.Text = value.ToString();
     }
 
-    public void UpdateAttributes(AttributesArgs attrs)
+    public void UpdateAttributes(PlayerAttributes attrs)
     {
         TrySetLabel(IDX_AC, attrs.Ac);
         TrySetLabel(IDX_DMG, attrs.Dmg);

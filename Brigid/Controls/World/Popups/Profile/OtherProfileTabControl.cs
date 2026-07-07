@@ -4,7 +4,7 @@ using Brigid.Controls.Components;
 using Brigid.Data;
 using Brigid.Data.Repositories;
 using Brigid.Models;
-using Chaos.Networking.Entities.Server;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -157,7 +157,7 @@ public sealed class OtherProfileTabControl : PrefabPanel
     /// <summary>
     ///     Populates and shows the other player's profile.
     /// </summary>
-    public void Show(OtherProfileArgs args, List<LegendMarkEntry> legendMarks, AislingRenderer aislingRenderer)
+    public void Show(ProfilePacket args, List<LegendMarkEntry> legendMarks, AislingRenderer aislingRenderer)
     {
         //equipment tab
         var equipPage = GetOrCreatePage<OtherProfileEquipmentTab>(StatusBookTab.Equipment);
@@ -170,19 +170,21 @@ public sealed class OtherProfileTabControl : PrefabPanel
                 GroupButtonWired = true;
             }
 
+            var socialStatus = (Chaos.DarkAges.Definitions.SocialStatus)(byte)args.SocialStatus;
+
             equipPage.SetPlayerInfo(
                 args.Name,
-                args.DisplayClass,
-                args.GuildName ?? string.Empty,
-                args.GuildRank ?? string.Empty,
-                args.Title ?? string.Empty);
+                args.ClassName,
+                args.GuildName,
+                args.GuildRank,
+                args.Title);
 
             equipPage.SetEquipment(args.Equipment);
             equipPage.SetGroupOpen(args.GroupOpen);
-            equipPage.SetNation((byte)args.Nation);
-            equipPage.SetEmoticonState((byte)args.SocialStatus, UiComponentRepository.GetSocialStatusName(args.SocialStatus));
+            equipPage.SetNation(args.NationFlag);
+            equipPage.SetEmoticonState((byte)socialStatus, UiComponentRepository.GetSocialStatusName(socialStatus));
 
-            equipPage.SetProfileText(args.ProfileText ?? string.Empty);
+            equipPage.SetProfileText(args.ProfileText);
             equipPage.SetPortrait(args.Portrait);
 
             //paperdoll from the entity's current appearance on the map

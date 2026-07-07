@@ -1,28 +1,23 @@
 #region
-using System.Buffers;
 using System.Net;
-using System.Text;
-using Chaos.Cryptography;
 using Chaos.DarkAges.Definitions;
-using Chaos.Geometry;
 using Chaos.Geometry.Abstractions.Definitions;
-using Chaos.IO.Memory;
-using Chaos.Networking.Abstractions.Definitions;
-using Chaos.Networking.Entities.Client;
-using Chaos.Networking.Entities.Server;
-using Chaos.Packets;
-using Chaos.Packets.Abstractions;
+using DALib.Networking.Wire;
+using Cli = DALib.Networking.Packets.Client;
+using Server = DALib.Networking.Packets.Server;
 #endregion
 
 namespace Brigid.Networking;
 
 /// <summary>
 ///     Manages the connection lifecycle: Lobby handshake, login redirect, and world entry. Drives state transitions and
-///     orchestrates the GameClient through each phase.
+///     orchestrates the GameClient through each phase. Inbound packets arrive already deserialized as DALib
+///     <see cref="IServerPacket" /> values; handlers cast and fire events that carry the DALib packet directly. Outbound
+///     sends translate the public method arguments into typed DALib <see cref="IClientPacket" /> values.
 /// </summary>
 public sealed class ConnectionManager : IDisposable
 {
-    private readonly Action<ServerPacket>?[] PacketHandlers = new Action<ServerPacket>?[byte.MaxValue + 1];
+    private readonly Action<IServerPacket>?[] PacketHandlers = new Action<IServerPacket>?[byte.MaxValue + 1];
     private WorldEntryState EntryState;
     private RedirectInfo? PendingRedirect;
 
@@ -37,14 +32,9 @@ public sealed class ConnectionManager : IDisposable
     public string AislingName { get; private set; } = string.Empty;
 
     /// <summary>
-    ///     The player's latest merged attribute snapshot. Partial server updates are merged so this always reflects the full state.
-    /// </summary>
-    public AttributesArgs? Attributes { get; private set; }
-
-    /// <summary>
     ///     The current map's metadata (map ID, dimensions, flags), updated on each map change.
     /// </summary>
-    public MapInfoArgs? MapInfo { get; private set; }
+    public Server.MapInfoPacket? MapInfo { get; private set; }
 
     /// <summary>
     ///     The player's current X tile coordinate, updated on walk confirmations and location packets.
@@ -92,12 +82,12 @@ public sealed class ConnectionManager : IDisposable
         IndexHandlers();
     }
 
-    private void SendIfWorld<T>(T args) where T : IPacketSerializable
+    private void SendIfWorld<T>(T packet) where T : IClientPacket
     {
         if (State != ConnectionState.World)
             return;
 
-        Client.Send(args);
+        Client.Send(packet);
     }
 
     /// <inheritdoc />
@@ -106,16 +96,13 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Sends a password change request to the login server.
     /// </summary>
-    /// <param name="name">The account name.</param>
-    /// <param name="currentPassword">The current password.</param>
-    /// <param name="newPassword">The new password.</param>
     public void ChangePassword(string name, string currentPassword, string newPassword)
     {
         if (State != ConnectionState.Login)
             return;
 
         Client.Send(
-            new PasswordChangeArgs
+            new Cli.ChangePasswordPacket
             {
                 Name = name,
                 CurrentPassword = currentPassword,
@@ -126,99 +113,23 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Sends a click on an entity (NPC, creature, aisling, ground item).
     /// </summary>
-    public void ClickEntity(uint targetId)
-        => SendIfWorld(
-            new ClickArgs
-            {
-                ClickType = ClickType.TargetId,
-                TargetId = targetId
-            });
+    public void ClickEntity(uint targetId) => SendIfWorld(Cli.ClickPacket.Entity(targetId));
 
     /// <summary>
-    ///     Sends a click on a map tile.
+    ///     Sends a click on a map tile (floor-aligned: signpost, ground item, stair base).
     /// </summary>
-    public void ClickTile(int x, int y)
-        => SendIfWorld(
-            new ClickArgs
-            {
-                ClickType = ClickType.TargetPoint,
-                TargetPoint = new Point(x, y)
-            });
+    public void ClickTile(int x, int y) => SendIfWorld(Cli.ClickPacket.Point((ushort)x, (ushort)y, 1));
 
     /// <summary>
-    ///     Sends a click on a known door tile, including the trailing layer + modifier bytes that retail's 0x43 handler
-    ///     uses to dispatch to the correct foreground entity. Empirically verified against legacy DA Darkages.exe via
-    ///     packet capture (2026-04-29):
-    ///     <code>
-    ///       N/S door (panel in RFG): layer = 1
-    ///       E/W door (panel in LFG): layer = 0
-    ///     </code>
-    ///     Modifier byte is 0 for an unmodified click. Hybrasyl drops both trailing bytes; retail strictly requires this
-    ///     shape for door dispatch — without the layer byte, retail silently rejects N/S door clicks (defaults to layer
-    ///     0 = LFG and finds nothing where the panel actually lives in RFG).
+    ///     Sends a click on a door tile. Door panels are above-tile sprites, so the anchor flag is 0
+    ///     (per the retail 0x43 point-click wire model; see comhaigne 0x43-point-click).
     /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         <b>TACTICAL WORKAROUND</b> — first of three pre-removal bypasses logged in
-    ///         <c>chaos-networking-removal-direction.md</c> "Tactical workarounds (pre-removal)",
-    ///         alongside the PR-7 <c>ClickFloorTile</c> and <c>HandleDisplayGroupInvite</c> paths.
-    ///         All three exist because <c>Chaos.Networking</c>'s <see cref="ClickArgs"/> /
-    ///         <c>ClickConverter</c> (and equivalents) are sealed and don't expose the trailing bytes
-    ///         retail requires, so the raw <see cref="SpanWriter"/> construction here is hand-rolled
-    ///         in place of a library call.
-    ///     </para>
-    ///     <para>
-    ///         <b>REMOVE WHEN</b> the new Hybrasyl networking library replaces Chaos.Networking and
-    ///         <c>ClickArgs</c> is owned locally with a correct <c>IPacketConverter</c> that supports
-    ///         the optional trailing <c>layer</c> + <c>modifier</c> bytes. At that point this method
-    ///         collapses back to a <c>SendIfWorld(new ClickArgs { ... })</c> one-liner matching
-    ///         <see cref="ClickTile"/>.
-    ///     </para>
-    /// </remarks>
-    /// <param name="x">Tile x.</param>
-    /// <param name="y">Tile y.</param>
-    /// <param name="layer">0 = LeftForeground (E/W door panels), 1 = RightForeground (N/S panels).</param>
-    public void ClickDoor(int x, int y, byte layer)
-    {
-        if (State != ConnectionState.World)
-            return;
-
-        var writer = new SpanWriter(Encoding.GetEncoding(949), usePooling: true);
-        writer.WriteByte((byte)ClickType.TargetPoint);
-        writer.WriteUInt16((ushort)x);
-        writer.WriteUInt16((ushort)y);
-        writer.WriteByte(layer);
-        writer.WriteByte(0x00);
-        var ownership = writer.TransferOwnership();
-        var packet = new Packet((byte)ClientOpCode.Click, ownership.Owner, ownership.Length);
-        Client.Send(ref packet);
-    }
+    public void ClickDoor(int x, int y) => SendIfWorld(Cli.ClickPacket.Point((ushort)x, (ushort)y, 0));
 
     /// <summary>
     ///     Sends a coord click for a floor-aligned tile target (signpost, ground item, door frame, stair base).
-    ///     Matches the legacy DA wire shape verified in Comhaigne's 0x43 RE refresh (2026-04-29):
-    ///     <c>[0x43][0x03][u16 x BE][u16 y BE][u8 flag=1]</c>. The trailing flag byte is the
-    ///     <c>WorldObject_Static</c> anchor flag — <c>1</c> for floor-aligned sprites, <c>0</c> for
-    ///     above-tile sprites (door panels, awnings). Without this byte retail defaults to flag=0
-    ///     and the signpost dispatch silently drops. Hybrasyl ignores the trailing byte and resolves
-    ///     by <c>(x,y)</c> alone, so this works on both servers.
-    ///     Bypasses the sealed <c>ClickArgs</c>/<c>ClickConverter</c> in Chaos.Networking — see
-    ///     <c>chaos-networking-removal-direction.md</c> "Tactical workarounds (pre-removal)".
     /// </summary>
-    public void ClickFloorTile(int x, int y)
-    {
-        if (State != ConnectionState.World)
-            return;
-
-        var writer = new SpanWriter(Encoding.GetEncoding(949), usePooling: true);
-        writer.WriteByte((byte)ClickType.TargetPoint);
-        writer.WriteUInt16((ushort)x);
-        writer.WriteUInt16((ushort)y);
-        writer.WriteByte(0x01); //floor-aligned anchor flag
-        var ownership = writer.TransferOwnership();
-        var packet = new Packet((byte)ClientOpCode.Click, ownership.Owner, ownership.Length);
-        Client.Send(ref packet);
-    }
+    public void ClickFloorTile(int x, int y) => SendIfWorld(Cli.ClickPacket.Point((ushort)x, (ushort)y, 1));
 
     /// <summary>
     ///     Sends a world map node click.
@@ -229,20 +140,17 @@ public sealed class ConnectionManager : IDisposable
         int y,
         ushort checkSum)
         => SendIfWorld(
-            new WorldMapClickArgs
+            new Cli.MapPointClickPacket
             {
+                CheckSum = checkSum,
                 MapId = mapId,
-                Point = new Point(x, y),
-                CheckSum = checkSum
+                X = (ushort)x,
+                Y = (ushort)y
             });
 
     /// <summary>
     ///     Connects to the lobby server, performs the Version/ConnectionInfo handshake.
     /// </summary>
-    /// <param name="host">The lobby server hostname or IP address.</param>
-    /// <param name="port">The lobby server port.</param>
-    /// <param name="clientVersion">The client version to send during handshake.</param>
-    /// <param name="ct">Cancellation token.</param>
     public async Task ConnectToLobbyAsync(
         string host,
         int port,
@@ -250,12 +158,10 @@ public sealed class ConnectionManager : IDisposable
         CancellationToken ct = default)
     {
         State = ConnectionState.Connecting;
-        Client.Crypto = new Crypto();
+        Client.ResetCrypto();
         Client.SetSequence(0);
 
         //set all acceptconnection handler state before connectasync starts the receive loop.
-        //the receive loop starts inside connectasync and acceptconnection can arrive immediately,
-        //so the handler must have everything it needs before the socket connects.
         LobbyClientVersion = clientVersion;
         PendingLobbyVersion = true;
         PendingTargetState = ConnectionState.Lobby;
@@ -274,99 +180,85 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Sends the finalized character creation request (appearance choices) to the login server.
     /// </summary>
-    /// <param name="hairStyle">The selected hair style index.</param>
-    /// <param name="gender">The selected gender.</param>
-    /// <param name="hairColor">The selected hair color.</param>
     public void CreateCharFinalize(byte hairStyle, Gender gender, DisplayColor hairColor)
     {
         if (State != ConnectionState.Login)
             return;
 
         Client.Send(
-            new CreateCharFinalizeArgs
+            new Cli.CreateCharFinalizePacket
             {
                 HairStyle = hairStyle,
-                Gender = gender,
-                HairColor = hairColor
+                Gender = ToDalibGender(gender),
+                HairColor = (byte)hairColor
             });
     }
 
     /// <summary>
     ///     Sends the initial character creation request (name and password) to the login server.
     /// </summary>
-    /// <param name="name">The character name.</param>
-    /// <param name="password">The account password.</param>
     public void CreateCharInitial(string name, string password)
     {
         if (State != ConnectionState.Login)
             return;
 
         Client.Send(
-            new CreateCharInitialArgs
+            new Cli.CreateCharRequestPacket
             {
                 Name = name,
-                Password = password
+                Password = password,
+                Email = string.Empty
             });
     }
 
     /// <summary>
     ///     Sends a gold drop request onto the ground.
     /// </summary>
-    /// <param name="amount">The amount of gold to drop.</param>
-    /// <param name="x">The destination tile X coordinate.</param>
-    /// <param name="y">The destination tile Y coordinate.</param>
     public void DropGold(int amount, int x, int y)
         => SendIfWorld(
-            new GoldDropArgs
+            new Cli.DropGoldPacket
             {
-                Amount = amount,
-                DestinationPoint = new Point(x, y)
+                Amount = (uint)amount,
+                X = (ushort)x,
+                Y = (ushort)y
             });
 
     /// <summary>
     ///     Sends a gold give request to a creature/NPC.
     /// </summary>
-    /// <param name="amount">The amount of gold to give.</param>
-    /// <param name="targetId">The target entity ID.</param>
     public void DropGoldOnCreature(int amount, uint targetId)
         => SendIfWorld(
-            new GoldDroppedOnCreatureArgs
+            new Cli.DropGoldOnCreaturePacket
             {
-                Amount = amount,
+                Amount = (uint)amount,
                 TargetId = targetId
             });
 
     /// <summary>
     ///     Sends an item drop request onto the ground.
     /// </summary>
-    /// <param name="sourceSlot">The inventory slot of the item to drop.</param>
-    /// <param name="x">The destination tile X coordinate.</param>
-    /// <param name="y">The destination tile Y coordinate.</param>
-    /// <param name="count">The number of items to drop (for stackable items).</param>
     public void DropItem(
         byte sourceSlot,
         int x,
         int y,
         int count = 1)
         => SendIfWorld(
-            new ItemDropArgs
+            new Cli.DropItemPacket
             {
-                SourceSlot = sourceSlot,
-                DestinationPoint = new Point(x, y),
-                Count = count
+                Slot = sourceSlot,
+                X = (ushort)x,
+                Y = (ushort)y,
+                Count = (uint)count
             });
 
     /// <summary>
     ///     Sends an item give request to a creature/NPC.
     /// </summary>
-    /// <param name="sourceSlot">The inventory slot of the item to give.</param>
-    /// <param name="targetId">The target entity ID.</param>
-    /// <param name="count">The number of items to give (for stackable items).</param>
     public void DropItemOnCreature(byte sourceSlot, uint targetId, byte count = 1)
         => SendIfWorld(
-            new ItemDroppedOnCreatureArgs
+            new Cli.DropItemOnCreaturePacket
             {
-                SourceSlot = sourceSlot,
+                Slot = sourceSlot,
                 TargetId = targetId,
                 Count = count
             });
@@ -382,7 +274,7 @@ public sealed class ConnectionManager : IDisposable
 
         //lobby→login uses empty keysaltseed (falls back to "default"), login→world uses character name
         var keySaltSeed = redirect.TargetState == ConnectionState.Login ? string.Empty : redirect.Name;
-        Client.Crypto = new Crypto(redirect.Seed, redirect.Key, keySaltSeed);
+        Client.ApplyCryptoKey(redirect.Seed, redirect.Key, keySaltSeed);
         Client.SetSequence(0);
         EntryState = WorldEntryState.None;
         PendingTargetState = redirect.TargetState;
@@ -398,17 +290,17 @@ public sealed class ConnectionManager : IDisposable
             return;
         }
 
-        //send clientredirected immediately after connecting.
+        //send clientjoin immediately after connecting.
         //not all servers send acceptconnection before expecting this packet.
         State = PendingTargetState;
 
         Client.Send(
-            new ClientRedirectedArgs
+            new Cli.ClientJoinPacket
             {
-                Id = redirect.Id,
-                Seed = redirect.Seed,
-                Key = redirect.Key,
-                Name = redirect.Name
+                EncryptionSeed = redirect.Seed,
+                EncryptionKey = redirect.Key,
+                Name = redirect.Name,
+                RedirectId = redirect.Id
             });
 
         if (State == ConnectionState.Login)
@@ -418,10 +310,6 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Sends login credentials to the login server.
     /// </summary>
-    /// <param name="name">The character name.</param>
-    /// <param name="password">The account password.</param>
-    /// <param name="clientId1">First client identification value.</param>
-    /// <param name="clientId2">Second client identification value.</param>
     public void Login(
         string name,
         string password,
@@ -431,344 +319,216 @@ public sealed class ConnectionManager : IDisposable
         if (State != ConnectionState.Login)
             return;
 
+        //ClientId1/2 have no DALib LoginPacket field (the integrity trailer is codec-internal); retained on the
+        //signature for caller compatibility but unused.
+        _ = clientId1;
+        _ = clientId2;
+
         AislingName = name;
 
         Client.Send(
-            new LoginArgs
+            new Cli.LoginPacket
             {
                 Name = name,
-                Password = password,
-                ClientId1 = clientId1,
-                ClientId2 = clientId2,
-                IsValid = true
+                Password = password
             });
     }
 
-    //--- inventory ---
+    /// <summary>Fired when an item is added to the inventory pane.</summary>
+    public event Action<Server.AddItemPacket>? OnAddItemToPane;
 
-    /// <summary>
-    ///     Fired when an item is added to the inventory pane.
-    /// </summary>
-    public event AddItemToPaneHandler? OnAddItemToPane;
+    /// <summary>Fired when a skill is added to the skill pane.</summary>
+    public event Action<Server.AddSkillPacket>? OnAddSkillToPane;
 
-    //--- skills / spells ---
+    /// <summary>Fired when a spell is added to the spell pane.</summary>
+    public event Action<Server.AddSpellPacket>? OnAddSpellToPane;
 
-    /// <summary>
-    ///     Fired when a skill is added to the skill pane.
-    /// </summary>
-    public event AddSkillToPaneHandler? OnAddSkillToPane;
+    /// <summary>Fired when a spell/effect animation should play.</summary>
+    public event Action<Server.SpellAnimationPacket>? OnAnimation;
 
-    /// <summary>
-    ///     Fired when a spell is added to the spell pane.
-    /// </summary>
-    public event AddSpellToPaneHandler? OnAddSpellToPane;
+    /// <summary>Fired when player attributes are updated. Carries the raw partial DALib packet; merge lives in PlayerAttributes.</summary>
+    public event Action<Server.AttributesPacket>? OnAttributes;
 
-    /// <summary>
-    ///     Fired when a spell/effect animation should play.
-    /// </summary>
-    public event AnimationHandler? OnAnimation;
+    /// <summary>Fired when a body animation is triggered on an entity.</summary>
+    public event Action<Server.PlayerAnimationPacket>? OnBodyAnimation;
 
-    /// <summary>
-    ///     Fired when player attributes are updated.
-    /// </summary>
-    public event AttributesHandler? OnAttributes;
-
-    /// <summary>
-    ///     Fired when a body animation is triggered on an entity.
-    /// </summary>
-    public event BodyAnimationHandler? OnBodyAnimation;
-
-    /// <summary>
-    ///     Fired when a casting animation should be cancelled.
-    /// </summary>
+    /// <summary>Fired when a casting animation should be cancelled.</summary>
     public event CancelCastingHandler? OnCancelCasting;
 
-    /// <summary>
-    ///     Fired when the server confirms the player's own walk. Args: (direction, oldX, oldY).
-    /// </summary>
+    /// <summary>Fired when the server confirms the player's own walk. Args: (direction, oldX, oldY).</summary>
     public event ClientWalkResponseHandler? OnClientWalkResponse;
 
-    /// <summary>
-    ///     Fired when a skill or spell cooldown starts.
-    /// </summary>
-    public event CooldownHandler? OnCooldown;
+    /// <summary>Fired when a skill or spell cooldown starts.</summary>
+    public event Action<Server.CooldownPacket>? OnCooldown;
 
-    /// <summary>
-    ///     Fired when another entity changes facing direction. Args: (sourceId, direction).
-    /// </summary>
+    /// <summary>Fired when another entity changes facing direction. Args: (sourceId, direction).</summary>
     public event CreatureTurnHandler? OnCreatureTurn;
 
-    /// <summary>
-    ///     Fired when another entity walks. Args: (sourceId, oldX, oldY, direction).
-    /// </summary>
+    /// <summary>Fired when another entity walks. Args: (sourceId, oldX, oldY, direction).</summary>
     public event CreatureWalkHandler? OnCreatureWalk;
 
-    /// <summary>
-    ///     Fired when an aisling display is received.
-    /// </summary>
-    public event DisplayAislingHandler? OnDisplayAisling;
+    /// <summary>Fired when an aisling display is received.</summary>
+    public event Action<Server.DisplayUserPacket>? OnDisplayAisling;
 
-    /// <summary>
-    ///     Fired when a bulletin board should be displayed.
-    /// </summary>
-    public event DisplayBoardHandler? OnDisplayBoard;
+    /// <summary>Fired when a bulletin board should be displayed.</summary>
+    public event Action<Server.BoardResponsePacket>? OnDisplayBoard;
 
-    /// <summary>
-    ///     Fired when an NPC dialog should be displayed.
-    /// </summary>
-    public event DisplayDialogHandler? OnDisplayDialog;
+    /// <summary>Fired when an NPC dialog should be displayed.</summary>
+    public event Action<Server.NpcDialogPacket>? OnDisplayDialog;
 
-    /// <summary>
-    ///     Fired when an editable notepad should be displayed.
-    /// </summary>
-    public event DisplayEditableNotepadHandler? OnDisplayEditableNotepad;
+    /// <summary>Fired when an editable notepad should be displayed.</summary>
+    public event Action<Server.EditablePaperPacket>? OnDisplayEditableNotepad;
 
-    /// <summary>
-    ///     Fired when an exchange/trade window should be displayed.
-    /// </summary>
-    public event DisplayExchangeHandler? OnDisplayExchange;
+    /// <summary>Fired when an exchange/trade window should be displayed.</summary>
+    public event Action<Server.ExchangeResponsePacket>? OnDisplayExchange;
 
-    /// <summary>
-    ///     Fired when a group invite is received.
-    /// </summary>
-    public event DisplayGroupInviteHandler? OnDisplayGroupInvite;
+    /// <summary>Fired when a group invite/recruit packet is received.</summary>
+    public event Action<Server.GroupResponsePacket>? OnDisplayGroupInvite;
 
-    //--- npc interaction ---
+    /// <summary>Fired when an NPC menu should be displayed.</summary>
+    public event Action<Server.NpcMenuPacket>? OnDisplayMenu;
 
-    /// <summary>
-    ///     Fired when an NPC menu should be displayed.
-    /// </summary>
-    public event DisplayMenuHandler? OnDisplayMenu;
+    /// <summary>Fired when a public chat message is displayed.</summary>
+    public event Action<Server.PublicMessagePacket>? OnDisplayPublicMessage;
 
-    /// <summary>
-    ///     Fired when a public chat message is displayed.
-    /// </summary>
-    public event DisplayPublicMessageHandler? OnDisplayPublicMessage;
+    /// <summary>Fired when a read-only notepad should be displayed.</summary>
+    public event Action<Server.ReadonlyPaperPacket>? OnDisplayReadonlyNotepad;
 
-    /// <summary>
-    ///     Fired when a read-only notepad should be displayed.
-    /// </summary>
-    public event DisplayReadonlyNotepadHandler? OnDisplayReadonlyNotepad;
+    /// <summary>Fired when an equipment slot is cleared.</summary>
+    public event Action<Server.RemoveEquipmentPacket>? OnDisplayUnequip;
 
-    /// <summary>
-    ///     Fired when an equipment slot is cleared.
-    /// </summary>
-    public event DisplayUnequipHandler? OnDisplayUnequip;
+    /// <summary>Fired when a visible entity (non-aisling) batch is received.</summary>
+    public event Action<Server.DrawObjectsPacket>? OnDisplayVisibleEntities;
 
-    /// <summary>
-    ///     Fired when a visible entity (non-aisling) is received.
-    /// </summary>
-    public event DisplayVisibleEntitiesHandler? OnDisplayVisibleEntities;
+    /// <summary>Fired when door states are updated.</summary>
+    public event Action<Server.DoorPacket>? OnDoor;
 
-    /// <summary>
-    ///     Fired when door states are updated.
-    /// </summary>
-    public event DoorHandler? OnDoor;
+    /// <summary>Fired when a status effect icon is applied or removed.</summary>
+    public event Action<Server.StatusBarPacket>? OnEffect;
 
-    /// <summary>
-    ///     Fired when a status effect is applied or removed.
-    /// </summary>
-    public event EffectHandler? OnEffect;
+    /// <summary>Fired when an equipment slot is updated.</summary>
+    public event Action<Server.AddEquipmentPacket>? OnEquipment;
 
-    //--- equipment ---
-
-    /// <summary>
-    ///     Fired when an equipment slot is updated.
-    /// </summary>
-    public event EquipmentHandler? OnEquipment;
-
-    /// <summary>
-    ///     Fired when an error occurs during connection or handshake.
-    /// </summary>
+    /// <summary>Fired when an error occurs during connection or handshake.</summary>
     public event ConnectionErrorHandler? OnError;
 
-    /// <summary>
-    ///     Fired when a logout response is received.
-    /// </summary>
-    public event ExitResponseHandler? OnExitResponse;
+    /// <summary>Fired when a logout response is received.</summary>
+    public event Action<Server.ConfirmExitPacket>? OnExitResponse;
 
-    /// <summary>
-    ///     Fired after the server forced the client to echo a packet. The packet has already been sent; this event is
-    ///     informational.
-    /// </summary>
-    public event ForceClientPacketHandler? OnForceClientPacket;
+    /// <summary>Fired when an entity's health bar should be displayed.</summary>
+    public event Action<Server.HealthBarPacket>? OnHealthBar;
 
-    //--- visual / audio ---
+    /// <summary>Fired when the ambient light level changes (time of day).</summary>
+    public event Action<Server.LightLevelPacket>? OnLightLevel;
 
-    /// <summary>
-    ///     Fired when an entity's health bar should be displayed.
-    /// </summary>
-    public event HealthBarHandler? OnHealthBar;
-
-    //--- world state ---
-
-    /// <summary>
-    ///     Fired when the ambient light level changes (time of day).
-    /// </summary>
-    public event LightLevelHandler? OnLightLevel;
-
-    /// <summary>
-    ///     Fired when the player's location changes.
-    /// </summary>
+    /// <summary>Fired when the player's location changes.</summary>
     public event LocationChangedHandler? OnLocationChanged;
 
-    /// <summary>
-    ///     Fired when a login control is received (e.g. homepage URL).
-    /// </summary>
-    public event LoginControlHandler? OnLoginControl;
+    /// <summary>Fired when a login control (homepage URL) is received.</summary>
+    public event Action<Server.UrlPacket>? OnLoginControl;
 
-    /// <summary>
-    ///     Fired when a login message is received (success, failure, or informational).
-    /// </summary>
-    public event LoginMessageHandler? OnLoginMessage;
+    /// <summary>Fired when a login message is received (success, failure, or informational).</summary>
+    public event Action<Server.LoginMessagePacket>? OnLoginMessage;
 
-    /// <summary>
-    ///     Fired when a login notice (EULA) is received.
-    /// </summary>
-    public event LoginNoticeHandler? OnLoginNotice;
+    /// <summary>Fired when a login notice (EULA) is received.</summary>
+    public event Action<Server.LoginNotificationPacket>? OnLoginNotice;
 
-    /// <summary>
-    ///     Fired when a map change is about to begin.
-    /// </summary>
+    /// <summary>Fired when a map change is about to begin.</summary>
     public event MapChangePendingHandler? OnMapChangePending;
 
-    /// <summary>
-    ///     Fired for each row of map data received.
-    /// </summary>
-    public event MapDataHandler? OnMapData;
+    /// <summary>Fired for each row of map data received.</summary>
+    public event Action<Server.MapDataPacket>? OnMapData;
 
-    /// <summary>
-    ///     Fired when map info is received, before map data arrives.
-    /// </summary>
-    public event MapInfoHandler? OnMapInfo;
+    /// <summary>Fired when map info is received, before map data arrives.</summary>
+    public event Action<Server.MapInfoPacket>? OnMapInfo;
 
-    /// <summary>
-    ///     Fired when the server signals that map loading is complete.
-    /// </summary>
+    /// <summary>Fired when the server signals that map loading is complete.</summary>
     public event MapLoadCompleteHandler? OnMapLoadComplete;
 
-    /// <summary>
-    ///     Fired when metadata is received.
-    /// </summary>
-    public event MetaDataHandler? OnMetaData;
+    /// <summary>Fired when metadata is received.</summary>
+    public event Action<Server.MetafilePacket>? OnMetaData;
 
-    /// <summary>
-    ///     Fired when another player's profile is received.
-    /// </summary>
-    public event OtherProfileHandler? OnOtherProfile;
+    /// <summary>Fired when another player's profile is received.</summary>
+    public event Action<Server.ProfilePacket>? OnOtherProfile;
 
-    /// <summary>
-    ///     Fired when a redirect is received and the client needs to connect to a new server.
-    /// </summary>
+    /// <summary>Fired when a redirect is received and the client needs to connect to a new server.</summary>
     public event RedirectReceivedHandler? OnRedirectReceived;
 
-    /// <summary>
-    ///     Fired when a viewport refresh response is received.
-    /// </summary>
+    /// <summary>Fired when a viewport refresh response is received.</summary>
     public event RefreshResponseHandler? OnRefreshResponse;
 
-    /// <summary>
-    ///     Fired when an entity is removed from the viewport.
-    /// </summary>
+    /// <summary>Fired when an entity is removed from the viewport.</summary>
     public event RemoveEntityHandler? OnRemoveEntity;
 
-    /// <summary>
-    ///     Fired when an item is removed from the inventory pane.
-    /// </summary>
-    public event RemoveItemFromPaneHandler? OnRemoveItemFromPane;
+    /// <summary>Fired when an item is removed from the inventory pane.</summary>
+    public event Action<Server.RemoveItemPacket>? OnRemoveItemFromPane;
 
-    /// <summary>
-    ///     Fired when a skill is removed from the skill pane.
-    /// </summary>
-    public event RemoveSkillFromPaneHandler? OnRemoveSkillFromPane;
+    /// <summary>Fired when a skill is removed from the skill pane.</summary>
+    public event Action<Server.RemoveSkillPacket>? OnRemoveSkillFromPane;
 
-    /// <summary>
-    ///     Fired when a spell is removed from the spell pane.
-    /// </summary>
-    public event RemoveSpellFromPaneHandler? OnRemoveSpellFromPane;
+    /// <summary>Fired when a spell is removed from the spell pane.</summary>
+    public event Action<Server.RemoveSpellPacket>? OnRemoveSpellFromPane;
 
-    /// <summary>
-    ///     Fired when the player's own profile is received.
-    /// </summary>
-    public event SelfProfileHandler? OnSelfProfile;
+    /// <summary>Fired when the player's own profile is received.</summary>
+    public event Action<Server.SelfProfilePacket>? OnSelfProfile;
 
-    //--- chat / messages ---
+    /// <summary>Fired when a system message is received (yellow text, overhead, etc.).</summary>
+    public event Action<Server.SystemMessagePacket>? OnServerMessage;
 
-    /// <summary>
-    ///     Fired when a system message is received (yellow text, overhead, etc.).
-    /// </summary>
-    public event ServerMessageHandler? OnServerMessage;
-
-    /// <summary>
-    ///     Fired when the lobby handshake completes and the server table is received.
-    /// </summary>
+    /// <summary>Fired when the lobby handshake completes and the server table is received.</summary>
     public event ServerTableReceivedHandler? OnServerTableReceived;
 
-    /// <summary>
-    ///     Fired when a sound or music track should play.
-    /// </summary>
-    public event SoundHandler? OnSound;
+    /// <summary>Fired when a sound or music track should play.</summary>
+    public event Action<Server.PlaySoundPacket>? OnSound;
 
-    /// <summary>
-    ///     Fired when the server assigns the local player's entity ID during world entry.
-    /// </summary>
+    /// <summary>Fired when the server assigns the local player's entity ID during world entry.</summary>
     public event UserIdHandler? OnUserId;
 
-    /// <summary>
-    ///     Fired when world entry is complete and all essential data (user ID, map, location, attributes) has been received.
-    /// </summary>
+    /// <summary>Fired when world entry is complete and all essential data has been received.</summary>
     public event WorldEntryCompleteHandler? OnWorldEntryComplete;
 
-    /// <summary>
-    ///     Fired when a world list (online players) is received.
-    /// </summary>
-    public event WorldListHandler? OnWorldList;
+    /// <summary>Fired when a world list (online players) is received.</summary>
+    public event Action<Server.UserListPacket>? OnWorldList;
 
-    /// <summary>
-    ///     Fired when the world map should be displayed.
-    /// </summary>
-    public event WorldMapHandler? OnWorldMap;
+    /// <summary>Fired when the world map should be displayed.</summary>
+    public event Action<Server.WorldMapPacket>? OnWorldMap;
+
+    /// <summary>Fired when the server requests the player's portrait and profile text.</summary>
+    public event EditableProfileRequestHandler? OnEditableProfileRequest;
+
+    /// <summary>Fired when the connection state changes. Args: (oldState, newState).</summary>
+    public event ConnectionStateChangedHandler? StateChanged;
 
     /// <summary>
     ///     Sends a pickup request from a tile.
     /// </summary>
-    /// <param name="x">The source tile X coordinate.</param>
-    /// <param name="y">The source tile Y coordinate.</param>
-    /// <param name="destinationSlot">The inventory slot to place the item in.</param>
     public void PickupItem(int x, int y, byte destinationSlot)
         => SendIfWorld(
-            new PickupArgs
+            new Cli.PickupItemPacket
             {
-                SourcePoint = new Point(x, y),
-                DestinationSlot = destinationSlot
+                Slot = destinationSlot,
+                X = (ushort)x,
+                Y = (ushort)y
             });
 
     /// <summary>
     ///     Processes queued inbound packets, driving state transitions. Call this from the game loop's Update method.
     /// </summary>
-    /// <param name="buffer">A reusable list that receives drained packets; cleared by the caller between frames.</param>
-    public void ProcessPackets(List<ServerPacket> buffer)
+    public void ProcessPackets(List<IServerPacket> buffer)
     {
         Client.DrainPackets(buffer);
 
         foreach (var pkt in buffer)
-        {
             try
             {
                 HandlePacket(pkt);
             } catch (Exception ex)
             {
-                //log every downstream failure (deserializer mismatches, NREs in event handlers, etc.) so
-                //protocol divergence between target servers is visible instead of silently dropped.
-                var hex = Convert.ToHexString(pkt.Data, 0, Math.Min(pkt.Length, 128));
-                NoticeDebugLog.Write($"!!! handler threw opcode=0x{pkt.OpCode:X2} len={pkt.Length} {ex.GetType().Name}: {ex.Message}");
-                NoticeDebugLog.Write($"  hex(0..128)={hex}");
+                //log every downstream failure (cast mismatches, NREs in event handlers, etc.) so protocol divergence
+                //between target servers is visible instead of silently dropped.
+                NoticeDebugLog.Write($"!!! handler threw opcode=0x{pkt.Opcode:X2} {ex.GetType().Name}: {ex.Message}");
                 NoticeDebugLog.Write($"  stack: {ex.StackTrace}");
-            } finally
-            {
-                ArrayPool<byte>.Shared.Return(pkt.Data);
             }
-        }
 
         //follow pending redirect once the old connection is fully torn down
         if (PendingRedirect is not null && !Client.Connected)
@@ -778,23 +538,16 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Sends a raise stat request.
     /// </summary>
-    /// <param name="stat">The stat to raise.</param>
-    public void RaiseStat(Stat stat)
-        => SendIfWorld(
-            new RaiseStatArgs
-            {
-                Stat = stat
-            });
+    public void RaiseStat(Stat stat) => SendIfWorld(new Cli.StatPointPacket { Stat = StatSelector(stat) });
 
     /// <summary>
     ///     Sends an exit/logout request.
     /// </summary>
-    /// <param name="isRequest"><see langword="true" /> to request the logout dialog; <see langword="false" /> to confirm logout.</param>
     public void RequestExit(bool isRequest = true)
         => SendIfWorld(
-            new ExitRequestArgs
+            new Cli.ClientExitPacket
             {
-                IsRequest = isRequest
+                Signal = isRequest ? Cli.ExitSignal.Request : Cli.ExitSignal.Confirm
             });
 
     /// <summary>
@@ -805,13 +558,19 @@ public sealed class ConnectionManager : IDisposable
         if (State != ConnectionState.Login)
             return;
 
-        Client.Send(new HomepageRequestArgs());
+        Client.Send(new Cli.RequestHomepagePacket());
     }
 
     /// <summary>
     ///     Requests tile data for the current map from the server.
     /// </summary>
-    public void RequestMapData() => SendIfWorld(new MapDataRequestArgs());
+    public void RequestMapData()
+        => SendIfWorld(
+            new Cli.RequestMapPacket
+            {
+                X = MapInfo?.Width ?? 0,
+                Y = MapInfo?.Height ?? 0
+            });
 
     /// <summary>
     ///     Requests the full login notice (EULA) from the login server.
@@ -821,18 +580,18 @@ public sealed class ConnectionManager : IDisposable
         if (State != ConnectionState.Login)
             return;
 
-        Client.Send(new NoticeRequestArgs());
+        Client.Send(new Cli.RequestNotificationPacket());
     }
 
     /// <summary>
     ///     Sends a refresh request (F5).
     /// </summary>
-    public void RequestRefresh() => SendIfWorld(new RefreshRequestArgs());
+    public void RequestRefresh() => SendIfWorld(new Cli.RefreshPacket());
 
     /// <summary>
     ///     Sends a self profile request.
     /// </summary>
-    public void RequestSelfProfile() => SendIfWorld(new SelfProfileRequestArgs());
+    public void RequestSelfProfile() => SendIfWorld(new Cli.RequestProfilePacket());
 
     /// <summary>
     ///     Requests the server table from the lobby.
@@ -842,69 +601,38 @@ public sealed class ConnectionManager : IDisposable
         if (State != ConnectionState.Lobby)
             return;
 
-        Client.Send(
-            new ServerTableRequestArgs
-            {
-                ServerTableRequestType = ServerTableRequestType.RequestTable
-            });
+        Client.Send(new Cli.ServerTableRequestPacket());
     }
 
     /// <summary>
     ///     Sends a world list request.
     /// </summary>
-    public void RequestWorldList() => SendIfWorld(new WorldListRequestArgs());
+    public void RequestWorldList() => SendIfWorld(new Cli.RequestWorldListPacket());
 
     /// <summary>
     ///     Selects a server from the server table by ID, triggering a redirect.
     /// </summary>
-    /// <param name="serverId">The server ID from the server table.</param>
     public void SelectServer(byte serverId)
     {
         if (State != ConnectionState.Lobby)
             return;
 
-        Client.Send(
-            new ServerTableRequestArgs
-            {
-                ServerTableRequestType = ServerTableRequestType.ServerId,
-                ServerId = serverId
-            });
+        Client.Send(new Cli.ServerTableSelectPacket { ServerId = serverId });
     }
 
     /// <summary>
     ///     Adds a player to the ignore list.
     /// </summary>
-    /// <param name="targetName">The name of the player to ignore.</param>
-    public void SendAddIgnore(string targetName)
-        => SendIfWorld(
-            new IgnoreArgs
-            {
-                IgnoreType = IgnoreType.AddUser,
-                TargetName = targetName
-            });
+    public void SendAddIgnore(string targetName) => SendIfWorld(Cli.IgnorePacket.AddUser(targetName));
 
     /// <summary>
     ///     Sends a begin chant packet to start spell casting.
     /// </summary>
-    /// <param name="castLineCount">The number of chant lines for this spell.</param>
-    public void SendBeginChant(byte castLineCount)
-        => SendIfWorld(
-            new BeginChantArgs
-            {
-                CastLineCount = castLineCount
-            });
+    public void SendBeginChant(byte castLineCount) => SendIfWorld(new Cli.BeginCastingPacket { Lines = castLineCount });
 
     /// <summary>
     ///     Sends a board/mail interaction (view board, read post, send mail, delete, etc.).
     /// </summary>
-    /// <param name="requestType">The type of board interaction.</param>
-    /// <param name="boardId">The board ID.</param>
-    /// <param name="postId">The post ID for read/delete operations.</param>
-    /// <param name="startPostId">The starting post ID for paginated listing.</param>
-    /// <param name="controls">Board control flags (previous/next page availability).</param>
-    /// <param name="to">The recipient name for mail.</param>
-    /// <param name="subject">The post or mail subject.</param>
-    /// <param name="message">The post or mail body text.</param>
     public void SendBoardInteraction(
         BoardRequestType requestType,
         ushort boardId = 0,
@@ -914,44 +642,67 @@ public sealed class ConnectionManager : IDisposable
         string? to = null,
         string? subject = null,
         string? message = null)
-        => SendIfWorld(
-            new BoardInteractionArgs
+    {
+        Cli.BoardRequestPacket? packet = requestType switch
+        {
+            BoardRequestType.BoardList => new Cli.BoardListPacket(),
+            BoardRequestType.ViewBoard => new Cli.ViewBoardPacket
             {
-                BoardRequestType = requestType,
+                BoardId = boardId,
+                StartPostId = startPostId,
+                Offset = -16
+            },
+            //offset drives server-side prev/next navigation: 0 = exact post, 1 = newer, -1 = older
+            BoardRequestType.ViewPost => new Cli.ViewPostPacket
+            {
                 BoardId = boardId,
                 PostId = postId,
-                StartPostId = startPostId,
-                Controls = controls,
-                To = to,
-                Subject = subject,
-                Message = message
-            });
+                Offset = (sbyte)(controls ?? BoardControls.RequestPost)
+            },
+            BoardRequestType.NewPost => new Cli.NewPostPacket
+            {
+                BoardId = boardId,
+                Subject = subject ?? string.Empty,
+                Body = message ?? string.Empty
+            },
+            BoardRequestType.Delete => new Cli.DeletePostPacket
+            {
+                BoardId = boardId,
+                PostId = postId
+            },
+            BoardRequestType.SendMail => new Cli.SendMailPacket
+            {
+                BoardId = boardId,
+                Recipient = to ?? string.Empty,
+                Subject = subject ?? string.Empty,
+                Body = message ?? string.Empty
+            },
+            BoardRequestType.Highlight => new Cli.HighlightPostPacket
+            {
+                BoardId = boardId,
+                PostId = postId
+            },
+            _ => null
+        };
+
+        if (packet is null)
+        {
+            NoticeDebugLog.Write($"SendBoardInteraction: unmapped BoardRequestType {requestType} -- not sent");
+
+            return;
+        }
+
+        SendIfWorld(packet);
+    }
 
     /// <summary>
     ///     Sends a chant line message.
     /// </summary>
-    /// <param name="message">The chant text to display.</param>
-    public void SendChant(string message)
-        => SendIfWorld(
-            new ChantArgs
-            {
-                ChantMessage = message
-            });
+    public void SendChant(string message) => SendIfWorld(new Cli.CastLinePacket { Line = message });
 
     /// <summary>
     ///     Sends a CreateGroupbox request with recruitment configuration.
     /// </summary>
-    /// <param name="playerName">The owner's (sender's) own character name. The protocol's
-    /// TargetName field on CreateGroupbox is the sender's own name, not the groupbox title.</param>
-    /// <param name="name">The group box name.</param>
-    /// <param name="note">The recruitment note.</param>
-    /// <param name="minLevel">Minimum level requirement.</param>
-    /// <param name="maxLevel">Maximum level requirement.</param>
-    /// <param name="maxWarriors">Maximum number of warriors.</param>
-    /// <param name="maxWizards">Maximum number of wizards.</param>
-    /// <param name="maxRogues">Maximum number of rogues.</param>
-    /// <param name="maxPriests">Maximum number of priests.</param>
-    /// <param name="maxMonks">Maximum number of monks.</param>
     public void SendCreateGroupBox(
         string playerName,
         string name,
@@ -964,207 +715,245 @@ public sealed class ConnectionManager : IDisposable
         byte maxPriests,
         byte maxMonks)
         => SendIfWorld(
-            new GroupInviteArgs
-            {
-                ClientGroupSwitch = ClientGroupSwitch.CreateGroupbox,
-                //TargetName in CreateGroupbox is the owner's (sender's) own name, not
-                //the groupbox title. The title lives in GroupBoxInfo.Name.
-                TargetName = playerName,
-                GroupBoxInfo = new CreateGroupBoxInfo
-                {
-                    Name = name,
-                    Note = note,
-                    MinLevel = minLevel,
-                    MaxLevel = maxLevel,
-                    MaxWarriors = maxWarriors,
-                    MaxWizards = maxWizards,
-                    MaxRogues = maxRogues,
-                    MaxPriests = maxPriests,
-                    MaxMonks = maxMonks
-                }
-            });
+            Cli.GroupRequestPacket.Groupbox(
+                playerName,
+                name,
+                note,
+                minLevel,
+                maxLevel,
+                maxWarriors,
+                maxWizards,
+                maxRogues,
+                maxPriests,
+                maxMonks));
 
     /// <summary>
-    ///     Sends a dialog interaction response (Next, Close, option select, text input).
+    ///     Sends a dialog interaction response (Next/Prev/Close, option select, text input).
     /// </summary>
-    /// <param name="entityType">The type of entity that owns the dialog.</param>
-    /// <param name="entityId">The entity ID of the dialog owner.</param>
-    /// <param name="pursuitId">The pursuit ID of the current dialog chain.</param>
-    /// <param name="dialogId">The dialog ID being responded to.</param>
-    /// <param name="argsType">The type of response arguments.</param>
-    /// <param name="option">The selected option index, if applicable.</param>
-    /// <param name="args">Additional string arguments (e.g. text input values).</param>
     public void SendDialogResponse(
-        EntityType entityType,
+        byte objectType,
         uint entityId,
         ushort pursuitId,
         ushort dialogId,
         DialogArgsType argsType = DialogArgsType.None,
         byte? option = null,
         List<string>? args = null)
-        => SendIfWorld(
-            new DialogInteractionArgs
+    {
+        Cli.DialogUsePacket packet = argsType switch
+        {
+            DialogArgsType.MenuResponse => new Cli.DialogOptionResponsePacket
             {
-                EntityType = entityType,
-                EntityId = entityId,
+                ObjectType = objectType,
+                ObjectId = entityId,
                 PursuitId = pursuitId,
-                DialogId = dialogId,
-                DialogArgsType = argsType,
-                Option = option,
-                Args = args
-            });
+                PursuitIndex = dialogId,
+                Option = option ?? 0
+            },
+            DialogArgsType.TextResponse => new Cli.DialogTextResponsePacket
+            {
+                ObjectType = objectType,
+                ObjectId = entityId,
+                PursuitId = pursuitId,
+                PursuitIndex = dialogId,
+                Text = args is { Count: > 0 } ? string.Join("\t", args) : string.Empty
+            },
+            _ => new Cli.DialogNavigationPacket
+            {
+                ObjectType = objectType,
+                ObjectId = entityId,
+                PursuitId = pursuitId,
+                PursuitIndex = dialogId
+            }
+        };
+
+        SendIfWorld(packet);
+    }
 
     /// <summary>
     ///     Sends the player's portrait and profile text to the server.
     /// </summary>
-    /// <param name="portraitData">The raw portrait image bytes.</param>
-    /// <param name="profileMessage">The profile text.</param>
     public void SendEditableProfile(byte[] portraitData, string profileMessage)
         => SendIfWorld(
-            new EditableProfileArgs
+            new Cli.SetProfilePacket
             {
                 PortraitData = portraitData,
-                ProfileMessage = profileMessage
+                ProfileText = profileMessage
             });
 
     /// <summary>
-    ///     Sends an emote request (body animation 9-44).
+    ///     Sends an emote request (body animation 9-44). The wire carries the zero-based emote index (animation - 9).
     /// </summary>
-    /// <param name="bodyAnimation">The emote body animation to play.</param>
     public void SendEmote(BodyAnimation bodyAnimation)
-        => SendIfWorld(
-            new EmoteArgs
-            {
-                BodyAnimation = bodyAnimation
-            });
+    {
+        var anim = (byte)bodyAnimation;
+        var emoteIndex = anim >= 9 ? (byte)(anim - 9) : anim;
+
+        SendIfWorld(new Cli.EmotePacket { EmoteIndex = emoteIndex });
+    }
 
     /// <summary>
     ///     Sends an exchange interaction.
     /// </summary>
-    /// <param name="type">The exchange action type.</param>
-    /// <param name="otherId">The other player's entity ID.</param>
-    /// <param name="sourceSlot">The inventory slot of the item being exchanged.</param>
-    /// <param name="itemCount">The number of items to exchange (for stackable items).</param>
-    /// <param name="goldAmount">The amount of gold to exchange.</param>
     public void SendExchangeInteraction(
         ExchangeRequestType type,
         uint otherId = 0,
         byte? sourceSlot = null,
         byte? itemCount = null,
         int? goldAmount = null)
-        => SendIfWorld(
-            new ExchangeInteractionArgs
+    {
+        Cli.ExchangePacket? packet = type switch
+        {
+            ExchangeRequestType.StartExchange => new Cli.StartExchangePacket { OtherUserId = otherId },
+            ExchangeRequestType.AddItem => new Cli.AddExchangeItemPacket
             {
-                ExchangeRequestType = type,
-                OtherPlayerId = otherId,
-                SourceSlot = sourceSlot,
-                ItemCount = itemCount,
-                GoldAmount = goldAmount
-            });
+                OtherUserId = otherId,
+                SourceSlot = sourceSlot ?? 0
+            },
+            ExchangeRequestType.AddStackableItem => new Cli.AddExchangeStackableItemPacket
+            {
+                OtherUserId = otherId,
+                SourceSlot = sourceSlot ?? 0,
+                ItemCount = itemCount ?? 0
+            },
+            ExchangeRequestType.SetGold => new Cli.SetExchangeGoldPacket
+            {
+                OtherUserId = otherId,
+                GoldAmount = (uint)(goldAmount ?? 0)
+            },
+            ExchangeRequestType.Cancel => new Cli.CancelExchangePacket { OtherUserId = otherId },
+            ExchangeRequestType.Accept => new Cli.AcceptExchangePacket { OtherUserId = otherId },
+            _ => null
+        };
+
+        if (packet is null)
+        {
+            NoticeDebugLog.Write($"SendExchangeInteraction: unmapped ExchangeRequestType {type} -- not sent");
+
+            return;
+        }
+
+        SendIfWorld(packet);
+    }
 
     /// <summary>
     ///     Sends a group invite or group management action.
     /// </summary>
-    /// <param name="action">The group action to perform.</param>
-    /// <param name="targetName">The target player name, if applicable.</param>
     public void SendGroupInvite(ClientGroupSwitch action, string? targetName = null)
-        => SendIfWorld(
-            new GroupInviteArgs
-            {
-                ClientGroupSwitch = action,
-                TargetName = targetName ?? string.Empty
-            });
+    {
+        var name = targetName ?? string.Empty;
+
+        IClientPacket? packet = action switch
+        {
+            ClientGroupSwitch.TryInvite => Cli.GroupRequestPacket.TryInvite(name),
+            ClientGroupSwitch.AcceptInvite => Cli.GroupRequestPacket.AcceptInvite(name),
+            ClientGroupSwitch.RemoveGroupBox => Cli.GroupRequestPacket.RemoveGroupBox(name),
+            ClientGroupSwitch.RequestToJoin => Cli.GroupRequestPacket.RecruitJoin(name),
+
+            //ViewGroupBox = Hybrasyl group stage 5 (RecruitInfo); DALib's GroupRequestPacket has no stage-5 factory,
+            //so it is emitted via a raw stage-5 group packet ([5][string8 name]).
+            ClientGroupSwitch.ViewGroupBox => new ViewRecruitInfoPacket(name),
+            _ => null
+        };
+
+        if (packet is null)
+        {
+            NoticeDebugLog.Write($"SendGroupInvite: unmapped ClientGroupSwitch {action} -- not sent");
+
+            return;
+        }
+
+        SendIfWorld(packet);
+    }
 
     /// <summary>
     ///     Requests the current ignore list from the server.
     /// </summary>
-    public void SendIgnoreRequest()
-        => SendIfWorld(
-            new IgnoreArgs
-            {
-                IgnoreType = IgnoreType.Request
-            });
+    public void SendIgnoreRequest() => SendIfWorld(Cli.IgnorePacket.Request());
 
     /// <summary>
-    ///     Sends a menu interaction response (pursuit selection).
+    ///     Sends a menu interaction response (pursuit selection / text / option).
     /// </summary>
-    /// <param name="entityType">The type of entity that owns the menu.</param>
-    /// <param name="entityId">The entity ID of the menu owner.</param>
-    /// <param name="pursuitId">The selected pursuit ID.</param>
-    /// <param name="slot">The selected slot index, if applicable.</param>
-    /// <param name="args">Additional string arguments.</param>
     public void SendMenuResponse(
-        EntityType entityType,
+        byte objectType,
         uint entityId,
         ushort pursuitId,
         byte? slot = null,
         string[]? args = null)
-        => SendIfWorld(
-            new MenuInteractionArgs
+    {
+        Cli.NpcMainMenuPacket packet;
+
+        if (slot is { } slotValue)
+            packet = new Cli.NpcOptionResponsePacket
             {
-                EntityType = entityType,
-                EntityId = entityId,
+                ObjectType = objectType,
+                ObjectId = entityId,
                 PursuitId = pursuitId,
-                Slot = slot,
-                Args = args
-            });
+                Option = slotValue
+            };
+        else if (args is { Length: >= 2 })
+            packet = new Cli.NpcTextPairResponsePacket
+            {
+                ObjectType = objectType,
+                ObjectId = entityId,
+                PursuitId = pursuitId,
+                Name = args[0],
+                Quantity = args[1]
+            };
+        else if (args is { Length: 1 })
+            packet = new Cli.NpcTextResponsePacket
+            {
+                ObjectType = objectType,
+                ObjectId = entityId,
+                PursuitId = pursuitId,
+                Text = args[0]
+            };
+        else
+            packet = new Cli.NpcMainMenuSelectPacket
+            {
+                ObjectType = objectType,
+                ObjectId = entityId,
+                PursuitId = pursuitId
+            };
+
+        SendIfWorld(packet);
+    }
 
     /// <summary>
     ///     Sends a metadata request to the server (checksums or specific file data).
     /// </summary>
-    /// <param name="requestType">The type of metadata request.</param>
-    /// <param name="name">The metadata file name, for specific file requests.</param>
     public void SendMetaDataRequest(MetaDataRequestType requestType, string? name = null)
         => Client.Send(
-            new MetaDataRequestArgs
-            {
-                MetaDataRequestType = requestType,
-                Name = name
-            });
+            requestType == MetaDataRequestType.AllCheckSums
+                ? Cli.RequestMetafilePacket.AllCheckSums()
+                : Cli.RequestMetafilePacket.ForName(name ?? string.Empty));
 
     /// <summary>
     ///     Toggles a user option (e.g. group allow, exchange allow, whisper settings).
     /// </summary>
-    /// <param name="option">The user option to toggle.</param>
-    public void SendOptionToggle(UserOption option)
-        => SendIfWorld(
-            new OptionToggleArgs
-            {
-                UserOption = option
-            });
+    public void SendOptionToggle(UserOption option) => SendIfWorld(new Cli.SettingsPacket { SettingNumber = (byte)option });
 
     /// <summary>
     ///     Sends a public (normal) chat message visible to nearby players.
     /// </summary>
-    /// <param name="message">The chat message text.</param>
     public void SendPublicMessage(string message)
         => SendIfWorld(
-            new PublicMessageArgs
+            new Cli.TalkPacket
             {
-                Message = message,
-                PublicMessageType = PublicMessageType.Normal
+                ChatType = Cli.ChatType.Say,
+                Message = message
             });
 
     /// <summary>
     ///     Removes a player from the ignore list.
     /// </summary>
-    /// <param name="targetName">The name of the player to un-ignore.</param>
-    public void SendRemoveIgnore(string targetName)
-        => SendIfWorld(
-            new IgnoreArgs
-            {
-                IgnoreType = IgnoreType.RemoveUser,
-                TargetName = targetName
-            });
+    public void SendRemoveIgnore(string targetName) => SendIfWorld(Cli.IgnorePacket.RemoveUser(targetName));
 
     /// <summary>
     ///     Sends notepad text for an editable notepad slot.
     /// </summary>
-    /// <param name="slot">The notepad slot index.</param>
-    /// <param name="message">The notepad text content.</param>
     public void SendSetNotepad(byte slot, string message)
         => SendIfWorld(
-            new SetNotepadArgs
+            new Cli.SetNotepadPacket
             {
                 Slot = slot,
                 Message = message
@@ -1173,60 +962,43 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Sends a shout message (! prefix) visible to all players on the map.
     /// </summary>
-    /// <param name="message">The shout message text.</param>
     public void SendShout(string message)
         => SendIfWorld(
-            new PublicMessageArgs
+            new Cli.TalkPacket
             {
-                Message = message,
-                PublicMessageType = PublicMessageType.Shout
+                ChatType = Cli.ChatType.Shout,
+                Message = message
             });
 
     /// <summary>
     ///     Sends a social status change to the server.
     /// </summary>
-    /// <param name="status">The new social status.</param>
-    public void SendSocialStatus(SocialStatus status)
-        => SendIfWorld(
-            new SocialStatusArgs
-            {
-                SocialStatus = status
-            });
+    public void SendSocialStatus(SocialStatus status) => SendIfWorld(new Cli.StatusPacket { Status = (byte)status });
 
     /// <summary>
     ///     Sends a whisper to a specific player.
     /// </summary>
-    /// <param name="targetName">The recipient player name.</param>
-    /// <param name="message">The whisper message text.</param>
     public void SendWhisper(string targetName, string message)
         => SendIfWorld(
-            new WhisperArgs
+            new Cli.WhisperPacket
             {
-                TargetName = targetName,
+                Target = targetName,
                 Message = message
             });
 
     /// <summary>
     ///     Sends a spacebar (assail) request.
     /// </summary>
-    public void Spacebar() => SendIfWorld(new SpacebarArgs());
-
-    /// <summary>
-    ///     Fired when the connection state changes. Args: (oldState, newState).
-    /// </summary>
-    public event ConnectionStateChangedHandler? StateChanged;
+    public void Spacebar() => SendIfWorld(new Cli.AttackPacket());
 
     /// <summary>
     ///     Sends a swap slot request between two panel positions.
     /// </summary>
-    /// <param name="panelType">The panel type (inventory, skill, or spell).</param>
-    /// <param name="slot1">The first slot position.</param>
-    /// <param name="slot2">The second slot position.</param>
     public void SwapSlot(PanelType panelType, byte slot1, byte slot2)
         => SendIfWorld(
-            new SwapSlotArgs
+            new Cli.SwapSlotPacket
             {
-                PanelType = panelType,
+                Window = (byte)panelType,
                 Slot1 = slot1,
                 Slot2 = slot2
             });
@@ -1234,105 +1006,62 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Toggles group membership (join/leave the current group).
     /// </summary>
-    public void ToggleGroup() => SendIfWorld(new ToggleGroupArgs());
+    public void ToggleGroup() => SendIfWorld(new Cli.GroupTogglePacket());
 
     /// <summary>
     ///     Sends a turn request to face the specified direction.
     /// </summary>
-    /// <param name="direction">The direction to face.</param>
-    public void Turn(Direction direction)
-        => SendIfWorld(
-            new TurnArgs
-            {
-                Direction = direction
-            });
+    public void Turn(Direction direction) => SendIfWorld(new Cli.TurnPacket { Direction = ToDalibDirection(direction) });
 
     /// <summary>
     ///     Sends an unequip request for the specified equipment slot.
     /// </summary>
-    /// <param name="slot">The equipment slot to unequip.</param>
-    public void Unequip(EquipmentSlot slot)
-        => SendIfWorld(
-            new UnequipArgs
-            {
-                EquipmentSlot = slot
-            });
+    public void Unequip(EquipmentSlot slot) => SendIfWorld(new Cli.UnequipPacket { Slot = (byte)slot });
 
     /// <summary>
     ///     Sends an item use request (equip, consume).
     /// </summary>
-    /// <param name="slot">The inventory slot of the item to use.</param>
-    public void UseItem(byte slot)
-        => SendIfWorld(
-            new ItemUseArgs
-            {
-                SourceSlot = slot
-            });
+    public void UseItem(byte slot) => SendIfWorld(new Cli.UseItemPacket { Slot = slot });
 
     /// <summary>
     ///     Sends a skill use request.
     /// </summary>
-    /// <param name="slot">The skill book slot to use.</param>
-    public void UseSkill(byte slot)
-        => SendIfWorld(
-            new SkillUseArgs
-            {
-                SourceSlot = slot
-            });
+    public void UseSkill(byte slot) => SendIfWorld(new Cli.UseSkillPacket { Slot = slot });
 
     /// <summary>
-    ///     Sends a spell use request.
+    ///     Sends a spell use request, optionally carrying raw targeting bytes.
     /// </summary>
-    /// <param name="slot">The spell book slot to use.</param>
-    /// <param name="argsData">Optional targeting data for targeted spells.</param>
     public void UseSpell(byte slot, byte[]? argsData = null)
         => SendIfWorld(
-            new SpellUseArgs
+            new Cli.UseSpellPacket
             {
-                SourceSlot = slot,
-                ArgsData = argsData ?? []
+                Slot = slot,
+                Args = argsData ?? []
             });
 
     /// <summary>
     ///     Sends a targeted spell cast at a specific entity and position.
     /// </summary>
-    /// <param name="slot">The spell book slot to use.</param>
-    /// <param name="targetId">The target entity ID.</param>
-    /// <param name="targetX">The target tile X coordinate.</param>
-    /// <param name="targetY">The target tile Y coordinate.</param>
     public void UseSpellOnTarget(
         byte slot,
         uint targetId,
         int targetX,
         int targetY)
-    {
-        var argsData = new byte[8];
-        argsData[0] = (byte)(targetId >> 24);
-        argsData[1] = (byte)(targetId >> 16);
-        argsData[2] = (byte)(targetId >> 8);
-        argsData[3] = (byte)targetId;
-        argsData[4] = (byte)(targetX >> 8);
-        argsData[5] = (byte)targetX;
-        argsData[6] = (byte)(targetY >> 8);
-        argsData[7] = (byte)targetY;
-
-        UseSpell(slot, argsData);
-    }
+        => SendIfWorld(Cli.UseSpellPacket.Targeted(slot, targetId, (ushort)targetX, (ushort)targetY));
 
     /// <summary>
     ///     Sends a walk request in the specified direction.
     /// </summary>
-    /// <param name="direction">The direction to walk.</param>
     public void Walk(Direction direction)
     {
         if (State != ConnectionState.World)
             return;
 
         Client.Send(
-            new ClientWalkArgs
+            new Cli.WalkPacket
             {
-                Direction = direction,
-                StepCount = WalkStepCount++
+                Direction = ToDalibDirection(direction),
+                Sequence = WalkStepCount++
             });
     }
 
@@ -1342,101 +1071,143 @@ public sealed class ConnectionManager : IDisposable
     private ConnectionState PendingTargetState;
     private byte WalkStepCount;
 
+    private static DALib.Enums.Direction ToDalibDirection(Direction direction)
+        => direction switch
+        {
+            Direction.Up    => DALib.Enums.Direction.North,
+            Direction.Right => DALib.Enums.Direction.East,
+            Direction.Down  => DALib.Enums.Direction.South,
+            Direction.Left  => DALib.Enums.Direction.West,
+            _               => DALib.Enums.Direction.North
+        };
+
+    private static Direction ToChaosDirection(DALib.Enums.Direction direction)
+        => direction switch
+        {
+            DALib.Enums.Direction.North => Direction.Up,
+            DALib.Enums.Direction.East  => Direction.Right,
+            DALib.Enums.Direction.South => Direction.Down,
+            DALib.Enums.Direction.West  => Direction.Left,
+            _                           => Direction.Up
+        };
+
+    private static DALib.Enums.Gender ToDalibGender(Gender gender)
+        => gender switch
+        {
+            Gender.Male   => DALib.Enums.Gender.Male,
+            Gender.Female => DALib.Enums.Gender.Female,
+            _             => DALib.Enums.Gender.Neutral
+        };
+
+    //retail 0x47 single-bit stat selector: Str=0x01, Dex=0x02, Int=0x04, Wis=0x08, Con=0x10.
+    private static byte StatSelector(Stat stat)
+        => stat switch
+        {
+            Stat.STR => 0x01,
+            Stat.DEX => 0x02,
+            Stat.INT => 0x04,
+            Stat.WIS => 0x08,
+            Stat.CON => 0x10,
+            _        => 0x00
+        };
+
     private void IndexHandlers()
     {
+        //0x1F (old MapChangeComplete) is deliberately unregistered: HandleMapInfo synthesizes that
+        //entry flag unconditionally, and Hybrasyl never emits 0x1F (DALib names it ChangeWeather).
+
         //lobby
-        PacketHandlers[(byte)ServerOpCode.AcceptConnection] = HandleAcceptConnection;
-        PacketHandlers[(byte)ServerOpCode.ConnectionInfo] = HandleConnectionInfo;
-        PacketHandlers[(byte)ServerOpCode.ServerTableResponse] = HandleServerTableResponse;
-        PacketHandlers[(byte)ServerOpCode.Redirect] = HandleRedirect;
+        PacketHandlers[(byte)ServerOpcode.AcceptConnection] = HandleAcceptConnection;
+        PacketHandlers[(byte)ServerOpcode.CryptoKey] = HandleConnectionInfo;
+        PacketHandlers[(byte)ServerOpcode.ServerTableData] = HandleServerTableResponse;
+        PacketHandlers[(byte)ServerOpcode.Redirect] = HandleRedirect;
 
         //login
-        PacketHandlers[(byte)ServerOpCode.LoginMessage] = HandleLoginMessage;
-        PacketHandlers[(byte)ServerOpCode.LoginNotice] = HandleLoginNotice;
-        PacketHandlers[(byte)ServerOpCode.LoginControl] = HandleLoginControl;
+        PacketHandlers[(byte)ServerOpcode.LoginMessage] = HandleLoginMessage;
+        PacketHandlers[(byte)ServerOpcode.LoginNotification] = HandleLoginNotice;
+        PacketHandlers[(byte)ServerOpcode.Url] = HandleLoginControl;
 
         //world entry
-        PacketHandlers[(byte)ServerOpCode.UserId] = HandleUserId;
-        PacketHandlers[(byte)ServerOpCode.MapInfo] = HandleMapInfo;
-        PacketHandlers[(byte)ServerOpCode.MapData] = HandleMapData;
-        PacketHandlers[(byte)ServerOpCode.MapLoadComplete] = HandleMapLoadComplete;
-        PacketHandlers[(byte)ServerOpCode.MapChangeComplete] = HandleMapChangeComplete;
-        PacketHandlers[(byte)ServerOpCode.Location] = HandleLocation;
-        PacketHandlers[(byte)ServerOpCode.Attributes] = HandleAttributes;
-        PacketHandlers[(byte)ServerOpCode.DisplayVisibleEntities] = HandleDisplayVisibleEntities;
-        PacketHandlers[(byte)ServerOpCode.DisplayAisling] = HandleDisplayAisling;
+        PacketHandlers[(byte)ServerOpcode.UserAppearance] = HandleUserId;
+        PacketHandlers[(byte)ServerOpcode.MapInfo] = HandleMapInfo;
+        PacketHandlers[(byte)ServerOpcode.MapData] = HandleMapData;
+        PacketHandlers[(byte)ServerOpcode.MapLoadComplete] = HandleMapLoadComplete;
+        PacketHandlers[(byte)ServerOpcode.Location] = HandleLocation;
+        PacketHandlers[(byte)ServerOpcode.Attributes] = HandleAttributes;
+        PacketHandlers[(byte)ServerOpcode.DrawObjects] = HandleDisplayVisibleEntities;
+        PacketHandlers[(byte)ServerOpcode.DisplayUser] = HandleDisplayAisling;
 
         //world entities
-        PacketHandlers[(byte)ServerOpCode.RemoveEntity] = HandleRemoveEntity;
-        PacketHandlers[(byte)ServerOpCode.CreatureWalk] = HandleCreatureWalk;
-        PacketHandlers[(byte)ServerOpCode.ClientWalkResponse] = HandleClientWalkResponse;
-        PacketHandlers[(byte)ServerOpCode.CreatureTurn] = HandleCreatureTurn;
+        PacketHandlers[(byte)ServerOpcode.RemoveObject] = HandleRemoveEntity;
+        PacketHandlers[(byte)ServerOpcode.CreatureWalk] = HandleCreatureWalk;
+        PacketHandlers[(byte)ServerOpcode.ConfirmWalk] = HandleClientWalkResponse;
+        PacketHandlers[(byte)ServerOpcode.CreatureTurn] = HandleCreatureTurn;
 
         //chat / messages
-        PacketHandlers[(byte)ServerOpCode.ServerMessage] = HandleServerMessage;
-        PacketHandlers[(byte)ServerOpCode.DisplayPublicMessage] = HandleDisplayPublicMessage;
+        PacketHandlers[(byte)ServerOpcode.SystemMessage] = HandleServerMessage;
+        PacketHandlers[(byte)ServerOpcode.PublicMessage] = HandleDisplayPublicMessage;
 
         //inventory
-        PacketHandlers[(byte)ServerOpCode.AddItemToPane] = HandleAddItemToPane;
-        PacketHandlers[(byte)ServerOpCode.RemoveItemFromPane] = HandleRemoveItemFromPane;
+        PacketHandlers[(byte)ServerOpcode.AddItem] = HandleAddItemToPane;
+        PacketHandlers[(byte)ServerOpcode.RemoveItem] = HandleRemoveItemFromPane;
 
         //skills / spells
-        PacketHandlers[(byte)ServerOpCode.AddSkillToPane] = HandleAddSkillToPane;
-        PacketHandlers[(byte)ServerOpCode.RemoveSkillFromPane] = HandleRemoveSkillFromPane;
-        PacketHandlers[(byte)ServerOpCode.AddSpellToPane] = HandleAddSpellToPane;
-        PacketHandlers[(byte)ServerOpCode.RemoveSpellFromPane] = HandleRemoveSpellFromPane;
+        PacketHandlers[(byte)ServerOpcode.AddSkill] = HandleAddSkillToPane;
+        PacketHandlers[(byte)ServerOpcode.RemoveSkill] = HandleRemoveSkillFromPane;
+        PacketHandlers[(byte)ServerOpcode.AddSpell] = HandleAddSpellToPane;
+        PacketHandlers[(byte)ServerOpcode.RemoveSpell] = HandleRemoveSpellFromPane;
 
         //equipment
-        PacketHandlers[(byte)ServerOpCode.Equipment] = HandleEquipment;
-        PacketHandlers[(byte)ServerOpCode.DisplayUnequip] = HandleDisplayUnequip;
+        PacketHandlers[(byte)ServerOpcode.AddEquipment] = HandleEquipment;
+        PacketHandlers[(byte)ServerOpcode.RemoveEquipment] = HandleDisplayUnequip;
 
         //visual / audio
-        PacketHandlers[(byte)ServerOpCode.HealthBar] = HandleHealthBar;
-        PacketHandlers[(byte)ServerOpCode.Sound] = HandleSound;
-        PacketHandlers[(byte)ServerOpCode.BodyAnimation] = HandleBodyAnimation;
-        PacketHandlers[(byte)ServerOpCode.Animation] = HandleAnimation;
-        PacketHandlers[(byte)ServerOpCode.Cooldown] = HandleCooldown;
-        PacketHandlers[(byte)ServerOpCode.Effect] = HandleEffect;
+        PacketHandlers[(byte)ServerOpcode.HealthBar] = HandleHealthBar;
+        PacketHandlers[(byte)ServerOpcode.PlaySound] = HandleSound;
+        PacketHandlers[(byte)ServerOpcode.PlayerAnimation] = HandleBodyAnimation;
+        PacketHandlers[(byte)ServerOpcode.SpellAnimation] = HandleAnimation;
+        PacketHandlers[(byte)ServerOpcode.Cooldown] = HandleCooldown;
+        PacketHandlers[(byte)ServerOpcode.StatusBar] = HandleEffect;
 
         //world state
-        PacketHandlers[(byte)ServerOpCode.LightLevel] = HandleLightLevel;
-        PacketHandlers[(byte)ServerOpCode.Door] = HandleDoor;
-        PacketHandlers[(byte)ServerOpCode.RefreshResponse] = HandleRefreshResponse;
-        PacketHandlers[(byte)ServerOpCode.MapChangePending] = HandleMapChangePending;
+        PacketHandlers[(byte)ServerOpcode.LightLevel] = HandleLightLevel;
+        PacketHandlers[(byte)ServerOpcode.Door] = HandleDoor;
+        PacketHandlers[(byte)ServerOpcode.Refresh] = HandleRefreshResponse;
+        PacketHandlers[(byte)ServerOpcode.MapChangePending] = HandleMapChangePending;
 
         //npc interaction
-        PacketHandlers[(byte)ServerOpCode.DisplayMenu] = HandleDisplayMenu;
-        PacketHandlers[(byte)ServerOpCode.DisplayDialog] = HandleDisplayDialog;
-        PacketHandlers[(byte)ServerOpCode.DisplayBoard] = HandleDisplayBoard;
-        PacketHandlers[(byte)ServerOpCode.DisplayExchange] = HandleDisplayExchange;
-        PacketHandlers[(byte)ServerOpCode.DisplayGroupInvite] = HandleDisplayGroupInvite;
+        PacketHandlers[(byte)ServerOpcode.NpcMenu] = HandleDisplayMenu;
+        PacketHandlers[(byte)ServerOpcode.NpcDialog] = HandleDisplayDialog;
+        PacketHandlers[(byte)ServerOpcode.Board] = HandleDisplayBoard;
+        PacketHandlers[(byte)ServerOpcode.Exchange] = HandleDisplayExchange;
+        PacketHandlers[(byte)ServerOpcode.Group] = HandleDisplayGroupInvite;
 
         //profiles / lists
-        PacketHandlers[(byte)ServerOpCode.EditableProfileRequest] = HandleEditableProfileRequest;
-        PacketHandlers[(byte)ServerOpCode.SelfProfile] = HandleSelfProfile;
-        PacketHandlers[(byte)ServerOpCode.OtherProfile] = HandleOtherProfile;
-        PacketHandlers[(byte)ServerOpCode.WorldList] = HandleWorldList;
-        PacketHandlers[(byte)ServerOpCode.WorldMap] = HandleWorldMap;
+        PacketHandlers[(byte)ServerOpcode.RequestPortrait] = HandleEditableProfileRequest;
+        PacketHandlers[(byte)ServerOpcode.SelfProfile] = HandleSelfProfile;
+        PacketHandlers[(byte)ServerOpcode.Profile] = HandleOtherProfile;
+        PacketHandlers[(byte)ServerOpcode.UserList] = HandleWorldList;
+        PacketHandlers[(byte)ServerOpcode.WorldMap] = HandleWorldMap;
 
         //notepads
-        PacketHandlers[(byte)ServerOpCode.DisplayEditableNotepad] = HandleDisplayEditableNotepad;
-        PacketHandlers[(byte)ServerOpCode.DisplayReadonlyNotepad] = HandleDisplayReadonlyNotepad;
+        PacketHandlers[(byte)ServerOpcode.EditablePaper] = HandleDisplayEditableNotepad;
+        PacketHandlers[(byte)ServerOpcode.ReadonlyPaper] = HandleDisplayReadonlyNotepad;
 
         //misc
-        PacketHandlers[(byte)ServerOpCode.ExitResponse] = HandleExitResponse;
-        PacketHandlers[(byte)ServerOpCode.ForceClientPacket] = HandleForceClientPacket;
-        PacketHandlers[(byte)ServerOpCode.CancelCasting] = HandleCancelCasting;
-        PacketHandlers[(byte)ServerOpCode.MetaData] = HandleMetaData;
+        PacketHandlers[(byte)ServerOpcode.ConfirmExit] = HandleExitResponse;
+        PacketHandlers[(byte)ServerOpcode.Bounce] = HandleForceClientPacket;
+        PacketHandlers[(byte)ServerOpcode.CancelCast] = HandleCancelCasting;
+        PacketHandlers[(byte)ServerOpcode.Metafile] = HandleMetaData;
     }
 
-    private void HandlePacket(ServerPacket pkt)
+    private void HandlePacket(IServerPacket pkt)
     {
-        var handler = PacketHandlers[pkt.OpCode];
-        NoticeDebugLog.Write($"inbound opcode=0x{pkt.OpCode:X2} len={pkt.Length} handled={handler is not null} state={State}");
+        var handler = PacketHandlers[pkt.Opcode];
+        NoticeDebugLog.Write($"inbound opcode=0x{pkt.Opcode:X2} handled={handler is not null} state={State}");
         handler?.Invoke(pkt);
     }
 
-    private void HandleAcceptConnection(ServerPacket _)
+    private void HandleAcceptConnection(IServerPacket _)
     {
         if (PendingLobbyVersion)
         {
@@ -1444,71 +1215,42 @@ public sealed class ConnectionManager : IDisposable
             PendingLobbyVersion = false;
             State = PendingTargetState;
 
-            Client.Send(
-                new VersionArgs
-                {
-                    Version = LobbyClientVersion
-                });
+            Client.Send(new Cli.VersionPacket { Version = LobbyClientVersion });
         }
 
-        //redirected connections send clientredirected in followredirectasync
-        //immediately after connecting, without waiting for acceptconnection.
+        //redirected connections send clientjoin in FollowPendingRedirect immediately after connecting,
+        //without waiting for acceptconnection.
     }
 
-    private void HandleConnectionInfo(ServerPacket pkt)
+    private void HandleConnectionInfo(IServerPacket p)
     {
         NoticeDebugLog.Write($"HandleConnectionInfo enter state={State}");
-        try
-        {
-            var args = Client.Deserialize<ConnectionInfoArgs>(in pkt);
-            NoticeDebugLog.Write($"  deserialized Seed={args.Seed} Key.Length={args.Key?.Length}");
+        var pkt = (Server.CryptoKeyPacket)p;
+        NoticeDebugLog.Write($"  deserialized Seed={pkt.Seed} Key.Length={pkt.Key?.Length}");
 
-            //lobby always uses empty keysaltseed (crypto falls back to "default")
-            //must explicitly pass keysaltseed to avoid binding to the 2-arg constructor
-            //crypto(byte seed, string keysaltseed) which generates a random key
-            Client.Crypto = new Crypto(args.Seed, args.Key, null);
-            NoticeDebugLog.Write("  crypto set");
+        //lobby always uses empty keysaltseed (crypto falls back to "default")
+        Client.ApplyCryptoKey(pkt.Seed, pkt.Key!, null);
+        NoticeDebugLog.Write("  crypto set");
 
-            //crypto is now configured — safe to request the server table
-            if (State == ConnectionState.Lobby)
-            {
-                NoticeDebugLog.Write("  calling RequestServerTable");
-                RequestServerTable();
-            }
-        }
-        catch (Exception ex)
+        //crypto is now configured — safe to request the server table
+        if (State == ConnectionState.Lobby)
         {
-            NoticeDebugLog.Write($"  !!! HandleConnectionInfo threw {ex.GetType().Name}: {ex.Message}");
-            throw;
+            NoticeDebugLog.Write("  calling RequestServerTable");
+            RequestServerTable();
         }
     }
 
-    private void HandleServerTableResponse(ServerPacket pkt)
+    private void HandleServerTableResponse(IServerPacket p)
     {
         NoticeDebugLog.Write("HandleServerTableResponse enter");
-        try
-        {
-            var rawHex = Convert.ToHexString(pkt.Data, 0, Math.Min(pkt.Length, 64));
-            NoticeDebugLog.Write($"  full packet hex (first 64): {rawHex}");
-            var args = Client.Deserialize<ServerTableResponseArgs>(in pkt);
-            NoticeDebugLog.Write($"  raw ServerTable bytes={args.ServerTable?.Length}");
-            if (args.ServerTable is { Length: > 0 })
-                NoticeDebugLog.Write($"  ServerTable hex (first 32): {Convert.ToHexString(args.ServerTable, 0, Math.Min(args.ServerTable.Length, 32))}");
-            var serverTableData = ServerTableData.Parse(args.ServerTable);
-            NoticeDebugLog.Write($"  parsed {serverTableData.Servers?.Count ?? 0} servers, ShowServerList={serverTableData.ShowServerList}");
-            OnServerTableReceived?.Invoke(serverTableData);
-        }
-        catch (Exception ex)
-        {
-            NoticeDebugLog.Write($"  !!! HandleServerTableResponse threw {ex.GetType().Name}: {ex.Message}");
-            NoticeDebugLog.Write($"  stack: {ex.StackTrace}");
-            throw;
-        }
+        var pkt = (Server.ServerTableDataPacket)p;
+        NoticeDebugLog.Write($"  parsed {pkt.Servers.Count} servers");
+        OnServerTableReceived?.Invoke(pkt.Servers);
     }
 
-    private void HandleRedirect(ServerPacket pkt)
+    private void HandleRedirect(IServerPacket p)
     {
-        var args = Client.Deserialize<RedirectArgs>(in pkt);
+        var pkt = (Server.RedirectPacket)p;
 
         //determine target state based on current state
         var targetState = State switch
@@ -1519,11 +1261,11 @@ public sealed class ConnectionManager : IDisposable
         };
 
         PendingRedirect = new RedirectInfo(
-            args.EndPoint,
-            args.Seed,
-            args.Key,
-            args.Name,
-            args.Id,
+            new IPEndPoint(pkt.IpAddress, pkt.Port),
+            pkt.EncryptionSeed,
+            pkt.EncryptionKey,
+            pkt.Name,
+            pkt.RedirectId,
             targetState);
 
         //order matters: fire the redirect event BEFORE Disconnect. Disconnect synchronously fires
@@ -1536,36 +1278,22 @@ public sealed class ConnectionManager : IDisposable
         Client.Disconnect();
     }
 
-    private void HandleLoginMessage(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<LoginMessageArgs>(in pkt);
-        OnLoginMessage?.Invoke(args);
-    }
+    private void HandleLoginMessage(IServerPacket p) => OnLoginMessage?.Invoke((Server.LoginMessagePacket)p);
 
-    private void HandleLoginNotice(ServerPacket pkt)
-    {
-        NoticeDebugLog.Write($"HandleLoginNotice raw Length={pkt.Length} DataLen={pkt.Data?.Length}");
-        var args = Client.Deserialize<LoginNoticeArgs>(in pkt);
-        NoticeDebugLog.Write($"  parsed IsFullResponse={args.IsFullResponse} CheckSum={args.CheckSum:X8} Data?.Length={args.Data?.Length}");
-        OnLoginNotice?.Invoke(args);
-    }
+    private void HandleLoginNotice(IServerPacket p) => OnLoginNotice?.Invoke((Server.LoginNotificationPacket)p);
 
-    private void HandleLoginControl(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<LoginControlArgs>(in pkt);
-        OnLoginControl?.Invoke(args);
-    }
+    private void HandleLoginControl(IServerPacket p) => OnLoginControl?.Invoke((Server.UrlPacket)p);
 
-    private void HandleUserId(ServerPacket pkt)
+    private void HandleUserId(IServerPacket p)
     {
-        var args = Client.Deserialize<UserIdArgs>(in pkt);
-        AislingId = args.Id;
-        OnUserId?.Invoke(args.Id);
+        var pkt = (Server.UserAppearancePacket)p;
+        AislingId = pkt.Id;
+        OnUserId?.Invoke(pkt.Id);
         EntryState |= WorldEntryState.UserId;
         CheckWorldEntryComplete();
     }
 
-    private void HandleMapInfo(ServerPacket pkt)
+    private void HandleMapInfo(IServerPacket p)
     {
         // Hybrasyl does not send MapChangePending, MapLoadComplete, or MapChangeComplete.
         // Synthesize the full lifecycle around the single MapInfo packet: fire pending first so
@@ -1573,143 +1301,48 @@ public sealed class ConnectionManager : IDisposable
         // the implicit load/change completion so OnWorldEntryComplete can fire.
         SynthesizeMapChangePending();
 
-        var args = Client.Deserialize<MapInfoArgs>(in pkt);
-        MapInfo = args;
+        var pkt = (Server.MapInfoPacket)p;
+        MapInfo = pkt;
         EntryState |= WorldEntryState.MapInfo;
-        OnMapInfo?.Invoke(args);
+        OnMapInfo?.Invoke(pkt);
 
         EntryState |= WorldEntryState.MapLoaded | WorldEntryState.MapChangeComplete;
         OnMapLoadComplete?.Invoke();
         CheckWorldEntryComplete();
     }
 
-    private void HandleMapData(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<MapDataArgs>(in pkt);
-        OnMapData?.Invoke(args);
-    }
+    private void HandleMapData(IServerPacket p) => OnMapData?.Invoke((Server.MapDataPacket)p);
 
-    private void HandleMapLoadComplete(ServerPacket _)
+    private void HandleMapLoadComplete(IServerPacket _)
     {
         EntryState |= WorldEntryState.MapLoaded;
         OnMapLoadComplete?.Invoke();
         CheckWorldEntryComplete();
     }
 
-    private void HandleMapChangeComplete(ServerPacket _)
+    private void HandleLocation(IServerPacket p)
     {
-        EntryState |= WorldEntryState.MapChangeComplete;
-        CheckWorldEntryComplete();
-    }
-
-    private void HandleLocation(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<LocationArgs>(in pkt);
-        PlayerX = args.X;
-        PlayerY = args.Y;
+        var pkt = (Server.LocationPacket)p;
+        PlayerX = pkt.X;
+        PlayerY = pkt.Y;
         EntryState |= WorldEntryState.Location;
-        OnLocationChanged?.Invoke(args.X, args.Y);
+        OnLocationChanged?.Invoke(pkt.X, pkt.Y);
         CheckWorldEntryComplete();
     }
 
-    private void HandleAttributes(ServerPacket pkt)
+    private void HandleAttributes(IServerPacket p)
     {
-        var args = Client.Deserialize<AttributesArgs>(in pkt);
+        var pkt = (Server.AttributesPacket)p;
 
-        //merge partial updates with previously stored attributes so consumers always get a complete picture
-        if (Attributes is not null)
-            args = MergeAttributes(Attributes, args);
-
-        Attributes = args;
+        //fire the raw partial packet; the accumulate-partial-updates merge lives in PlayerAttributes now.
+        OnAttributes?.Invoke(pkt);
         EntryState |= WorldEntryState.Attributes;
-        OnAttributes?.Invoke(args);
         CheckWorldEntryComplete();
     }
 
-    private static AttributesArgs MergeAttributes(AttributesArgs previous, AttributesArgs incoming)
-    {
-        var flags = incoming.StatUpdateType;
+    private void HandleDisplayVisibleEntities(IServerPacket p) => OnDisplayVisibleEntities?.Invoke((Server.DrawObjectsPacket)p);
 
-        //start from previous complete state, then overlay the incoming partial fields
-        var merged = previous with
-        {
-            StatUpdateType = flags
-        };
-
-        if (flags.HasFlag(StatUpdateType.Primary))
-            merged = merged with
-            {
-                Level = incoming.Level,
-                Ability = incoming.Ability,
-                MaximumHp = incoming.MaximumHp,
-                MaximumMp = incoming.MaximumMp,
-                Str = incoming.Str,
-                Int = incoming.Int,
-                Wis = incoming.Wis,
-                Con = incoming.Con,
-                Dex = incoming.Dex,
-                UnspentPoints = incoming.UnspentPoints,
-                MaxWeight = incoming.MaxWeight,
-                CurrentWeight = incoming.CurrentWeight
-            };
-
-        if (flags.HasFlag(StatUpdateType.Vitality))
-            merged = merged with
-            {
-                CurrentHp = incoming.CurrentHp,
-                CurrentMp = incoming.CurrentMp
-            };
-
-        if (flags.HasFlag(StatUpdateType.ExpGold))
-            merged = merged with
-            {
-                TotalExp = incoming.TotalExp,
-                ToNextLevel = incoming.ToNextLevel,
-                TotalAbility = incoming.TotalAbility,
-                ToNextAbility = incoming.ToNextAbility,
-                GamePoints = incoming.GamePoints,
-                Gold = incoming.Gold
-            };
-
-        if (flags.HasFlag(StatUpdateType.Secondary))
-            merged = merged with
-            {
-                Blind = incoming.Blind,
-                HasUnreadMail = incoming.HasUnreadMail,
-                OffenseElement = incoming.OffenseElement,
-                DefenseElement = incoming.DefenseElement,
-                MagicResistance = incoming.MagicResistance,
-                Ac = incoming.Ac,
-                Dmg = incoming.Dmg,
-                Hit = incoming.Hit
-            };
-
-        if (flags.HasFlag(StatUpdateType.GameMasterA))
-            merged = merged with
-            {
-                IsAdmin = incoming.IsAdmin
-            };
-
-        if (flags.HasFlag(StatUpdateType.GameMasterB))
-            merged = merged with
-            {
-                IsSwimming = incoming.IsSwimming
-            };
-
-        return merged;
-    }
-
-    private void HandleDisplayVisibleEntities(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayVisibleEntitiesArgs>(in pkt);
-        OnDisplayVisibleEntities?.Invoke(args);
-    }
-
-    private void HandleDisplayAisling(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayAislingArgs>(in pkt);
-        OnDisplayAisling?.Invoke(args);
-    }
+    private void HandleDisplayAisling(IServerPacket p) => OnDisplayAisling?.Invoke((Server.DisplayUserPacket)p);
 
     private void CheckWorldEntryComplete()
     {
@@ -1724,158 +1357,81 @@ public sealed class ConnectionManager : IDisposable
         OnWorldEntryComplete?.Invoke();
     }
 
-    private void HandleRemoveEntity(ServerPacket pkt)
+    private void HandleRemoveEntity(IServerPacket p)
     {
-        var args = Client.Deserialize<RemoveEntityArgs>(in pkt);
-        OnRemoveEntity?.Invoke(args.SourceId);
+        var pkt = (Server.RemoveObjectPacket)p;
+        OnRemoveEntity?.Invoke(pkt.SourceId);
     }
 
-    private void HandleCreatureWalk(ServerPacket pkt)
+    private void HandleCreatureWalk(IServerPacket p)
     {
-        var args = Client.Deserialize<CreatureWalkArgs>(in pkt);
-
-        OnCreatureWalk?.Invoke(
-            args.SourceId,
-            args.OldPoint.X,
-            args.OldPoint.Y,
-            args.Direction);
+        var pkt = (Server.CreatureWalkPacket)p;
+        OnCreatureWalk?.Invoke(pkt.SourceId, pkt.OldX, pkt.OldY, ToChaosDirection(pkt.Direction));
     }
 
-    private void HandleClientWalkResponse(ServerPacket pkt)
+    private void HandleClientWalkResponse(IServerPacket p)
     {
-        var args = Client.Deserialize<ClientWalkResponseArgs>(in pkt);
-        OnClientWalkResponse?.Invoke(args.Direction, args.OldPoint.X, args.OldPoint.Y);
+        var pkt = (Server.ConfirmWalkPacket)p;
+        OnClientWalkResponse?.Invoke(ToChaosDirection(pkt.Direction), pkt.OldX, pkt.OldY);
     }
 
-    private void HandleCreatureTurn(ServerPacket pkt)
+    private void HandleCreatureTurn(IServerPacket p)
     {
-        var args = Client.Deserialize<CreatureTurnArgs>(in pkt);
-        OnCreatureTurn?.Invoke(args.SourceId, args.Direction);
+        var pkt = (Server.CreatureTurnPacket)p;
+        OnCreatureTurn?.Invoke(pkt.SourceId, ToChaosDirection(pkt.Direction));
     }
 
     //--- chat / messages ---
 
-    private void HandleServerMessage(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<ServerMessageArgs>(in pkt);
-        OnServerMessage?.Invoke(args);
-    }
+    private void HandleServerMessage(IServerPacket p) => OnServerMessage?.Invoke((Server.SystemMessagePacket)p);
 
-    private void HandleDisplayPublicMessage(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayPublicMessageArgs>(in pkt);
-        OnDisplayPublicMessage?.Invoke(args);
-    }
+    private void HandleDisplayPublicMessage(IServerPacket p) => OnDisplayPublicMessage?.Invoke((Server.PublicMessagePacket)p);
 
     //--- inventory ---
 
-    private void HandleAddItemToPane(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<AddItemToPaneArgs>(in pkt);
-        OnAddItemToPane?.Invoke(args);
-    }
+    private void HandleAddItemToPane(IServerPacket p) => OnAddItemToPane?.Invoke((Server.AddItemPacket)p);
 
-    private void HandleRemoveItemFromPane(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<RemoveItemFromPaneArgs>(in pkt);
-        OnRemoveItemFromPane?.Invoke(args);
-    }
+    private void HandleRemoveItemFromPane(IServerPacket p) => OnRemoveItemFromPane?.Invoke((Server.RemoveItemPacket)p);
 
     //--- skills / spells ---
 
-    private void HandleAddSkillToPane(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<AddSkillToPaneArgs>(in pkt);
-        OnAddSkillToPane?.Invoke(args);
-    }
+    private void HandleAddSkillToPane(IServerPacket p) => OnAddSkillToPane?.Invoke((Server.AddSkillPacket)p);
 
-    private void HandleRemoveSkillFromPane(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<RemoveSkillFromPaneArgs>(in pkt);
-        OnRemoveSkillFromPane?.Invoke(args);
-    }
+    private void HandleRemoveSkillFromPane(IServerPacket p) => OnRemoveSkillFromPane?.Invoke((Server.RemoveSkillPacket)p);
 
-    private void HandleAddSpellToPane(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<AddSpellToPaneArgs>(in pkt);
-        OnAddSpellToPane?.Invoke(args);
-    }
+    private void HandleAddSpellToPane(IServerPacket p) => OnAddSpellToPane?.Invoke((Server.AddSpellPacket)p);
 
-    private void HandleRemoveSpellFromPane(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<RemoveSpellFromPaneArgs>(in pkt);
-        OnRemoveSpellFromPane?.Invoke(args);
-    }
+    private void HandleRemoveSpellFromPane(IServerPacket p) => OnRemoveSpellFromPane?.Invoke((Server.RemoveSpellPacket)p);
 
     //--- equipment ---
 
-    private void HandleEquipment(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<EquipmentArgs>(in pkt);
-        OnEquipment?.Invoke(args);
-    }
+    private void HandleEquipment(IServerPacket p) => OnEquipment?.Invoke((Server.AddEquipmentPacket)p);
 
-    private void HandleDisplayUnequip(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayUnequipArgs>(in pkt);
-        OnDisplayUnequip?.Invoke(args);
-    }
+    private void HandleDisplayUnequip(IServerPacket p) => OnDisplayUnequip?.Invoke((Server.RemoveEquipmentPacket)p);
 
     //--- visual / audio ---
 
-    private void HandleHealthBar(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<HealthBarArgs>(in pkt);
-        OnHealthBar?.Invoke(args);
-    }
+    private void HandleHealthBar(IServerPacket p) => OnHealthBar?.Invoke((Server.HealthBarPacket)p);
 
-    private void HandleSound(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<SoundArgs>(in pkt);
-        OnSound?.Invoke(args);
-    }
+    private void HandleSound(IServerPacket p) => OnSound?.Invoke((Server.PlaySoundPacket)p);
 
-    private void HandleBodyAnimation(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<BodyAnimationArgs>(in pkt);
-        OnBodyAnimation?.Invoke(args);
-    }
+    private void HandleBodyAnimation(IServerPacket p) => OnBodyAnimation?.Invoke((Server.PlayerAnimationPacket)p);
 
-    private void HandleAnimation(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<AnimationArgs>(in pkt);
-        OnAnimation?.Invoke(args);
-    }
+    private void HandleAnimation(IServerPacket p) => OnAnimation?.Invoke((Server.SpellAnimationPacket)p);
 
-    private void HandleCooldown(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<CooldownArgs>(in pkt);
-        OnCooldown?.Invoke(args);
-    }
+    private void HandleCooldown(IServerPacket p) => OnCooldown?.Invoke((Server.CooldownPacket)p);
 
-    private void HandleEffect(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<EffectArgs>(in pkt);
-        OnEffect?.Invoke(args);
-    }
+    private void HandleEffect(IServerPacket p) => OnEffect?.Invoke((Server.StatusBarPacket)p);
 
     //--- world state ---
 
-    private void HandleLightLevel(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<LightLevelArgs>(in pkt);
-        OnLightLevel?.Invoke(args);
-    }
+    private void HandleLightLevel(IServerPacket p) => OnLightLevel?.Invoke((Server.LightLevelPacket)p);
 
-    private void HandleDoor(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DoorArgs>(in pkt);
-        OnDoor?.Invoke(args);
-    }
+    private void HandleDoor(IServerPacket p) => OnDoor?.Invoke((Server.DoorPacket)p);
 
-    private void HandleRefreshResponse(ServerPacket _) => OnRefreshResponse?.Invoke();
+    private void HandleRefreshResponse(IServerPacket _) => OnRefreshResponse?.Invoke();
 
-    private void HandleMapChangePending(ServerPacket _) => OnMapChangePending?.Invoke();
+    private void HandleMapChangePending(IServerPacket _) => OnMapChangePending?.Invoke();
 
     // Synthesize a MapChangePending signal for Hybrasyl: fire it before HandleMapInfo's
     // implicit completion so UI cleanup (world-map hide, pathfinding clear) runs first.
@@ -1883,213 +1439,48 @@ public sealed class ConnectionManager : IDisposable
 
     //--- npc interaction ---
 
-    private void HandleDisplayMenu(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayMenuArgs>(in pkt);
-        OnDisplayMenu?.Invoke(args);
-    }
+    private void HandleDisplayMenu(IServerPacket p) => OnDisplayMenu?.Invoke((Server.NpcMenuPacket)p);
 
-    private void HandleDisplayDialog(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayDialogArgs>(in pkt);
-        OnDisplayDialog?.Invoke(args);
-    }
+    private void HandleDisplayDialog(IServerPacket p) => OnDisplayDialog?.Invoke((Server.NpcDialogPacket)p);
 
-    private void HandleDisplayBoard(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayBoardArgs>(in pkt);
-        OnDisplayBoard?.Invoke(args);
-    }
+    private void HandleDisplayBoard(IServerPacket p) => OnDisplayBoard?.Invoke((Server.BoardResponsePacket)p);
 
-    private void HandleDisplayExchange(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayExchangeArgs>(in pkt);
-        OnDisplayExchange?.Invoke(args);
-    }
+    private void HandleDisplayExchange(IServerPacket p) => OnDisplayExchange?.Invoke((Server.ExchangeResponsePacket)p);
 
-    /// <summary>
-    ///     Deserializes the <c>0x63 DisplayGroupInvite</c> server packet directly off the wire, bypassing
-    ///     <c>Chaos.Networking.DisplayGroupInviteConverter</c>. The upstream converter's
-    ///     <c>Deserialize</c> / <c>Serialize</c> branches are functionally swapped against the actual
-    ///     Hybrasyl/retail wire shape (<c>Invite=1</c> reads group-box info that isn't on the wire;
-    ///     <c>ShowGroupBox=4</c> ignores group-box info that is) and reads class slots in the wrong order
-    ///     (Monk before Rogue vs. the actual W/Wiz/R/P/M emission), so calling it produces garbage args.
-    ///     Wire shape is per <c>server/hybrasyl/Subsystems/Players/Grouping/UserGroup.cs</c>.
-    /// </summary>
-    /// <remarks>
-    ///     <para>
-    ///         <b>TACTICAL WORKAROUND</b> — second of three pre-removal bypasses logged in
-    ///         <c>chaos-networking-removal-direction.md</c> "Tactical workarounds (pre-removal)",
-    ///         alongside <see cref="ClickFloorTile"/> and the PR-6 <c>ClickDoor</c> path.
-    ///     </para>
-    ///     <para>
-    ///         <b>REMOVE WHEN</b> the new Hybrasyl networking library replaces Chaos.Networking and
-    ///         <c>DisplayGroupInviteArgs</c> / <c>DisplayGroupBoxInfo</c> are owned locally with a correct
-    ///         <c>IPacketConverter</c>. At that point this method collapses back to
-    ///         <c>Client.Deserialize&lt;DisplayGroupInviteArgs&gt;(in pkt)</c> and the subtype 2 / 5
-    ///         "log + drop" branches fold into the converter.
-    ///     </para>
-    /// </remarks>
-    private void HandleDisplayGroupInvite(ServerPacket pkt)
-    {
-        var span = pkt.Data.AsSpan(0, pkt.Length);
-        var packet = new Packet(ref span, pkt.IsEncrypted);
-        var reader = new SpanReader(Encoding.GetEncoding(949), in packet.Buffer);
-
-        var subtype = reader.ReadByte();
-        DisplayGroupInviteArgs? args;
-
-        switch (subtype)
-        {
-            case 1: //Hybrasyl `Ask` — wire: [string8 source][0][0]. Map to Chaos enum Invite.
-            {
-                var source = reader.ReadString8();
-
-                args = new DisplayGroupInviteArgs
-                {
-                    ServerGroupSwitch = ServerGroupSwitch.Invite,
-                    SourceName = source
-                };
-
-                break;
-            }
-            case 2: //Hybrasyl `Member` — never emitted by Hybrasyl. TODO: capture retail wire shape before re-enabling.
-                NoticeDebugLog.Write($"0x63 subtype 0x02 (Member) unhandled — no retail capture yet. len={pkt.Length}");
-
-                return;
-            case 4: //Hybrasyl `RecruitInfo` — full WriteInfo block. Map to Chaos enum ShowGroupBox.
-            {
-                var recruiter = reader.ReadString8();
-                var name = reader.ReadString8();
-                var note = reader.ReadString8();
-                var minLevel = reader.ReadByte();
-                var maxLevel = reader.ReadByte();
-
-                //class-slot order on the wire (Hybrasyl WriteInfo): Warrior, Wizard, Rogue, Priest, Monk
-                var maxWarriors = reader.ReadByte();
-                var currWarriors = reader.ReadByte();
-                var maxWizards = reader.ReadByte();
-                var currWizards = reader.ReadByte();
-                var maxRogues = reader.ReadByte();
-                var currRogues = reader.ReadByte();
-                var maxPriests = reader.ReadByte();
-                var currPriests = reader.ReadByte();
-                var maxMonks = reader.ReadByte();
-                var currMonks = reader.ReadByte();
-
-                args = new DisplayGroupInviteArgs
-                {
-                    ServerGroupSwitch = ServerGroupSwitch.ShowGroupBox,
-                    SourceName = recruiter,
-                    GroupBoxInfo = new DisplayGroupBoxInfo
-                    {
-                        Name = name,
-                        Note = note,
-                        MinLevel = minLevel,
-                        MaxLevel = maxLevel,
-                        MaxWarriors = maxWarriors,
-                        CurrentWarriors = currWarriors,
-                        MaxWizards = maxWizards,
-                        CurrentWizards = currWizards,
-                        MaxRogues = maxRogues,
-                        CurrentRogues = currRogues,
-                        MaxPriests = maxPriests,
-                        CurrentPriests = currPriests,
-                        MaxMonks = maxMonks,
-                        CurrentMonks = currMonks
-                    }
-                };
-
-                break;
-            }
-            case 5: //Hybrasyl `RecruitAsk` — never emitted by Hybrasyl. TODO: capture retail wire shape before re-enabling.
-                NoticeDebugLog.Write($"0x63 subtype 0x05 (RecruitAsk) unhandled — no retail capture yet. len={pkt.Length}");
-
-                return;
-            default:
-                NoticeDebugLog.Write($"0x63 unknown subtype 0x{subtype:X2} len={pkt.Length}");
-
-                return;
-        }
-
-        OnDisplayGroupInvite?.Invoke(args);
-    }
+    private void HandleDisplayGroupInvite(IServerPacket p) => OnDisplayGroupInvite?.Invoke((Server.GroupResponsePacket)p);
 
     //--- profiles / lists ---
 
-    private void HandleEditableProfileRequest(ServerPacket _) => OnEditableProfileRequest?.Invoke();
+    private void HandleEditableProfileRequest(IServerPacket _) => OnEditableProfileRequest?.Invoke();
 
-    /// <summary>
-    ///     Fired when the server requests the player's portrait and profile text.
-    /// </summary>
-    public event EditableProfileRequestHandler? OnEditableProfileRequest;
+    private void HandleSelfProfile(IServerPacket p) => OnSelfProfile?.Invoke((Server.SelfProfilePacket)p);
 
-    private void HandleSelfProfile(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<SelfProfileArgs>(in pkt);
-        OnSelfProfile?.Invoke(args);
-    }
+    private void HandleOtherProfile(IServerPacket p) => OnOtherProfile?.Invoke((Server.ProfilePacket)p);
 
-    private void HandleOtherProfile(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<OtherProfileArgs>(in pkt);
-        OnOtherProfile?.Invoke(args);
-    }
+    private void HandleWorldList(IServerPacket p) => OnWorldList?.Invoke((Server.UserListPacket)p);
 
-    private void HandleWorldList(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<WorldListArgs>(in pkt);
-        OnWorldList?.Invoke(args);
-    }
-
-    private void HandleWorldMap(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<WorldMapArgs>(in pkt);
-        OnWorldMap?.Invoke(args);
-    }
+    private void HandleWorldMap(IServerPacket p) => OnWorldMap?.Invoke((Server.WorldMapPacket)p);
 
     //--- notepads ---
 
-    private void HandleDisplayEditableNotepad(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayEditableNotepadArgs>(in pkt);
-        OnDisplayEditableNotepad?.Invoke(args);
-    }
+    private void HandleDisplayEditableNotepad(IServerPacket p) => OnDisplayEditableNotepad?.Invoke((Server.EditablePaperPacket)p);
 
-    private void HandleDisplayReadonlyNotepad(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<DisplayReadonlyNotepadArgs>(in pkt);
-        OnDisplayReadonlyNotepad?.Invoke(args);
-    }
+    private void HandleDisplayReadonlyNotepad(IServerPacket p) => OnDisplayReadonlyNotepad?.Invoke((Server.ReadonlyPaperPacket)p);
 
     //--- misc ---
 
-    private void HandleExitResponse(ServerPacket pkt)
+    private void HandleExitResponse(IServerPacket p) => OnExitResponse?.Invoke((Server.ConfirmExitPacket)p);
+
+    private void HandleForceClientPacket(IServerPacket p)
     {
-        var args = Client.Deserialize<ExitResponseArgs>(in pkt);
-        OnExitResponse?.Invoke(args);
+        //re-emit the inner forced packet exactly as the server instructed.
+        var pkt = (Server.BouncePacket)p;
+        Client.Send(new RawClientPacket((byte)pkt.ClientOpcode, pkt.Data));
     }
 
-    private void HandleForceClientPacket(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<ForceClientPacketArgs>(in pkt);
+    private void HandleCancelCasting(IServerPacket _) => OnCancelCasting?.Invoke();
 
-        var owner = MemoryPool<byte>.Shared.Rent(args.Data.Length);
-        args.Data.CopyTo(owner.Memory.Span);
-
-        var packet = new Packet((byte)args.ClientOpCode, owner, args.Data.Length);
-        Client.Send(ref packet);
-
-        OnForceClientPacket?.Invoke(args);
-    }
-
-    private void HandleCancelCasting(ServerPacket _) => OnCancelCasting?.Invoke();
-
-    private void HandleMetaData(ServerPacket pkt)
-    {
-        var args = Client.Deserialize<MetaDataArgs>(in pkt);
-        OnMetaData?.Invoke(args);
-    }
+    private void HandleMetaData(IServerPacket p) => OnMetaData?.Invoke((Server.MetafilePacket)p);
 
     private void HandleDisconnected()
     {
@@ -2105,7 +1496,39 @@ public sealed class ConnectionManager : IDisposable
 public readonly record struct RedirectInfo(
     IPEndPoint EndPoint,
     byte Seed,
-    string Key,
+    byte[] Key,
     string Name,
     uint Id,
     ConnectionState TargetState);
+
+/// <summary>
+///     A pass-through client packet carrying a raw, pre-built body for a given opcode. Used to re-emit the inner packet of
+///     a server 0x4B Bounce (<see cref="DALib.Networking.Packets.Server.BouncePacket" />), whose body was authored by the
+///     server.
+/// </summary>
+internal sealed record RawClientPacket(byte ForcedOpcode, byte[] Body) : ClientPacket
+{
+    public override byte Opcode => ForcedOpcode;
+
+    public override void WriteBody(IPacketWriter writer) => writer.WriteBytes(Body);
+}
+
+/// <summary>
+///     The Hybrasyl group stage-5 "view recruit info" request (<c>[0x2E][5][string8 name]</c>). DALib's
+///     <see cref="DALib.Networking.Packets.Client.GroupRequestPacket" /> models stages 2/3/4/6/7 but not stage 5, so this
+///     local packet covers <see cref="Chaos.DarkAges.Definitions.ClientGroupSwitch.ViewGroupBox" />. Not expressible via
+///     <c>GroupRequestPacket { Stage = 5 }</c>: its simple form appends a trailing zero byte that stage 5 omits.
+///     Candidate for an upstream DALib stage-5 factory.
+/// </summary>
+internal sealed record ViewRecruitInfoPacket(string Name) : ClientPacket
+{
+    private const byte StageRecruitInfo = 5;
+
+    public override byte Opcode => (byte)ClientOpcode.GroupRequest;
+
+    public override void WriteBody(IPacketWriter writer)
+    {
+        writer.WriteByte(StageRecruitInfo);
+        writer.WriteString8(Name);
+    }
+}

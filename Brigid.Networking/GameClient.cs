@@ -4,32 +4,31 @@ using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
-using Chaos.Cryptography;
-using Chaos.Extensions.Common;
-using Chaos.Networking.Abstractions.Definitions;
-using Chaos.Networking.Entities.Client;
-using Chaos.Networking.Entities.Server;
-using Chaos.Packets;
-using Chaos.Packets.Abstractions;
+using DALib.Networking.Crypto;
+using DALib.Networking.Packets.Server;
+using DALib.Networking.Wire;
 #endregion
 
 namespace Brigid.Networking;
 
 /// <summary>
-///     Client-side networking implementation for the Dark Ages protocol. Handles TCP connection, packet framing,
-///     encryption, and serialization.
+///     Client-side networking implementation for the Dark Ages (DOOMVAS v1) protocol. Handles the TCP connection and
+///     hands framing, encryption, and (de)serialization to DALib's <see cref="PacketCodec" />. Inbound packets surface
+///     as typed <see cref="IServerPacket" /> values via <see cref="DrainPackets" />; outbound packets are sent as typed
+///     <see cref="IClientPacket" /> values via <see cref="Send" />.
 /// </summary>
 public sealed class GameClient : IDisposable
 {
     private const int RECEIVE_BUFFER_SIZE = ushort.MaxValue * 8;
     private const int INITIAL_SEND_ARGS_COUNT = 5;
-    private readonly ConcurrentQueue<ServerPacket> InboundQueue = new();
-    private readonly PacketSerializer PacketSerializer;
+
+    //the codec is stateless and shared across every connection; only CryptoState is per-connection.
+    private static readonly PacketCodec Codec = new();
+
+    private readonly ConcurrentQueue<IServerPacket> InboundQueue = new();
     private readonly ConcurrentQueue<SocketAsyncEventArgs> SendArgsPool = new();
 
     private readonly Lock SendLock = new();
-    private readonly ServerPacketHandler?[] ServerHandlers = new ServerPacketHandler?[byte.MaxValue + 1];
     private int ConnectionGeneration;
     private bool Disposed;
     private volatile bool IsAlive;
@@ -37,14 +36,14 @@ public sealed class GameClient : IDisposable
     private CancellationTokenSource? ReceiveCts;
     private IMemoryOwner<byte>? ReceiveMemoryOwner;
     private Task? ReceiveTask;
-    private int Sequence;
 
     private Socket? Socket;
 
     /// <summary>
-    ///     The crypto instance used for encryption/decryption. Updated during connection handshake.
+    ///     This connection's crypto state (seed, key, key table, and ordinal counters). Replaced wholesale at each
+    ///     handshake via <see cref="ResetCrypto" /> / <see cref="ApplyCryptoKey" />.
     /// </summary>
-    public Crypto Crypto { get; set; } = new();
+    public CryptoState Crypto { get; private set; } = new();
 
     /// <summary>
     ///     Whether the client is currently connected to a server.
@@ -191,9 +190,6 @@ public sealed class GameClient : IDisposable
     /// </summary>
     public GameClient()
     {
-        PacketSerializer = BuildPacketSerializer();
-        IndexHandlers();
-
         for (var i = 0; i < INITIAL_SEND_ARGS_COUNT; i++)
         {
             var args = new SocketAsyncEventArgs();
@@ -255,23 +251,6 @@ public sealed class GameClient : IDisposable
         await Socket.ConnectAsync(host, port, ct);
 
         StartReceiveLoop();
-    }
-
-    /// <summary>
-    ///     Deserializes a <see cref="ServerPacket" /> into a strongly-typed args instance.
-    /// </summary>
-    /// <typeparam name="T">The args type to deserialize into.</typeparam>
-    /// <param name="serverPacket">The server packet to deserialize.</param>
-    public T Deserialize<T>(in ServerPacket serverPacket) where T: IPacketSerializable
-    {
-        var span = serverPacket.Data.AsSpan(0, serverPacket.Length);
-        var isEncrypted = serverPacket.IsEncrypted;
-        var packet = new Packet(ref span, isEncrypted);
-
-        //the buffer in serverpacket.data has already been decrypted,
-        //so we reconstruct a packet for the serializer to read
-        //(the packet constructor expects the full wire bytes including header)
-        return PacketSerializer.Deserialize<T>(in packet);
     }
 
     /// <summary>
@@ -346,7 +325,7 @@ public sealed class GameClient : IDisposable
     /// <param name="buffer">The list to append dequeued packets to.</param>
     /// <param name="maxCount">Maximum number of packets to drain per call.</param>
     /// <returns>The number of packets drained.</returns>
-    public int DrainPackets(List<ServerPacket> buffer, int maxCount = int.MaxValue)
+    public int DrainPackets(List<IServerPacket> buffer, int maxCount = int.MaxValue)
     {
         var count = 0;
 
@@ -365,47 +344,29 @@ public sealed class GameClient : IDisposable
     public event DisconnectedHandler? OnDisconnected;
 
     /// <summary>
-    ///     Fired when a packet is received that is not handled internally (heartbeat/sync). The subscriber receives the raw
-    ///     <see cref="ServerPacket" /> for deferred deserialization.
+    ///     Sends a typed packet to the server. Thread-safe. Framing, encryption, and ordinal allocation are handled by
+    ///     the codec from the packet's opcode.
     /// </summary>
-    public event PacketReceivedHandler? OnPacketReceived;
-
-    /// <summary>
-    ///     Sends a serializable packet to the server. Thread-safe.
-    /// </summary>
-    public void Send<T>(T args) where T: IPacketSerializable
-    {
-        var packet = PacketSerializer.Serialize(args);
-        Send(ref packet);
-    }
-
-    /// <summary>
-    ///     Sends a raw packet to the server. Thread-safe.
-    /// </summary>
-    public void Send(ref Packet packet)
+    /// <param name="packet">The client packet to send.</param>
+    public void Send(IClientPacket packet)
     {
         if (!Connected)
             return;
 
-        //log outbound bytes BEFORE encryption so the hex matches what the wire-format design says we should be sending.
-        //first 64 bytes of payload is enough to identify any packet we'd want to inspect; longer packets get truncated.
-        var preview = Math.Min(packet.Length, 64);
-        var hex = Convert.ToHexString(packet.Buffer[..preview]);
-        NoticeDebugLog.Write($"outbound opcode=0x{packet.OpCode:X2} len={packet.Length} hex={hex}");
-
-        packet.IsEncrypted = Crypto.IsClientEncrypted(packet.OpCode);
+        ReadOnlyMemory<byte> wire;
         SocketAsyncEventArgs args;
 
         using (SendLock.EnterScope())
         {
-            if (packet.IsEncrypted)
-            {
-                packet.Sequence = (byte)Sequence++;
-                Encrypt(ref packet);
-            }
+            //EncodeClient advances Crypto.ClientOrdinal for encrypted opcodes; hold the lock across encode+dispatch so
+            //ordinals stay monotonic and frames hit the socket in ordinal order.
+            wire = Codec.EncodeClient(packet, Crypto);
 
-            (var owner, var length) = packet.TransferOwnership();
-            args = DequeueSendArgs(owner, length);
+            NoticeDebugLog.Write($"outbound opcode=0x{packet.Opcode:X2} len={wire.Length} hex={HexPreview(wire.Span)}");
+
+            var owner = MemoryPool<byte>.Shared.Rent(wire.Length);
+            wire.Span.CopyTo(owner.Memory.Span);
+            args = DequeueSendArgs(owner, wire.Length);
         }
 
         try
@@ -421,10 +382,43 @@ public sealed class GameClient : IDisposable
     }
 
     /// <summary>
-    ///     Resets the outbound packet sequence counter, typically after a redirect or new connection.
+    ///     Replaces the crypto state with a fresh, unkeyed <see cref="CryptoState" />. Called before the lobby connect,
+    ///     where the only packets exchanged (Version, AcceptConnection, CryptoKey) are unencrypted.
     /// </summary>
-    /// <param name="newSequence">The new sequence value.</param>
-    public void SetSequence(byte newSequence) => Sequence = newSequence;
+    public void ResetCrypto() => Crypto = new CryptoState();
+
+    /// <summary>
+    ///     Installs fresh per-connection key material. This is the single re-key seam, used at both the lobby
+    ///     <c>0x00 CryptoKey</c> handshake and every <c>0x03 Redirect</c> hop. A fresh <see cref="CryptoState" /> is
+    ///     built each call, so the ordinal counters reset to zero and the new connection never inherits the previous
+    ///     hop's key — required for servers that rotate key material per redirect (e.g. Hybrasyl).
+    /// </summary>
+    /// <param name="seed">Encryption seed (salt-table selector).</param>
+    /// <param name="key">Encryption key for <see cref="EncryptMethod.Normal" /> packets.</param>
+    /// <param name="keyTableSeed">
+    ///     Seed string for the MD5 key table used by <see cref="EncryptMethod.MD5Key" /> packets — the character name at
+    ///     the login->world hop. Null/empty falls back to <c>"default"</c> (lobby/login hops, which never exercise the
+    ///     table).
+    /// </param>
+    public void ApplyCryptoKey(byte seed, byte[] key, string? keyTableSeed)
+    {
+        var crypto = new CryptoState
+        {
+            EncryptionSeed = seed,
+            EncryptionKey = key
+        };
+
+        crypto.GenerateKeyTable(string.IsNullOrEmpty(keyTableSeed) ? "default" : keyTableSeed);
+
+        Crypto = crypto;
+    }
+
+    /// <summary>
+    ///     Resets the outbound (C->S) ordinal counter. Normally redundant — <see cref="ApplyCryptoKey" /> and
+    ///     <see cref="ResetCrypto" /> already start a fresh counter — but retained for explicit handshake parity.
+    /// </summary>
+    /// <param name="newSequence">The new ordinal value.</param>
+    public void SetSequence(byte newSequence) => Crypto.ClientOrdinal = newSequence;
 
     private void StartReceiveLoop()
     {
@@ -437,15 +431,7 @@ public sealed class GameClient : IDisposable
         ReceiveTask = Task.Run(() => ReceiveLoopAsync(ReceiveCts.Token, generation), ReceiveCts.Token);
     }
 
-    private delegate void ServerPacketHandler(in Packet packet);
-
     #region Private
-    private void IndexHandlers()
-    {
-        ServerHandlers[(byte)ServerOpCode.HeartBeat] = HandleHeartBeat;
-        ServerHandlers[(byte)ServerOpCode.SynchronizeTicks] = HandleSynchronizeTicks;
-    }
-
     private async Task ReceiveLoopAsync(CancellationToken ct, int generation)
     {
         try
@@ -495,101 +481,79 @@ public sealed class GameClient : IDisposable
 
     private void ProcessReceivedData()
     {
-        var buffer = ReceiveMemoryOwner!.Memory.Span;
         var offset = 0;
-        var shouldReset = false;
 
-        while (ReceiveCount > 3)
+        while (ReceiveCount - offset >= WireFrameHeaderLength)
         {
-            var packetLength = (buffer[offset + 1] << 8) + buffer[offset + 2] + 3;
+            var remaining = ReceiveMemoryOwner!.Memory.Slice(offset, ReceiveCount - offset);
+            var span = remaining.Span;
 
-            if (ReceiveCount < packetLength)
-                break;
+            if (span[0] != WireFrameMarker)
+            {
+                //stream desync — the only safe recovery is to drop the buffered remainder and resynchronize on the
+                //next socket read.
+                NoticeDebugLog.Write($"!!! frame marker mismatch 0x{span[0]:X2}; dropping {ReceiveCount - offset} buffered byte(s)");
+                offset = ReceiveCount;
 
-            if (ReceiveCount < 4)
                 break;
+            }
+
+            var frameLength = WireFrameHeaderLength + ((span[1] << 8) | span[2]);
+
+            if (frameLength > ReceiveCount - offset)
+                break; //incomplete frame; wait for more bytes
+
+            var opcode = frameLength > WireFrameHeaderLength ? span[WireFrameHeaderLength] : (byte)0;
 
             try
             {
-                var packetSpan = buffer.Slice(offset, packetLength);
-                HandleReceivedPacket(packetSpan);
-            } catch
+                if (Codec.TryGetServerPacket(remaining[..frameLength], Crypto, out var packet, out _))
+                    DispatchInbound(packet!);
+            } catch (Exception ex)
             {
-                shouldReset = true;
+                //a single malformed/unknown frame should not poison the rest of the buffer; log and skip past it.
+                NoticeDebugLog.Write($"!!! inbound parse threw opcode=0x{opcode:X2} len={frameLength}: {ex.GetType().Name}: {ex.Message}");
             }
 
-            ReceiveCount -= packetLength;
-            offset += packetLength;
+            offset += frameLength;
         }
 
-        if (shouldReset)
-            ReceiveCount = 0;
+        ReceiveCount -= offset;
 
         if (ReceiveCount > 0)
-            buffer.Slice(offset, ReceiveCount)
-                  .CopyTo(buffer);
+            ReceiveMemoryOwner!.Memory.Slice(offset, ReceiveCount)
+                              .CopyTo(ReceiveMemoryOwner.Memory);
     }
 
-    private void HandleReceivedPacket(Span<byte> rawPacket)
+    private void DispatchInbound(IServerPacket packet)
     {
-        var opCode = rawPacket[3];
-        var isEncrypted = Crypto.IsServerEncrypted(opCode);
-        var packet = new Packet(ref rawPacket, isEncrypted);
-
-        if (isEncrypted)
-            Crypto.ClientDecrypt(ref packet.Buffer, packet.OpCode, packet.Sequence);
-
-        //dispatch to registered handler (e.g. heartbeat, synchronizeticks auto-responders)
-        var handler = ServerHandlers[opCode];
-
-        if (handler is not null)
+        switch (packet)
         {
-            handler(in packet);
+            //heartbeats are answered on the receive thread and never surface to the game loop.
+            case ByteHeartbeatPacket byteHeartbeat:
+                Send(
+                    new DALib.Networking.Packets.Client.ByteHeartbeatPacket
+                    {
+                        First = byteHeartbeat.Second,
+                        Second = byteHeartbeat.First
+                    });
 
-            return;
+                return;
+            case TickHeartbeatPacket tickHeartbeat:
+                Send(
+                    new DALib.Networking.Packets.Client.TickHeartbeatPacket
+                    {
+                        ServerTick = tickHeartbeat.ServerTick,
+                        ClientTick = (uint)Environment.TickCount
+                    });
+
+                return;
+            default:
+                InboundQueue.Enqueue(packet);
+
+                return;
         }
-
-        //default: enqueue for game loop consumption (rented buffer returned after deserialization)
-        var wireLength = rawPacket.Length;
-        var rented = ArrayPool<byte>.Shared.Rent(wireLength);
-        rawPacket.CopyTo(rented);
-
-        var serverPacket = new ServerPacket(
-            opCode,
-            packet.Sequence,
-            isEncrypted,
-            rented,
-            wireLength);
-
-        InboundQueue.Enqueue(serverPacket);
-        OnPacketReceived?.Invoke(serverPacket);
     }
-
-    private void HandleHeartBeat(in Packet packet)
-    {
-        var args = PacketSerializer.Deserialize<HeartBeatArgs>(in packet);
-
-        Send(
-            new HeartBeatResponseArgs
-            {
-                First = args.Second,
-                Second = args.First
-            });
-    }
-
-    private void HandleSynchronizeTicks(in Packet packet)
-    {
-        var args = PacketSerializer.Deserialize<SynchronizeTicksArgs>(in packet);
-
-        Send(
-            new SynchronizeTicksResponseArgs
-            {
-                ServerTicks = args.Ticks,
-                ClientTicks = (uint)Environment.TickCount
-            });
-    }
-
-    private void Encrypt(ref Packet packet) => Crypto.ClientEncrypt(ref packet.Buffer, packet.OpCode, packet.Sequence);
 
     private SocketAsyncEventArgs DequeueSendArgs(IMemoryOwner<byte> owner, int length)
     {
@@ -617,36 +581,16 @@ public sealed class GameClient : IDisposable
             client.SendArgsPool.Enqueue(args);
     }
 
-    private static PacketSerializer BuildPacketSerializer()
+    private static string HexPreview(ReadOnlySpan<byte> wire)
     {
-        var converters = new Dictionary<Type, IPacketConverter>();
+        //first 64 bytes is enough to identify any packet we'd want to inspect; longer frames get truncated.
+        var preview = Math.Min(wire.Length, 64);
 
-        var instances = typeof(IPacketConverter<>).LoadImplementations()
-                                                  .Select(type => (IPacketConverter)Activator.CreateInstance(type)!);
-
-        foreach (var instance in instances)
-        {
-            var argsType = instance.GetType()
-                                   .GetInterfaces()
-                                   .Where(i => i.IsGenericType)
-                                   .First(i => i.GetGenericTypeDefinition() == typeof(IPacketConverter<>))
-                                   .GetGenericArguments()
-                                   .First();
-
-            converters.TryAdd(argsType, instance);
-        }
-
-        return new PacketSerializer(Encoding.GetEncoding(949), converters);
+        return Convert.ToHexString(wire[..preview]);
     }
+
+    //outer frame: [0xAA marker][u16-BE body length]. Mirrors DALib's internal WireFrame constants, which are not public.
+    private const byte WireFrameMarker = 0xAA;
+    private const int WireFrameHeaderLength = 3;
     #endregion
 }
-
-/// <summary>
-///     Represents a received server packet with its raw wire bytes for deferred deserialization.
-/// </summary>
-public readonly record struct ServerPacket(
-    byte OpCode,
-    byte Sequence,
-    bool IsEncrypted,
-    byte[] Data,
-    int Length);

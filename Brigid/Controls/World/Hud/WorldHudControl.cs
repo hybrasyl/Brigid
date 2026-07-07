@@ -319,8 +319,8 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         if (AttributesState.Current is not { } attrs)
             return;
 
-        UpdateHp((int)attrs.CurrentHp, (int)attrs.MaximumHp);
-        UpdateMp((int)attrs.CurrentMp, (int)attrs.MaximumMp);
+        UpdateHp((int)attrs.CurrentHp, (int)attrs.MaxHp);
+        UpdateMp((int)attrs.CurrentMp, (int)attrs.MaxMp);
         SetWeight(attrs.CurrentWeight, attrs.MaxWeight);
         StatsPanel.UpdateAttributes(attrs);
         ExtendedStatsPanel.UpdateAttributes(attrs);

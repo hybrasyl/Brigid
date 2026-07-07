@@ -5,10 +5,10 @@ using Brigid.Systems;
 using Chaos.DarkAges.Definitions;
 using Chaos.Geometry;
 using Chaos.Geometry.Abstractions;
-using Chaos.Networking.Entities.Server;
 using Chaos.Pathfinding;
-using DALib.Cryptography;
 using DALib.Data;
+using DALib.Networking.Packets.Server;
+using DALib.Networking.Wire;
 using DALib.Extensions;
 using Pathfinder = Chaos.Pathfinding.Pathfinder;
 using TileFlags = DALib.Definitions.TileFlags;
@@ -23,13 +23,13 @@ public sealed partial class WorldScreen
     #region Map Assembly
     private void HandleUserId(uint id) => WorldState.PlayerEntityId = id;
 
-    private void HandleMapInfo(MapInfoArgs args)
+    private void HandleMapInfo(MapInfoPacket args)
     {
         WorldMap.HideMap();
         //same map (refresh) — skip expensive teardown, just clear transient entity state. checksum must
         //also match: a server-side map edit reuses the same id but changes the bytes, so a mismatch means
         //the cached MapFile is stale and we have to take the full reload path.
-        if ((args.MapId == CurrentMapId) && (args.CheckSum == CurrentMapCheckSum) && MapFile is not null)
+        if ((args.MapId == CurrentMapId) && (args.Checksum == CurrentMapCheckSum) && MapFile is not null)
         {
             ClearTransientState();
 
@@ -39,7 +39,7 @@ public sealed partial class WorldScreen
             if (newFlags != CurrentMapFlags)
             {
                 CurrentMapFlags = newFlags;
-                DarknessRenderer.OnMapChanged(args.MapId, CurrentMapFlags.HasFlag(MapFlags.Darkness));
+                DarknessRenderer.OnMapChanged((short)args.MapId, CurrentMapFlags.HasFlag(MapFlags.Darkness));
                 WeatherRenderer.OnMapChanged(CurrentMapFlags);
             }
 
@@ -57,11 +57,11 @@ public sealed partial class WorldScreen
             args.MapId,
             args.Width,
             args.Height,
-            args.CheckSum);
+            args.Checksum);
         MapPreloaded = false;
         AwaitingMapData = false;
-        CurrentMapId = args.MapId;
-        CurrentMapCheckSum = args.CheckSum;
+        CurrentMapId = (short)args.MapId;
+        CurrentMapCheckSum = args.Checksum;
         CurrentMapFlags = (MapFlags)args.Flags;
         MapLoading.Show();
 
@@ -83,7 +83,7 @@ public sealed partial class WorldScreen
         Game.ItemRenderer.Clear();
 
         //reset darkness state and load hea light map for the new map
-        DarknessRenderer.OnMapChanged(args.MapId, CurrentMapFlags.HasFlag(MapFlags.Darkness));
+        DarknessRenderer.OnMapChanged((short)args.MapId, CurrentMapFlags.HasFlag(MapFlags.Darkness));
         WeatherRenderer.OnMapChanged(CurrentMapFlags);
 
         UpdateHuds(HudOps.SetZoneName, args.Name);
@@ -103,18 +103,18 @@ public sealed partial class WorldScreen
         Game.CreatureRenderer.ClearTintCaches();
     }
 
-    private void HandleMapData(MapDataArgs args)
+    private void HandleMapData(MapDataPacket args)
     {
         if (MapFile is null)
             return;
 
-        var y = args.CurrentYIndex;
+        var y = args.RowIndex;
 
         if (y >= MapFile.Height)
             return;
 
         //each tile is 6 bytes: bg(2 be), lfg(2 be), rfg(2 be)
-        var data = args.MapData;
+        var data = args.RowData;
         var tileCount = Math.Min(data.Length / 6, MapFile.Width);
 
         for (var x = 0; x < tileCount; x++)
@@ -311,7 +311,7 @@ public sealed partial class WorldScreen
             if (fileBytes.Length != (width * height * 6))
                 return null;
 
-            if (CRC16.Calculate(fileBytes) != serverCheckSum)
+            if (CrcCcitt.Compute(fileBytes) != serverCheckSum)
                 return null;
 
             //parse in-place — file format is le int16 x3 per tile, y-major x-minor
@@ -344,6 +344,7 @@ public sealed partial class WorldScreen
     private void SaveMapFile(int mapId)
     {
         var path = Path.Combine(DataContext.DataPath, "maps", $"lod{mapId}.map");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         MapFile!.Save(path);
     }
 

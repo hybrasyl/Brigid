@@ -1479,11 +1479,9 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>
-    ///     Routes a foreground-tile click to the appropriate send path. Door tiles use the extended
-    ///     <see cref="ConnectionManager.ClickDoor" /> (7-byte payload with layer + modifier bytes that retail's 0x43
-    ///     handler requires for door dispatch); non-door foreground (signposts, anything else) uses the standard 5-byte
-    ///     <see cref="ConnectionManager.ClickTile" />. Layer byte is empirically derived: door in LeftForeground → 0
-    ///     (E/W panel), door in RightForeground → 1 (N/S panel).
+    ///     Routes a foreground-tile click to the appropriate send path. Door tiles send the above-tile
+    ///     anchor flag via <see cref="ConnectionManager.ClickDoor" />; non-door foreground (signposts,
+    ///     anything else) sends the floor-aligned flag via <see cref="ConnectionManager.ClickTile" />.
     /// </summary>
     private void ClickForegroundTile(int tileX, int tileY)
     {
@@ -1492,10 +1490,8 @@ public sealed partial class WorldScreen
 
         var tile = MapFile.Tiles[tileX, tileY];
 
-        if (DoorTable.IsDoorTile(tile.LeftForeground))
-            Game.Connection.ClickDoor(tileX, tileY, 0);
-        else if (DoorTable.IsDoorTile(tile.RightForeground))
-            Game.Connection.ClickDoor(tileX, tileY, 1);
+        if (DoorTable.IsDoorTile(tile.LeftForeground) || DoorTable.IsDoorTile(tile.RightForeground))
+            Game.Connection.ClickDoor(tileX, tileY);
         else
             Game.Connection.ClickTile(tileX, tileY);
     }
@@ -1678,11 +1674,7 @@ public sealed partial class WorldScreen
                 var doorX = tx;
                 var doorY = ty;
 
-                //layer byte mirrors ClickForegroundTile: 0 if the door panel sits in LeftForeground (E/W door), 1 if
-                //in RightForeground (N/S door). captured into a local so the lambda closes over the byte rather than
-                //re-checking lfg/rfg at click time.
-                byte doorLayer = DoorTable.IsDoorTile(lfg) ? (byte)0 : (byte)1;
-                Action callback = () => Game.Connection.ClickDoor(doorX, doorY, doorLayer);
+                Action callback = () => Game.Connection.ClickDoor(doorX, doorY);
 
                 results.Add(new DoorProximityDedup.DoorHit<(string, Action)>(distSq, tx, ty, (label, callback)));
             }

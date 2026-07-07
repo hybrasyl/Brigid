@@ -36,8 +36,6 @@ public sealed partial class WorldScreen
         Game.Connection.OnRemoveEntity += HandleRemoveEntity;
         Game.Connection.OnClientWalkResponse += HandleClientWalkResponse;
 
-        //hud data events
-        Game.Connection.OnAttributes += HandleAttributes;
 
         //chat events
         Game.Connection.OnDisplayPublicMessage += HandleDisplayPublicMessage;
@@ -130,7 +128,7 @@ public sealed partial class WorldScreen
         {
             if (NpcSession is { SourceId: { } sourceId, IsDialogOpcode: true })
                 Game.Connection.SendDialogResponse(
-                    NpcSession.SourceEntityType,
+                    NpcSession.SourceObjectType,
                     sourceId,
                     NpcSession.PursuitId,
                     NpcSession.DialogId);
@@ -146,7 +144,7 @@ public sealed partial class WorldScreen
         {
             if (NpcSession.SourceId is { } sourceId)
                 Game.Connection.SendDialogResponse(
-                    NpcSession.SourceEntityType,
+                    NpcSession.SourceObjectType,
                     sourceId,
                     NpcSession.PursuitId,
                     (ushort)(NpcSession.DialogId + 1));
@@ -156,7 +154,7 @@ public sealed partial class WorldScreen
         {
             if (NpcSession.SourceId is { } sourceId)
                 Game.Connection.SendDialogResponse(
-                    NpcSession.SourceEntityType,
+                    NpcSession.SourceObjectType,
                     sourceId,
                     NpcSession.PursuitId,
                     (ushort)(NpcSession.DialogId - 1));
@@ -169,7 +167,7 @@ public sealed partial class WorldScreen
 
             if (NpcSession.IsDialogOpcode)
                 Game.Connection.SendDialogResponse(
-                    NpcSession.SourceEntityType,
+                    NpcSession.SourceObjectType,
                     sourceId,
                     NpcSession.PursuitId,
                     (ushort)(NpcSession.DialogId + 1),
@@ -181,12 +179,12 @@ public sealed partial class WorldScreen
 
                 if (NpcSession.MenuArgs is not null)
                     Game.Connection.SendMenuResponse(
-                        NpcSession.SourceEntityType,
+                        NpcSession.SourceObjectType,
                         sourceId,
                         pursuitId,
                         args: [NpcSession.MenuArgs]);
                 else
-                    Game.Connection.SendMenuResponse(NpcSession.SourceEntityType, sourceId, pursuitId);
+                    Game.Connection.SendMenuResponse(NpcSession.SourceObjectType, sourceId, pursuitId);
             }
         };
 
@@ -213,7 +211,7 @@ public sealed partial class WorldScreen
                 }
 
                 Game.Connection.SendDialogResponse(
-                    NpcSession.SourceEntityType,
+                    NpcSession.SourceObjectType,
                     sourceId,
                     NpcSession.PursuitId,
                     (ushort)(NpcSession.DialogId + 1),
@@ -226,7 +224,7 @@ public sealed partial class WorldScreen
 
                 if (prevArgs is not null)
                     Game.Connection.SendMenuResponse(
-                        NpcSession.SourceEntityType,
+                        NpcSession.SourceObjectType,
                         sourceId,
                         NpcSession.PursuitId,
                         args:
@@ -236,7 +234,7 @@ public sealed partial class WorldScreen
                         ]);
                 else
                     Game.Connection.SendMenuResponse(
-                        NpcSession.SourceEntityType,
+                        NpcSession.SourceObjectType,
                         sourceId,
                         NpcSession.PursuitId,
                         args: [text]);
@@ -249,7 +247,7 @@ public sealed partial class WorldScreen
                 return;
 
             Game.Connection.SendDialogResponse(
-                NpcSession.SourceEntityType,
+                NpcSession.SourceObjectType,
                 sourceId,
                 NpcSession.PursuitId,
                 (ushort)(NpcSession.DialogId + 1),
@@ -279,7 +277,7 @@ public sealed partial class WorldScreen
 
             if (name is not null)
                 Game.Connection.SendMenuResponse(
-                    NpcSession.SourceEntityType,
+                    NpcSession.SourceObjectType,
                     sourceId,
                     NpcSession.PursuitId,
                     args: [name]);
@@ -297,7 +295,7 @@ public sealed partial class WorldScreen
 
             if (NpcSession.CurrentMenuType is MenuType.ShowPlayerItems or MenuType.ShowPlayerSkills or MenuType.ShowPlayerSpells)
                 Game.Connection.SendMenuResponse(
-                    NpcSession.SourceEntityType,
+                    NpcSession.SourceObjectType,
                     sourceId,
                     NpcSession.PursuitId,
                     slot.Value);
@@ -307,7 +305,7 @@ public sealed partial class WorldScreen
 
                 if (name is not null)
                     Game.Connection.SendMenuResponse(
-                        NpcSession.SourceEntityType,
+                        NpcSession.SourceObjectType,
                         sourceId,
                         NpcSession.PursuitId,
                         args: [name]);

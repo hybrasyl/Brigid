@@ -27,7 +27,7 @@ Brigid.slnx (.NET 10.0, C# 14)
 └── Brigid.Networking     — TCP client, crypto, packet framing, connection state machine
 ```
 
-DALib (Dark Ages file format support) is consumed as an external NuGet package, not a solution project.
+DALib (Dark Ages file format + networking support) is consumed from the sibling checkout at `../dalib` by default (`UseLocalDALib=true` in `Directory.Build.props`) until a DALib release with the networking layer is published; build with `-p:UseLocalDALib=false` to use the pinned NuGet package instead.
 
 **Dependency flow:** Data <- Rendering <- Client, Networking <- Client
 
@@ -51,9 +51,8 @@ DALib (Dark Ages file format support) is consumed as an external NuGet package, 
 
 | Package                                    | Purpose                                                                   |
 |--------------------------------------------|---------------------------------------------------------------------------|
-| DALib                                      | Dark Ages file format support, SkiaSharp rendering                        |
+| DALib                                      | Dark Ages file formats, SkiaSharp rendering, protocol packets + crypto    |
 | MonoGame.Framework.DesktopGL 3.8.4.1       | Cross-platform graphics/windowing                                         |
-| Chaos.Networking 1.11.0-preview            | Complete protocol library: packet converters, crypto, opcodes, args types |
 | Chaos.Common 1.11.0-preview                | Shared extension methods (NuGet)                                          |
 | Chaos.DarkAges 1.11.0-preview              | Dark Ages protocol types (NuGet)                                          |
 | Chaos.Geometry 1.11.0-preview              | Geometry types -- rectangles, points (NuGet)                              |
