@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Networking;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
@@ -51,10 +52,11 @@ public sealed class MenuListPanel : FramedDialogPanelBase
 
     private readonly List<ListEntryControl> EntryControls = [];
     private readonly UIPanel ContentContainer;
+    private readonly ScrollBarBinder Binder;
+    private readonly ScrollModel Model = new();
     private readonly ScrollBarControl ScrollBar;
 
     private int ColumnWidth;
-    private int ScrollOffset;
     private int SelectedIndex = -1;
 
     private int TotalRows => (Entries.Count + COLUMN_COUNT - 1) / COLUMN_COUNT;
@@ -100,9 +102,11 @@ public sealed class MenuListPanel : FramedDialogPanelBase
             Visible = false
         };
 
-        ScrollBar.OnValueChanged += value =>
+        Binder = new ScrollBarBinder(Model, ScrollBar);
+
+        //any scroll (wheel or bar) clears the selection and re-lays out the visible window
+        Model.Changed += _ =>
         {
-            ScrollOffset = value;
             SelectedIndex = -1;
             LayoutEntries();
         };
@@ -148,14 +152,14 @@ public sealed class MenuListPanel : FramedDialogPanelBase
 
         EntryControls.Clear();
         Entries.Clear();
-        ScrollOffset = 0;
+        Model.ScrollToStart();
         SelectedIndex = -1;
         Visible = false;
     }
 
     private void LayoutEntries()
     {
-        var firstEntry = ScrollOffset * COLUMN_COUNT;
+        var firstEntry = Model.Offset * COLUMN_COUNT;
         var controlIndex = 0;
 
         for (var row = 0; row < DISPLAY_ROWS; row++)
@@ -349,13 +353,8 @@ public sealed class MenuListPanel : FramedDialogPanelBase
         ScrollBar.Y = CONTENT_Y;
         ScrollBar.Height = contentHeight + 2;
 
-        if (needsScroll)
-        {
-            ScrollBar.TotalItems = TotalRows;
-            ScrollBar.VisibleItems = MAX_VISIBLE_ROWS;
-            ScrollBar.MaxValue = TotalRows - MAX_VISIBLE_ROWS;
-            ScrollBar.Value = 0;
-        }
+        Model.SetMetrics(TotalRows, MAX_VISIBLE_ROWS);
+        Model.ScrollToStart();
 
         //resize container to match available content width
         ContentContainer.Width = availableWidth;
@@ -421,19 +420,10 @@ public sealed class MenuListPanel : FramedDialogPanelBase
 
     public override void OnMouseScroll(MouseScrollEvent e)
     {
-        if (ScrollBar.TotalItems <= ScrollBar.VisibleItems)
+        if (!Model.CanScroll)
             return;
 
-        var newValue = Math.Clamp(ScrollBar.Value - e.Delta, 0, ScrollBar.MaxValue);
-
-        if (newValue != ScrollBar.Value)
-        {
-            ScrollBar.Value = newValue;
-            ScrollOffset = newValue;
-            SelectedIndex = -1;
-            LayoutEntries();
-        }
-
+        Model.WheelBy(e.Delta);
         e.Handled = true;
     }
 
