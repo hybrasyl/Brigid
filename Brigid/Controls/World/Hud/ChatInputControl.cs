@@ -1,4 +1,5 @@
 #region
+using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Data.Models;
 using Chaos.Extensions.Common;
@@ -24,11 +25,17 @@ public enum ChatMode
 public sealed class ChatInputControl : UIPanel
 {
     private const int MAX_WHISPER_HISTORY = 5;
+    private const int MAX_SENT_HISTORY = 50;
 
     private readonly int FullWidth;
     private readonly UILabel PrefixLabel;
     private readonly UITextBox TextBox;
     private readonly List<string> WhisperHistory = [];
+
+    //shared, in-session recall of sent messages (say/shout/whisper) navigated with Up/Down while the prompt is open
+    private readonly CircularBuffer<string> SentHistory = new(MAX_SENT_HISTORY);
+    private int SentHistoryIndex = -1;           //-1 = not navigating (showing the in-progress draft)
+    private string SentHistoryDraft = string.Empty;
 
     private Action<string>? PromptCallback;
     private Color? SavedFocusedBackgroundColor;
@@ -73,7 +80,11 @@ public sealed class ChatInputControl : UIPanel
             Y = 0,
             Width = rect.Width,
             Height = rect.Height,
-            MaxLength = 255,
+            //225 leaves headroom under the 255-byte string8 wire cap for the server's "Name: " echo prefix
+            //(name width is moving to 24 chars: 255 - (24 + 2) = 229). AllowHorizontalScroll lets long messages
+            //scroll instead of hard-blocking at the visible box width (~77 chars).
+            MaxLength = 225,
+            AllowHorizontalScroll = true,
             PaddingLeft = 1,
             PaddingRight = 1,
             PaddingTop = 1,
@@ -184,6 +195,8 @@ public sealed class ChatInputControl : UIPanel
     {
         Mode = ChatMode.None;
         WhisperTarget = null;
+        SentHistoryIndex = -1;
+        SentHistoryDraft = string.Empty;
         TextBox.IsReadOnly = false;
         TextBox.IsFocused = false;
         TextBox.Text = string.Empty;
@@ -229,6 +242,71 @@ public sealed class ChatInputControl : UIPanel
         UpdateLayout($"to [{WhisperHistory[WhisperHistoryIndex]}]? ", TextBox.ForegroundColor);
     }
 
+    //--- sent-message history ---
+
+    private void AddSentHistory(string message)
+    {
+        if (message.Length == 0)
+            return;
+
+        //skip consecutive duplicates, like a shell history
+        if ((SentHistory.Count > 0) && (SentHistory[SentHistory.Count - 1] == message))
+            return;
+
+        SentHistory.Add(message);
+    }
+
+    //direction: -1 = older (Up), +1 = newer (Down). Preserves the in-progress draft the first time recall begins and
+    //restores it when the user pages back past the newest entry. Relies on the buffer staying stable while the prompt is
+    //focused — every send path calls Unfocus() (which resets the index), so no Add can shift the ring mid-navigation.
+    private void RecallSentHistory(int direction)
+    {
+        if (SentHistory.Count == 0)
+        {
+            //the TextBox already moved the caret to column 0 (Up) during dispatch; keep it at the end so a following
+            //keystroke appends rather than prepends
+            TextBox.CursorPosition = TextBox.Text.Length;
+
+            return;
+        }
+
+        if (SentHistoryIndex == -1)
+        {
+            //Down does nothing until recall has started
+            if (direction > 0)
+                return;
+
+            SentHistoryDraft = TextBox.Text;
+            SentHistoryIndex = SentHistory.Count - 1;
+        } else
+        {
+            var next = SentHistoryIndex + direction;
+
+            //already at the oldest entry — stay put, but re-assert the caret (Up moved it to column 0 during dispatch)
+            if (next < 0)
+            {
+                TextBox.CursorPosition = TextBox.Text.Length;
+
+                return;
+            }
+
+            //paged past the newest entry — restore the preserved draft
+            if (next >= SentHistory.Count)
+            {
+                SentHistoryIndex = -1;
+                SetText(SentHistoryDraft, SentHistoryDraft.Length);
+                SentHistoryDraft = string.Empty;
+
+                return;
+            }
+
+            SentHistoryIndex = next;
+        }
+
+        var recalled = SentHistory[SentHistoryIndex];
+        SetText(recalled, recalled.Length);
+    }
+
     private string GetBracketedWhisperTarget()
     {
         // ReSharper disable once NullCoalescingConditionIsAlwaysNotNullAccordingToAPIContract
@@ -268,12 +346,14 @@ public sealed class ChatInputControl : UIPanel
         switch (Mode)
         {
             case ChatMode.Normal:
+                AddSentHistory(message);
                 MessageSent?.Invoke(message);
                 Unfocus();
 
                 break;
 
             case ChatMode.Shout:
+                AddSentHistory(message);
                 ShoutSent?.Invoke(message);
                 Unfocus();
 
@@ -317,6 +397,7 @@ public sealed class ChatInputControl : UIPanel
                 if (WhisperTarget is not null)
                 {
                     AddWhisperTarget(WhisperTarget);
+                    AddSentHistory(message);
                     WhisperSent?.Invoke(WhisperTarget, message);
                 }
 
@@ -386,12 +467,28 @@ public sealed class ChatInputControl : UIPanel
     {
         base.Update(gameTime);
 
-        if ((Mode != ChatMode.WhisperName) || !IsFocused)
+        if (!IsFocused)
             return;
 
-        if (InputBuffer.WasKeyPressed(Keys.Up))
-            CycleWhisperTarget(1);
-        else if (InputBuffer.WasKeyPressed(Keys.Down))
-            CycleWhisperTarget(-1);
+        //Up/Down cycle whisper recipients while choosing a target; in text-entry modes they recall sent messages.
+        //Polled here (not via OnKeyDown) because the single-line TextBox consumes Up/Down in Phase 1; Home/End still
+        //provide caret-to-start/end so nothing is lost by repurposing them here.
+        if (Mode == ChatMode.WhisperName)
+        {
+            if (InputBuffer.WasKeyPressed(Keys.Up))
+                CycleWhisperTarget(1);
+            else if (InputBuffer.WasKeyPressed(Keys.Down))
+                CycleWhisperTarget(-1);
+
+            return;
+        }
+
+        if (Mode is ChatMode.Normal or ChatMode.Shout or ChatMode.WhisperMessage)
+        {
+            if (InputBuffer.WasKeyPressed(Keys.Up))
+                RecallSentHistory(-1);
+            else if (InputBuffer.WasKeyPressed(Keys.Down))
+                RecallSentHistory(1);
+        }
     }
 }

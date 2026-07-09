@@ -105,6 +105,16 @@ public class UITextBox : UIElement
 
     public int ScrollOffset { get; set; }
 
+    /// <summary>
+    ///     When true, a single-line textbox scrolls its content horizontally to follow the caret instead of hard-blocking
+    ///     input once the text fills the visible width. Opt-in: other single-line boxes keep the width-block behavior.
+    /// </summary>
+    public bool AllowHorizontalScroll { get; set; }
+
+    //pixels the single-line editable content is scrolled left to keep the caret in view (only meaningful when
+    //allowhorizontalscroll and focused; reset to 0 otherwise)
+    private int HorizontalScrollOffset;
+
     public string Text { get; set; } = string.Empty;
 
     public static bool IsAnyFocused
@@ -342,7 +352,9 @@ public class UITextBox : UIElement
             DrawTextClipped(spriteBatch, new Vector2(sx + PaddingLeft, textY), Prefix, ForegroundColor);
         }
 
-        var textStartX = sx + PaddingLeft + prefixWidth;
+        //horizontal scroll shifts the editable content left; the prefix stays pinned. HorizontalScrollOffset is 0 unless
+        //this is a focused AllowHorizontalScroll box, so non-scrolling boxes are unaffected.
+        var textStartX = sx + PaddingLeft + prefixWidth - HorizontalScrollOffset;
 
         if (HasSelection && (displayText.Length > 0))
         {
@@ -454,6 +466,44 @@ public class UITextBox : UIElement
         var availableWidth = Width - PaddingLeft;
 
         return (prefixWidth + textWidth) > availableWidth;
+    }
+
+    /// <summary>
+    ///     Single-line horizontal analog of <see cref="EnsureCursorVisible" />: adjusts <see cref="HorizontalScrollOffset" />
+    ///     so the caret stays within the visible width. No-op unless <see cref="AllowHorizontalScroll" /> is set.
+    /// </summary>
+    private void EnsureCursorVisibleHorizontal()
+    {
+        if (IsMultiLine || !AllowHorizontalScroll)
+            return;
+
+        //no scrolling while unfocused — collapse any prior offset so the box renders from the start
+        if (!IsFocused)
+        {
+            HorizontalScrollOffset = 0;
+
+            return;
+        }
+
+        var displayText = IsMasked ? new string('*', Text.Length) : Text;
+        var clampedPos = Math.Min(CursorPosition, displayText.Length);
+        var caretX = clampedPos > 0 ? TextRenderer.MeasureWidth(displayText[..clampedPos]) : 0;
+
+        var prefixWidth = Prefix.Length > 0 ? TextRenderer.MeasureWidth(Prefix) : 0;
+        var availableWidth = Width - PaddingLeft - PaddingRight - prefixWidth - CURSOR_WIDTH;
+
+        if (availableWidth <= 0)
+            return;
+
+        //scroll right/left just enough to bring the caret back into view
+        if (caretX - HorizontalScrollOffset > availableWidth)
+            HorizontalScrollOffset = caretX - availableWidth;
+        else if (caretX - HorizontalScrollOffset < 0)
+            HorizontalScrollOffset = caretX;
+
+        //never scroll past the start, and never leave a trailing gap when text shrinks
+        var maxOffset = Math.Max(0, TextRenderer.MeasureWidth(displayText) - availableWidth);
+        HorizontalScrollOffset = Math.Clamp(HorizontalScrollOffset, 0, maxOffset);
     }
 
     private int FindWordBoundaryLeft(int from)
@@ -638,6 +688,10 @@ public class UITextBox : UIElement
         if ((Prefix.Length > 0) && IsFocused)
             localX -= TextRenderer.MeasureWidth(Prefix);
 
+        //account for horizontal scroll so clicks map to the character actually under the cursor
+        if (AllowHorizontalScroll)
+            localX += HorizontalScrollOffset;
+
         if ((Text.Length == 0) || (localX <= 0))
             return 0;
 
@@ -783,7 +837,7 @@ public class UITextBox : UIElement
         SelectionAnchor = CursorPosition;
         ResetCursor();
 
-        if (ExceedsTextBoxWidth() || (ClampToVisibleArea && IsMultiLine && ExceedsVisibleArea()))
+        if ((!AllowHorizontalScroll && ExceedsTextBoxWidth()) || (ClampToVisibleArea && IsMultiLine && ExceedsVisibleArea()))
         {
             Text = savedText;
             CursorPosition = savedCursor;
@@ -825,6 +879,10 @@ public class UITextBox : UIElement
 
         if (IsMultiLine)
             ComputeLineLayout();
+        else
+            //per-frame so it also absorbs external Text/CursorPosition changes (SetText, prompt/whisper resets,
+            //Unfocus) that never flow through OnKeyDown/OnTextInput. No-op unless AllowHorizontalScroll.
+            EnsureCursorVisibleHorizontal();
 
         if (IsFocused)
             UpdateCursorBlink(gameTime);
@@ -1215,7 +1273,7 @@ public class UITextBox : UIElement
         SelectionAnchor = CursorPosition;
         ResetCursor();
 
-        if (ExceedsTextBoxWidth() || (ClampToVisibleArea && IsMultiLine && ExceedsVisibleArea()))
+        if ((!AllowHorizontalScroll && ExceedsTextBoxWidth()) || (ClampToVisibleArea && IsMultiLine && ExceedsVisibleArea()))
         {
             Text = priorText;
             CursorPosition = priorCursor;
