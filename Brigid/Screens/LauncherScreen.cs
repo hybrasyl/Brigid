@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Data;
+using Brigid.Definitions;
 using Brigid.Rendering;
 using Brigid.Systems;
 using Brigid.Utilities;
@@ -75,7 +76,6 @@ public sealed class LauncherScreen : IScreen
     private AddField AddFocused = AddField.Host;
     private string AssetPath = "";
     private bool AssetPathValid;
-    private bool PreviousLeftHeld;
     private bool Completed;
     private double CaretTimer;
 
@@ -239,36 +239,42 @@ public sealed class LauncherScreen : IScreen
 
     private void HandleMouse()
     {
-        var leftHeld = InputBuffer.IsLeftButtonHeld;
-        var pressed = leftHeld && !PreviousLeftHeld;
-        PreviousLeftHeld = leftHeld;
-
-        if (!pressed)
-            return;
-
-        var cursor = new Point(InputBuffer.MouseX, InputBuffer.MouseY);
-
-        switch (CurrentMode)
+        //consume the discrete per-event stream (same contract as InputDispatcher) rather than edge-detecting the
+        //polled IsLeftButtonHeld bool — polling drops a click whose down+up are drained in the same frame, which is
+        //timing-dependent and diverged by platform (dead on Windows, fine on macOS).
+        foreach (var evt in InputBuffer.Events)
         {
-            case Mode.Main:
-                HandleMainClick(cursor);
+            if ((evt.Kind != BufferedInputKind.MouseButton) || (evt.Button != MouseButton.Left) || !evt.IsPress)
+                continue;
 
-                break;
+            var cursor = new Point(evt.X, evt.Y);
 
-            case Mode.Dropdown:
-                HandleDropdownClick(cursor);
+            switch (CurrentMode)
+            {
+                case Mode.Main:
+                    HandleMainClick(cursor);
 
-                break;
+                    break;
 
-            case Mode.ResolutionDropdown:
-                HandleResolutionDropdownClick(cursor);
+                case Mode.Dropdown:
+                    HandleDropdownClick(cursor);
 
-                break;
+                    break;
 
-            case Mode.AddServer:
-                HandleAddClick(cursor);
+                case Mode.ResolutionDropdown:
+                    HandleResolutionDropdownClick(cursor);
 
-                break;
+                    break;
+
+                case Mode.AddServer:
+                    HandleAddClick(cursor);
+
+                    break;
+            }
+
+            //Connect() replaces this screen mid-loop — stop touching state once that happens.
+            if (Completed)
+                return;
         }
     }
 
@@ -445,8 +451,10 @@ public sealed class LauncherScreen : IScreen
     {
         var picked = FolderPicker.Pick("Select your Dark Ages data folder", AssetPath);
 
-        //the modal dialog blocked the game loop; resync the edge tracker so the return click isn't double-counted
-        PreviousLeftHeld = InputBuffer.IsLeftButtonHeld;
+        //the modal ran its own message loop while our game loop was stalled; drop anything the SDL watcher buffered
+        //during that time (e.g. a dialog-dismiss click delivered via SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH) so it isn't
+        //replayed as a launcher click next frame.
+        InputBuffer.DiscardPending();
 
         if (picked is null)
             return;
