@@ -41,12 +41,9 @@ public sealed class ScrollView : UIPanel
         set => Model.Inverted = value;
     }
 
+    private readonly ScrollBarBinder Binder;
     private readonly ScrollOrientation Orientation;
     private IScrollSource? Source;
-
-    //guards our own writes to Bar.Value from re-entering OnBarValueChanged. Today ScrollBarControl.Value is a plain
-    //setter that never raises OnValueChanged, so this is forward-insurance for a widget that later raises-on-set.
-    private bool Syncing;
 
     public ScrollView(ScrollOrientation orientation = ScrollOrientation.Vertical)
     {
@@ -60,8 +57,8 @@ public sealed class ScrollView : UIPanel
             ZIndex = int.MaxValue
         };
 
-        Bar.OnValueChanged += OnBarValueChanged;
-        Model.Changed += OnModelChanged;
+        Binder = new ScrollBarBinder(Model, Bar);
+        Model.Changed += OnOffsetChanged;
 
         AddChild(Bar);
     }
@@ -119,7 +116,7 @@ public sealed class ScrollView : UIPanel
 
         Layout();
         Model.Configure(Source);
-        RefreshBar();
+        Binder.Refresh();
     }
 
     /// <summary>
@@ -139,41 +136,6 @@ public sealed class ScrollView : UIPanel
         e.Handled = true;
     }
 
-    private void OnModelChanged(int offset)
-    {
-        Source?.ApplyOffset(offset);
-
-        if (!Syncing)
-            SetBarValue(offset);
-    }
-
-    private void OnBarValueChanged(int value)
-    {
-        //bar-driven changes (arrows / thumb drag / page / wheel over the strip) feed the model; skip our own writes
-        if (Syncing)
-            return;
-
-        Model.ScrollTo(OffsetForBarValue(value));
-    }
-
-    private void RefreshBar()
-    {
-        Syncing = true;
-        Bar.TotalItems = Model.Extent;
-        Bar.VisibleItems = Model.Viewport;
-        Bar.MaxValue = Model.Max;
-        Bar.Value = BarValueFor(Model.Offset);
-        Syncing = false;
-    }
-
-    private void SetBarValue(int offset)
-    {
-        Syncing = true;
-        Bar.Value = BarValueFor(offset);
-        Syncing = false;
-    }
-
-    private int BarValueFor(int offset) => InvertBar ? Model.Max - offset : offset;
-
-    private int OffsetForBarValue(int value) => InvertBar ? Model.Max - value : value;
+    //push the resolved offset into the content surface; the bar side of the sync is owned by the binder
+    private void OnOffsetChanged(int offset) => Source?.ApplyOffset(offset);
 }
