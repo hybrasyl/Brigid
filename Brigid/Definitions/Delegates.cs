@@ -199,6 +199,11 @@ public delegate void CloseHandler();
 ///     A scrollbar value changed.
 /// </summary>
 public delegate void ScrollValueChangedHandler(int value);
+
+/// <summary>
+///     A scroll model's offset changed.
+/// </summary>
+public delegate void ScrollOffsetChangedHandler(int offset);
 #endregion
 
 #region Controls/World/Hud Delegates
