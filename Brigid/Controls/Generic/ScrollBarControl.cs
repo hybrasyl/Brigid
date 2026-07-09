@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -26,15 +27,32 @@ public sealed class ScrollBarControl : UIElement
     private const float REPEAT_INTERVAL_MS = 50f;
 
     //── modern-flat palette (tune during run-through) ──
-    private static readonly Color TrackColor = new(24, 24, 28, 235);
-    private static readonly Color TrackBorderColor = new(150, 150, 160, 255);
-    private static readonly Color ThumbIdleColor = new(120, 120, 130, 255);
-    private static readonly Color ThumbHoverColor = new(150, 150, 160, 255);
-    private static readonly Color ThumbPressColor = new(186, 162, 110, 255);
-    private static readonly Color ArrowIdleColor = new(200, 200, 210, 255);
-    private static readonly Color ArrowHoverColor = new(230, 230, 235, 255);
-    private static readonly Color ArrowPressColor = new(186, 162, 110, 255);
-    private static readonly Color DisabledColor = new(70, 70, 78, 255);
+    //── wood palette, sourced from the HUD wood tone (#966946 base) — no cool greys ──
+    private static readonly Color TrackColor = new(32, 22, 16, 235);        //#201610 — dark warm recess
+    private static readonly Color TrackBorderColor = new(150, 105, 70, 255); //#966946 — wood outline
+    private static readonly Color ThumbIdleColor = new(128, 90, 60, 255);   //#805A3C
+    private static readonly Color ThumbHoverColor = new(176, 133, 90, 255);  //#B0855A — brightens on hover
+    private static readonly Color ThumbPressColor = new(107, 72, 48, 255);   //#6B4830 — darker, pressed/inset
+    private static readonly Color ArrowIdleColor = new(200, 164, 120, 255);  //#C8A478 (primitive-fallback glyph)
+    private static readonly Color ArrowHoverColor = new(224, 195, 152, 255); //#E0C398
+    private static readonly Color ArrowPressColor = new(150, 105, 70, 255);  //#966946
+    private static readonly Color DisabledColor = new(92, 65, 48, 255);      //#5C4130 — muted dark wood
+
+    //── legacy sprite cover (temporary) ──
+    //Draw real scroll.epf art over the primitive scaffold until the primitive look is finalized. Flip UseSprites to
+    //false to see the pure-primitive rendering. scroll.epf frame order: left(0,1), right(2,3), up(4,5), down(6,7),
+    //thumb(8), track(9) — each arrow pair is [normal, depressed]. The track stays primitive; the thumb sprite is
+    //stretched to the proportional thumb size.
+    private static readonly bool UseSprites = true;
+    private const string SCROLL_EPF = "scroll.epf";
+    private const int FRAME_LEFT_NORMAL = 0;
+    private const int FRAME_LEFT_ACTIVE = 1;
+    private const int FRAME_RIGHT_NORMAL = 2;
+    private const int FRAME_RIGHT_ACTIVE = 3;
+    private const int FRAME_UP_NORMAL = 4;
+    private const int FRAME_UP_ACTIVE = 5;
+    private const int FRAME_DOWN_NORMAL = 6;
+    private const int FRAME_DOWN_ACTIVE = 7;
 
     private ScrollZone ActiveZone = ScrollZone.None;
     private ScrollZone HoveredZone = ScrollZone.None;
@@ -72,6 +90,14 @@ public sealed class ScrollBarControl : UIElement
 
         ComputeGeometry(out var trackStart, out var trackEnd, out var usableTrack, out var thumbSize, out var thumbOffset);
 
+        if (UseSprites)
+            DrawSprites(spriteBatch, trackStart, trackEnd, usableTrack, thumbSize, thumbOffset);
+        else
+            DrawPrimitives(spriteBatch, trackStart, trackEnd, usableTrack, thumbSize, thumbOffset);
+    }
+
+    private void DrawPrimitives(SpriteBatch spriteBatch, int trackStart, int trackEnd, int usableTrack, int thumbSize, int thumbOffset)
+    {
         //track groove
         if (usableTrack > 0)
         {
@@ -94,6 +120,47 @@ public sealed class ScrollBarControl : UIElement
             DrawBorderClipped(spriteBatch, thumbRect, TrackBorderColor);
         }
     }
+
+    //legacy scroll.epf art over the primitive scaffold: sprite arrows + a stretched sprite thumb, primitive track behind
+    private void DrawSprites(SpriteBatch spriteBatch, int trackStart, int trackEnd, int usableTrack, int thumbSize, int thumbOffset)
+    {
+        //keep the primitive track groove behind the sprite arrows/thumb
+        if (usableTrack > 0)
+        {
+            var trackRect = MainRect(trackStart, usableTrack);
+
+            DrawRectClipped(spriteBatch, trackRect, TrackColor);
+            DrawBorderClipped(spriteBatch, trackRect, TrackBorderColor);
+        }
+
+        //arrow buttons — depressed frame only on an actual press; a disabled (non-scrollable) bar keeps the normal
+        //frame so it doesn't read as permanently pushed in
+        var decRect = MainRect(trackStart - ARROW_SIZE, ARROW_SIZE);
+        var incRect = MainRect(trackEnd, ARROW_SIZE);
+        var decPressed = ActiveZone == ScrollZone.DecArrow;
+        var incPressed = ActiveZone == ScrollZone.IncArrow;
+
+        var decFrame = IsHorizontal
+            ? (decPressed ? FRAME_LEFT_ACTIVE : FRAME_LEFT_NORMAL)
+            : (decPressed ? FRAME_UP_ACTIVE : FRAME_UP_NORMAL);
+        var incFrame = IsHorizontal
+            ? (incPressed ? FRAME_RIGHT_ACTIVE : FRAME_RIGHT_NORMAL)
+            : (incPressed ? FRAME_DOWN_ACTIVE : FRAME_DOWN_NORMAL);
+
+        DrawTexture(spriteBatch, GetFrame(decFrame), new Vector2(decRect.X, decRect.Y), Color.White);
+        DrawTexture(spriteBatch, GetFrame(incFrame), new Vector2(incRect.X, incRect.Y), Color.White);
+
+        //thumb — primitive proportional bar (a fixed grip sprite can't scale cleanly); shares the wood outline
+        if (Scrollable && (thumbSize > 0))
+        {
+            var thumbRect = MainRect(thumbOffset, thumbSize);
+
+            DrawRectClipped(spriteBatch, thumbRect, ThumbColor());
+            DrawBorderClipped(spriteBatch, thumbRect, TrackBorderColor);
+        }
+    }
+
+    private static Texture2D GetFrame(int index) => UiRenderer.Instance!.GetEpfTexture(SCROLL_EPF, index);
 
     //builds a bounds rect from a main-axis position/size; the cross axis is the fixed 16px strip
     private Rectangle MainRect(int mainPos, int mainSize)
