@@ -52,6 +52,14 @@ public static class LauncherConfig
     public static string? AssetPath { get; set; }
 
     /// <summary>
+    ///     When true, startup skips the launcher screen and auto-connects using the saved server + asset path (see
+    ///     <c>GlobalSettings.ResolveConnectionConfig</c>). Set from the launcher's "skip next time" checkbox; there is
+    ///     deliberately no in-app way to clear it — the user re-enables the launcher by editing this flag to
+    ///     <c>false</c> (or deleting it) in <see cref="FilePath" />. Persisted across launches.
+    /// </summary>
+    public static bool SuppressLauncher { get; set; }
+
+    /// <summary>
     ///     Window size as an integer multiple of the 640×480 virtual resolution (e.g. 2 = 1280×960). Null when the user
     ///     has never chosen one, in which case the client falls back to its default multiplier. Persisted across launches.
     /// </summary>
@@ -97,6 +105,7 @@ public static class LauncherConfig
         SelectedServer = model?.SelectedServer;
         AssetPath = model?.AssetPath;
         WindowMultiplier = model?.WindowMultiplier;
+        SuppressLauncher = model?.SuppressLauncher ?? false;
 
         //migrate the pre-server-list shape: a single Host/Port becomes a list entry
         if (!string.IsNullOrWhiteSpace(model?.Host))
@@ -147,7 +156,8 @@ public static class LauncherConfig
                 Servers = Servers,
                 SelectedServer = SelectedServer,
                 AssetPath = AssetPath,
-                WindowMultiplier = WindowMultiplier
+                WindowMultiplier = WindowMultiplier,
+                SuppressLauncher = SuppressLauncher
             };
 
             File.WriteAllText(FilePath, JsonSerializer.Serialize(model, SerializerOptions));
@@ -199,6 +209,7 @@ public static class LauncherConfig
         public string? SelectedServer { get; set; }
         public string? AssetPath { get; set; }
         public int? WindowMultiplier { get; set; }
+        public bool SuppressLauncher { get; set; }
 
         //legacy (pre-server-list) fields, migrated into Servers on load
         public string? Host { get; set; }

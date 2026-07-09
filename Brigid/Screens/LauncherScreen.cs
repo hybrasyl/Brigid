@@ -84,6 +84,7 @@ public sealed class LauncherScreen : IScreen
     private Rectangle ResolutionButton;
     private Rectangle AssetButton;
     private Rectangle ConnectButton;
+    private Rectangle SkipLauncherRow;
     private Rectangle AddRow;
     private Rectangle SaveButton;
     private Rectangle CancelButton;
@@ -185,6 +186,9 @@ public sealed class LauncherScreen : IScreen
         AssetButton = new Rectangle(Panel.Right - 100, Panel.Y + 150, 80, ROW_HEIGHT);
         ResolutionButton = new Rectangle(Panel.X + 90, Panel.Y + 186, Panel.Right - 20 - (Panel.X + 90), ROW_HEIGHT);
         ConnectButton = new Rectangle(Panel.Right - 120, Panel.Bottom - 40, 100, 26);
+
+        //clickable box + label at the bottom-left; toggles LauncherConfig.SuppressLauncher
+        SkipLauncherRow = new Rectangle(Panel.X + 20, Panel.Bottom - 34, 210, 16);
 
         DropdownRows.Clear();
         ResolutionRows.Clear();
@@ -297,6 +301,14 @@ public sealed class LauncherScreen : IScreen
         if (ResolutionButton.Contains(cursor))
         {
             CurrentMode = Mode.ResolutionDropdown;
+
+            return;
+        }
+
+        if (SkipLauncherRow.Contains(cursor))
+        {
+            LauncherConfig.SuppressLauncher = !LauncherConfig.SuppressLauncher;
+            LauncherConfig.Save();
 
             return;
         }
@@ -523,6 +535,7 @@ public sealed class LauncherScreen : IScreen
 
         DrawAssetRow();
         DrawResolutionRow();
+        DrawSkipLauncherCheckbox();
         DrawButton(ConnectButton, "Connect", CanConnect(), new Color(60, 110, 70), new Color(110, 180, 120));
 
         if (CurrentMode == Mode.Dropdown)
@@ -573,6 +586,18 @@ public sealed class LauncherScreen : IScreen
             DrawClippedFront("not a Dark Ages data folder (need khanpal.dat + legend.dat)", pathBox, BadColor, HINT_SIZE);
             DrawButton(AssetButton, "Browse", true, new Color(60, 70, 92), FocusBorder);
         }
+    }
+
+    private void DrawSkipLauncherCheckbox()
+    {
+        var box = new Rectangle(SkipLauncherRow.X, SkipLauncherRow.Y, 14, 14);
+        FillRect(box, FieldFill);
+        BorderRect(box, LauncherConfig.SuppressLauncher ? FocusBorder : FieldBorder);
+
+        if (LauncherConfig.SuppressLauncher)
+            FillRect(new Rectangle(box.X + 3, box.Y + 3, 8, 8), OkColor);
+
+        DrawText("Skip this launcher next time", new Vector2(box.Right + 8, box.Y - 2), LabelColor, HINT_SIZE);
     }
 
     private void DrawDropdownList()
