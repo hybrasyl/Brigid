@@ -67,14 +67,16 @@ public sealed class ScrollView : UIPanel
     }
 
     /// <summary>
-    ///     Content width available to child surfaces — the panel width minus the vertical bar strip.
+    ///     Content width available to child surfaces — the panel width minus the vertical bar strip, or the full width
+    ///     when the bar is hidden (e.g. a non-scrolling style).
     /// </summary>
-    public int ContentWidth => Orientation == ScrollOrientation.Horizontal ? Width : Width - ScrollBarControl.DEFAULT_WIDTH;
+    public int ContentWidth => (Orientation == ScrollOrientation.Vertical) && Bar.Visible ? Width - ScrollBarControl.DEFAULT_WIDTH : Width;
 
     /// <summary>
-    ///     Content height available to child surfaces — the panel height minus the horizontal bar strip.
+    ///     Content height available to child surfaces — the panel height minus the horizontal bar strip, or the full
+    ///     height when the bar is hidden.
     /// </summary>
-    public int ContentHeight => Orientation == ScrollOrientation.Horizontal ? Height - ScrollBarControl.DEFAULT_WIDTH : Height;
+    public int ContentHeight => (Orientation == ScrollOrientation.Horizontal) && Bar.Visible ? Height - ScrollBarControl.DEFAULT_WIDTH : Height;
 
     /// <summary>
     ///     Binds the scrollable surface and does an initial <see cref="Sync" />. Call once after construction.
@@ -116,10 +118,15 @@ public sealed class ScrollView : UIPanel
             return;
 
         Layout();
-        Model.Step = Source.Step;
-        Model.SetMetrics(Source.ContentExtent, Source.ViewportExtent);
+        Model.Configure(Source);
         RefreshBar();
     }
+
+    /// <summary>
+    ///     Jumps to the top/start of the content. Call on a fresh show so a reused view doesn't retain the prior
+    ///     scroll position.
+    /// </summary>
+    public void ScrollToStart() => Model.ScrollToStart();
 
     public override void OnMouseScroll(MouseScrollEvent e)
     {

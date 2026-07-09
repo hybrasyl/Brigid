@@ -73,6 +73,27 @@ public sealed class ScrollModel
     }
 
     /// <summary>
+    ///     Pulls <see cref="Step" /> and the metrics straight off a source in one call — the single bind path shared by
+    ///     <see cref="ScrollView" /> and bare-model consumers, so no site forgets to copy <see cref="Step" />.
+    /// </summary>
+    public bool Configure(IScrollSource source)
+    {
+        Step = source.Step;
+
+        return SetMetrics(source.ContentExtent, source.ViewportExtent);
+    }
+
+    /// <summary>
+    ///     Jumps to the start of the content (offset 0). Returns true if it moved.
+    /// </summary>
+    public bool ScrollToStart() => ScrollTo(0);
+
+    /// <summary>
+    ///     Jumps to the end of the content (offset <see cref="Max" />). Returns true if it moved.
+    /// </summary>
+    public bool ScrollToEnd() => ScrollTo(Max);
+
+    /// <summary>
     ///     Moves to an absolute offset, clamped to <c>[0, Max]</c>. Returns true if the offset moved.
     /// </summary>
     public bool ScrollTo(int offset)
