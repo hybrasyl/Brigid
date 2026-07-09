@@ -115,8 +115,7 @@ public sealed class ScrollView : UIPanel
             return;
 
         Layout();
-        Model.Configure(Source);
-        Binder.Refresh();
+        Model.Configure(Source); //fires MetricsChanged → the binder refreshes the bar
     }
 
     /// <summary>

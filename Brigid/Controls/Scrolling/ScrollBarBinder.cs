@@ -27,10 +27,13 @@ public sealed class ScrollBarBinder
         Bar = bar;
         Bar.OnValueChanged += OnBarValueChanged;
         Model.Changed += OnModelChanged;
+        //auto-refresh the thumb geometry whenever metrics change, so callers can't forget to sync the bar
+        Model.MetricsChanged += Refresh;
     }
 
     /// <summary>
-    ///     Re-pushes the full model state (extent / viewport / max / offset) onto the bar. Call after the metrics change.
+    ///     Re-pushes the full model state (extent / viewport / max / offset) onto the bar. Runs automatically on every
+    ///     <see cref="ScrollModel.SetMetrics" />; call directly only to force a resync outside a metrics change.
     /// </summary>
     public void Refresh()
     {

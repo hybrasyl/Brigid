@@ -198,6 +198,30 @@ public sealed class ScrollModelTests
     }
 
     [Fact]
+    public void SetMetrics_RaisesMetricsChanged()
+    {
+        var m = new ScrollModel();
+        var fires = 0;
+        m.MetricsChanged += () => fires++;
+
+        m.SetMetrics(100, 10);
+
+        Assert.Equal(1, fires);
+    }
+
+    [Fact]
+    public void Configure_RaisesMetricsChanged()
+    {
+        var m = new ScrollModel();
+        var fires = 0;
+        m.MetricsChanged += () => fires++;
+
+        m.Configure(new FakeSource(extent: 50, viewport: 10, step: 1));
+
+        Assert.Equal(1, fires);
+    }
+
+    [Fact]
     public void Configure_CopiesStepAndMetrics()
     {
         var m = Model(100, 10);

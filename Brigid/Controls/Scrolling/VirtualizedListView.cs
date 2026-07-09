@@ -172,8 +172,7 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
     private void SyncMetrics()
     {
         var extent = Items.Count + (HasTrailingRow ? 1 : 0);
-        Model.SetMetrics(extent, MaxVisibleRows);
-        Binder.Refresh();
+        Model.SetMetrics(extent, MaxVisibleRows); //fires MetricsChanged → the binder refreshes the bar
         Dirty = true;
     }
 

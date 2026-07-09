@@ -39,9 +39,6 @@ public sealed class BoardListControl : PrefabPanel
         if (QuitButton is not null)
             QuitButton.Clicked += Close;
 
-        if (ViewButton is not null)
-            ViewButton.Clicked += () => ActivateBoard(ListView.SelectedIndex);
-
         var boardListRect = GetRect("BoardList");
 
         ListView = new VirtualizedListView<(ushort BoardId, string Name), UILabel>(
@@ -64,6 +61,9 @@ public sealed class BoardListControl : PrefabPanel
         ListView.SelectionChanged += _ => UpdateButtonStates();
         ListView.ItemActivated += ActivateBoard;
         AddChild(ListView);
+
+        if (ViewButton is not null)
+            ViewButton.Clicked += () => ActivateBoard(ListView.SelectedIndex);
     }
 
     private static void BindRow(UILabel label, VirtualRow<(ushort BoardId, string Name)> row)

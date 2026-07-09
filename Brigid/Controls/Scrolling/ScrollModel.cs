@@ -61,6 +61,12 @@ public sealed class ScrollModel
     public event ScrollOffsetChangedHandler? Changed;
 
     /// <summary>
+    ///     Raised whenever <see cref="SetMetrics" /> runs (content extent / viewport updated). A bound bar listens to
+    ///     this so its thumb geometry can never drift from the model — callers just update metrics, no manual refresh.
+    /// </summary>
+    public event ScrollMetricsChangedHandler? MetricsChanged;
+
+    /// <summary>
     ///     Updates the content/viewport metrics (e.g. after the item list or the visible-row count changes) and
     ///     re-clamps <see cref="Offset" /> into the new range. Returns true if the offset was pulled in as a result.
     /// </summary>
@@ -69,7 +75,10 @@ public sealed class ScrollModel
         Extent = Math.Max(0, extent);
         Viewport = Math.Max(0, viewport);
 
-        return Reclamp();
+        var moved = Reclamp();
+        MetricsChanged?.Invoke();
+
+        return moved;
     }
 
     /// <summary>
