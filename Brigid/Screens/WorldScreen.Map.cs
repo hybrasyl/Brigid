@@ -232,6 +232,36 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>
+    ///     Resolves the tile whose foreground sprite a double-click targets. A board/signpost sprite is anchored at its
+    ///     tile and drawn tall, so it visually overhangs the tiles up-and-left of the anchor; a click landing on that
+    ///     overhang should still hit the board. Probes the clicked (anchor) tile first — so an exact click is unchanged —
+    ///     then the three down-right neighbours the sprite can cover, and returns the first tile that carries a foreground.
+    /// </summary>
+    private bool TryResolveForegroundTile(int tileX, int tileY, out int foregroundX, out int foregroundY)
+    {
+        ReadOnlySpan<(int Dx, int Dy)> footprint = [(0, 0), (1, 0), (0, 1), (1, 1)];
+
+        foreach (var (dx, dy) in footprint)
+        {
+            var tx = tileX + dx;
+            var ty = tileY + dy;
+
+            if (TileHasForeground(tx, ty))
+            {
+                foregroundX = tx;
+                foregroundY = ty;
+
+                return true;
+            }
+        }
+
+        foregroundX = 0;
+        foregroundY = 0;
+
+        return false;
+    }
+
+    /// <summary>
     ///     True when the foreground is a walk-blocking wall. Open door tile IDs are treated as walkable even when SOTP still
     ///     has their Wall bit set — <see cref="DoorTable" /> is the source of truth for "is this foreground a known open
     ///     door?" because <c>sotp.dat</c> is inconsistent about clearing the flag on some open variants.
