@@ -20,6 +20,9 @@ public sealed class ArticleListControl : PrefabPanel
     private const int POSTID_CHARS = 5;
     private const int AUTHOR_CHARS = 14; //wide enough for system authors like "Mundane Gossip" (14) so the date stays aligned
     private const int DATE_CHARS = 5;
+    //row-block alignment to the board art, captured from the in-client nudge tool (2px left, 4px up)
+    private const int ROW_OFFSET_X = -2;
+    private const int ROW_OFFSET_Y = -4;
     private const string SPACER5 = "     ";
     private const string SPACER3 = "   ";
 
@@ -124,8 +127,9 @@ public sealed class ArticleListControl : PrefabPanel
         {
             RowLabels[i] = new UILabel
             {
-                X = ArticleListRect.X,
-                Y = ArticleListRect.Y + i * ROW_HEIGHT,
+                Name = $"Article{i}",
+                X = ArticleListRect.X + ROW_OFFSET_X,
+                Y = ArticleListRect.Y + ROW_OFFSET_Y + i * ROW_HEIGHT,
                 Width = usableWidth,
                 Height = ROW_HEIGHT,
                 PaddingLeft = 0,
@@ -348,9 +352,9 @@ public sealed class ArticleListControl : PrefabPanel
         if ((localX < 0) || (localX >= ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH) || (localY < 0) || (localY >= ArticleListRect.Height))
             return;
 
-        var row = localY / ROW_HEIGHT;
+        var row = (localY - ROW_OFFSET_Y) / ROW_HEIGHT;
 
-        if (row >= MaxVisibleRows)
+        if ((row < 0) || (row >= MaxVisibleRows))
             return;
 
         var entryIndex = ScrollOffset + row;
@@ -377,9 +381,9 @@ public sealed class ArticleListControl : PrefabPanel
         if ((localX < 0) || (localX >= ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH) || (localY < 0) || (localY >= ArticleListRect.Height))
             return;
 
-        var row = localY / ROW_HEIGHT;
+        var row = (localY - ROW_OFFSET_Y) / ROW_HEIGHT;
 
-        if (row >= MaxVisibleRows)
+        if ((row < 0) || (row >= MaxVisibleRows))
             return;
 
         var entryIndex = ScrollOffset + row;
