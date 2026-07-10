@@ -361,11 +361,74 @@ public sealed class MailListControl : PrefabPanel
 
     public override void OnKeyDown(KeyDownEvent e)
     {
-        if (e.Key == Keys.Escape)
+        switch (e.Key)
         {
-            OnUp?.Invoke();
-            e.Handled = true;
+            case Keys.Escape:
+                OnUp?.Invoke();
+                e.Handled = true;
+
+                break;
+            case Keys.Up:
+                MoveSelection(-1);
+                e.Handled = true;
+
+                break;
+            case Keys.Down:
+                MoveSelection(1);
+                e.Handled = true;
+
+                break;
+            case Keys.Enter:
+                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
+                    OnViewPost?.Invoke(Entries[SelectedIndex].PostId);
+
+                e.Handled = true;
+
+                break;
+            case Keys.Delete:
+                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
+                    OnDeletePost?.Invoke(Entries[SelectedIndex].PostId);
+
+                e.Handled = true;
+
+                break;
         }
+    }
+
+    //keyboard row navigation: move the selection, keeping it on screen and paging older posts if it reaches the bottom.
+    private void MoveSelection(int delta)
+    {
+        if (Entries.Count == 0)
+            return;
+
+        var newIndex = SelectedIndex < 0
+            ? delta > 0 ? 0 : Entries.Count - 1
+            : Math.Clamp(SelectedIndex + delta, 0, Entries.Count - 1);
+
+        SelectedIndex = newIndex;
+        EnsureVisible(newIndex);
+        DataVersion++;
+        UpdateButtonStates();
+    }
+
+    private void EnsureVisible(int index)
+    {
+        if (index < ScrollOffset)
+            SetScrollOffset(index);
+        else if (index >= ScrollOffset + MaxVisibleRows)
+            SetScrollOffset(index - MaxVisibleRows + 1);
+    }
+
+    private void SetScrollOffset(int offset)
+    {
+        var clamped = Math.Clamp(offset, 0, ScrollBar.MaxValue);
+
+        if (clamped == ScrollOffset)
+            return;
+
+        ScrollOffset = clamped;
+        ScrollBar.Value = clamped;
+        MaybeRequestOlder();
     }
 
     public override void OnMouseScroll(MouseScrollEvent e)
