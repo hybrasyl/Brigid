@@ -21,6 +21,10 @@
         </EmbeddedResource>
     </ItemGroup>
 
+    <ItemGroup>
+        <InternalsVisibleTo Include="Brigid.Tests" />
+    </ItemGroup>
+
     <!-- Native SDL2_mixer binaries per runtime; copied to bin/.../runtimes/{rid}/native/ so the
          standard .NET native-DLL probe picks them up via [LibraryImport("SDL2_mixer")].
          SDL2.dll itself is provided by MonoGame.Framework.DesktopGL's own runtimes payload. -->

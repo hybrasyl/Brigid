@@ -1,7 +1,6 @@
 #region
 using System.Buffers.Binary;
 using System.IO.Compression;
-using System.Reflection;
 using System.Runtime.InteropServices;
 using Brigid.Collections;
 using DALib.Utility;
@@ -10,6 +9,7 @@ using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
 using Brigid.Systems;
+using Brigid.Utilities;
 using Chaos.DarkAges.Definitions;
 using DALib.Cryptography;
 using DALib.Extensions;
@@ -32,35 +32,17 @@ public sealed class ChaosGame : Game
     //the window opens at this integer multiple of the virtual resolution (2 → 1280×960); the F-key cycle continues from here
     private const int DEFAULT_WINDOW_MULTIPLIER = 2;
 
-    //Brigid's app version (Nerdbank-generated, git-hash stripped), resolved once for the window title
-    private static readonly string AppVersion = ResolveAppVersion();
-
-    private static string ResolveAppVersion()
-    {
-        var info = typeof(ChaosGame).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-
-        //keep only the leading numeric version: drop "+gitHash" metadata and any "-prerelease" tag (feature-branch
-        //builds), then trim to a clean Major.Minor.Patch (Nerdbank tacks its git-height onto a 4th component)
-        if (!string.IsNullOrEmpty(info))
-        {
-            var core = info.Split('+', '-')[0];
-
-            return Version.TryParse(core, out var v) ? $"{v.Major}.{v.Minor}.{v.Build}" : core;
-        }
-
-        return typeof(ChaosGame).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-    }
-
     /// <summary>
     ///     Sets the window title to <c>Brigid {version}</c>, with <c> - {server}</c> appended once a server is
     ///     selected. The server suffix reuses <see cref="ConnectionManager.ServerName" /> — the friendly name the
     ///     lobby resolves (the same value the HUD's SZ_SERVER label shows), so retail reads "Dark Ages" and
-    ///     Hybrasyl reads "Hybrasyl" without a duplicate host→name mapping here.
+    ///     Hybrasyl reads "Hybrasyl" without a duplicate host→name mapping here. Driven by <see cref="ConnectionManager.ServerNameChanged" />.
     /// </summary>
-    public void UpdateWindowTitle()
+    private void UpdateWindowTitle()
     {
         var server = Connection.ServerName;
-        Window.Title = string.IsNullOrWhiteSpace(server) ? $"Brigid {AppVersion}" : $"Brigid {AppVersion} - {server}";
+        var version = VersionInfo.Display;
+        Window.Title = string.IsNullOrWhiteSpace(server) ? $"Brigid {version}" : $"Brigid {version} - {server}";
     }
 
     /// <summary>
@@ -214,6 +196,8 @@ public sealed class ChaosGame : Game
         InactiveSleepTime = TimeSpan.Zero;
 
         Connection = new ConnectionManager();
+        //the friendly server name drives the window-title suffix; refresh from the write itself so no caller has to remember
+        Connection.ServerNameChanged += UpdateWindowTitle;
         Connection.OnMetaData += HandleMetaData;
         Connection.OnWorldEntryComplete += () => Connection.SendMetaDataRequest(MetaDataRequestType.AllCheckSums);
         Connection.StateChanged += OnConnectionStateChanged;

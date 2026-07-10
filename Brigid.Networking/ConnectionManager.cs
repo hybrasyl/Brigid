@@ -52,9 +52,28 @@ public sealed class ConnectionManager : IDisposable
     public int PlayerY { get; private set; }
 
     /// <summary>
-    ///     The name of the server the client is currently connected to.
+    ///     The friendly name of the server the client is currently connected to (e.g. "Dark Ages", "Hybrasyl"). Raises
+    ///     <see cref="ServerNameChanged" /> on change so derived surfaces (the window title) refresh from the write
+    ///     itself rather than each write site having to remember to poke them — any future writer stays correct.
     /// </summary>
-    public string ServerName { get; set; } = string.Empty;
+    public string ServerName
+    {
+        get;
+        set
+        {
+            if (field == value)
+                return;
+
+            field = value;
+            ServerNameChanged?.Invoke();
+        }
+    } = string.Empty;
+
+    /// <summary>
+    ///     Raised whenever <see cref="ServerName" /> changes. Fired on the thread that performs the write (today the
+    ///     lobby/server-select flow on the game-loop thread); subscribers touching UI must not block.
+    /// </summary>
+    public event Action? ServerNameChanged;
 
     /// <summary>
     ///     The current phase of the connection lifecycle. Fires <see cref="StateChanged" /> on transitions.
