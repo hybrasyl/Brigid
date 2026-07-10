@@ -758,7 +758,9 @@ public static class WorldState
                                            m.Author,
                                            m.Month,
                                            m.Day,
-                                           m.Subject,
+                                           //subjects can carry embedded line breaks (e.g. retail post 306); flatten them
+                                           //to a single space so each list row stays on one line like retail.
+                                           m.Subject.ReplaceLineEndings(" "),
                                            m.Highlight))
                                        .ToList();
 

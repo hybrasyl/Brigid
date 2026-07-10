@@ -44,8 +44,9 @@ public sealed class BoardListControl : PrefabPanel
         ListView = new VirtualizedListView<(ushort BoardId, string Name), UILabel>(
             boardListRect,
             ROW_HEIGHT,
-            w => new UILabel
+            (w, i) => new UILabel
             {
+                Name = $"Board{i}",
                 Width = w,
                 Height = ROW_HEIGHT,
                 PaddingLeft = 0,

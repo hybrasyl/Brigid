@@ -8,13 +8,12 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Brigid.Controls.Scrolling;
 
 /// <summary>
-///     What a windowed row slot should display: a real <see cref="VirtualRowKind.Item" />, the trailing virtual row
-///     (e.g. "Load More"), or nothing (<see cref="VirtualRowKind.Empty" />).
+///     What a windowed row slot should display: a real <see cref="VirtualRowKind.Item" />, or nothing
+///     (<see cref="VirtualRowKind.Empty" />).
 /// </summary>
 public enum VirtualRowKind
 {
     Item,
-    Trailing,
     Empty
 }
 
@@ -36,7 +35,8 @@ public readonly struct VirtualRow<TItem>
 ///     board/mail/article/world-list panels each used to hand-roll. The consumer supplies a row factory and a bind
 ///     callback; selection + click/double-click activation are opt-in (<see cref="Selectable" />) for list panels whose
 ///     rows are passive labels, and left off for panels whose rows handle their own input (e.g. world-list whisper).
-///     An optional trailing virtual row models the "Load More" affordance.
+///     Reaching the last item (by wheel, bar, or keyboard) raises <see cref="ReachedEnd" /> — the retail-style
+///     scroll-back paging hook that replaces any client-invented "Load More" affordance.
 ///     <para>
 ///         Rows are held directly (not inside a <see cref="ScrollView" />) so clicks on passive rows bubble to this
 ///         panel's hit-test rather than being absorbed by an intermediate container. The bar is kept always-visible
@@ -46,8 +46,6 @@ public readonly struct VirtualRow<TItem>
 public sealed class VirtualizedListView<TItem, TRow> : UIPanel
     where TRow : UIElement
 {
-    private const int TrailingRowHit = -2;
-
     private readonly ScrollBarControl Bar;
     private readonly ScrollBarBinder Binder;
     private readonly Action<TRow, VirtualRow<TItem>> BindRow;
@@ -74,26 +72,31 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
     /// <summary>When true, the list tracks selection and raises the click/activate events on passive rows.</summary>
     public bool Selectable { get; init; }
 
-    /// <summary>When true, one extra virtual "trailing" row follows the last item (e.g. "Load More").</summary>
-    public bool HasTrailingRow { get; private set; }
-
     public int SelectedIndex { get; private set; } = -1;
 
     public int ItemCount => Items.Count;
 
     public event ListRowHandler? SelectionChanged;
     public event ListRowHandler? ItemActivated;
-    public event ListTrailingHandler? TrailingActivated;
+
+    /// <summary>
+    ///     Raised whenever the scroll position reaches the last item (the content is scrolled to the bottom). Boards/mail
+    ///     use this to request the next older page, mirroring retail's continuous scroll-back paging. Not raised when the
+    ///     content fits (nothing to scroll) or on a no-op scroll at the bottom — a consumer re-arms it by growing the item
+    ///     list, which moves the bottom past the current offset.
+    /// </summary>
+    public event Action? ReachedEnd;
 
     /// <param name="bounds">List bounds within the parent, including the bar strip.</param>
-    /// <param name="rowFactory">Builds one pooled row, given the content width it should size to.</param>
+    /// <param name="rowFactory">Builds one pooled row, given the content width it should size to and its pool index (for
+    ///     naming — <c>Name</c> is init-only so a row can only be named in its factory initializer).</param>
     /// <param name="bindRow">Configures a pooled row for a windowed slot (text/colour/visibility live here).</param>
     /// <param name="rowInsetX">Left inset for rows inside the content area.</param>
     /// <param name="rowInsetRight">Extra right inset between the rows and the bar.</param>
     public VirtualizedListView(
         Rectangle bounds,
         int rowHeight,
-        Func<int, TRow> rowFactory,
+        Func<int, int, TRow> rowFactory,
         Action<TRow, VirtualRow<TItem>> bindRow,
         int rowInsetX = 0,
         int rowInsetRight = 0)
@@ -117,14 +120,22 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
         };
 
         Binder = new ScrollBarBinder(Model, Bar);
-        Model.Changed += _ => Dirty = true;
+
+        Model.Changed += _ =>
+        {
+            Dirty = true;
+
+            if ((Model.Max > 0) && (Model.Offset >= Model.Max))
+                ReachedEnd?.Invoke();
+        };
+
         AddChild(Bar);
 
         Rows = new TRow[MaxVisibleRows];
 
         for (var i = 0; i < MaxVisibleRows; i++)
         {
-            var row = rowFactory(ContentWidth);
+            var row = rowFactory(ContentWidth, i);
             row.X = rowInsetX;
             row.Y = i * rowHeight;
             Rows[i] = row;
@@ -136,10 +147,9 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
     ///     Replaces the backing items, re-derives scroll metrics, and (by default) resets the scroll position to the
     ///     top. Selection is left untouched — callers reset it explicitly when the semantics call for it.
     /// </summary>
-    public void SetItems(IReadOnlyList<TItem> items, bool hasTrailingRow = false, bool resetScroll = true)
+    public void SetItems(IReadOnlyList<TItem> items, bool resetScroll = true)
     {
         Items = items;
-        HasTrailingRow = hasTrailingRow;
 
         if (resetScroll)
             Model.ScrollToStart();
@@ -149,15 +159,9 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
 
     /// <summary>
     ///     Re-derives scroll metrics and repaints after an in-place edit that kept the same items reference (e.g. a
-    ///     removed or appended entry, or a page appended). Optionally updates whether the trailing row shows.
+    ///     removed or appended entry, or a page appended).
     /// </summary>
-    public void Refresh(bool? hasTrailingRow = null)
-    {
-        if (hasTrailingRow.HasValue)
-            HasTrailingRow = hasTrailingRow.Value;
-
-        SyncMetrics();
-    }
+    public void Refresh() => SyncMetrics();
 
     /// <summary>Sets the selected item index (clamped to a valid item, or cleared to -1).</summary>
     public void SetSelectedIndex(int index)
@@ -169,10 +173,25 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
     /// <summary>Scrolls to an absolute item offset (used e.g. to centre the local player in the world list).</summary>
     public void ScrollTo(int offset) => Model.ScrollTo(offset);
 
+    /// <summary>
+    ///     Scrolls the minimum amount needed to bring <paramref name="index" /> into the visible window. Driving the
+    ///     selection to the last item scrolls to the bottom, which raises <see cref="ReachedEnd" /> — so keyboard
+    ///     navigation and the mouse wheel share one paging trigger.
+    /// </summary>
+    public void EnsureVisible(int index)
+    {
+        if ((index < 0) || (index >= Items.Count))
+            return;
+
+        if (index < Model.Offset)
+            Model.ScrollTo(index);
+        else if (index >= Model.Offset + MaxVisibleRows)
+            Model.ScrollTo(index - MaxVisibleRows + 1);
+    }
+
     private void SyncMetrics()
     {
-        var extent = Items.Count + (HasTrailingRow ? 1 : 0);
-        Model.SetMetrics(extent, MaxVisibleRows); //fires MetricsChanged → the binder refreshes the bar
+        Model.SetMetrics(Items.Count, MaxVisibleRows); //fires MetricsChanged → the binder refreshes the bar
         Dirty = true;
     }
 
@@ -206,9 +225,7 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
                     Index = entryIndex,
                     Selected = Selectable && (entryIndex == SelectedIndex)
                 }
-                : HasTrailingRow && (entryIndex == Items.Count)
-                    ? new VirtualRow<TItem> { Kind = VirtualRowKind.Trailing }
-                    : new VirtualRow<TItem> { Kind = VirtualRowKind.Empty };
+                : new VirtualRow<TItem> { Kind = VirtualRowKind.Empty };
 
             BindRow(Rows[i], slot);
         }
@@ -240,9 +257,7 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
 
         var index = HitRow(e.ScreenX, e.ScreenY);
 
-        if (index == TrailingRowHit)
-            TrailingActivated?.Invoke();
-        else if (index >= 0)
+        if (index >= 0)
         {
             SelectedIndex = index;
             Dirty = true;
@@ -274,8 +289,8 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
         e.Handled = true;
     }
 
-    //real item index, TrailingRowHit for the trailing row, or -1 for no row. Bounds match the legacy panels (full
-    //rect width, though the bar child intercepts strip clicks before they reach here).
+    //real item index, or -1 for no row. Bounds match the legacy panels (full rect width, though the bar child
+    //intercepts strip clicks before they reach here).
     private int HitRow(int screenX, int screenY)
     {
         var localX = screenX - ScreenX;
@@ -290,9 +305,6 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
             return -1;
 
         var entryIndex = Model.Offset + row;
-
-        if (HasTrailingRow && (entryIndex == Items.Count))
-            return TrailingRowHit;
 
         return entryIndex < Items.Count ? entryIndex : -1;
     }
