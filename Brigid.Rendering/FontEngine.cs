@@ -38,8 +38,9 @@ public sealed class FontEngine
     //selectable UI faces, cycled in order. The first is the default/required; later entries load only if present.
     private static readonly (string Name, string File)[] FaceDefs =
     [
-        ("Crimson Pro", "CrimsonPro-SemiBold.ttf"),
-        ("Noto Sans Mono", "NotoSansMono-Regular.ttf")
+        ("Noto Sans Mono", "NotoSansMono-Regular.ttf"),
+        ("Anonymous Mono", "AnonymousPro-Regular.ttf"),
+        ("Iosevka Mono", "IosevkaCharonMono-Regular.ttf")
     ];
 
     //optional fallback faces for codepoints the primaries lack (CJK etc.), added to every face. Loaded if present.
