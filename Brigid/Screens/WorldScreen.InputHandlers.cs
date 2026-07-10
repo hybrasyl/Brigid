@@ -1278,13 +1278,16 @@ public sealed partial class WorldScreen
                         } else
                             Game.Connection.ClickEntity(entity.Id);
                     }
-                } else if (TryResolveForegroundTile(tileX, tileY, out var fgX, out var fgY))
-                    //retail UX: messageboard signposts open on double-click. Signposts are tile-attached
-                    //(not broadcast as entities) so GetEntityAtScreen returns null. A tall signpost sprite
-                    //overhangs the tiles up-and-left of its anchor, so accept a click on the anchor or the tiles
-                    //it visually covers. Send the 7-byte coord click with the floor-aligned flag so retail's
+                } else if (MapRenderer.TryHitTestForeground(MapFile, Camera, e.ScreenX - viewport.X, e.ScreenY - viewport.Y, out var fgX, out var fgY))
+                    //retail UX: messageboard signposts open on double-click. Signposts are tile-attached (not broadcast
+                    //as entities) so GetEntityAtScreen returns null. Resolve the click to whichever foreground SPRITE it
+                    //lands on — a tall board is drawn bottom-aligned and overhangs the tiles above it, which may be
+                    //non-passable walls — then send the 7-byte coord click with the floor-aligned flag so retail's
                     //signpost dispatch resolves.
                     Game.Connection.ClickFloorTile(fgX, fgY);
+                else if (TileHasForeground(tileX, tileY))
+                    //fallback: a direct hit on a foreground tile whose sprite bbox didn't cover the exact click point
+                    Game.Connection.ClickFloorTile(tileX, tileY);
             }
 
             e.Handled = true;
