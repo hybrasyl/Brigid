@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Scrolling;
 using Brigid.Data;
 using Brigid.Extensions;
 using DALib.Drawing;
@@ -40,6 +41,10 @@ public sealed class NotepadControl : UIPanel
 
     private readonly UITextBox ContentBox;
     private readonly UILabel ReadonlyLabel;
+
+    //bare scroll model (no visible bar) driving the readonly label — the editable box scrolls itself
+    private readonly ScrollModel ReadonlyScroll = new();
+    private readonly LabelScrollSource ReadonlySource;
     private byte EditSlot;
     private bool IsEditable;
 
@@ -77,6 +82,9 @@ public sealed class NotepadControl : UIPanel
             Visible = false
         };
         AddChild(ReadonlyLabel);
+
+        ReadonlySource = new LabelScrollSource(ReadonlyLabel);
+        ReadonlyScroll.Changed += ReadonlySource.ApplyOffset;
     }
 
     public void Close()
@@ -328,8 +336,9 @@ public sealed class NotepadControl : UIPanel
         ConfigureSize(notepadType, width, height);
 
         ReadonlyLabel.Text = NormalizeMessage(message);
-        ReadonlyLabel.ScrollOffset = 0;
         ReadonlyLabel.Visible = true;
+        ReadonlyScroll.Configure(ReadonlySource);
+        ReadonlyScroll.ScrollToStart();
 
         ContentBox.Visible = false;
         ContentBox.IsFocused = false;
@@ -401,16 +410,11 @@ public sealed class NotepadControl : UIPanel
 
     public override void OnMouseScroll(MouseScrollEvent e)
     {
-        if (!IsEditable && (ReadonlyLabel.ContentHeight > ReadonlyLabel.Height))
-        {
-            var maxScroll = Math.Max(0, ReadonlyLabel.ContentHeight - ReadonlyLabel.Height);
+        //editable mode: the UITextBox handles its own wheel; readonly: drive the bare model (line-granular)
+        if (IsEditable || !ReadonlyScroll.CanScroll)
+            return;
 
-            ReadonlyLabel.ScrollOffset = Math.Clamp(
-                ReadonlyLabel.ScrollOffset - e.Delta * TextRenderer.CHAR_HEIGHT,
-                0,
-                maxScroll);
-
-            e.Handled = true;
-        }
+        ReadonlyScroll.WheelBy(e.Delta);
+        e.Handled = true;
     }
 }

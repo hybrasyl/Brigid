@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -16,11 +17,14 @@ namespace Brigid.Controls.World.Hud.Panel;
 public sealed class SystemMessagePanel : ExpandablePanel
 {
     private const int GLYPH_HEIGHT = 12;
+    private readonly ScrollBarControl Bar;
+    private readonly ScrollBarBinder Binder;
     private readonly IReadOnlyList<Chat.OrangeBarMessage> History;
+    //Offset is lines-from-bottom (0 = newest at bottom); Inverted maps wheel/page + the bar thumb accordingly
+    private readonly ScrollModel Model = new() { Inverted = true };
     private readonly Rectangle NormalDisplayBounds;
     private readonly int PanelOriginX;
     private readonly int PanelOriginY;
-    private readonly ScrollBarControl ScrollBar;
 
     private Rectangle DisplayBounds;
     private Rectangle ExpandedDisplayBounds;
@@ -29,7 +33,6 @@ public sealed class SystemMessagePanel : ExpandablePanel
     private int MaxVisibleLines;
     private int RenderedHistoryCount = -1;
     private int RenderedScrollOffset = -1;
-    private int ScrollOffset;
 
     public SystemMessagePanel(Rectangle displayBounds, Rectangle panelBounds, IReadOnlyList<Chat.OrangeBarMessage> history)
     {
@@ -66,20 +69,17 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
         var relY = displayBounds.Y - panelBounds.Y;
 
-        ScrollBar = new ScrollBarControl
+        Bar = new ScrollBarControl
         {
             X = relX + displayBounds.Width - ScrollBarControl.DEFAULT_WIDTH,
             Y = relY,
             Height = displayBounds.Height
         };
 
-        ScrollBar.OnValueChanged += v =>
-        {
-            ScrollOffset = ScrollBar.MaxValue - v;
-            RenderedScrollOffset = -1;
-        };
+        Binder = new ScrollBarBinder(Model, Bar);
+        Model.Changed += _ => RenderedScrollOffset = -1;
 
-        AddChild(ScrollBar);
+        AddChild(Bar);
     }
 
     /// <summary>
@@ -125,21 +125,21 @@ public sealed class SystemMessagePanel : ExpandablePanel
         }
 
         //in the large hud, the compact area is too small for a scrollbar
-        ScrollBar.Visible = false;
+        Bar.Visible = false;
     }
 
     //labels are children — drawn automatically by base.draw()
 
     private void RefreshDisplay()
     {
-        if ((History.Count == RenderedHistoryCount) && (ScrollOffset == RenderedScrollOffset))
+        if ((History.Count == RenderedHistoryCount) && (Model.Offset == RenderedScrollOffset))
             return;
 
         RenderedHistoryCount = History.Count;
-        RenderedScrollOffset = ScrollOffset;
+        RenderedScrollOffset = Model.Offset;
 
         var maxLines = Math.Min(MaxVisibleLines, Lines.Length);
-        var startIndex = Math.Max(0, History.Count - maxLines - ScrollOffset);
+        var startIndex = Math.Max(0, History.Count - maxLines - Model.Offset);
         var lineIndex = 0;
 
         for (var i = startIndex; (i < History.Count) && (lineIndex < maxLines); i++)
@@ -174,8 +174,10 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
         DisplayBounds = expanded ? ExpandedDisplayBounds : NormalDisplayBounds;
         MaxVisibleLines = Math.Min(DisplayBounds.Height / GLYPH_HEIGHT, Lines.Length);
-        ScrollBar.Visible = expanded;
-        ScrollBar.Height = DisplayBounds.Height;
+        Bar.Visible = expanded;
+        Bar.Height = DisplayBounds.Height;
+
+        Model.SetMetrics(History.Count, MaxVisibleLines);
 
         //show/hide labels based on current line count
         for (var i = 0; i < Lines.Length; i++)
@@ -186,8 +188,7 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
     public void ScrollToBottom()
     {
-        ScrollOffset = 0;
-        ScrollBar.Value = ScrollBar.MaxValue;
+        Model.ScrollToStart();
         RenderedScrollOffset = -1;
     }
 
@@ -199,11 +200,11 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
     public bool Scroll(int delta)
     {
-        if (History.Count <= MaxVisibleLines)
+        if (!Model.CanScroll)
             return false;
 
-        ScrollOffset = Math.Clamp(ScrollOffset + delta, 0, History.Count - MaxVisibleLines);
-        ScrollBar.Value = ScrollBar.MaxValue - ScrollOffset;
+        //Inverted: a positive wheel notch scrolls back into history; consume while scrollable (matches legacy)
+        Model.WheelBy(delta);
 
         return true;
     }
@@ -217,19 +218,14 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
         if (History.Count != LastHistoryCount)
         {
-            var wasAtBottom = ScrollOffset == 0;
+            var wasAtBottom = Model.Offset == 0;
             LastHistoryCount = History.Count;
 
-            ScrollBar.TotalItems = History.Count;
-            ScrollBar.VisibleItems = MaxVisibleLines;
-            ScrollBar.MaxValue = Math.Max(0, History.Count - MaxVisibleLines);
+            Model.SetMetrics(History.Count, MaxVisibleLines);
 
+            //stick to the bottom when already there; otherwise keep the same lines-from-bottom offset
             if (wasAtBottom)
-            {
-                ScrollOffset = 0;
-                ScrollBar.Value = ScrollBar.MaxValue;
-            } else
-                ScrollBar.Value = ScrollBar.MaxValue - ScrollOffset;
+                Model.ScrollToStart();
         }
 
         RefreshDisplay();

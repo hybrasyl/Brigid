@@ -103,6 +103,9 @@ public class UILabel : UIElement
 
         base.Draw(spriteBatch);
 
+        //re-measure if the UI font was cycled since this label last changed, so alignment uses live glyph widths
+        TextElement.RefreshForFont();
+
         var innerX = ScreenX + PaddingLeft;
         var innerY = ScreenY + PaddingTop;
         var innerW = Width - PaddingLeft - PaddingRight;

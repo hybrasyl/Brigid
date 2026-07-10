@@ -283,6 +283,14 @@ public static class InputBuffer
         _ = Sdl.SDL_GetMouseState(out RawMouseX, out RawMouseY);
     }
 
+    /// <summary>
+    ///     Drops input events the watcher buffered but that <see cref="Update" /> has not yet frozen into the per-frame
+    ///     <see cref="Events" /> stream. Call right after a blocking modal (e.g. a native file dialog) that ran its own
+    ///     message loop while the game loop was stalled, so clicks/keys captured during the block don't leak into the
+    ///     next frame. Main-thread only, same as the watcher that fills the buffer.
+    /// </summary>
+    public static void DiscardPending() => PendingEvents.Clear();
+
     //─────────────────────────────────────────────────────────────────────────────
     //  SDL event watcher
     //─────────────────────────────────────────────────────────────────────────────

@@ -46,9 +46,11 @@ public static class GlobalSettings
     public static bool IsCursed => LobbyHost.EndsWith("kru.com", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    ///     True when the launcher screen should be shown at startup (the normal case). False only when environment
-    ///     variables fully specify a valid host + asset path, in which case the client auto-connects without the launcher
-    ///     (for CI / scripted launches).
+    ///     True when the launcher screen should be shown at startup (the normal case). False when the client
+    ///     auto-connects instead: either environment variables fully specify a valid host + asset path (CI / scripted),
+    ///     or a bypass is requested — <c>DA_NO_LAUNCHER</c> (Epona) or the saved
+    ///     <see cref="LauncherConfig.SuppressLauncher" /> flag — and a valid asset path resolves from env or saved
+    ///     config. See <see cref="ResolveConnectionConfig" />.
     /// </summary>
     public static bool ShowLauncher { get; private set; }
 
@@ -80,11 +82,13 @@ public static class GlobalSettings
     }
 
     /// <summary>
-    ///     Loads the saved launcher config and decides whether to show the launcher screen. The launcher is shown on every
-    ///     normal launch; it is skipped (auto-connect) only when environment variables fully specify a valid host + asset
-    ///     path, so CI / scripted launches can run non-interactively. Seeds <see cref="DataPath" /> from env/config so the
-    ///     launcher can prefill and validate it; the host/port are finalized either from env (auto-connect) or from the
-    ///     launcher's server selection at connect time.
+    ///     Loads the saved launcher config and decides whether to show the launcher screen. It is shown on every normal
+    ///     launch and skipped (auto-connect) in two cases: (1) environment variables fully specify a valid host + asset
+    ///     path (CI / scripted); or (2) a bypass is requested via <c>DA_NO_LAUNCHER</c> (Epona) or the saved
+    ///     <see cref="LauncherConfig.SuppressLauncher" /> flag — resolving host from env, then the saved server, then
+    ///     <see cref="LauncherConfig.DEFAULT_HOST" />, and asset from env then saved config — but only if a valid asset
+    ///     dir resolves; otherwise the launcher is shown so the user can fix it. Seeds <see cref="DataPath" /> for
+    ///     prefill/validation; host/port are finalized from env, saved config, or the launcher's selection at connect time.
     /// </summary>
     private static void ResolveConnectionConfig()
     {
@@ -93,27 +97,57 @@ public static class GlobalSettings
         var envHost = Environment.GetEnvironmentVariable("DA_HOST");
         var envPort = Environment.GetEnvironmentVariable("DA_HOST_PORT");
         var envPath = Environment.GetEnvironmentVariable("DA_ASSET_PATH");
+        var envNoLauncher = IsTruthy(Environment.GetEnvironmentVariable("DA_NO_LAUNCHER"));
 
         var envHostSet = !string.IsNullOrWhiteSpace(envHost);
         var envPathValid = DataContext.IsValidDataDirectory(envPath);
 
+        string reason;
+
         if (envHostSet && envPathValid)
         {
+            //full env spec — CI / scripted auto-connect
             LobbyHost = envHost!;
-            LobbyPort = int.TryParse(envPort, out var p) && p is >= 1 and <= 65535 ? p : LauncherConfig.DEFAULT_PORT;
+            LobbyPort = ParsePort(envPort);
             DataPath = envPath!;
             ShowLauncher = false;
+            reason = "env";
+        } else if (envNoLauncher || LauncherConfig.SuppressLauncher)
+        {
+            //bypass requested — Epona's DA_NO_LAUNCHER, or the user's saved SuppressLauncher flag. Resolve the asset
+            //dir and host from env first, then saved config. Only skip the launcher if a valid asset dir resolves;
+            //otherwise fall back to the (now-working) launcher so the user can fix the path rather than boot blind.
+            var assetPath = envPathValid
+                ? envPath!
+                : DataContext.IsValidDataDirectory(LauncherConfig.AssetPath) ? LauncherConfig.AssetPath! : null;
+
+            if (assetPath is not null)
+            {
+                var server = LauncherConfig.GetSelectedServer();
+                LobbyHost = envHostSet ? envHost! : (server?.Host ?? LauncherConfig.DEFAULT_HOST);
+                LobbyPort = envHostSet ? ParsePort(envPort) : (server?.Port ?? LauncherConfig.DEFAULT_PORT);
+                DataPath = assetPath;
+                ShowLauncher = false;
+                reason = envNoLauncher ? "env-no-launcher" : "config-suppress";
+            } else
+            {
+                DataPath = FirstNonBlank(envPath, LauncherConfig.AssetPath) ?? "";
+                ShowLauncher = true;
+                reason = "bypass-requested-no-valid-asset";
+            }
         } else
         {
             DataPath = FirstNonBlank(envPath, LauncherConfig.AssetPath) ?? "";
             ShowLauncher = true;
+            reason = "default";
         }
 
         NoticeDebugLog.Write(
-            $"connection config resolved: showLauncher={ShowLauncher}, "
+            $"connection config resolved: showLauncher={ShowLauncher} ({reason}), "
             + $"host={(string.IsNullOrEmpty(LobbyHost) ? "(unset)" : LobbyHost)}:{LobbyPort}, "
             + $"assetPath={(string.IsNullOrEmpty(DataPath) ? "(unset)" : DataPath)} "
-            + $"(DA_HOST={envHost ?? "(unset)"}, DA_HOST_PORT={envPort ?? "(unset)"}, DA_ASSET_PATH={envPath ?? "(unset)"})");
+            + $"(DA_HOST={envHost ?? "(unset)"}, DA_HOST_PORT={envPort ?? "(unset)"}, DA_ASSET_PATH={envPath ?? "(unset)"}, "
+            + $"DA_NO_LAUNCHER={(envNoLauncher ? "1" : "(unset)")}, SuppressLauncher={LauncherConfig.SuppressLauncher})");
     }
 
     /// <summary>
@@ -136,5 +170,18 @@ public static class GlobalSettings
             return primary;
 
         return string.IsNullOrWhiteSpace(fallback) ? null : fallback;
+    }
+
+    private static int ParsePort(string? value)
+        => int.TryParse(value, out var p) && p is >= 1 and <= 65535 ? p : LauncherConfig.DEFAULT_PORT;
+
+    private static bool IsTruthy(string? value)
+    {
+        var v = value?.Trim();
+
+        return !string.IsNullOrEmpty(v)
+               && (v.Equals("1", StringComparison.Ordinal)
+                   || v.Equals("true", StringComparison.OrdinalIgnoreCase)
+                   || v.Equals("yes", StringComparison.OrdinalIgnoreCase));
     }
 }

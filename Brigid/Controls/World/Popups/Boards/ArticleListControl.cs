@@ -1,10 +1,9 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Models;
 using Brigid.Networking;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
 
@@ -20,24 +19,19 @@ public sealed class ArticleListControl : PrefabPanel
     private const int POSTID_CHARS = 5;
     private const int AUTHOR_CHARS = 14; //wide enough for system authors like "Mundane Gossip" (14) so the date stays aligned
     private const int DATE_CHARS = 5;
-    //row-block alignment to the board art, captured from the in-client nudge tool (2px left, 4px up)
-    private const int ROW_OFFSET_X = -2;
+    //row-block alignment to the board art, captured from the in-client nudge tool (3px left, 4px up)
+    private const int ROW_OFFSET_X = -3;
     private const int ROW_OFFSET_Y = -4;
     private const string SPACER5 = "     ";
     private const string SPACER3 = "   ";
 
-    private readonly Rectangle ArticleListRect;
-    private readonly int MaxVisibleRows;
-    private readonly UILabel[] RowLabels;
-    private readonly ScrollBarControl ScrollBar;
-    private int DataVersion;
+    private static readonly Color SelectedColor = new(100, 149, 237);
+
+    private readonly VirtualizedListView<MailEntry, UILabel> ListView;
 
     private List<MailEntry> Entries = [];
     private bool LoadingMore;
     private bool MoreMayExist;
-    private int RenderedVersion = -1;
-    private int ScrollOffset;
-    private int SelectedIndex = -1;
     private int TargetX;
 
     public ushort BoardId { get; private set; }
@@ -67,8 +61,8 @@ public sealed class ArticleListControl : PrefabPanel
         if (ViewButton is not null)
             ViewButton.Clicked += () =>
             {
-                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
-                    OnViewPost?.Invoke(Entries[SelectedIndex].PostId);
+                if (TrySelected(out var i))
+                    OnViewPost?.Invoke(Entries[i].PostId);
             };
 
         if (NewButton is not null)
@@ -77,8 +71,8 @@ public sealed class ArticleListControl : PrefabPanel
         if (DeleteButton is not null)
             DeleteButton.Clicked += () =>
             {
-                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
-                    OnDeletePost?.Invoke(Entries[SelectedIndex].PostId);
+                if (TrySelected(out var i))
+                    OnDeletePost?.Invoke(Entries[i].PostId);
             };
 
         if (UpButton is not null)
@@ -92,54 +86,78 @@ public sealed class ArticleListControl : PrefabPanel
 
             HighlightButton.Clicked += () =>
             {
-                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
-                    OnHighlight?.Invoke(Entries[SelectedIndex].PostId);
+                if (TrySelected(out var i))
+                    OnHighlight?.Invoke(Entries[i].PostId);
             };
         }
 
-        ArticleListRect = GetRect("ArticleList");
-        MaxVisibleRows = ArticleListRect.Height > 0 ? ArticleListRect.Height / ROW_HEIGHT : 0;
+        var articleListRect = GetRect("ArticleList");
 
-        //scrollbar
-        ScrollBar = new ScrollBarControl
-        {
-            Name = "ScrollBar",
-            X = ArticleListRect.X + ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH,
-            Y = ArticleListRect.Y,
-            Height = ArticleListRect.Height
-        };
+        //nudge the whole list block onto the board art. rows are clipped to the list panel's bounds, so the offset must
+        //move the bounds (moving the panel + its clip region) — a negative row inset would only clip, not shift. the bar
+        //rides along by a few px, which is immaterial against its own art.
+        var listBounds = new Rectangle(
+            articleListRect.X + ROW_OFFSET_X,
+            articleListRect.Y + ROW_OFFSET_Y,
+            articleListRect.Width,
+            articleListRect.Height);
 
-        ScrollBar.OnValueChanged += v =>
-        {
-            ScrollOffset = v;
-            DataVersion++;
-            MaybeRequestOlder();
-        };
-
-        AddChild(ScrollBar);
-
-        //row labels — one per visible row, columns via fixed-width string formatting
-        var usableWidth = ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH;
-
-        RowLabels = new UILabel[MaxVisibleRows];
-
-        for (var i = 0; i < MaxVisibleRows; i++)
-        {
-            RowLabels[i] = new UILabel
+        ListView = new VirtualizedListView<MailEntry, UILabel>(
+            listBounds,
+            ROW_HEIGHT,
+            (w, i) => new UILabel
             {
                 Name = $"Article{i}",
-                X = ArticleListRect.X + ROW_OFFSET_X,
-                Y = ArticleListRect.Y + ROW_OFFSET_Y + i * ROW_HEIGHT,
-                Width = usableWidth,
+                Width = w,
                 Height = ROW_HEIGHT,
                 PaddingLeft = 0,
                 PaddingTop = 0,
-                //fixed-width columns: clip overflow at the panel edge instead of squishing the line to fit
+                //fixed-width columns: clip the subject at the panel edge instead of squishing the line to fit
                 ShrinkToFit = false
-            };
+            },
+            BindRow)
+        {
+            Selectable = true
+        };
 
-            AddChild(RowLabels[i]);
+        ListView.SelectionChanged += _ => UpdateButtonStates();
+
+        ListView.ItemActivated += i =>
+        {
+            if ((i >= 0) && (i < Entries.Count))
+                OnViewPost?.Invoke(Entries[i].PostId);
+        };
+
+        //retail-style scroll-back paging: reaching the oldest loaded row requests the next older page. this relies on a
+        //full page overflowing the viewport so the bottom is scroll-reachable — the board panels show well under
+        //BoardProtocol.PageSize (16) rows, so a full page always scrolls.
+        ListView.ReachedEnd += MaybeRequestOlder;
+
+        AddChild(ListView);
+    }
+
+    private bool TrySelected(out int index)
+    {
+        index = ListView.SelectedIndex;
+
+        return (index >= 0) && (index < Entries.Count);
+    }
+
+    private void BindRow(UILabel label, VirtualRow<MailEntry> row)
+    {
+        if (row.Kind != VirtualRowKind.Item)
+        {
+            label.Text = string.Empty;
+
+            return;
         }
+
+        label.ForegroundColor = row.Selected
+            ? SelectedColor
+            : row.Item.IsHighlighted
+                ? Color.Yellow
+                : TextColors.Default;
+        label.Text = FormatRow(row.Item);
     }
 
     /// <summary>
@@ -174,18 +192,8 @@ public sealed class ArticleListControl : PrefabPanel
         //cursor post, so a full page always overlaps by one — gating on "a full page of new" would stop after a single
         //fetch. a batch that adds nothing new means we reached the oldest post (or the server does not page).
         MoreMayExist = added > 0;
-        DataVersion++;
 
-        UpdateScrollBar();
-    }
-
-    public override void Draw(SpriteBatch spriteBatch)
-    {
-        if (!Visible)
-            return;
-
-        RefreshLabels();
-        base.Draw(spriteBatch);
+        ListView.Refresh();
     }
 
     private string FormatRow(MailEntry entry)
@@ -224,52 +232,21 @@ public sealed class ArticleListControl : PrefabPanel
     public event ViewPostHandler? OnViewPost;
 
     /// <summary>
-    ///     Requests the next older page when the view has scrolled to the oldest loaded row, paging is not exhausted, and
-    ///     no request is already in flight. Mirrors retail, which re-sends 0x02 continuously as the user scrolls back.
+    ///     Requests the next older page when the view has scrolled to the oldest loaded row (raised as
+    ///     <see cref="VirtualizedListView{TItem,TRow}.ReachedEnd" />), paging is not exhausted, and no request is already
+    ///     in flight. Mirrors retail, which re-sends 0x02 continuously as the user scrolls back.
     /// </summary>
     private void MaybeRequestOlder()
     {
         if (!MoreMayExist || LoadingMore || (Entries.Count == 0))
             return;
 
-        if (ScrollOffset + MaxVisibleRows < Entries.Count)
-            return;
-
         LoadingMore = true;
         OnLoadMorePosts?.Invoke(Entries[^1].PostId);
     }
 
-    private void RefreshLabels()
-    {
-        if (RenderedVersion == DataVersion)
-            return;
-
-        RenderedVersion = DataVersion;
-
-        for (var i = 0; i < MaxVisibleRows; i++)
-        {
-            var entryIndex = ScrollOffset + i;
-
-            if (entryIndex < Entries.Count)
-            {
-                var entry = Entries[entryIndex];
-                var isSelected = entryIndex == SelectedIndex;
-
-                var textColor = isSelected
-                    ? new Color(100, 149, 237)
-                    : entry.IsHighlighted
-                        ? Color.Yellow
-                        : TextColors.Default;
-
-                RowLabels[i].ForegroundColor = textColor;
-                RowLabels[i].Text = FormatRow(entry);
-            } else
-                RowLabels[i].Text = string.Empty;
-        }
-    }
-
     /// <summary>
-    ///     Appends additional entries from a subsequent page to the existing list.
+    ///     Removes an entry by post id and re-clamps the selection.
     /// </summary>
     public void RemoveEntry(short postId)
     {
@@ -280,11 +257,11 @@ public sealed class ArticleListControl : PrefabPanel
 
         Entries.RemoveAt(index);
 
-        if (SelectedIndex >= Entries.Count)
-            SelectedIndex = Entries.Count - 1;
+        if (ListView.SelectedIndex >= Entries.Count)
+            ListView.SetSelectedIndex(Entries.Count - 1);
 
-        DataVersion++;
-        UpdateScrollBar();
+        ListView.Refresh();
+        UpdateButtonStates();
     }
 
     public void ToggleHighlight(short postId)
@@ -296,7 +273,7 @@ public sealed class ArticleListControl : PrefabPanel
 
         var entry = Entries[index];
         Entries[index] = entry with { IsHighlighted = !entry.IsHighlighted };
-        DataVersion++;
+        ListView.Refresh();
     }
 
     /// <summary>
@@ -304,7 +281,8 @@ public sealed class ArticleListControl : PrefabPanel
     /// </summary>
     public void SetHighlightEnabled(bool enabled)
     {
-        HighlightButton?.Visible = enabled;
+        if (HighlightButton is not null)
+            HighlightButton.Visible = enabled;
     }
 
     public void SetViewportBounds(Rectangle viewport)
@@ -329,72 +307,11 @@ public sealed class ArticleListControl : PrefabPanel
         Entries = entries;
         MoreMayExist = entries.Count >= BoardProtocol.PageSize;
         LoadingMore = false;
-        SelectedIndex = -1;
-        ScrollOffset = 0;
-        DataVersion++;
 
-        UpdateScrollBar();
+        ListView.SetItems(Entries);
+        ListView.SetSelectedIndex(-1);
         UpdateButtonStates();
         Show();
-    }
-
-    public override void OnClick(ClickEvent e)
-    {
-        base.OnClick(e);
-
-        if (e.Button != MouseButton.Left)
-            return;
-
-        var localX = e.ScreenX - ScreenX - ArticleListRect.X;
-        var localY = e.ScreenY - ScreenY - ArticleListRect.Y;
-
-        //exclude the scrollbar strip on the right so a click on it never selects/opens the row beneath
-        if ((localX < 0) || (localX >= ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH) || (localY < 0) || (localY >= ArticleListRect.Height))
-            return;
-
-        var row = (localY - ROW_OFFSET_Y) / ROW_HEIGHT;
-
-        if ((row < 0) || (row >= MaxVisibleRows))
-            return;
-
-        var entryIndex = ScrollOffset + row;
-
-        if (entryIndex >= Entries.Count)
-            return;
-
-        SelectedIndex = entryIndex;
-        DataVersion++;
-        UpdateButtonStates();
-    }
-
-    public override void OnDoubleClick(DoubleClickEvent e)
-    {
-        base.OnDoubleClick(e);
-
-        if (e.Button != MouseButton.Left)
-            return;
-
-        var localX = e.ScreenX - ScreenX - ArticleListRect.X;
-        var localY = e.ScreenY - ScreenY - ArticleListRect.Y;
-
-        //exclude the scrollbar strip on the right so a click on it never selects/opens the row beneath
-        if ((localX < 0) || (localX >= ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH) || (localY < 0) || (localY >= ArticleListRect.Height))
-            return;
-
-        var row = (localY - ROW_OFFSET_Y) / ROW_HEIGHT;
-
-        if ((row < 0) || (row >= MaxVisibleRows))
-            return;
-
-        var entryIndex = ScrollOffset + row;
-
-        if (entryIndex >= Entries.Count)
-            return;
-
-        SelectedIndex = entryIndex;
-        DataVersion++;
-        UpdateButtonStates();
-        OnViewPost?.Invoke(Entries[entryIndex].PostId);
     }
 
     public override void OnKeyDown(KeyDownEvent e)
@@ -417,25 +334,25 @@ public sealed class ArticleListControl : PrefabPanel
 
                 break;
             case Keys.PageUp:
-                MoveSelection(-MaxVisibleRows);
+                MoveSelection(-ListView.VisibleRows);
                 e.Handled = true;
 
                 break;
             case Keys.PageDown:
-                MoveSelection(MaxVisibleRows);
+                MoveSelection(ListView.VisibleRows);
                 e.Handled = true;
 
                 break;
             case Keys.Enter:
-                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
-                    OnViewPost?.Invoke(Entries[SelectedIndex].PostId);
+                if (TrySelected(out var viewIndex))
+                    OnViewPost?.Invoke(Entries[viewIndex].PostId);
 
                 e.Handled = true;
 
                 break;
             case Keys.Delete:
-                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
-                    OnDeletePost?.Invoke(Entries[SelectedIndex].PostId);
+                if (TrySelected(out var deleteIndex))
+                    OnDeletePost?.Invoke(Entries[deleteIndex].PostId);
 
                 e.Handled = true;
 
@@ -443,76 +360,34 @@ public sealed class ArticleListControl : PrefabPanel
         }
     }
 
-    //keyboard row navigation: move the selection, keeping it on screen and paging older posts if it reaches the bottom.
+    //keyboard row navigation: move the selection, keeping it on screen; reaching the bottom pages older posts via ReachedEnd
     private void MoveSelection(int delta)
     {
         if (Entries.Count == 0)
             return;
 
-        var newIndex = SelectedIndex < 0
+        var current = ListView.SelectedIndex;
+
+        var newIndex = current < 0
             ? delta > 0 ? 0 : Entries.Count - 1
-            : Math.Clamp(SelectedIndex + delta, 0, Entries.Count - 1);
+            : Math.Clamp(current + delta, 0, Entries.Count - 1);
 
-        SelectedIndex = newIndex;
-        EnsureVisible(newIndex);
-        DataVersion++;
+        ListView.SetSelectedIndex(newIndex);
+        ListView.EnsureVisible(newIndex);
         UpdateButtonStates();
-    }
-
-    private void EnsureVisible(int index)
-    {
-        if (index < ScrollOffset)
-            SetScrollOffset(index);
-        else if (index >= ScrollOffset + MaxVisibleRows)
-            SetScrollOffset(index - MaxVisibleRows + 1);
-    }
-
-    private void SetScrollOffset(int offset)
-    {
-        var clamped = Math.Clamp(offset, 0, ScrollBar.MaxValue);
-
-        if (clamped == ScrollOffset)
-            return;
-
-        ScrollOffset = clamped;
-        ScrollBar.Value = clamped;
-        MaybeRequestOlder();
-    }
-
-    public override void OnMouseScroll(MouseScrollEvent e)
-    {
-        if (ScrollBar.TotalItems <= ScrollBar.VisibleItems)
-            return;
-
-        var newValue = Math.Clamp(ScrollBar.Value - e.Delta, 0, ScrollBar.MaxValue);
-
-        if (newValue != ScrollBar.Value)
-        {
-            ScrollBar.Value = newValue;
-            ScrollOffset = newValue;
-            DataVersion++;
-            MaybeRequestOlder();
-        }
-
-        e.Handled = true;
     }
 
     private void UpdateButtonStates()
     {
-        var hasSelection = (SelectedIndex >= 0) && (SelectedIndex < Entries.Count);
+        var hasSelection = TrySelected(out _);
 
-        ViewButton?.Enabled = hasSelection;
+        if (ViewButton is not null)
+            ViewButton.Enabled = hasSelection;
 
-        DeleteButton?.Enabled = hasSelection;
+        if (DeleteButton is not null)
+            DeleteButton.Enabled = hasSelection;
 
         if (HighlightButton is { Visible: true })
             HighlightButton.Enabled = hasSelection;
-    }
-
-    private void UpdateScrollBar()
-    {
-        ScrollBar.TotalItems = Entries.Count;
-        ScrollBar.VisibleItems = MaxVisibleRows;
-        ScrollBar.MaxValue = Math.Max(0, Entries.Count - MaxVisibleRows);
     }
 }

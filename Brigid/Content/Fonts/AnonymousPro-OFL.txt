@@ -1,4 +1,5 @@
-Copyright 2018 The Crimson Pro Project Authors (https://github.com/Fonthausen/CrimsonPro)
+Copyright (c) 2009, Mark Simonson (http://www.ms-studio.com, mark@marksimonson.com),
+with Reserved Font Name Anonymous Pro.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

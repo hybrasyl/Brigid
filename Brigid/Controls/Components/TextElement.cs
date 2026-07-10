@@ -96,6 +96,18 @@ public sealed class TextElement
     }
 
     /// <summary>
+    ///     Re-measures (and re-wraps) if the active font changed since the last <see cref="Update" /> — i.e. the user
+    ///     cycled the UI font at runtime. Static labels never call <see cref="Update" /> again on their own, so without
+    ///     this their cached <see cref="Width" />/<see cref="Height" /> stay measured in the previous face while the
+    ///     glyphs draw in the new one, throwing off center/right alignment. Cheap no-op when the font is unchanged.
+    /// </summary>
+    public void RefreshForFont()
+    {
+        if (!string.IsNullOrEmpty(Text) && (Rendering.FontEngine.Instance.Generation != LastFontGeneration))
+            Update(Text, Color);
+    }
+
+    /// <summary>
     ///     Draws <paramref name="text" /> (or <see cref="Text" /> when null) at <paramref name="position" />,
     ///     applying <see cref="ShadowStyle" /> and clipping each pass to <paramref name="clipRect" />. Pass
     ///     <see cref="Rectangle.Empty" /> (or omit) to skip clipping entirely.

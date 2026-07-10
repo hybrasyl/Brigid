@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -36,10 +37,15 @@ public sealed class ExchangeControl : PrefabPanel
     private readonly ExchangeItemControl[] YourItems = new ExchangeItemControl[MAX_VISIBLE_ITEMS];
     private readonly UILabel? YourMoneyLabel;
 
-    private int MyHorizontalOffset;
-    private int MyVerticalOffset;
-    private int YourHorizontalOffset;
-    private int YourVerticalOffset;
+    //each of the four bars is a bare model + binder; the scroll offset lives on the model
+    private readonly ScrollBarBinder MyHorizontalBinder;
+    private readonly ScrollModel MyHorizontalModel = new();
+    private readonly ScrollBarBinder MyVerticalBinder;
+    private readonly ScrollModel MyVerticalModel = new();
+    private readonly ScrollBarBinder YourHorizontalBinder;
+    private readonly ScrollModel YourHorizontalModel = new();
+    private readonly ScrollBarBinder YourVerticalBinder;
+    private readonly ScrollModel YourVerticalModel = new();
 
     public UIButton? CancelButton { get; }
     public UIButton? OkButton { get; }
@@ -124,11 +130,8 @@ public sealed class ExchangeControl : PrefabPanel
             Height = MyExchangeRect.Height - ScrollBarControl.DEFAULT_WIDTH
         };
 
-        MyVerticalScroll.OnValueChanged += v =>
-        {
-            MyVerticalOffset = v;
-            RefreshVisibleItems(false);
-        };
+        MyVerticalBinder = new ScrollBarBinder(MyVerticalModel, MyVerticalScroll);
+        MyVerticalModel.Changed += _ => RefreshVisibleItems(false);
 
         AddChild(MyVerticalScroll);
 
@@ -140,11 +143,8 @@ public sealed class ExchangeControl : PrefabPanel
             Height = YourExchangeRect.Height - ScrollBarControl.DEFAULT_WIDTH
         };
 
-        YourVerticalScroll.OnValueChanged += v =>
-        {
-            YourVerticalOffset = v;
-            RefreshVisibleItems(true);
-        };
+        YourVerticalBinder = new ScrollBarBinder(YourVerticalModel, YourVerticalScroll);
+        YourVerticalModel.Changed += _ => RefreshVisibleItems(true);
 
         AddChild(YourVerticalScroll);
 
@@ -159,11 +159,8 @@ public sealed class ExchangeControl : PrefabPanel
             Height = ScrollBarControl.DEFAULT_WIDTH
         };
 
-        MyHorizontalScroll.OnValueChanged += v =>
-        {
-            MyHorizontalOffset = v;
-            ApplyHorizontalOffset(MyItems, v);
-        };
+        MyHorizontalBinder = new ScrollBarBinder(MyHorizontalModel, MyHorizontalScroll);
+        MyHorizontalModel.Changed += offset => ApplyHorizontalOffset(MyItems, offset);
 
         AddChild(MyHorizontalScroll);
 
@@ -177,11 +174,8 @@ public sealed class ExchangeControl : PrefabPanel
             Height = ScrollBarControl.DEFAULT_WIDTH
         };
 
-        YourHorizontalScroll.OnValueChanged += v =>
-        {
-            YourHorizontalOffset = v;
-            ApplyHorizontalOffset(YourItems, v);
-        };
+        YourHorizontalBinder = new ScrollBarBinder(YourHorizontalModel, YourHorizontalScroll);
+        YourHorizontalModel.Changed += offset => ApplyHorizontalOffset(YourItems, offset);
 
         AddChild(YourHorizontalScroll);
 
@@ -297,43 +291,17 @@ public sealed class ExchangeControl : PrefabPanel
         var mouseX = e.ScreenX;
         var mouseY = e.ScreenY;
 
-        //determine which exchange rect the mouse is over
+        //determine which exchange rect the mouse is over; the wheel drives that side's vertical model
         if (MyItemsContainer.ContainsPoint(mouseX, mouseY))
         {
-            if (MyVerticalScroll.TotalItems <= MyVerticalScroll.VisibleItems)
-            {
-                e.Handled = true;
-
-                return;
-            }
-
-            var newValue = Math.Clamp(MyVerticalScroll.Value - e.Delta, 0, MyVerticalScroll.MaxValue);
-
-            if (newValue != MyVerticalScroll.Value)
-            {
-                MyVerticalScroll.Value = newValue;
-                MyVerticalOffset = newValue;
-                RefreshVisibleItems(false);
-            }
+            if (MyVerticalModel.CanScroll)
+                MyVerticalModel.WheelBy(e.Delta);
 
             e.Handled = true;
         } else if (YourItemsContainer.ContainsPoint(mouseX, mouseY))
         {
-            if (YourVerticalScroll.TotalItems <= YourVerticalScroll.VisibleItems)
-            {
-                e.Handled = true;
-
-                return;
-            }
-
-            var newValue = Math.Clamp(YourVerticalScroll.Value - e.Delta, 0, YourVerticalScroll.MaxValue);
-
-            if (newValue != YourVerticalScroll.Value)
-            {
-                YourVerticalScroll.Value = newValue;
-                YourVerticalOffset = newValue;
-                RefreshVisibleItems(true);
-            }
+            if (YourVerticalModel.CanScroll)
+                YourVerticalModel.WheelBy(e.Delta);
 
             e.Handled = true;
         }
@@ -348,8 +316,8 @@ public sealed class ExchangeControl : PrefabPanel
     private void RefreshVisibleItems(bool rightSide)
     {
         var items = rightSide ? YourItems : MyItems;
-        var offset = rightSide ? YourVerticalOffset : MyVerticalOffset;
-        var horizontalOffset = rightSide ? YourHorizontalOffset : MyHorizontalOffset;
+        var offset = rightSide ? YourVerticalModel.Offset : MyVerticalModel.Offset;
+        var horizontalOffset = rightSide ? YourHorizontalModel.Offset : MyHorizontalModel.Offset;
         var totalCount = WorldState.Exchange.GetItemCount(rightSide);
 
         for (var i = 0; i < MAX_VISIBLE_ITEMS; i++)
@@ -380,30 +348,15 @@ public sealed class ExchangeControl : PrefabPanel
 
     private void ResetAllScrollbars()
     {
-        MyVerticalOffset = 0;
-        YourVerticalOffset = 0;
-        MyHorizontalOffset = 0;
-        YourHorizontalOffset = 0;
+        MyVerticalModel.SetMetrics(0, MAX_VISIBLE_ITEMS);
+        MyVerticalModel.ScrollToStart();
+        YourVerticalModel.SetMetrics(0, MAX_VISIBLE_ITEMS);
+        YourVerticalModel.ScrollToStart();
 
-        MyVerticalScroll.Value = 0;
-        MyVerticalScroll.TotalItems = 0;
-        MyVerticalScroll.VisibleItems = MAX_VISIBLE_ITEMS;
-        MyVerticalScroll.MaxValue = 0;
-
-        YourVerticalScroll.Value = 0;
-        YourVerticalScroll.TotalItems = 0;
-        YourVerticalScroll.VisibleItems = MAX_VISIBLE_ITEMS;
-        YourVerticalScroll.MaxValue = 0;
-
-        MyHorizontalScroll.Value = 0;
-        MyHorizontalScroll.TotalItems = 0;
-        MyHorizontalScroll.VisibleItems = 0;
-        MyHorizontalScroll.MaxValue = 0;
-
-        YourHorizontalScroll.Value = 0;
-        YourHorizontalScroll.TotalItems = 0;
-        YourHorizontalScroll.VisibleItems = 0;
-        YourHorizontalScroll.MaxValue = 0;
+        MyHorizontalModel.SetMetrics(0, 0);
+        MyHorizontalModel.ScrollToStart();
+        YourHorizontalModel.SetMetrics(0, 0);
+        YourHorizontalModel.ScrollToStart();
 
         ApplyHorizontalOffset(MyItems, 0);
         ApplyHorizontalOffset(YourItems, 0);
@@ -412,7 +365,7 @@ public sealed class ExchangeControl : PrefabPanel
     private void UpdateHorizontalScrollbar(bool rightSide)
     {
         var items = rightSide ? YourItems : MyItems;
-        var scrollbar = rightSide ? YourHorizontalScroll : MyHorizontalScroll;
+        var model = rightSide ? YourHorizontalModel : MyHorizontalModel;
         var rect = rightSide ? YourExchangeRect : MyExchangeRect;
         var visibleWidth = rect.Width - ScrollBarControl.DEFAULT_WIDTH - 10;
 
@@ -422,40 +375,15 @@ public sealed class ExchangeControl : PrefabPanel
             if (item.Visible && (item.EntryWidth > maxEntryWidth))
                 maxEntryWidth = item.EntryWidth;
 
-        var overflow = maxEntryWidth - visibleWidth;
-
-        if (overflow > 0)
-        {
-            scrollbar.TotalItems = maxEntryWidth;
-            scrollbar.VisibleItems = visibleWidth;
-            scrollbar.MaxValue = overflow;
-        } else
-        {
-            scrollbar.TotalItems = 0;
-            scrollbar.VisibleItems = 0;
-            scrollbar.MaxValue = 0;
-            scrollbar.Value = 0;
-
-            //reset offset when no overflow
-            if (rightSide)
-            {
-                YourHorizontalOffset = 0;
-                ApplyHorizontalOffset(YourItems, 0);
-            } else
-            {
-                MyHorizontalOffset = 0;
-                ApplyHorizontalOffset(MyItems, 0);
-            }
-        }
+        //pixel-granular: Max resolves to the overflow (or 0 when it fits, which re-clamps the offset to 0)
+        model.SetMetrics(maxEntryWidth, visibleWidth);
     }
 
     private void UpdateVerticalScrollbar(bool rightSide)
     {
         var totalCount = WorldState.Exchange.GetItemCount(rightSide);
-        var scrollbar = rightSide ? YourVerticalScroll : MyVerticalScroll;
+        var model = rightSide ? YourVerticalModel : MyVerticalModel;
 
-        scrollbar.TotalItems = totalCount;
-        scrollbar.VisibleItems = MAX_VISIBLE_ITEMS;
-        scrollbar.MaxValue = Math.Max(0, totalCount - MAX_VISIBLE_ITEMS);
+        model.SetMetrics(totalCount, MAX_VISIBLE_ITEMS);
     }
 }
