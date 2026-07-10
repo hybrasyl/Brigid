@@ -24,23 +24,29 @@ public class LoadingBar : PrefabPanel
         var fillTexture = cache.GetSpfTexture("_nloadb1.spf");
         var endTexture = cache.GetSpfTexture("_nloadb2.spf");
 
-        var barY = Height - startTexture.Height - 20;
-        var barX = 20;
+        //the prefab defines the bar-piece slots as named controls (Head/Body/Tail) recessed into the art;
+        //use them so the bar sits in the groove instead of a hardcoded guess.
+        var headRect = GetRect("Head");
+        var bodyRect = GetRect("Body");
+        var tailRect = GetRect("Tail");
 
+        //caps need explicit Width/Height — a 0x0 element is fully clipped and never draws (UIElement.Draw).
         AddChild(
             new UIImage
             {
                 Texture = startTexture,
-                X = barX,
-                Y = barY
+                X = headRect.X,
+                Y = headRect.Y,
+                Width = headRect.Width,
+                Height = headRect.Height
             });
 
         FillBar = new UIProgressBar
         {
-            X = barX + startTexture.Width,
-            Y = barY,
-            Width = fillTexture.Width,
-            Height = fillTexture.Height,
+            X = bodyRect.X,
+            Y = bodyRect.Y,
+            Width = bodyRect.Width,
+            Height = bodyRect.Height,
             FillTexture = fillTexture
         };
 
@@ -49,8 +55,10 @@ public class LoadingBar : PrefabPanel
         EndCap = new UIImage
         {
             Texture = endTexture,
-            X = barX + startTexture.Width + fillTexture.Width,
-            Y = barY,
+            X = tailRect.X,
+            Y = tailRect.Y,
+            Width = tailRect.Width,
+            Height = tailRect.Height,
             Visible = false
         };
 

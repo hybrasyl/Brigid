@@ -21,6 +21,11 @@ public sealed class ConnectionManager : IDisposable
     private WorldEntryState EntryState;
     private RedirectInfo? PendingRedirect;
 
+    //set when the client confirms a logout (ClientExit endSignal=0). A redirect that arrives while in World
+    //means "go back to the login screen" only if we asked to quit; an unsolicited World-state redirect is a
+    //server-initiated world transfer (e.g. Temuair↔Medenia) that must reconnect straight back into World.
+    private bool ExitConfirmed;
+
     /// <summary>
     ///     The local player's unique entity ID, assigned by the server upon world entry.
     /// </summary>
@@ -544,11 +549,18 @@ public sealed class ConnectionManager : IDisposable
     ///     Sends an exit/logout request.
     /// </summary>
     public void RequestExit(bool isRequest = true)
-        => SendIfWorld(
+    {
+        //the confirm (endSignal=0) is what makes the server redirect us back to login; mark it so the
+        //incoming World-state redirect routes to Login instead of being treated as a world transfer.
+        if (!isRequest)
+            ExitConfirmed = true;
+
+        SendIfWorld(
             new Cli.ClientExitPacket
             {
                 Signal = isRequest ? Cli.ExitSignal.Request : Cli.ExitSignal.Confirm
             });
+    }
 
     /// <summary>
     ///     Requests the homepage URL from the login server.
@@ -1252,13 +1264,21 @@ public sealed class ConnectionManager : IDisposable
     {
         var pkt = (Server.RedirectPacket)p;
 
-        //determine target state based on current state
+        //determine target state based on current state. A World-state redirect is ambiguous: it is either a
+        //logout (we sent ClientExit confirm → back to Login) or a server-initiated world transfer such as
+        //Temuair↔Medenia (→ straight back into World, using the character-name key salt). Distinguish by whether
+        //we asked to quit.
         var targetState = State switch
         {
             ConnectionState.Lobby => ConnectionState.Login,
             ConnectionState.Login => ConnectionState.World,
+            ConnectionState.World => ExitConfirmed ? ConnectionState.Login : ConnectionState.World,
             _                     => ConnectionState.Login
         };
+
+        //consumed: any redirect resolves the pending quit. Reaching World again always passes through a
+        //Login→World redirect, so a stale flag can never leak into a later world transfer.
+        ExitConfirmed = false;
 
         PendingRedirect = new RedirectInfo(
             new IPEndPoint(pkt.IpAddress, pkt.Port),

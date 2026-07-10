@@ -548,7 +548,19 @@ public sealed partial class WorldScreen
         BoardResponsePopup.Show(message);
     }
 
-    private void HandleRedirectReceived(RedirectInfo _) => RedirectInProgress = true;
+    private void HandleRedirectReceived(RedirectInfo info)
+    {
+        RedirectInProgress = true;
+
+        //server-initiated world transfer (dachaidh, express ship, Temuair↔Medenia): cover the reconnect gap
+        //with the map loading screen and stop drawing the now-stale map, matching retail's black screen +
+        //progress bar. a logout redirect (TargetState=Login) is bound for the login screen, so skip it there.
+        if (info.TargetState == ConnectionState.World)
+        {
+            MapPreloaded = false;
+            MapLoading.Show();
+        }
+    }
 
     private void HandleBoardListReceived()
     {
@@ -1288,6 +1300,15 @@ public sealed partial class WorldScreen
             RedirectInProgress = false;
             ExitInProgressSecondsRemaining = 0f;
             PendingLoginSwitch = true;
+
+            return;
+        }
+
+        //server transfer (e.g. Temuair↔Medenia) reconnected straight back into World: clear the redirect
+        //latch so a genuine drop afterward still surfaces the "connection lost" popup.
+        if (newState == ConnectionState.World)
+        {
+            RedirectInProgress = false;
 
             return;
         }
