@@ -18,9 +18,12 @@ public sealed class ArticleListControl : PrefabPanel
 {
     private const int ROW_HEIGHT = Constants.BOARD_ROW_HEIGHT;
     private const int POSTID_CHARS = 5;
-    private const int AUTHOR_CHARS = 12;
+    private const int AUTHOR_CHARS = 14; //wide enough for system authors like "Mundane Gossip" (14) so the date stays aligned
     private const int DATE_CHARS = 5;
-    private const int PREFIX_CHARS = POSTID_CHARS + AUTHOR_CHARS + DATE_CHARS;
+    private const int SPACER5_LEN = 5;
+    private const int SPACER3_LEN = 3;
+    //prefix width in characters, including the inter-column spacers, so MaxSubjectChars leaves room for them
+    private const int PREFIX_CHARS = POSTID_CHARS + SPACER5_LEN + AUTHOR_CHARS + SPACER5_LEN + DATE_CHARS + SPACER3_LEN;
     private const string SPACER5 = "     ";
     private const string SPACER3 = "   ";
 
@@ -132,7 +135,9 @@ public sealed class ArticleListControl : PrefabPanel
                 Width = usableWidth,
                 Height = ROW_HEIGHT,
                 PaddingLeft = 0,
-                PaddingTop = 0
+                PaddingTop = 0,
+                //fixed-width columns: clip overflow at the panel edge instead of squishing the line to fit
+                ShrinkToFit = false
             };
 
             AddChild(RowLabels[i]);
@@ -187,11 +192,13 @@ public sealed class ArticleListControl : PrefabPanel
 
     private string FormatRow(MailEntry entry)
     {
+        //truncate to the fixed column widths so a long author (e.g. "Mundane Gossip") can't push the later columns over
+        var author = entry.Author.Length > AUTHOR_CHARS ? entry.Author[..AUTHOR_CHARS] : entry.Author;
         var subject = entry.Subject.Length > MaxSubjectChars ? entry.Subject[..MaxSubjectChars] : entry.Subject;
 
         var date = $"{entry.Month,2}/{entry.Day,2}";
 
-        return $"{entry.PostId,POSTID_CHARS}{SPACER5}{entry.Author,-AUTHOR_CHARS}{SPACER5}{date,DATE_CHARS}{SPACER3}{subject}";
+        return $"{entry.PostId,POSTID_CHARS}{SPACER5}{author,-AUTHOR_CHARS}{SPACER5}{date,DATE_CHARS}{SPACER3}{subject}";
     }
 
     public override void Hide()

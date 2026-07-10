@@ -129,7 +129,9 @@ public sealed class MailListControl : PrefabPanel
                 Width = usableWidth - TEXT_INDENT,
                 Height = ROW_HEIGHT,
                 PaddingLeft = 0,
-                PaddingTop = 0
+                PaddingTop = 0,
+                //fixed-width columns: clip overflow at the panel edge instead of squishing the line to fit
+                ShrinkToFit = false
             };
 
             AddChild(RowLabels[i]);
@@ -184,9 +186,11 @@ public sealed class MailListControl : PrefabPanel
 
     private string FormatRow(MailEntry entry)
     {
+        //truncate to the fixed column widths so a long author can't push the later columns over
+        var author = entry.Author.Length > AUTHOR_CHARS ? entry.Author[..AUTHOR_CHARS] : entry.Author;
         var subject = entry.Subject.Length > MaxSubjectChars ? entry.Subject[..MaxSubjectChars] : entry.Subject;
 
-        return $"{entry.PostId,-POSTID_CHARS}{entry.Author,-AUTHOR_CHARS}{entry.Month + "/" + entry.Day,-DATE_CHARS}{subject}";
+        return $"{entry.PostId,-POSTID_CHARS}{author,-AUTHOR_CHARS}{entry.Month + "/" + entry.Day,-DATE_CHARS}{subject}";
     }
 
     public override void Hide()
