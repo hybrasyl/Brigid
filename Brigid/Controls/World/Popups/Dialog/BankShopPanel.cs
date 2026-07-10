@@ -1,6 +1,7 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.Scrolling;
 using Brigid.Data;
 using Brigid.Definitions;
 using Brigid.Networking;
@@ -80,17 +81,20 @@ public sealed class BankShopPanel : UIPanel
     private readonly TextButton ItemNextButton;
     private readonly TextButton OkButton;
 
-    //first visible filtered-item index; the row list is a VISIBLE_ROWS window starting here (mouse-wheel + < > paging)
-    private int ItemScrollOffset;
+    //the filtered-item rows and the category tabs are each a fixed window over their list; ScrollModel owns the
+    //clamp/offset math (the shared home for every scrollable surface) — Offset is the first visible index.
+    private readonly ScrollModel ItemScroll = new();
+    private readonly ScrollModel TabScroll = new();
     private int SelectedCategoryIndex;
     private int SelectedIndex = -1;
-    private int TabWindowStart;
 
-    private int MaxItemScroll => Math.Max(0, FilteredIndices.Count - VISIBLE_ROWS);
-
-    //hover tooltip state — HoveredSlot is the visible row slot, HoveredIndex the absolute entry it maps to (-1 = none)
+    //hover tooltip state — HoveredSlot is the visible row slot (-1 = none); the absolute entry index is derived from it
+    //on demand in Draw. The tooltip content (wrapped lines + box height) is cached against that index so Draw never
+    //rebuilds it per frame.
     private int HoveredSlot = -1;
-    private int HoveredIndex = -1;
+    private List<(string Text, Color Color)>? TooltipLines;
+    private int TooltipHeight;
+    private int TooltipCachedIndex = -1;
 
     //category-tab hover: HoveredCategory is the full name to show (set only when the tab label was truncated)
     private int HoveredTabSlot = -1;
@@ -182,7 +186,7 @@ public sealed class BankShopPanel : UIPanel
             X = PADDING,
             Y = btnY
         };
-        TabPrevButton.Clicked += ScrollTabsPrev;
+        TabPrevButton.Clicked += () => ScrollTabs(TabScroll.ScrollBy(-1));
         AddChild(TabPrevButton);
 
         TabNextButton = new TextButton(">", 16, 18)
@@ -190,7 +194,7 @@ public sealed class BankShopPanel : UIPanel
             X = PADDING + 18,
             Y = btnY
         };
-        TabNextButton.Clicked += ScrollTabsNext;
+        TabNextButton.Clicked += () => ScrollTabs(TabScroll.ScrollBy(1));
         AddChild(TabNextButton);
 
         GoldLabel = new UILabel
@@ -226,7 +230,8 @@ public sealed class BankShopPanel : UIPanel
             X = itemPrevX,
             Y = btnY
         };
-        ItemPrevButton.Clicked += PrevItemPage;
+        //the < > buttons jump a whole page; the wheel moves one row at a time (see OnMouseScroll)
+        ItemPrevButton.Clicked += () => ScrollItems(ItemScroll.ScrollBy(-VISIBLE_ROWS));
         AddChild(ItemPrevButton);
 
         ItemNextButton = new TextButton(">", 16, 18)
@@ -234,7 +239,7 @@ public sealed class BankShopPanel : UIPanel
             X = itemNextX,
             Y = btnY
         };
-        ItemNextButton.Clicked += NextItemPage;
+        ItemNextButton.Clicked += () => ScrollItems(ItemScroll.ScrollBy(VISIBLE_ROWS));
         AddChild(ItemNextButton);
 
         OkButton = new TextButton("OK", okW, 18)
@@ -270,14 +275,11 @@ public sealed class BankShopPanel : UIPanel
                     break;
                 }
 
-        //scroll the tab window so the restored tab is visible
-        TabWindowStart = 0;
-
-        if (SelectedCategoryIndex >= MAX_VISIBLE_TABS)
-            TabWindowStart = Math.Min(SelectedCategoryIndex - MAX_VISIBLE_TABS + 1, Math.Max(0, Categories.Count - MAX_VISIBLE_TABS));
+        //scroll the tab window so the restored tab is visible (ScrollTo clamps; a negative target lands at 0)
+        TabScroll.ScrollTo(SelectedCategoryIndex - MAX_VISIBLE_TABS + 1);
 
         BuildFilteredIndices();
-        ItemScrollOffset = Math.Clamp(savedScroll, 0, MaxItemScroll);
+        ItemScroll.ScrollTo(savedScroll);
 
         TitleLabel.Text = string.IsNullOrEmpty(pkt.Name) ? "Shop" : pkt.Name;
         GoldLabel.Text = $"Gold: {WorldState.Inventory.Gold:N0}";
@@ -301,10 +303,13 @@ public sealed class BankShopPanel : UIPanel
         if (!Visible)
             return;
 
-        //hover tooltips are drawn unclipped, on top, following the cursor. A tab and a row can't be hovered at once,
-        //but item detail takes precedence if both are somehow set.
-        if ((HoveredIndex >= 0) && (HoveredIndex < Entries.Count))
-            DrawTooltip(spriteBatch, Entries[HoveredIndex]);
+        //hover tooltips are drawn unclipped, on top, following the cursor. The hovered item is derived fresh from the
+        //row slot each frame, so a wheel-scroll under a resting cursor tracks the newly revealed item; a tab and a row
+        //can't be hovered at once, but item detail takes precedence if both are somehow set.
+        var hoveredIndex = HoveredSlot >= 0 ? RowToAbsoluteIndex(HoveredSlot) : -1;
+
+        if ((hoveredIndex >= 0) && (hoveredIndex < Entries.Count))
+            DrawTooltip(spriteBatch, hoveredIndex);
         else if (HoveredCategory is { } category)
             DrawLineTooltip(spriteBatch, category);
     }
@@ -313,16 +318,32 @@ public sealed class BankShopPanel : UIPanel
     {
         var width = TextRenderer.MeasureWidth(text) + 2 * TOOLTIP_PAD;
         var height = TextRenderer.CHAR_HEIGHT + 2 * TOOLTIP_PAD;
-
-        var rightX = InputBuffer.MouseX + 15;
-        var x = (rightX + width) <= ChaosGame.VIRTUAL_WIDTH ? rightX : InputBuffer.MouseX - width;
-        var y = Math.Clamp(InputBuffer.MouseY + 15, 0, ChaosGame.VIRTUAL_HEIGHT - height);
+        var (x, y) = TooltipPlacement.CursorAnchored(InputBuffer.MouseX, InputBuffer.MouseY, width, height);
 
         DrawBorderedRect(spriteBatch, new Rectangle(x, y, width, height), TooltipFill, TooltipBorder);
         TextRenderer.DrawText(spriteBatch, new Vector2(x + TOOLTIP_PAD, y + TOOLTIP_PAD), text, LegendColors.White);
     }
 
-    private static void DrawTooltip(SpriteBatch spriteBatch, MerchantEntry entry)
+    private void DrawTooltip(SpriteBatch spriteBatch, int index)
+    {
+        if (index != TooltipCachedIndex)
+            BuildTooltip(Entries[index], index);
+
+        var (x, y) = TooltipPlacement.CursorAnchored(InputBuffer.MouseX, InputBuffer.MouseY, TOOLTIP_WIDTH, TooltipHeight);
+        DrawBorderedRect(spriteBatch, new Rectangle(x, y, TOOLTIP_WIDTH, TooltipHeight), TooltipFill, TooltipBorder);
+
+        var textY = y + TOOLTIP_PAD;
+
+        foreach (var (text, color) in TooltipLines!)
+        {
+            TextRenderer.DrawText(spriteBatch, new Vector2(x + TOOLTIP_PAD, textY), text, color);
+            textY += TextRenderer.CHAR_HEIGHT;
+        }
+    }
+
+    //builds the wrapped tooltip lines + box height for one entry, once, when the hovered item changes — the entry is
+    //immutable, so there's no reason to re-wrap/re-measure it on every frame the cursor rests on the row.
+    private void BuildTooltip(MerchantEntry entry, int index)
     {
         var lines = new List<(string Text, Color Color)>();
 
@@ -342,9 +363,7 @@ public sealed class BankShopPanel : UIPanel
         if (entry.Weight is { } weight)
             lines.Add(($"Weight: {weight}", LegendColors.White));
 
-        var hasDescription = !string.IsNullOrWhiteSpace(entry.Description);
-
-        if (hasDescription)
+        if (!string.IsNullOrWhiteSpace(entry.Description))
         {
             lines.Add(("Description:", TooltipHeading));
 
@@ -352,32 +371,13 @@ public sealed class BankShopPanel : UIPanel
                 lines.Add((wrapped, LegendColors.White));
         }
 
-        //nothing worth showing (item had no metadata) — skip the tooltip entirely
-        if (lines.Count == 0)
-            return;
-
-        var height = 2 * TOOLTIP_PAD + lines.Count * TextRenderer.CHAR_HEIGHT;
-
-        var rightX = InputBuffer.MouseX + 15;
-        var x = (rightX + TOOLTIP_WIDTH) <= ChaosGame.VIRTUAL_WIDTH ? rightX : InputBuffer.MouseX - TOOLTIP_WIDTH;
-        var y = Math.Clamp(InputBuffer.MouseY + 15, 0, ChaosGame.VIRTUAL_HEIGHT - height);
-
-        DrawBorderedRect(spriteBatch, new Rectangle(x, y, TOOLTIP_WIDTH, height), TooltipFill, TooltipBorder);
-
-        var textY = y + TOOLTIP_PAD;
-
-        foreach (var (text, color) in lines)
-        {
-            TextRenderer.DrawText(spriteBatch, new Vector2(x + TOOLTIP_PAD, textY), text, color);
-            textY += TextRenderer.CHAR_HEIGHT;
-        }
+        TooltipLines = lines;
+        TooltipHeight = 2 * TOOLTIP_PAD + lines.Count * TextRenderer.CHAR_HEIGHT;
+        TooltipCachedIndex = index;
     }
 
     /// <summary>Returns the name of the entry at the given absolute index, or null if out of range.</summary>
     public string? GetEntryName(int index) => (index >= 0) && (index < Entries.Count) ? Entries[index].Name : null;
-
-    /// <summary>Returns the slot byte for the entry at the given absolute index, or null if out of range.</summary>
-    public byte? GetEntrySlot(int index) => (index >= 0) && (index < Entries.Count) ? Entries[index].Slot : null;
 
     private void ClearEntries()
     {
@@ -386,8 +386,8 @@ public sealed class BankShopPanel : UIPanel
         Categories.Clear();
         SelectedIndex = -1;
         SelectedCategoryIndex = 0;
-        TabWindowStart = 0;
-        ItemScrollOffset = 0;
+        TabScroll.SetMetrics(0, MAX_VISIBLE_TABS);
+        ItemScroll.SetMetrics(0, VISIBLE_ROWS);
         ClearHover();
 
         foreach (var row in Rows)
@@ -417,7 +417,6 @@ public sealed class BankShopPanel : UIPanel
             names[i] = items[i].Name;
 
         var metadata = DataContext.MetaFiles.GetItemMetadata(names);
-        byte slot = 1;
 
         foreach (var item in items)
         {
@@ -431,7 +430,6 @@ public sealed class BankShopPanel : UIPanel
                     item.Name,
                     icon,
                     (int)item.Cost,
-                    slot++,
                     meta?.Category ?? string.Empty,
                     meta?.Description ?? string.Empty,
                     meta?.Level,
@@ -467,6 +465,8 @@ public sealed class BankShopPanel : UIPanel
 
             return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
         });
+
+        TabScroll.SetMetrics(Categories.Count, MAX_VISIBLE_TABS);
     }
 
     private void BuildFilteredIndices()
@@ -474,49 +474,46 @@ public sealed class BankShopPanel : UIPanel
         FilteredIndices.Clear();
 
         if (Categories.Count == 0)
-        {
             for (var i = 0; i < Entries.Count; i++)
                 FilteredIndices.Add(i);
-
-            return;
-        }
-
-        var selected = Categories[SelectedCategoryIndex];
-        var isOther = selected.EqualsI("Other");
-
-        for (var i = 0; i < Entries.Count; i++)
+        else
         {
-            var cat = Entries[i].Category;
+            var selected = Categories[SelectedCategoryIndex];
+            var isOther = selected.EqualsI("Other");
 
-            if (isOther && (cat.Length == 0))
-                FilteredIndices.Add(i);
-            else if (cat.EqualsI(selected))
-                FilteredIndices.Add(i);
+            for (var i = 0; i < Entries.Count; i++)
+            {
+                var cat = Entries[i].Category;
+
+                if (isOther && (cat.Length == 0))
+                    FilteredIndices.Add(i);
+                else if (cat.EqualsI(selected))
+                    FilteredIndices.Add(i);
+            }
         }
+
+        ItemScroll.SetMetrics(FilteredIndices.Count, VISIBLE_ROWS);
     }
 
     private void UpdateTabDisplay()
     {
-        var visibleCount = Math.Min(MAX_VISIBLE_TABS, Categories.Count - TabWindowStart);
-
         for (var i = 0; i < MAX_VISIBLE_TABS; i++)
         {
             var tab = Tabs[i];
-            var categoryIndex = TabWindowStart + i;
+            var categoryIndex = TabScroll.Offset + i;
 
-            if ((i < visibleCount) && (categoryIndex < Categories.Count))
+            if (categoryIndex < Categories.Count)
             {
                 var category = Categories[categoryIndex];
-                var label = category.Length > TAB_MAX_CHARS ? category[..(TAB_MAX_CHARS - 1)] + "…" : category;
-                tab.SetCategory(category, label);
+                tab.SetCategory(TextRenderer.Truncate(category, TAB_MAX_CHARS));
                 tab.IsSelected = categoryIndex == SelectedCategoryIndex;
                 tab.Visible = true;
             } else
                 tab.Visible = false;
         }
 
-        TabPrevButton.SetEnabled(TabWindowStart > 0);
-        TabNextButton.SetEnabled((TabWindowStart + MAX_VISIBLE_TABS) < Categories.Count);
+        TabPrevButton.SetEnabled(TabScroll.Offset > 0);
+        TabNextButton.SetEnabled(TabScroll.Offset < TabScroll.Max);
 
         //the tab under the cursor may now show a different category after a wheel/page scroll — refresh its tooltip
         if (HoveredTabSlot >= 0)
@@ -527,7 +524,7 @@ public sealed class BankShopPanel : UIPanel
     {
         for (var i = 0; i < Rows.Length; i++)
         {
-            var filteredPosition = ItemScrollOffset + i;
+            var filteredPosition = ItemScroll.Offset + i;
             var row = Rows[i];
 
             if (filteredPosition < FilteredIndices.Count)
@@ -545,14 +542,10 @@ public sealed class BankShopPanel : UIPanel
         }
 
         var total = FilteredIndices.Count;
-        var last = Math.Min(ItemScrollOffset + VISIBLE_ROWS, total);
-        PageLabel.Text = total > VISIBLE_ROWS ? $"{ItemScrollOffset + 1}-{last}/{total}" : string.Empty;
-        ItemPrevButton.SetEnabled(ItemScrollOffset > 0);
-        ItemNextButton.SetEnabled(ItemScrollOffset < MaxItemScroll);
-
-        //a wheel scroll keeps the cursor over the same row slot, which now shows a different item — refresh the tooltip
-        if (HoveredSlot >= 0)
-            HoveredIndex = RowToAbsoluteIndex(HoveredSlot);
+        var last = Math.Min(ItemScroll.Offset + VISIBLE_ROWS, total);
+        PageLabel.Text = total > VISIBLE_ROWS ? $"{ItemScroll.Offset + 1}-{last}/{total}" : string.Empty;
+        ItemPrevButton.SetEnabled(ItemScroll.Offset > 0);
+        ItemNextButton.SetEnabled(ItemScroll.Offset < ItemScroll.Max);
 
         //OK is always actionable — it confirms the selection, or closes the shop when nothing is selected
         //(HandleOk). With the session chrome suppressed there is no other mouse affordance to dismiss the bank.
@@ -560,17 +553,17 @@ public sealed class BankShopPanel : UIPanel
 
     private void HandleTabClick(int slot)
     {
-        var categoryIndex = TabWindowStart + slot;
+        var categoryIndex = TabScroll.Offset + slot;
 
         if ((categoryIndex >= Categories.Count) || (categoryIndex == SelectedCategoryIndex))
             return;
 
         SelectedCategoryIndex = categoryIndex;
         SelectedIndex = -1;
-        ItemScrollOffset = 0;
         ClearHover();
 
         BuildFilteredIndices();
+        ItemScroll.ScrollToStart();
         UpdateTabDisplay();
         UpdateItemDisplay();
         SaveNpcMemory();
@@ -601,31 +594,24 @@ public sealed class BankShopPanel : UIPanel
 
     private int RowToAbsoluteIndex(int slot)
     {
-        var filteredPosition = ItemScrollOffset + slot;
+        var filteredPosition = ItemScroll.Offset + slot;
 
         return filteredPosition < FilteredIndices.Count ? FilteredIndices[filteredPosition] : -1;
     }
 
-    internal void NotifyRowHover(int slot)
-    {
-        HoveredSlot = slot;
-        HoveredIndex = RowToAbsoluteIndex(slot);
-    }
+    internal void NotifyRowHover(int slot) => HoveredSlot = slot;
 
     //only clear when the leaving row is the one currently tracked — a row-to-row move enters the new row
     //(setting HoveredSlot) before the old row's leave fires, so a stale leave must not wipe the new hover.
     internal void NotifyRowLeave(int slot)
     {
-        if (HoveredSlot != slot)
-            return;
-
-        HoveredSlot = -1;
-        HoveredIndex = -1;
+        if (HoveredSlot == slot)
+            HoveredSlot = -1;
     }
 
     internal void NotifyTabHover(int slot)
     {
-        var categoryIndex = TabWindowStart + slot;
+        var categoryIndex = TabScroll.Offset + slot;
 
         if ((categoryIndex < 0) || (categoryIndex >= Categories.Count))
             return;
@@ -649,9 +635,11 @@ public sealed class BankShopPanel : UIPanel
     private void ClearHover()
     {
         HoveredSlot = -1;
-        HoveredIndex = -1;
         HoveredTabSlot = -1;
         HoveredCategory = null;
+
+        //force a rebuild on the next hover — a new shop can reuse the same index for a different item
+        TooltipCachedIndex = -1;
     }
 
     private void HandleOk()
@@ -662,36 +650,19 @@ public sealed class BankShopPanel : UIPanel
             OnClose?.Invoke();
     }
 
-    private void ScrollTabsPrev() => SetTabWindow(TabWindowStart - 1);
-
-    private void ScrollTabsNext() => SetTabWindow(TabWindowStart + 1);
-
-    private void SetTabWindow(int target)
+    private void ScrollTabs(bool moved)
     {
-        target = Math.Clamp(target, 0, Math.Max(0, Categories.Count - MAX_VISIBLE_TABS));
-
-        if (target == TabWindowStart)
-            return;
-
-        TabWindowStart = target;
-        UpdateTabDisplay();
+        if (moved)
+            UpdateTabDisplay();
     }
 
-    //the < > buttons jump a whole page; the wheel moves one row at a time (see OnMouseScroll)
-    private void PrevItemPage() => SetItemScroll(ItemScrollOffset - VISIBLE_ROWS);
-
-    private void NextItemPage() => SetItemScroll(ItemScrollOffset + VISIBLE_ROWS);
-
-    private void SetItemScroll(int target)
+    //the selection is intentionally kept across scrolling — the highlight simply moves out of view and OK still acts
+    //on it; UpdateItemDisplay re-maps the hovered row so its tooltip tracks the newly revealed item
+    private void ScrollItems(bool moved)
     {
-        target = Math.Clamp(target, 0, MaxItemScroll);
-
-        if (target == ItemScrollOffset)
+        if (!moved)
             return;
 
-        //the selection is intentionally kept across scrolling — the highlight simply moves out of view and OK still
-        //acts on it; UpdateItemDisplay re-maps the hovered row so its tooltip tracks the newly revealed item
-        ItemScrollOffset = target;
         UpdateItemDisplay();
         SaveNpcMemory();
     }
@@ -700,12 +671,12 @@ public sealed class BankShopPanel : UIPanel
     {
         var localX = e.ScreenX - ScreenX;
 
-        //cursor over the left tab column scrolls categories; anywhere else scrolls the item rows. Wheel-up (positive
-        //delta) moves toward the top, matching the rest of the client (see MenuListPanel).
+        //cursor over the left tab column scrolls categories; anywhere else scrolls the item rows. WheelBy matches the
+        //client-wide "wheel-up moves toward the top" convention (see MenuListPanel).
         if (localX < ITEM_X)
-            SetTabWindow(TabWindowStart - e.Delta);
+            ScrollTabs(TabScroll.WheelBy(e.Delta));
         else
-            SetItemScroll(ItemScrollOffset - e.Delta);
+            ScrollItems(ItemScroll.WheelBy(e.Delta));
 
         e.Handled = true;
     }
@@ -718,14 +689,13 @@ public sealed class BankShopPanel : UIPanel
         if ((SelectedCategoryIndex < 0) || (SelectedCategoryIndex >= Categories.Count))
             return;
 
-        NpcMemory[CurrentNpcName] = (Categories[SelectedCategoryIndex], ItemScrollOffset);
+        NpcMemory[CurrentNpcName] = (Categories[SelectedCategoryIndex], ItemScroll.Offset);
     }
 
     private sealed record MerchantEntry(
         string Name,
         Texture2D? Icon,
         int Count,
-        byte Slot,
         string Category = "",
         string Description = "",
         int? Level = null,
@@ -812,10 +782,7 @@ public sealed class BankShopPanel : UIPanel
             if (newline >= 0)
                 name = name[..newline];
 
-            if (name.Length > MAX_NAME_CHARS)
-                name = name[..(MAX_NAME_CHARS - 3)] + "...";
-
-            NameLabel.Text = name;
+            NameLabel.Text = TextRenderer.Truncate(name, MAX_NAME_CHARS);
             CountLabel.Text = count > 0 ? count.ToString("N0") : string.Empty;
         }
 
@@ -870,7 +837,6 @@ public sealed class BankShopPanel : UIPanel
     {
         private readonly UILabel NameLabel;
 
-        public string Category { get; private set; } = string.Empty;
         public int TabIndex { get; init; }
 
         public event ClickedHandler? Clicked;
@@ -908,11 +874,7 @@ public sealed class BankShopPanel : UIPanel
             AddChild(NameLabel);
         }
 
-        public void SetCategory(string category, string label)
-        {
-            Category = category;
-            NameLabel.Text = label;
-        }
+        public void SetCategory(string label) => NameLabel.Text = label;
 
         public override void OnMouseEnter() => (Parent as BankShopPanel)?.NotifyTabHover(TabIndex);
 
@@ -976,7 +938,7 @@ public sealed class BankShopPanel : UIPanel
 
         private void RefreshVisual()
         {
-            BackgroundColor = !Enabled ? IdleFill : Pressed ? PressFill : Hovered ? HoverFill : IdleFill;
+            BackgroundColor = Enabled ? Pressed ? PressFill : Hovered ? HoverFill : IdleFill : IdleFill;
             Label.ForegroundColor = Enabled ? LegendColors.White : DisabledText;
             BorderColor = Enabled ? EdgeColor : DividerColor;
         }

@@ -443,11 +443,6 @@ public sealed class NpcSessionControl : PrefabPanel
     public string? GetMerchantEntryName(int index) => MenuShop.GetEntryName(index);
 
     /// <summary>
-    ///     Returns the slot byte for the merchant entry at the given index.
-    /// </summary>
-    public byte? GetMerchantEntrySlot(int index) => MenuShop.GetEntrySlot(index);
-
-    /// <summary>
     ///     Returns the pursuit ID for the option at the given index in the OptionMenu sub-panel.
     /// </summary>
     public ushort GetOptionPursuitId(int index) => DialogOption.GetOptionPursuitId(index);
@@ -462,8 +457,7 @@ public sealed class NpcSessionControl : PrefabPanel
         HideAllSubPanels();
 
         //restore chrome so the next dialog/menu opens in the default (non-suppressed) state
-        ChromeSuppressed = false;
-        SetSessionChrome(true);
+        ApplyChromeSuppression(false);
 
         Hide();
     }
@@ -479,6 +473,13 @@ public sealed class NpcSessionControl : PrefabPanel
         DialogTextLabel.Text = string.Empty;
         DialogScroll.Configure(DialogSource);
         UpdateScrollButtons();
+    }
+
+    //single owner of the suppress-flag ⇄ chrome-visibility relationship so the two can never drift apart
+    private void ApplyChromeSuppression(bool suppressed)
+    {
+        ChromeSuppressed = suppressed;
+        SetSessionChrome(!suppressed);
     }
 
     /// <summary>
@@ -677,8 +678,7 @@ public sealed class NpcSessionControl : PrefabPanel
         var dialogType = (DialogType)(byte)pkt.DialogType;
 
         //dialogs always use the default chrome (no from-scratch content panel suppresses it)
-        ChromeSuppressed = false;
-        SetSessionChrome(true);
+        ApplyChromeSuppression(false);
 
         IsDialogOpcode = true;
         CurrentDialogType = dialogType;
@@ -777,8 +777,7 @@ public sealed class NpcSessionControl : PrefabPanel
         CurrentMenuType = menuType;
 
         //the from-scratch BankShopPanel owns the whole screen for ShowItems — hide the legacy bar/portrait/name chrome
-        ChromeSuppressed = menuType == MenuType.ShowItems;
-        SetSessionChrome(!ChromeSuppressed);
+        ApplyChromeSuppression(menuType == MenuType.ShowItems);
 
         SourceEntityType = pkt.EntityType switch
         {

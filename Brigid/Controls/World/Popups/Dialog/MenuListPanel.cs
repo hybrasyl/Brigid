@@ -116,7 +116,7 @@ public sealed class MenuListPanel : FramedDialogPanelBase
 
     private void AddEntry(string name, byte slot, Texture2D? icon)
     {
-        var displayName = name.Length > 23 ? name[..20] + "..." : name;
+        var displayName = TextRenderer.Truncate(name, 23);
 
         Entries.Add(
             new ListEntryData(

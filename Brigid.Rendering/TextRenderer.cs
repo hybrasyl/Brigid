@@ -248,6 +248,19 @@ public static class TextRenderer
 
         return width;
     }
+
+    /// <summary>
+    ///     Clips <paramref name="text" /> to at most <paramref name="maxChars" /> characters, appending a single-glyph
+    ///     ellipsis ("…") when it overflows so the result never exceeds the budget. One home for the truncation rule so
+    ///     list/tab/label sites share the same ellipsis instead of each rolling their own "…" vs "..." variant.
+    /// </summary>
+    public static string Truncate(string text, int maxChars)
+    {
+        if (string.IsNullOrEmpty(text) || (text.Length <= maxChars))
+            return text;
+
+        return maxChars <= 1 ? "…" : text[..(maxChars - 1)] + "…";
+    }
     #endregion
 
     #region Word Wrapping
