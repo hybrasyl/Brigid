@@ -76,9 +76,9 @@ public sealed class WorldListControl : PrefabPanel
         ListView = new VirtualizedListView<WorldListEntry, WorldListEntryControl>(
             usersListRect,
             ROW_HEIGHT,
-            w =>
+            (w, i) =>
             {
-                var row = new WorldListEntryControl(w) { Visible = false };
+                var row = new WorldListEntryControl(w) { Name = $"WorldListEntry{i}", Visible = false };
                 row.OnWhisper += name => OnWhisperRequested?.Invoke(name);
 
                 return row;

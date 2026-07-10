@@ -214,11 +214,6 @@ public delegate void ScrollMetricsChangedHandler();
 ///     A virtualized list row was selected or activated, by item index.
 /// </summary>
 public delegate void ListRowHandler(int index);
-
-/// <summary>
-///     A virtualized list's trailing virtual row (e.g. "Load More") was activated.
-/// </summary>
-public delegate void ListTrailingHandler();
 #endregion
 
 #region Controls/World/Hud Delegates

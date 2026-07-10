@@ -650,7 +650,7 @@ public sealed class ConnectionManager : IDisposable
             {
                 BoardId = boardId,
                 StartPostId = startPostId,
-                Offset = -16
+                Offset = (sbyte)(-BoardProtocol.PageSize)
             },
             //offset drives server-side prev/next navigation: 0 = exact post, 1 = newer, -1 = older
             BoardRequestType.ViewPost => new Cli.ViewPostPacket

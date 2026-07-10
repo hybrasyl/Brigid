@@ -498,10 +498,7 @@ public sealed partial class WorldScreen
         };
 
         ArticleList.OnLoadMorePosts += lastPostId =>
-        {
-            LoadingMoreBoardPosts = true;
             Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, ArticleList.BoardId, startPostId: lastPostId);
-        };
 
         ArticleList.OnUp += () =>
         {
@@ -558,10 +555,7 @@ public sealed partial class WorldScreen
         };
 
         MailList.OnLoadMorePosts += lastPostId =>
-        {
-            LoadingMoreBoardPosts = true;
             Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, MailList.BoardId, startPostId: lastPostId);
-        };
 
         MailList.OnUp += () =>
         {

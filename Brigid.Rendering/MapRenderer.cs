@@ -327,6 +327,98 @@ public sealed class MapRenderer : IDisposable
         }
     }
 
+    /// <summary>
+    ///     Hit-tests the foreground sprites at a screen point and returns the tile of the frontmost foreground whose
+    ///     rendered bounding box contains it. A tall foreground (a signpost/board) is drawn bottom-aligned and overhangs
+    ///     the tiles above it, so this lets a click anywhere on the sprite resolve to its anchor tile even when the
+    ///     overhung tiles carry their own foreground (e.g. walls). Bounding-box test, not per-pixel — good enough for
+    ///     click targeting and independent of tile passability. <paramref name="screenX" />/<paramref name="screenY" /> are
+    ///     viewport-relative (camera space), i.e. window coords minus the world viewport origin — same as ScreenToWorld.
+    /// </summary>
+    public bool TryHitTestForeground(MapFile mapFile, Camera camera, int screenX, int screenY, out int tileX, out int tileY)
+    {
+        tileX = 0;
+        tileY = 0;
+
+        var found = false;
+        var bestDepth = int.MinValue;
+
+        var (minX, minY, maxX, maxY) = camera.GetVisibleTileBounds(mapFile.Width, mapFile.Height, ForegroundExtraMargin);
+
+        for (var y = minY; y <= maxY; y++)
+            for (var x = minX; x <= maxX; x++)
+            {
+                var depth = x + y;
+
+                //only a frontmost (larger depth) sprite can override the current best, so skip anything that can't win
+                if (depth <= bestDepth)
+                    continue;
+
+                var tile = mapFile.Tiles[x, y];
+                var worldPos = Camera.TileToWorld(x, y, mapFile.Height);
+
+                if ((tile.LeftForeground.IsRenderedTileIndex()
+                     && FgSpriteContains(camera, worldPos.X, worldPos.Y, tile.LeftForeground, screenX, screenY))
+                    || (tile.RightForeground.IsRenderedTileIndex()
+                        && FgSpriteContains(camera, worldPos.X + CONSTANTS.HALF_TILE_WIDTH, worldPos.Y, tile.RightForeground, screenX, screenY)))
+                {
+                    bestDepth = depth;
+                    tileX = x;
+                    tileY = y;
+                    found = true;
+                }
+            }
+
+        return found;
+    }
+
+    private bool FgSpriteContains(Camera camera, float worldX, float worldY, int tileId, int screenX, int screenY)
+    {
+        if (!TryGetFgSpriteSize(tileId, out var width, out var height))
+            return false;
+
+        //foreground is bottom-aligned at the tile (mirrors DrawSingleFgTile)
+        var fgWorldY = worldY + CONSTANTS.HALF_TILE_HEIGHT * 2 - height;
+        var screenPos = camera.WorldToScreen(new Vector2(worldX, fgWorldY));
+
+        return (screenX >= screenPos.X) && (screenX < screenPos.X + width) && (screenY >= screenPos.Y)
+               && (screenY < screenPos.Y + height);
+    }
+
+    private bool TryGetFgSpriteSize(int tileId, out int width, out int height)
+    {
+        if (CyclingManager is not null && CyclingManager.FgOverrides.TryGetValue(tileId, out var cyclingRegion))
+        {
+            width = cyclingRegion.SourceRect.Width;
+            height = cyclingRegion.SourceRect.Height;
+
+            return true;
+        }
+
+        if (FgAtlas is not null && FgAtlas.TryGetRegion(tileId) is { } region)
+        {
+            width = region.SourceRect.Width;
+            height = region.SourceRect.Height;
+
+            return true;
+        }
+
+        var texture = GetOrCreateFgTexture(tileId);
+
+        if (texture is not null)
+        {
+            width = texture.Width;
+            height = texture.Height;
+
+            return true;
+        }
+
+        width = 0;
+        height = 0;
+
+        return false;
+    }
+
     private Texture2D? GetOrCreateBgTexture(int tileId)
     {
         if (BgTextureCache.TryGetValue(tileId, out var cached))
