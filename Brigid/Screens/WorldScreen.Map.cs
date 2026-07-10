@@ -234,26 +234,34 @@ public sealed partial class WorldScreen
     /// <summary>
     ///     Resolves the tile whose foreground sprite a double-click targets. A board/signpost sprite is anchored at its
     ///     tile and drawn tall, so it visually overhangs the tiles up-and-left of the anchor; a click landing on that
-    ///     overhang should still hit the board. Probes the clicked (anchor) tile first — so an exact click is unchanged —
-    ///     then the three down-right neighbours the sprite can cover, and returns the first tile that carries a foreground.
+    ///     overhang should still hit the board. Probes the clicked (anchor) tile and the three down-right neighbours the
+    ///     sprite can cover, preferring a non-wall foreground (the signpost) so a click that lands on a wall tile the
+    ///     board's sprite overhangs resolves past the wall to the board behind it rather than stopping on the wall. Falls
+    ///     back to any foreground so an exact hit is never worse than before.
     /// </summary>
     private bool TryResolveForegroundTile(int tileX, int tileY, out int foregroundX, out int foregroundY)
     {
         ReadOnlySpan<(int Dx, int Dy)> footprint = [(0, 0), (1, 0), (0, 1), (1, 1)];
 
+        //pass 1 — prefer a non-wall foreground (a signpost/board) over a wall in front of it
         foreach (var (dx, dy) in footprint)
-        {
-            var tx = tileX + dx;
-            var ty = tileY + dy;
-
-            if (TileHasForeground(tx, ty))
+            if (TileHasForeground(tileX + dx, tileY + dy) && !IsTileWallBlocked(tileX + dx, tileY + dy))
             {
-                foregroundX = tx;
-                foregroundY = ty;
+                foregroundX = tileX + dx;
+                foregroundY = tileY + dy;
 
                 return true;
             }
-        }
+
+        //pass 2 — fall back to any foreground (e.g. the exact tile) so a direct hit still resolves
+        foreach (var (dx, dy) in footprint)
+            if (TileHasForeground(tileX + dx, tileY + dy))
+            {
+                foregroundX = tileX + dx;
+                foregroundY = tileY + dy;
+
+                return true;
+            }
 
         foregroundX = 0;
         foregroundY = 0;

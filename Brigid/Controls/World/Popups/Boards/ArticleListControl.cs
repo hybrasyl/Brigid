@@ -26,6 +26,7 @@ public sealed class ArticleListControl : PrefabPanel
     private const int PREFIX_CHARS = POSTID_CHARS + SPACER5_LEN + AUTHOR_CHARS + SPACER5_LEN + DATE_CHARS + SPACER3_LEN;
     private const string SPACER5 = "     ";
     private const string SPACER3 = "   ";
+    private const int SUBJECT_SLACK = 4; //extra subject characters allowed past the column estimate before the clip trims
 
     private readonly Rectangle ArticleListRect;
     private readonly int MaxSubjectChars;
@@ -120,9 +121,10 @@ public sealed class ArticleListControl : PrefabPanel
 
         AddChild(ScrollBar);
 
-        //row labels — one per visible row, columns via fixed-width string formatting
+        //row labels — one per visible row, columns via fixed-width string formatting. SUBJECT_SLACK lets the subject
+        //run a few characters past the conservative column estimate; the label's hard clip trims any real overflow.
         var usableWidth = ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH;
-        MaxSubjectChars = Math.Max(0, usableWidth / TextRenderer.CHAR_WIDTH - PREFIX_CHARS);
+        MaxSubjectChars = Math.Max(0, usableWidth / TextRenderer.CHAR_WIDTH - PREFIX_CHARS + SUBJECT_SLACK);
 
         RowLabels = new UILabel[MaxVisibleRows];
 
@@ -349,7 +351,8 @@ public sealed class ArticleListControl : PrefabPanel
         var localX = e.ScreenX - ScreenX - ArticleListRect.X;
         var localY = e.ScreenY - ScreenY - ArticleListRect.Y;
 
-        if ((localX < 0) || (localX >= ArticleListRect.Width) || (localY < 0) || (localY >= ArticleListRect.Height))
+        //exclude the scrollbar strip on the right so a click on it never selects/opens the row beneath
+        if ((localX < 0) || (localX >= ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH) || (localY < 0) || (localY >= ArticleListRect.Height))
             return;
 
         var row = localY / ROW_HEIGHT;
@@ -377,7 +380,8 @@ public sealed class ArticleListControl : PrefabPanel
         var localX = e.ScreenX - ScreenX - ArticleListRect.X;
         var localY = e.ScreenY - ScreenY - ArticleListRect.Y;
 
-        if ((localX < 0) || (localX >= ArticleListRect.Width) || (localY < 0) || (localY >= ArticleListRect.Height))
+        //exclude the scrollbar strip on the right so a click on it never selects/opens the row beneath
+        if ((localX < 0) || (localX >= ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH) || (localY < 0) || (localY >= ArticleListRect.Height))
             return;
 
         var row = localY / ROW_HEIGHT;
@@ -412,6 +416,16 @@ public sealed class ArticleListControl : PrefabPanel
                 break;
             case Keys.Down:
                 MoveSelection(1);
+                e.Handled = true;
+
+                break;
+            case Keys.PageUp:
+                MoveSelection(-MaxVisibleRows);
+                e.Handled = true;
+
+                break;
+            case Keys.PageDown:
+                MoveSelection(MaxVisibleRows);
                 e.Handled = true;
 
                 break;

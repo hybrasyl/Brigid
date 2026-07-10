@@ -317,7 +317,8 @@ public sealed class MailListControl : PrefabPanel
         var localX = e.ScreenX - ScreenX - MailListRect.X;
         var localY = e.ScreenY - ScreenY - MailListRect.Y;
 
-        if ((localX < 0) || (localX >= MailListRect.Width) || (localY < 0) || (localY >= MailListRect.Height))
+        //exclude the scrollbar strip on the right so a click on it never selects/opens the row beneath
+        if ((localX < 0) || (localX >= MailListRect.Width - ScrollBarControl.DEFAULT_WIDTH) || (localY < 0) || (localY >= MailListRect.Height))
             return;
 
         var row = localY / ROW_HEIGHT;
@@ -345,7 +346,8 @@ public sealed class MailListControl : PrefabPanel
         var localX = e.ScreenX - ScreenX - MailListRect.X;
         var localY = e.ScreenY - ScreenY - MailListRect.Y;
 
-        if ((localX < 0) || (localX >= MailListRect.Width) || (localY < 0) || (localY >= MailListRect.Height))
+        //exclude the scrollbar strip on the right so a click on it never selects/opens the row beneath
+        if ((localX < 0) || (localX >= MailListRect.Width - ScrollBarControl.DEFAULT_WIDTH) || (localY < 0) || (localY >= MailListRect.Height))
             return;
 
         var row = localY / ROW_HEIGHT;
@@ -380,6 +382,16 @@ public sealed class MailListControl : PrefabPanel
                 break;
             case Keys.Down:
                 MoveSelection(1);
+                e.Handled = true;
+
+                break;
+            case Keys.PageUp:
+                MoveSelection(-MaxVisibleRows);
+                e.Handled = true;
+
+                break;
+            case Keys.PageDown:
+                MoveSelection(MaxVisibleRows);
                 e.Handled = true;
 
                 break;
