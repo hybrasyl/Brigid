@@ -277,4 +277,58 @@ public class MarkdownLayoutEngineTests
         Assert.Contains("&", text);
         Assert.Contains("A", text);
     }
+
+    [Fact]
+    public void List_EmptyItemAdvancesY_NoMarkerOverlap()
+    {
+        //Markdig emits a childless ListItemBlock for a bare '-'; the empty item must still occupy a line
+        //(BODY line height in the fake is 15 + 5 = 20px)
+        var layout = Layout("- first\n-\n- third");
+
+        var markers = layout.Spans
+                            .Where(s => s.Kind == MarkdownSpanKind.ListMarker)
+                            .OrderBy(s => s.Y)
+                            .ToList();
+        Assert.Equal(3, markers.Count);
+        Assert.True(markers[1].Y - markers[0].Y >= 20, "marker overlaps the first item");
+        Assert.True(markers[2].Y - markers[1].Y >= 20, "marker overlaps the empty item");
+
+        //a trailing empty item's line must be inside ContentHeight (reachable at max scroll)
+        var trailing = Layout("- a\n-");
+        var lastMarker = trailing.Spans.Where(s => s.Kind == MarkdownSpanKind.ListMarker).MaxBy(s => s.Y);
+        Assert.True(lastMarker.Y + 20 <= trailing.ContentHeight, "trailing empty item clipped past ContentHeight");
+    }
+
+    [Fact]
+    public void OrderedList_WideMarkerPushesContentClear()
+    {
+        //marker "100." is 4 chars = 40px in the fake — wider than the fixed 18px indent
+        var layout = Layout("100. item");
+
+        var marker = layout.Spans.Single(s => s.Kind == MarkdownSpanKind.ListMarker);
+        var content = layout.Spans.Single(s => s.Kind == MarkdownSpanKind.Body);
+
+        Assert.Equal("100.", marker.Text);
+        Assert.True(content.X >= marker.X + 40, $"content at x={content.X} overlaps the 40px marker");
+    }
+
+    [Fact]
+    public void CodeBlock_WrapNeverSplitsSurrogatePairs()
+    {
+        //each UTF-16 unit is 10px in the fake, so a pair is 20px. Width 91 → 79px available: a per-unit
+        //wrap would break after 7 units (mid-pair); whole-char advance must wrap on pair boundaries.
+        var line = string.Concat(Enumerable.Repeat("😀", 40));
+        var layout = Layout($"```\n{line}\n```", width: 91);
+
+        var codeSpans = layout.Spans.Where(s => s.Kind == MarkdownSpanKind.Code).ToList();
+        Assert.True(codeSpans.Count > 1, "expected the code line to wrap");
+
+        foreach (var span in codeSpans)
+        {
+            Assert.False(char.IsLowSurrogate(span.Text[0]), "span starts with a lone low surrogate");
+            Assert.False(char.IsHighSurrogate(span.Text[^1]), "span ends with a lone high surrogate");
+        }
+
+        Assert.Equal(line, string.Concat(codeSpans.Select(s => s.Text)));
+    }
 }

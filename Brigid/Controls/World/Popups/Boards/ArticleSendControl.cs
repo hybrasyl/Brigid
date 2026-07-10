@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -87,7 +88,7 @@ public sealed class ArticleSendControl : PrefabPanel
             Height = SCROLLBAR_HEIGHT
         };
 
-        BodyScrollBar.OnValueChanged += v => BodyBox.ScrollOffset = v * TextRenderer.CHAR_HEIGHT;
+        TextBoxScrollSync.Wire(BodyBox, BodyScrollBar);
         AddChild(BodyScrollBar);
     }
 
@@ -97,16 +98,7 @@ public sealed class ArticleSendControl : PrefabPanel
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
-
-        BodyScrollBar.TotalItems = BodyBox.LineCount;
-        BodyScrollBar.VisibleItems = BodyBox.VisibleLineCount;
-        BodyScrollBar.MaxValue = Math.Max(0, BodyBox.LineCount - BodyBox.VisibleLineCount);
-
-        //content can shrink while scrolled down (e.g. deleting near the bottom) — pull the view
-        //back in range, otherwise the scrollbar disables itself while early lines are stranded
-        //out of reach above the viewport
-        BodyBox.ScrollOffset = Math.Min(BodyBox.ScrollOffset, BodyScrollBar.MaxValue * TextRenderer.CHAR_HEIGHT);
-        BodyScrollBar.Value = Math.Clamp(BodyBox.ScrollOffset / TextRenderer.CHAR_HEIGHT, 0, BodyScrollBar.MaxValue);
+        TextBoxScrollSync.Sync(BodyBox, BodyScrollBar);
     }
 
     private void HandleSend()

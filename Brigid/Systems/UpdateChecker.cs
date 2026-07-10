@@ -2,6 +2,7 @@
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
+using Chaos.Extensions.Common;
 #endregion
 
 namespace Brigid.Systems;
@@ -59,10 +60,10 @@ public static class UpdateChecker
     }
 
     /// <summary>
-    ///     Informational version without +commit metadata (e.g. "0.1.0" or "1.0.0-alpha1"), matching the
-    ///     start-screen version label.
+    ///     Informational version without +commit metadata (e.g. "0.1.0" or "1.0.0-alpha1"). Also consumed by the
+    ///     start-screen version label so the displayed version and the compared version can never drift.
     /// </summary>
-    private static string GetCurrentVersion()
+    public static string GetCurrentVersion()
     {
         var info = typeof(UpdateChecker).Assembly
                                         .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
@@ -91,7 +92,7 @@ public static class UpdateChecker
 
         //unparseable on either side: fall back to plain inequality
         if ((remoteCore is null) || (localCore is null))
-            return !string.Equals(remote, localVersion, StringComparison.OrdinalIgnoreCase);
+            return !remote.EqualsI(localVersion);
 
         if (remoteCore != localCore)
             return remoteCore > localCore;

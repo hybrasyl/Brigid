@@ -25,6 +25,7 @@ public static class MarkdownLayoutEngine
     private const int H3_SIZE = 17;
 
     private const int LIST_INDENT = 18;
+    private const int MARKER_GAP = 4;
     private const int QUOTE_INDENT = 12;
     private const int ITEM_GAP = 2;
     private const int CODE_PAD = 6;
@@ -82,6 +83,7 @@ public static class MarkdownLayoutEngine
     private sealed class Builder(int width, ITextMeasurer measurer)
     {
         private readonly List<Rectangle> CodeBackgrounds = [];
+        private readonly Dictionary<char, int> MonoCharWidths = [];
         private readonly List<Rectangle> Rules = [];
         private readonly List<MarkdownSpan> Spans = [];
         private int Y;
@@ -217,8 +219,19 @@ public static class MarkdownLayoutEngine
                 Spans.Add(new MarkdownSpan(marker, indent, Y, BODY_SIZE, FontStyle.Regular, MarkdownSpanKind.ListMarker));
                 number++;
 
+                //content clears the measured marker — multi-digit ordered markers ('10.', '999.') exceed the
+                //fixed indent and would otherwise draw under the item's first words
+                var contentIndent = indent + Math.Max(LIST_INDENT, measurer.MeasureWidth(marker, BODY_SIZE) + MARKER_GAP);
+
                 //item content starts on the marker's line; nested blocks (incl. nested lists) indent further
-                LayoutBlocks(listItem, indent + LIST_INDENT, ITEM_GAP);
+                var itemTop = Y;
+                LayoutBlocks(listItem, contentIndent, ITEM_GAP);
+
+                //an empty item ('- ' alone — Markdig emits a childless ListItemBlock) lays out nothing, so
+                //advance past the marker's own line: the next marker must not overlap it, and a trailing empty
+                //item's marker must stay inside ContentHeight
+                if (Y == itemTop)
+                    Y += measurer.GetLineHeight(BODY_SIZE);
             }
         }
 
@@ -242,13 +255,16 @@ public static class MarkdownLayoutEngine
                     continue;
                 }
 
-                //greedy character wrap for over-wide code lines (no word boundaries assumed)
-                while (line.Length > 0)
+                //greedy character wrap for over-wide code lines (no word boundaries assumed); offset-based so
+                //the shrinking remainder isn't re-allocated per wrapped line
+                var pos = 0;
+
+                while (pos < line.Length)
                 {
-                    var fit = FitChars(line, available);
-                    Spans.Add(new MarkdownSpan(line[..fit], textX, Y, BODY_SIZE, FontStyle.Mono, MarkdownSpanKind.Code));
+                    var fit = FitChars(line, pos, available);
+                    Spans.Add(new MarkdownSpan(line.Substring(pos, fit), textX, Y, BODY_SIZE, FontStyle.Mono, MarkdownSpanKind.Code));
                     Y += lineHeight;
-                    line = line[fit..];
+                    pos += fit;
                 }
             }
 
@@ -257,29 +273,56 @@ public static class MarkdownLayoutEngine
         }
 
         /// <summary>
-        ///     Longest prefix of <paramref name="text" /> that fits <paramref name="available" /> px (at least one
-        ///     char). Accumulates per-character widths — O(n) even on a 64KB single-line code block, and exact for
-        ///     monospace faces (code is always <see cref="FontStyle.Mono" />). On a proportional fallback face the
-        ///     sum ignores inter-glyph tracking, which only ever overestimates — wrapping slightly early, never
-        ///     overflowing.
+        ///     Length of the longest prefix of <paramref name="text" /> starting at <paramref name="start" /> that
+        ///     fits <paramref name="available" /> px (at least one char). Accumulates per-character widths — O(n)
+        ///     even on a 64KB single-line code block, and exact for monospace faces (code is always
+        ///     <see cref="FontStyle.Mono" />). On a proportional fallback face the sum ignores inter-glyph
+        ///     tracking, which only ever overestimates — wrapping slightly early, never overflowing. Advances in
+        ///     whole characters: a surrogate pair is measured and consumed as one unit, never split across a wrap
+        ///     (a lone half would sanitize to U+FFFD and render as a replacement glyph).
         /// </summary>
-        private int FitChars(string text, int available)
+        private int FitChars(string text, int start, int available)
         {
             var x = 0;
             var fit = 0;
 
-            while (fit < text.Length)
+            while (start + fit < text.Length)
             {
-                var charWidth = measurer.MeasureWidth(text[fit..(fit + 1)], BODY_SIZE, FontStyle.Mono);
+                var step = char.IsHighSurrogate(text[start + fit]) && (start + fit + 1 < text.Length) && char.IsLowSurrogate(text[start + fit + 1])
+                    ? 2
+                    : 1;
+
+                var charWidth = MeasureMonoChar(text, start + fit, step);
 
                 if ((fit > 0) && (x + charWidth > available))
                     break;
 
                 x += charWidth;
-                fit++;
+                fit += step;
             }
 
             return fit;
+        }
+
+        //memoized per-character mono widths — repeated characters cost one dictionary hit instead of a
+        //substring allocation plus a full measure pipeline (a 10KB code block is ~10k lookups, ~80 measures)
+        private int MeasureMonoChar(string text, int index, int length)
+        {
+            if (length == 1)
+            {
+                var c = text[index];
+
+                if (!MonoCharWidths.TryGetValue(c, out var width))
+                {
+                    width = measurer.MeasureWidth(text.Substring(index, 1), BODY_SIZE, FontStyle.Mono);
+                    MonoCharWidths[c] = width;
+                }
+
+                return width;
+            }
+
+            //surrogate pair — rare enough that an uncached measure is fine
+            return measurer.MeasureWidth(text.Substring(index, length), BODY_SIZE, FontStyle.Mono);
         }
 
         /// <summary>

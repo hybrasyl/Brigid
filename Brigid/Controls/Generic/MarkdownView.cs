@@ -53,7 +53,6 @@ public sealed class MarkdownView : UIPanel
     private bool IsMaximized;
     private int LastFontGeneration = -1;
     private MarkdownLayout? Layout;
-    private int ScrollY;
     private string Source = string.Empty;
     private int TitleBarHeight;
     private Rectangle ViewportBounds;
@@ -116,9 +115,8 @@ public sealed class MarkdownView : UIPanel
         AddChild(Scrollbar);
 
         //the layout is pixel-positioned, so the model works in SCROLL_STEP-px chunks ("lines") — the bar's ±1
-        //arrow step and each wheel notch then move one chunk, not one pixel. ApplyScroll maps back to pixels.
+        //arrow step and each wheel notch then move one chunk, not one pixel. ScrollY derives the pixel offset.
         ScrollBinder = new ScrollBarBinder(Scroll, Scrollbar);
-        Scroll.Changed += _ => ApplyScroll();
 
         UpdateBounds();
     }
@@ -230,31 +228,27 @@ public sealed class MarkdownView : UIPanel
 
     private int MaxScroll => Math.Max(0, (Layout?.ContentHeight ?? 0) - Content.Height);
 
-    //feed the model chunk-unit metrics derived from the pixel range, then pull the pixel offset back out.
-    //extent = viewport + scrollable-chunks so Max lands exactly on the last (partial) chunk and
-    //CanScroll ⇔ MaxScroll > 0; SetMetrics re-clamps the offset and the binder refreshes the bar.
+    //pixel offset the renderer uses — derived, so it can't drift from the model's chunk offset
+    private int ScrollY => Math.Min(Scroll.Offset * SCROLL_STEP, MaxScroll);
+
+    //feed the model chunk-unit metrics derived from the pixel range. extent = viewport + scrollable-chunks so
+    //Max lands exactly on the last (partial) chunk and CanScroll ⇔ MaxScroll > 0; SetMetrics re-clamps the
+    //offset and the binder refreshes the bar. Called only when metrics can change (every such path funnels
+    //through Relayout), not per frame.
     private void SyncScroll()
     {
         var viewportUnits = Math.Max(1, Content.Height / SCROLL_STEP);
         var maxUnits = (MaxScroll + SCROLL_STEP - 1) / SCROLL_STEP;
 
         Scroll.SetMetrics(viewportUnits + maxUnits, viewportUnits);
-        ApplyScroll();
         Scrollbar.Visible = Scroll.CanScroll;
     }
 
-    private void ApplyScroll() => ScrollY = Math.Min(Scroll.Offset * SCROLL_STEP, MaxScroll);
-
     public override void Update(GameTime gameTime)
     {
-        if (Visible)
-        {
-            //font cycling or window resize changes measurements — re-lay-out at the same width
-            if (FontEngine.Instance.Generation != LastFontGeneration)
-                Relayout();
-
-            SyncScroll();
-        }
+        //font cycling or window resize changes measurements — re-lay-out at the same width
+        if (Visible && (FontEngine.Instance.Generation != LastFontGeneration))
+            Relayout();
 
         base.Update(gameTime);
     }
@@ -303,10 +297,11 @@ public sealed class MarkdownView : UIPanel
 
     public override void OnMouseScroll(MouseScrollEvent e)
     {
-        if (MaxScroll <= 0)
-            return;
+        //consume even a no-op notch (content fits): unhandled, the wheel would bubble to the root handler
+        //and scroll the chat panel underneath this opaque, click-consuming window — same rule as ScrollView
+        if (MaxScroll > 0)
+            Scroll.WheelBy(e.Delta);
 
-        Scroll.WheelBy(e.Delta);
         e.Handled = true;
     }
 
@@ -341,23 +336,44 @@ public sealed class MarkdownView : UIPanel
             var originX = ScreenX;
             var originY = ScreenY - owner.ScrollY;
 
+            //all three lists are emitted in ascending Y by the layout engine, so once an element starts below
+            //the clip rect every later one does too — break instead of scanning the whole document each frame
             foreach (var rect in layout.CodeBackgrounds)
+            {
+                if (originY + rect.Y > ClipRect.Bottom)
+                    break;
+
+                if (originY + rect.Y + rect.Height < ClipRect.Y)
+                    continue;
+
                 DrawRectClipped(
                     spriteBatch,
                     new Rectangle(originX + rect.X, originY + rect.Y, rect.Width, rect.Height),
                     CodeBackgroundColor);
+            }
 
             foreach (var rule in layout.Rules)
+            {
+                if (originY + rule.Y > ClipRect.Bottom)
+                    break;
+
+                if (originY + rule.Y + rule.Height < ClipRect.Y)
+                    continue;
+
                 DrawRectClipped(
                     spriteBatch,
                     new Rectangle(originX + rule.X, originY + rule.Y, rule.Width, rule.Height),
                     RuleColor);
+            }
 
             foreach (var span in layout.Spans)
             {
                 var y = originY + span.Y;
 
-                if ((y > ClipRect.Bottom) || (y + CULL_MARGIN < ClipRect.Y))
+                if (y > ClipRect.Bottom)
+                    break;
+
+                if (y + CULL_MARGIN < ClipRect.Y)
                     continue;
 
                 FontEngine.Instance.DrawLine(

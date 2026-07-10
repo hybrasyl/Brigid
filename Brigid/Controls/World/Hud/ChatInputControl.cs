@@ -220,14 +220,20 @@ public sealed class ChatInputControl : UIPanel
 
     //--- message history ---
 
-    private void AddMessageHistory(string message)
+    //bounded MRU shared by message and whisper history: newest first, dedup by move-to-front, oldest trimmed
+    private static void AddMru(List<string> list, string entry, int max)
     {
-        MessageHistory.Remove(message);
-        MessageHistory.Insert(0, message);
+        if (entry.Length == 0)
+            return;
 
-        if (MessageHistory.Count > MAX_MESSAGE_HISTORY)
-            MessageHistory.RemoveAt(MessageHistory.Count - 1);
+        list.Remove(entry);
+        list.Insert(0, entry);
+
+        if (list.Count > max)
+            list.RemoveAt(list.Count - 1);
     }
+
+    private void AddMessageHistory(string message) => AddMru(MessageHistory, message, MAX_MESSAGE_HISTORY);
 
     /// <summary>
     ///     Cycles the input through previously sent messages. Positive direction = older; stepping past the
@@ -254,14 +260,7 @@ public sealed class ChatInputControl : UIPanel
 
     //--- whisper history ---
 
-    private void AddWhisperTarget(string name)
-    {
-        WhisperHistory.Remove(name);
-        WhisperHistory.Insert(0, name);
-
-        if (WhisperHistory.Count > MAX_WHISPER_HISTORY)
-            WhisperHistory.RemoveAt(WhisperHistory.Count - 1);
-    }
+    private void AddWhisperTarget(string name) => AddMru(WhisperHistory, name, MAX_WHISPER_HISTORY);
 
     private void CycleWhisperTarget(int direction)
     {
@@ -311,18 +310,14 @@ public sealed class ChatInputControl : UIPanel
         switch (Mode)
         {
             case ChatMode.Normal:
-                if (message.Length > 0)
-                    AddMessageHistory(message);
-
+                AddMessageHistory(message);
                 MessageSent?.Invoke(message);
                 Unfocus();
 
                 break;
 
             case ChatMode.Shout:
-                if (message.Length > 0)
-                    AddMessageHistory(message);
-
+                AddMessageHistory(message);
                 ShoutSent?.Invoke(message);
                 Unfocus();
 
@@ -365,9 +360,7 @@ public sealed class ChatInputControl : UIPanel
             case ChatMode.WhisperMessage:
                 if (WhisperTarget is not null)
                 {
-                    if (message.Length > 0)
-                        AddMessageHistory(message);
-
+                    AddMessageHistory(message);
                     AddWhisperTarget(WhisperTarget);
                     WhisperSent?.Invoke(WhisperTarget, message);
                 }

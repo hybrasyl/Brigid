@@ -147,7 +147,7 @@ public class UITextBox : UIElement
 
     public int SelectionStart => Math.Min(SelectionAnchor, CursorPosition);
 
-    public int VisibleLineCount => (Height - PaddingTop + PaddingBottom) / TextRenderer.CHAR_HEIGHT;
+    public int VisibleLineCount => (Height - PaddingTop - PaddingBottom) / TextRenderer.CHAR_HEIGHT;
 
     public UITextBox()
     {
@@ -340,7 +340,7 @@ public class UITextBox : UIElement
         var sx = ScreenX;
         var sy = ScreenY;
         var textY = sy + PaddingTop;
-        var textHeight = Height - PaddingTop + PaddingBottom;
+        var textHeight = Height - PaddingTop - PaddingBottom;
 
         //prefix offset — non-editable text rendered before editable content
         var prefixWidth = 0;

@@ -446,15 +446,21 @@ public sealed class FontEngine : ITextMeasurer
     ///     A selectable UI face: a FontSystem per loaded style variant, a per-(style, size) glyph cache, and a
     ///     line-band centering offset. Styles with no variant file resolve to the regular FontSystem.
     /// </summary>
-    private sealed class Face(string name, FontSystem regular)
+    private sealed class Face
     {
         private readonly Dictionary<(FontStyle Style, int Size), DynamicSpriteFont> Cache = [];
 
-        //indexed by FontStyle value, which Resolve masks to Regular..BoldItalic (0..3) before any Face call — the
-        //Mono flag never reaches here. The Regular slot stays null (the primary-constructor system is used instead).
+        //indexed by FontStyle value, which Resolve masks to Regular..BoldItalic (0..3) before any Face call —
+        //the Mono flag never reaches here. The Regular slot is always populated (set in the constructor).
         private readonly FontSystem?[] Variants = new FontSystem?[4];
-        public readonly string Name = name;
+        public readonly string Name;
         public int VerticalOffset;
+
+        public Face(string name, FontSystem regular)
+        {
+            Name = name;
+            Variants[(int)FontStyle.Regular] = regular;
+        }
 
         public DynamicSpriteFont GetFont(FontStyle style, int size)
         {
@@ -463,7 +469,7 @@ public sealed class FontEngine : ITextMeasurer
 
             if (!Cache.TryGetValue((effective, size), out var font))
             {
-                font = (Variants[(int)effective] ?? regular).GetFont(size);
+                font = Variants[(int)effective]!.GetFont(size);
                 Cache[(effective, size)] = font;
             }
 

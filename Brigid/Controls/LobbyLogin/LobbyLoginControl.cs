@@ -1,5 +1,4 @@
 #region
-using System.Reflection;
 using Brigid.Controls.Components;
 using Brigid.Systems;
 using Brigid.Utilities;
@@ -92,21 +91,20 @@ public sealed class LobbyLoginControl : PrefabPanel
 
         //version label — type 7, 0 images
         VersionLabel = CreateLabel("Version", HorizontalAlignment.Right);
-        VersionLabel?.Text = $"Brigid v{GetDisplayVersion()}";
+        VersionLabel?.Text = $"Brigid v{UpdateChecker.GetCurrentVersion()}";
         VersionLabel?.ForegroundColor = Color.Blue;
 
         //update notice — stacked above the version label, populated when the startup
-        //release check (UpdateChecker) finds a newer tag
+        //release check (UpdateChecker) finds a newer tag. Constructed as a right-edge anchor
+        //(aligned with the version label); Update() sets the real X/Width from the measured text.
         if (VersionLabel is not null)
         {
-            //widened leftward past the prefab Version rect (98px) so the notice text renders
-            //unsquished; the right edge stays aligned with the version label
             UpdateNotice = new LinkLabel
             {
                 Name = "UpdateNotice",
-                X = VersionLabel.X - 60,
+                X = VersionLabel.X,
                 Y = VersionLabel.Y - VersionLabel.Height,
-                Width = VersionLabel.Width + 60,
+                Width = VersionLabel.Width,
                 Height = VersionLabel.Height,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 ForegroundColor = Color.Yellow,
@@ -134,21 +132,6 @@ public sealed class LobbyLoginControl : PrefabPanel
             notice.Width = textWidth;
             notice.Visible = true;
         }
-    }
-
-    //informational version carries the prerelease tag (e.g. 1.0.0-alpha1); strip any +commit metadata
-    private static string GetDisplayVersion()
-    {
-        var info = typeof(LobbyLoginControl).Assembly
-                                            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                                            ?.InformationalVersion;
-
-        if (string.IsNullOrEmpty(info))
-            return typeof(LobbyLoginControl).Assembly.GetName().Version?.ToString(3) ?? "?";
-
-        var metadata = info.IndexOf('+');
-
-        return metadata < 0 ? info : info[..metadata];
     }
 
     public void EnableButtons() => SetButtonsEnabled(true);
