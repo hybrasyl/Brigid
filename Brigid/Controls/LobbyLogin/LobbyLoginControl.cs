@@ -1,6 +1,8 @@
 #region
 using System.Reflection;
 using Brigid.Controls.Components;
+using Brigid.Systems;
+using Brigid.Utilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -17,6 +19,7 @@ public sealed class LobbyLoginControl : PrefabPanel
     public UIButton? HomepageButton { get; }
     public UIButton? PasswordButton { get; }
     public UIButton? SubmitCreateButton { get; }
+    public LinkLabel? UpdateNotice { get; }
     public UILabel? VersionLabel { get; }
 
     public LobbyLoginControl()
@@ -91,6 +94,46 @@ public sealed class LobbyLoginControl : PrefabPanel
         VersionLabel = CreateLabel("Version", HorizontalAlignment.Right);
         VersionLabel?.Text = $"Brigid v{GetDisplayVersion()}";
         VersionLabel?.ForegroundColor = Color.Blue;
+
+        //update notice — stacked above the version label, populated when the startup
+        //release check (UpdateChecker) finds a newer tag
+        if (VersionLabel is not null)
+        {
+            //widened leftward past the prefab Version rect (98px) so the notice text renders
+            //unsquished; the right edge stays aligned with the version label
+            UpdateNotice = new LinkLabel
+            {
+                Name = "UpdateNotice",
+                X = VersionLabel.X - 60,
+                Y = VersionLabel.Y - VersionLabel.Height,
+                Width = VersionLabel.Width + 60,
+                Height = VersionLabel.Height,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                ForegroundColor = Color.Yellow,
+                Visible = false
+            };
+
+            UpdateNotice.Clicked += () => Browser.Open(UpdateChecker.Available?.Url ?? string.Empty);
+            AddChild(UpdateNotice);
+        }
+    }
+
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+
+        //surface the async release-check result once it lands
+        if (UpdateNotice is { Visible: false } notice && UpdateChecker.Available is { } update)
+        {
+            notice.Text = $"{update.Tag} available!";
+
+            //shrink the hit box to the rendered text (right edge fixed) so clicks on the
+            //blank strip to the left don't open the browser
+            var textWidth = TextRenderer.MeasureWidth(notice.Text) + 2;
+            notice.X = notice.X + notice.Width - textWidth;
+            notice.Width = textWidth;
+            notice.Visible = true;
+        }
     }
 
     //informational version carries the prerelease tag (e.g. 1.0.0-alpha1); strip any +commit metadata

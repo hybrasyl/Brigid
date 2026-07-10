@@ -402,6 +402,9 @@ public sealed class ChaosGame : Game
         base.Initialize();
 
         Window.ClientSizeChanged += OnClientSizeChanged;
+
+        //best-effort async release check; the start screen polls UpdateChecker.Available
+        UpdateChecker.BeginCheck();
     }
 
     protected override void LoadContent()
