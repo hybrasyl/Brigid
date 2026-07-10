@@ -41,6 +41,12 @@ public sealed class ScrollBarControl : UIElement
 
     public int MaxValue { get; set; }
     public ScrollOrientation Orientation { get; set; } = ScrollOrientation.Vertical;
+
+    /// <summary>
+    ///     How much one arrow click, held-arrow repeat, track-zone click, or wheel notch moves <see cref="Value" />.
+    ///     Defaults to 1 for line-unit consumers; pixel-unit consumers (e.g. MarkdownView) set a larger step.
+    /// </summary>
+    public int Step { get; set; } = 1;
     public int TotalItems { get; set; }
     public int Value { get; set; }
     public int VisibleItems { get; set; }
@@ -207,11 +213,11 @@ public sealed class ScrollBarControl : UIElement
 
                 if (ActiveZone == 0)
                 {
-                    Value = Math.Max(0, Value - 1);
+                    Value = Math.Max(0, Value - Step);
                     OnValueChanged?.Invoke(Value);
                 } else if (ActiveZone == 4)
                 {
-                    Value = Math.Min(MaxValue, Value + 1);
+                    Value = Math.Min(MaxValue, Value + Step);
                     OnValueChanged?.Invoke(Value);
                 }
             }
@@ -239,12 +245,12 @@ public sealed class ScrollBarControl : UIElement
         if (my < trackStart)
         {
             ActiveZone = 0;
-            Value = Math.Max(0, Value - 1);
+            Value = Math.Max(0, Value - Step);
             OnValueChanged?.Invoke(Value);
         } else if (my >= trackEnd)
         {
             ActiveZone = 4;
-            Value = Math.Min(MaxValue, Value + 1);
+            Value = Math.Min(MaxValue, Value + Step);
             OnValueChanged?.Invoke(Value);
         } else if ((my >= thumbY) && (my < (thumbY + BUTTON_SIZE)))
         {
@@ -254,12 +260,12 @@ public sealed class ScrollBarControl : UIElement
         } else if (my < thumbY)
         {
             ActiveZone = 1;
-            Value = Math.Max(0, Value - 1);
+            Value = Math.Max(0, Value - Step);
             OnValueChanged?.Invoke(Value);
         } else
         {
             ActiveZone = 3;
-            Value = Math.Min(MaxValue, Value + 1);
+            Value = Math.Min(MaxValue, Value + Step);
             OnValueChanged?.Invoke(Value);
         }
 
@@ -277,12 +283,12 @@ public sealed class ScrollBarControl : UIElement
         if (mx < trackStart)
         {
             ActiveZone = 0;
-            Value = Math.Max(0, Value - 1);
+            Value = Math.Max(0, Value - Step);
             OnValueChanged?.Invoke(Value);
         } else if (mx >= trackEnd)
         {
             ActiveZone = 4;
-            Value = Math.Min(MaxValue, Value + 1);
+            Value = Math.Min(MaxValue, Value + Step);
             OnValueChanged?.Invoke(Value);
         } else if ((mx >= thumbX) && (mx < (thumbX + BUTTON_SIZE)))
         {
@@ -292,12 +298,12 @@ public sealed class ScrollBarControl : UIElement
         } else if (mx < thumbX)
         {
             ActiveZone = 1;
-            Value = Math.Max(0, Value - 1);
+            Value = Math.Max(0, Value - Step);
             OnValueChanged?.Invoke(Value);
         } else
         {
             ActiveZone = 3;
-            Value = Math.Min(MaxValue, Value + 1);
+            Value = Math.Min(MaxValue, Value + Step);
             OnValueChanged?.Invoke(Value);
         }
 
@@ -356,7 +362,7 @@ public sealed class ScrollBarControl : UIElement
         if (TotalItems <= VisibleItems)
             return;
 
-        var newValue = Math.Clamp(Value - e.Delta, 0, MaxValue);
+        var newValue = Math.Clamp(Value - e.Delta * Step, 0, MaxValue);
 
         if (newValue != Value)
         {

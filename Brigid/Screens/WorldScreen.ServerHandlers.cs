@@ -243,6 +243,14 @@ public sealed partial class WorldScreen
 
     private void HandleServerMessage(SystemMessagePacket args)
     {
+        //Hybrasyl/USDA extension — not part of the retail ServerMessageType block the switch below models
+        if (args.MessageType == SystemMessageType.MarkdownNotice)
+        {
+            MarkdownNotice.Show(args.Message);
+
+            return;
+        }
+
         switch ((ServerMessageType)(byte)args.MessageType)
         {
             case ServerMessageType.Whisper:
@@ -308,6 +316,7 @@ public sealed partial class WorldScreen
 
             case ServerMessageType.ClosePopup:
                 TextPopup.Hide();
+                MarkdownNotice.Hide();
 
                 break;
 

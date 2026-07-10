@@ -825,6 +825,16 @@ public sealed partial class WorldScreen
             }
         }
 
+        //ctrl+m while the debug overlay is up — show a test markdown notice (markdown-test.md next to the
+        //binary when present, otherwise a built-in sample) so the render path is exercisable without a server
+        if (Controls.Generic.DebugOverlay.IsActive && e is { Key: Keys.M, Ctrl: true })
+        {
+            ShowMarkdownTestNotice();
+            e.Handled = true;
+
+            return;
+        }
+
         //f1 — help merchant (server-side)
         if (e.Key == Keys.F1)
         {
@@ -1783,4 +1793,43 @@ public sealed partial class WorldScreen
             Pathfinding.Path = path;
     }
     #endregion
+
+    /// <summary>
+    ///     Debug-only (overlay + Ctrl+M): shows the markdown notice with <c>markdown-test.md</c> from the app base
+    ///     directory when present, otherwise a built-in sample exercising every supported construct.
+    /// </summary>
+    private void ShowMarkdownTestNotice()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "markdown-test.md");
+
+        var markdown = File.Exists(path)
+            ? File.ReadAllText(path)
+            : """
+              # Notice Test
+
+              This is the **built-in** markdown sample — drop a *markdown-test.md* next to the
+              binary to show your own content instead.
+
+              ## Formatting
+
+              Inline `code spans`, **bold**, *italic*, and ***both***.
+
+              ---
+
+              ### Lists
+
+              - unordered item
+              - another item
+                - nested item
+
+              1. ordered item
+              2. second item
+
+              ```
+              fenced code block — rendered verbatim, **no markdown** inside
+              ```
+              """;
+
+        MarkdownNotice.Show(markdown);
+    }
 }
