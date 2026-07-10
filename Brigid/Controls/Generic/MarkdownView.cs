@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Scrolling;
 using Brigid.Data;
 using Brigid.Rendering.Markdown;
 using Brigid.Rendering.Utility;
@@ -43,6 +44,8 @@ public sealed class MarkdownView : UIPanel
     private readonly UIButton CloseButton;
     private readonly MarkdownContentElement Content;
     private readonly UIButton MaximizeButton;
+    private readonly ScrollModel Scroll = new();
+    private readonly ScrollBarBinder ScrollBinder;
     private readonly ScrollBarControl Scrollbar;
     private readonly UILabel TitleLabel;
 
@@ -108,14 +111,13 @@ public sealed class MarkdownView : UIPanel
         };
         AddChild(Content);
 
-        Scrollbar = new ScrollBarControl
-        {
-            Visible = false,
-            //this scrollbar works in pixel units, so arrows/track/wheel step by a chunk of a line, not 1px
-            Step = SCROLL_STEP
-        };
-        Scrollbar.OnValueChanged += value => ScrollY = value;
+        Scrollbar = new ScrollBarControl { Visible = false };
         AddChild(Scrollbar);
+
+        //the layout is pixel-positioned, so the model works in SCROLL_STEP-px chunks ("lines") — the bar's ±1
+        //arrow step and each wheel notch then move one chunk, not one pixel. ApplyScroll maps back to pixels.
+        ScrollBinder = new ScrollBarBinder(Scroll, Scrollbar);
+        Scroll.Changed += _ => ApplyScroll();
 
         UpdateBounds();
     }
@@ -126,7 +128,7 @@ public sealed class MarkdownView : UIPanel
     public void Show(string markdown)
     {
         Source = markdown ?? string.Empty;
-        ScrollY = 0;
+        Scroll.ScrollToStart();
         UpdateBounds();
         Relayout();
         Visible = true;
@@ -222,24 +224,25 @@ public sealed class MarkdownView : UIPanel
         LastFontGeneration = FontEngine.Instance.Generation;
         Layout = MarkdownLayoutEngine.Layout(Source, Content.Width, FontEngine.Instance, extractTitle: true);
         TitleLabel.Text = Layout.Title ?? DEFAULT_TITLE;
-        ClampScroll();
+        SyncScroll();
     }
 
     private int MaxScroll => Math.Max(0, (Layout?.ContentHeight ?? 0) - Content.Height);
 
-    private void ClampScroll() => ScrollY = Math.Clamp(ScrollY, 0, MaxScroll);
-
-    private void SyncScrollbar()
+    //feed the model chunk-unit metrics derived from the pixel range, then pull the pixel offset back out.
+    //extent = viewport + scrollable-chunks so Max lands exactly on the last (partial) chunk and
+    //CanScroll ⇔ MaxScroll > 0; SetMetrics re-clamps the offset and the binder refreshes the bar.
+    private void SyncScroll()
     {
-        var contentHeight = Layout?.ContentHeight ?? 0;
-        ClampScroll();
+        var viewportUnits = Math.Max(1, Content.Height / SCROLL_STEP);
+        var maxUnits = (MaxScroll + SCROLL_STEP - 1) / SCROLL_STEP;
 
-        Scrollbar.MaxValue = MaxScroll;
-        Scrollbar.TotalItems = contentHeight;
-        Scrollbar.VisibleItems = Content.Height;
-        Scrollbar.Value = ScrollY;
-        Scrollbar.Visible = MaxScroll > 0;
+        Scroll.SetMetrics(viewportUnits + maxUnits, viewportUnits);
+        ApplyScroll();
+        Scrollbar.Visible = Scroll.CanScroll;
     }
+
+    private void ApplyScroll() => ScrollY = Math.Min(Scroll.Offset * SCROLL_STEP, MaxScroll);
 
     public override void Update(GameTime gameTime)
     {
@@ -249,7 +252,7 @@ public sealed class MarkdownView : UIPanel
             if (FontEngine.Instance.Generation != LastFontGeneration)
                 Relayout();
 
-            SyncScrollbar();
+            SyncScroll();
         }
 
         base.Update(gameTime);
@@ -265,22 +268,22 @@ public sealed class MarkdownView : UIPanel
                 break;
 
             case Keys.PageDown:
-                ScrollY = Math.Min(MaxScroll, ScrollY + Content.Height);
+                Scroll.PageBy(1);
 
                 break;
 
             case Keys.PageUp:
-                ScrollY = Math.Max(0, ScrollY - Content.Height);
+                Scroll.PageBy(-1);
 
                 break;
 
             case Keys.Home:
-                ScrollY = 0;
+                Scroll.ScrollToStart();
 
                 break;
 
             case Keys.End:
-                ScrollY = MaxScroll;
+                Scroll.ScrollToEnd();
 
                 break;
 
@@ -302,7 +305,7 @@ public sealed class MarkdownView : UIPanel
         if (MaxScroll <= 0)
             return;
 
-        ScrollY = Math.Clamp(ScrollY - e.Delta * SCROLL_STEP, 0, MaxScroll);
+        Scroll.WheelBy(e.Delta);
         e.Handled = true;
     }
 
