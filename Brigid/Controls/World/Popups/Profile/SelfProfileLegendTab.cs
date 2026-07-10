@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Models;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -16,8 +17,10 @@ public sealed class SelfProfileLegendTab : PrefabPanel
 {
     private const int MAX_VISIBLE_ROWS = 12;
 
+    private readonly ScrollBarBinder Binder;
     private readonly Texture2D[] IconFrames;
     private readonly Rectangle LegendListRect;
+    private readonly ScrollModel Model = new();
     private readonly int RowHeight;
     private readonly LegendMarkControl[] Rows;
     private readonly ScrollBarControl ScrollBar;
@@ -25,7 +28,6 @@ public sealed class SelfProfileLegendTab : PrefabPanel
     private int DataVersion;
     private List<LegendMarkEntry> Marks = [];
     private int RenderedVersion = -1;
-    private int ScrollOffset;
 
     public SelfProfileLegendTab(string prefabName)
         : base(prefabName, false)
@@ -67,15 +69,11 @@ public sealed class SelfProfileLegendTab : PrefabPanel
             Name = "LegendScrollBar",
             X = LegendListRect.X + LegendListRect.Width - 16,
             Y = LegendListRect.Y,
-            Height = LegendListRect.Height,
-            VisibleItems = MAX_VISIBLE_ROWS
+            Height = LegendListRect.Height
         };
 
-        ScrollBar.OnValueChanged += v =>
-        {
-            ScrollOffset = v;
-            DataVersion++;
-        };
+        Binder = new ScrollBarBinder(Model, ScrollBar);
+        Model.Changed += _ => DataVersion++;
 
         AddChild(ScrollBar);
 
@@ -114,7 +112,7 @@ public sealed class SelfProfileLegendTab : PrefabPanel
 
         for (var i = 0; i < MAX_VISIBLE_ROWS; i++)
         {
-            var markIndex = ScrollOffset + i;
+            var markIndex = Model.Offset + i;
 
             if (markIndex < Marks.Count)
             {
@@ -146,21 +144,17 @@ public sealed class SelfProfileLegendTab : PrefabPanel
     public void SetMarks(List<LegendMarkEntry> marks)
     {
         Marks = marks;
-        ScrollOffset = 0;
-        ScrollBar.Value = 0;
-        ScrollBar.TotalItems = marks.Count;
-        ScrollBar.MaxValue = Math.Max(0, marks.Count - MAX_VISIBLE_ROWS);
+        Model.SetMetrics(marks.Count, MAX_VISIBLE_ROWS);
+        Model.ScrollToStart();
         DataVersion++;
     }
 
     public override void OnMouseScroll(MouseScrollEvent e)
     {
-        if (Marks.Count > MAX_VISIBLE_ROWS)
-        {
-            ScrollOffset = Math.Clamp(ScrollOffset - e.Delta, 0, Marks.Count - MAX_VISIBLE_ROWS);
-            ScrollBar.Value = ScrollOffset;
-            DataVersion++;
-            e.Handled = true;
-        }
+        if (!Model.CanScroll)
+            return;
+
+        Model.WheelBy(e.Delta);
+        e.Handled = true;
     }
 }
