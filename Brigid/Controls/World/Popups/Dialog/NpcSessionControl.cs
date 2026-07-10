@@ -27,11 +27,20 @@ public sealed class NpcSessionControl : PrefabPanel
     //container controls from lnpcd prefab
     private readonly UIButton? CloseButton;
     private readonly UILabel DialogTextLabel;
-    private readonly MenuShopPanel MenuShop;
+    private readonly BankShopPanel MenuShop;
     private readonly UIButton? NextButton;
 
     private readonly UILabel? NpcNameLabel;
     private readonly UIImage? NpcTileImage;
+    private readonly UIImage? MessageBarImage;
+    private readonly DialogAlphaGradient AlphaGradient;
+
+    /// <summary>
+    ///     When true, the legacy session chrome (bottom dialog bar, NPC portrait, name, dialog text, nav buttons) is
+    ///     hidden so a from-scratch content panel — currently the <see cref="BankShopPanel" /> for ShowItems — owns the
+    ///     whole screen region. <see cref="WorldScreen" /> also skips portrait rendering while this is set.
+    /// </summary>
+    public bool ChromeSuppressed { get; private set; }
     private readonly Rectangle PortraitRect;
     private readonly UIButton? PreviousButton;
 
@@ -131,10 +140,11 @@ public sealed class NpcSessionControl : PrefabPanel
         Y = 0;
 
         //darkness gradient (behind everything else in the dialog)
-        AddChild(new DialogAlphaGradient());
+        AlphaGradient = new DialogAlphaGradient();
+        AddChild(AlphaGradient);
 
         //background images (drawn after gradient so they render on top of it)
-        CreateImage("MessageDialog"); //nd_talk.spf — bottom dialog bar
+        MessageBarImage = CreateImage("MessageDialog"); //nd_talk.spf — bottom dialog bar
         NpcTileImage = CreateImage("NPCTile"); //nd_npcbg.spf — portrait background
 
         //container buttons (added after images so they draw on top)
@@ -241,7 +251,7 @@ public sealed class NpcSessionControl : PrefabPanel
         DialogOption = new DialogOptionPanel();
         DialogTextEntry = new DialogTextEntryPanel();
         MenuTextEntry = new MenuTextEntryPanel();
-        MenuShop = new MenuShopPanel();
+        MenuShop = new BankShopPanel();
         MenuList = new MenuListPanel();
         DialogProtectedTextEntry = new DialogProtectedTextEntryPanel();
 
@@ -294,9 +304,6 @@ public sealed class NpcSessionControl : PrefabPanel
             if (BeginResponse())
                 OnMerchantItemSelected?.Invoke(index);
         };
-
-        MenuShop.OnItemHoverEnter += name => OnItemHoverEnter?.Invoke(name);
-        MenuShop.OnItemHoverExit += () => OnItemHoverExit?.Invoke();
 
         MenuShop.OnClose += () =>
         {
@@ -384,7 +391,7 @@ public sealed class NpcSessionControl : PrefabPanel
 
     private void DrawPortrait(SpriteBatch spriteBatch)
     {
-        if (PortraitTexture is null)
+        if (ChromeSuppressed || (PortraitTexture is null))
             return;
 
         if (OwnsPortraitTexture)
@@ -453,6 +460,11 @@ public sealed class NpcSessionControl : PrefabPanel
         ResetDialogLock();
         DisposePortrait();
         HideAllSubPanels();
+
+        //restore chrome so the next dialog/menu opens in the default (non-suppressed) state
+        ChromeSuppressed = false;
+        SetSessionChrome(true);
+
         Hide();
     }
 
@@ -467,6 +479,20 @@ public sealed class NpcSessionControl : PrefabPanel
         DialogTextLabel.Text = string.Empty;
         DialogScroll.Configure(DialogSource);
         UpdateScrollButtons();
+    }
+
+    /// <summary>
+    ///     Toggles the legacy session chrome (bottom dialog bar, NPC name, dialog text). The portrait is gated separately
+    ///     in <see cref="DrawPortrait" /> via <see cref="ChromeSuppressed" />; nav buttons are handled by the callers.
+    /// </summary>
+    private void SetSessionChrome(bool visible)
+    {
+        //the alpha gradient is shaped for the bottom-anchored dialog; over the centered bank it reads as a stray
+        //diagonal shadow, so it's part of the chrome we suppress
+        AlphaGradient.Visible = visible;
+        MessageBarImage?.Visible = visible;
+        NpcNameLabel?.Visible = visible;
+        DialogTextLabel.Visible = visible;
     }
 
     private void HideNavigationButtons()
@@ -506,8 +532,6 @@ public sealed class NpcSessionControl : PrefabPanel
 
     //events — worldscreen.wiring subscribes to these
     public event CloseHandler? OnClose;
-    public event ItemHoverEnterHandler? OnItemHoverEnter;
-    public event ItemHoverExitHandler? OnItemHoverExit;
     public event ItemSelectedHandler? OnListItemSelected;
     public event ItemSelectedHandler? OnMerchantItemSelected;
     public event NextHandler? OnNext;
@@ -602,7 +626,11 @@ public sealed class NpcSessionControl : PrefabPanel
 
         //server never answered (dropped packet) — release the latch so the user can retry instead of being stuck
         ResponsePending = false;
-        SetNavigationButtons(LastHasNext, LastHasPrevious);
+
+        //don't resurrect the legacy nav buttons over a from-scratch panel that suppresses the chrome (e.g. the bank) —
+        //re-showing them would float stale Next/Prev/Close over it, and a stale enabled Next could fire a bogus response
+        if (!ChromeSuppressed)
+            SetNavigationButtons(LastHasNext, LastHasPrevious);
     }
 
     /// <summary>
@@ -647,6 +675,10 @@ public sealed class NpcSessionControl : PrefabPanel
 
         //Chaos DialogType and DALib NpcDialogType share wire byte values; convert and reuse the existing switch.
         var dialogType = (DialogType)(byte)pkt.DialogType;
+
+        //dialogs always use the default chrome (no from-scratch content panel suppresses it)
+        ChromeSuppressed = false;
+        SetSessionChrome(true);
 
         IsDialogOpcode = true;
         CurrentDialogType = dialogType;
@@ -743,6 +775,11 @@ public sealed class NpcSessionControl : PrefabPanel
         IsDialogOpcode = false;
         CurrentDialogType = null;
         CurrentMenuType = menuType;
+
+        //the from-scratch BankShopPanel owns the whole screen for ShowItems — hide the legacy bar/portrait/name chrome
+        ChromeSuppressed = menuType == MenuType.ShowItems;
+        SetSessionChrome(!ChromeSuppressed);
+
         SourceEntityType = pkt.EntityType switch
         {
             2 => EntityType.Item,
@@ -819,22 +856,26 @@ public sealed class NpcSessionControl : PrefabPanel
                 return;
         }
 
-        if (CloseButton is not null)
+        //the BankShopPanel supplies its own OK/close; leave the legacy nav buttons hidden when chrome is suppressed
+        if (!ChromeSuppressed)
         {
-            CloseButton.Visible = true;
-            CloseButton.Enabled = true;
-        }
+            if (CloseButton is not null)
+            {
+                CloseButton.Visible = true;
+                CloseButton.Enabled = true;
+            }
 
-        if (TopButton is not null)
-        {
-            TopButton.Visible = true;
-            TopButton.Enabled = true;
-        }
+            if (TopButton is not null)
+            {
+                TopButton.Visible = true;
+                TopButton.Enabled = true;
+            }
 
-        if (NpcNameLabel is not null)
-        {
-            NpcNameLabel.Text = pkt.Name;
-            NpcNameLabel.ForegroundColor = LegendColors.Lime;
+            if (NpcNameLabel is not null)
+            {
+                NpcNameLabel.Text = pkt.Name;
+                NpcNameLabel.ForegroundColor = LegendColors.Lime;
+            }
         }
 
         Show();

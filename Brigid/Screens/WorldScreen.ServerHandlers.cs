@@ -409,6 +409,14 @@ public sealed partial class WorldScreen
 
     private void RenderNpcSessionPortrait()
     {
+        //the BankShopPanel (ShowItems) suppresses the portrait entirely — don't load/own an illustration for it
+        if (NpcSession.ChromeSuppressed)
+        {
+            NpcSession.SetPortrait(null, false);
+
+            return;
+        }
+
         //phase 1: try full-art illustration spf. The original DA client attempts this unconditionally for every
         //dialog/menu packet — the only gate is whether the NPC name matches an entry in the merged illustration
         //metadata (npci.tbl inside npcbase.dat + server-pushed NPCIllust metafile). IllustrationIndex picks which

@@ -126,6 +126,10 @@ public sealed partial class WorldScreen
     {
         NpcSession.OnClose += () =>
         {
+            //only 0x30 dialogs are closed by echoing the current pursuitId/pursuitIndex back (0x3A-dialog-use.md).
+            //Merchant menus (bank/shop, 0x2F shown / 0x39 responses) are NOT part of the dialog-pursuit state machine
+            //— retail's own client closes them client-side with no packet, so we must not emit a 0x3A close here or a
+            //retail server would see a bogus (pursuitId, 0) index and could drop the connection (±1 validation).
             if (NpcSession is { SourceId: { } sourceId, IsDialogOpcode: true })
                 Game.Connection.SendDialogResponse(
                     NpcSession.SourceObjectType,
@@ -258,15 +262,6 @@ public sealed partial class WorldScreen
                     password
                 ]);
         };
-
-        NpcSession.OnItemHoverEnter += name => ItemTooltip.Show(
-            name,
-            0,
-            0,
-            InputBuffer.MouseX,
-            InputBuffer.MouseY);
-
-        NpcSession.OnItemHoverExit += () => ItemTooltip.Hide();
 
         NpcSession.OnMerchantItemSelected += selectedIndex =>
         {
