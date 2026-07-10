@@ -29,11 +29,9 @@
 
         <!-- DALib is consumed from the pinned NuGet package by default. Opt into the sibling checkout
              with -p:UseLocalDALib=true when co-developing DALib alongside Brigid.
-             INTERIM local flip: default true while the branch consumes retail-protocol DALib changes
-             (GroupRequestPacket 0x2E stage-5 ViewRecruitInfo model) not yet published; drop this flip
-             when the 1.0.0-alpha3 pin bump lands. Hybrasyl protocol divergence deliberately does NOT
-             live in DALib (retail/USDA ground truth) — see Brigid.Networking/Definitions/HybrasylExtensions.cs. -->
-        <UseLocalDALib Condition="'$(UseLocalDALib)' == ''">true</UseLocalDALib>
+             Hybrasyl protocol divergence deliberately does NOT live in DALib (retail/USDA ground
+             truth) — see Brigid.Networking/Definitions/HybrasylExtensions.cs. -->
+        <UseLocalDALib Condition="'$(UseLocalDALib)' == ''">false</UseLocalDALib>
         <LocalDALibProjectPath Condition="'$(LocalDALibProjectPath)' == ''">$(MSBuildThisFileDirectory)..\dalib\DALib\DALib.csproj</LocalDALibProjectPath>
     </PropertyGroup>
 

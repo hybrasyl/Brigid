@@ -28,7 +28,7 @@ Brigid.slnx (.NET 10.0, C# 14)
 └── Brigid.Tests          — xunit regression/smoke tests
 ```
 
-DALib (Dark Ages file format + networking support) currently comes from the sibling checkout at `../dalib` by default (`UseLocalDALib=true`) because Brigid consumes DALib changes not yet in a published package; once 1.0.0-alpha3 ships, the pin bumps and the default flips to NuGet. Build with `-p:UseLocalDALib=false` to force the pinned package (1.0.0-alpha2).
+DALib (Dark Ages file format + networking support) comes from the pinned NuGet package (1.0.0-alpha3) by default. Build with `-p:UseLocalDALib=true` to use the sibling checkout at `../dalib` when co-developing DALib alongside Brigid. DALib models the retail/USDA wire format as ground truth; Hybrasyl protocol divergence lives in `Brigid.Networking/Definitions/HybrasylExtensions.cs`, never in DALib.
 
 **Dependency flow:** Data <- Rendering <- Client, Networking <- Client
 
