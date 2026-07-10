@@ -370,7 +370,10 @@ public sealed class LobbyLoginScreen : IScreen
         var server = ServerList.FirstOrDefault(s => s.Id == serverId);
 
         if (server is not null)
+        {
             Game.Connection.ServerName = server.SplitNameDescription().Name;
+            Game.UpdateWindowTitle();
+        }
 
         Game.Connection.SelectServer(serverId);
     }
@@ -425,6 +428,7 @@ public sealed class LobbyLoginScreen : IScreen
         {
             //auto-select the first (or only) server
             Game.Connection.ServerName = servers[0].SplitNameDescription().Name;
+            Game.UpdateWindowTitle();
             Game.Connection.SelectServer(servers[0].Id);
         }
     }
