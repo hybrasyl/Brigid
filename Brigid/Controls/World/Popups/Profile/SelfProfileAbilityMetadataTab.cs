@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Data.Models;
 using Brigid.ViewModel;
 using Chaos.Extensions.Common;
@@ -27,17 +28,19 @@ public sealed class SelfProfileAbilityMetadataTab : PrefabPanel
     private readonly Rectangle SkillRect;
 
     private readonly AbilityMetadataEntryControl[] SkillRows;
+    private readonly ScrollBarBinder SkillBinder;
+    private readonly ScrollModel SkillModel = new();
     private readonly ScrollBarControl SkillScrollBar;
     private readonly UIPanel SpellContainer;
     private readonly Rectangle SpellRect;
     private readonly AbilityMetadataEntryControl[] SpellRows;
+    private readonly ScrollBarBinder SpellBinder;
+    private readonly ScrollModel SpellModel = new();
     private readonly ScrollBarControl SpellScrollBar;
 
     private bool Dirty = true;
     private IReadOnlyList<AbilityMetadataEntry> SkillEntries = [];
-    private int SkillScrollOffset;
     private IReadOnlyList<AbilityMetadataEntry> SpellEntries = [];
-    private int SpellScrollOffset;
 
     public SelfProfileAbilityMetadataTab(string prefabName)
         : base(prefabName, false)
@@ -95,21 +98,13 @@ public sealed class SelfProfileAbilityMetadataTab : PrefabPanel
         SpellRows = CreateColumn(SpellContainer, SpellRect.Height);
         SkillRows = CreateColumn(SkillContainer, SkillRect.Height);
 
-        SpellScrollBar = CreateScrollBar(
-            SpellRect,
-            v =>
-            {
-                SpellScrollOffset = v;
-                Dirty = true;
-            });
+        SpellScrollBar = CreateScrollBar(SpellRect);
+        SkillScrollBar = CreateScrollBar(SkillRect);
 
-        SkillScrollBar = CreateScrollBar(
-            SkillRect,
-            v =>
-            {
-                SkillScrollOffset = v;
-                Dirty = true;
-            });
+        SpellBinder = new ScrollBarBinder(SpellModel, SpellScrollBar);
+        SkillBinder = new ScrollBarBinder(SkillModel, SkillScrollBar);
+        SpellModel.Changed += _ => Dirty = true;
+        SkillModel.Changed += _ => Dirty = true;
     }
 
     /// <summary>
@@ -119,14 +114,10 @@ public sealed class SelfProfileAbilityMetadataTab : PrefabPanel
     {
         SpellEntries = [];
         SkillEntries = [];
-        SpellScrollOffset = 0;
-        SkillScrollOffset = 0;
-        SpellScrollBar.Value = 0;
-        SpellScrollBar.TotalItems = 0;
-        SpellScrollBar.MaxValue = 0;
-        SkillScrollBar.Value = 0;
-        SkillScrollBar.TotalItems = 0;
-        SkillScrollBar.MaxValue = 0;
+        SpellModel.SetMetrics(0, MAX_VISIBLE_ROWS);
+        SpellModel.ScrollToStart();
+        SkillModel.SetMetrics(0, MAX_VISIBLE_ROWS);
+        SkillModel.ScrollToStart();
         Dirty = true;
     }
 
@@ -157,17 +148,15 @@ public sealed class SelfProfileAbilityMetadataTab : PrefabPanel
         return rows;
     }
 
-    private ScrollBarControl CreateScrollBar(Rectangle columnRect, ScrollValueChangedHandler onValueChanged)
+    private ScrollBarControl CreateScrollBar(Rectangle columnRect)
     {
         var scrollBar = new ScrollBarControl
         {
             X = columnRect.X + columnRect.Width - ScrollBarControl.DEFAULT_WIDTH,
             Y = columnRect.Y,
-            Height = columnRect.Height,
-            VisibleItems = MAX_VISIBLE_ROWS
+            Height = columnRect.Height
         };
 
-        scrollBar.OnValueChanged += onValueChanged;
         AddChild(scrollBar);
 
         return scrollBar;
@@ -230,9 +219,9 @@ public sealed class SelfProfileAbilityMetadataTab : PrefabPanel
 
         Dirty = false;
 
-        RefreshColumn(SpellRows, SpellEntries, SpellScrollOffset);
+        RefreshColumn(SpellRows, SpellEntries, SpellModel.Offset);
 
-        RefreshColumn(SkillRows, SkillEntries, SkillScrollOffset);
+        RefreshColumn(SkillRows, SkillEntries, SkillModel.Offset);
     }
 
     private static AbilityIconState ResolveIconState(AbilityMetadataEntry entry)
@@ -287,31 +276,22 @@ public sealed class SelfProfileAbilityMetadataTab : PrefabPanel
         SpellEntries = metadata.Spells;
         SkillEntries = metadata.Skills;
 
-        SpellScrollOffset = 0;
-        SpellScrollBar.Value = 0;
-        SpellScrollBar.TotalItems = SpellEntries.Count;
-        SpellScrollBar.MaxValue = Math.Max(0, SpellEntries.Count - MAX_VISIBLE_ROWS);
-
-        SkillScrollOffset = 0;
-        SkillScrollBar.Value = 0;
-        SkillScrollBar.TotalItems = SkillEntries.Count;
-        SkillScrollBar.MaxValue = Math.Max(0, SkillEntries.Count - MAX_VISIBLE_ROWS);
+        SpellModel.SetMetrics(SpellEntries.Count, MAX_VISIBLE_ROWS);
+        SpellModel.ScrollToStart();
+        SkillModel.SetMetrics(SkillEntries.Count, MAX_VISIBLE_ROWS);
+        SkillModel.ScrollToStart();
         Dirty = true;
     }
 
     public override void OnMouseScroll(MouseScrollEvent e)
     {
-        if (SpellContainer.ContainsPoint(e.ScreenX, e.ScreenY) && (SpellEntries.Count > MAX_VISIBLE_ROWS))
+        if (SpellContainer.ContainsPoint(e.ScreenX, e.ScreenY) && SpellModel.CanScroll)
         {
-            SpellScrollOffset = Math.Clamp(SpellScrollOffset - e.Delta, 0, SpellEntries.Count - MAX_VISIBLE_ROWS);
-            SpellScrollBar.Value = SpellScrollOffset;
-            Dirty = true;
+            SpellModel.WheelBy(e.Delta);
             e.Handled = true;
-        } else if (SkillContainer.ContainsPoint(e.ScreenX, e.ScreenY) && (SkillEntries.Count > MAX_VISIBLE_ROWS))
+        } else if (SkillContainer.ContainsPoint(e.ScreenX, e.ScreenY) && SkillModel.CanScroll)
         {
-            SkillScrollOffset = Math.Clamp(SkillScrollOffset - e.Delta, 0, SkillEntries.Count - MAX_VISIBLE_ROWS);
-            SkillScrollBar.Value = SkillScrollOffset;
-            Dirty = true;
+            SkillModel.WheelBy(e.Delta);
             e.Handled = true;
         }
     }

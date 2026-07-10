@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Data.Models;
 using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
@@ -30,12 +31,16 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
     private readonly Rectangle LeftRect;
 
     private readonly EventMetadataEntryControl[] LeftRows;
+    private readonly ScrollBarBinder LeftBinder;
+    private readonly ScrollModel LeftModel = new();
     private readonly ScrollBarControl LeftScrollBar;
     private readonly UIButton? NextButton;
     private readonly UIButton? PrevButton;
     private readonly UIPanel RightContainer;
     private readonly Rectangle RightRect;
     private readonly EventMetadataEntryControl[] RightRows;
+    private readonly ScrollBarBinder RightBinder;
+    private readonly ScrollModel RightModel = new();
     private readonly ScrollBarControl RightScrollBar;
 
     private BaseClass BaseClass;
@@ -43,8 +48,6 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
     private int CurrentPage;
     private bool Dirty = true;
     private bool EnableMasterQuests;
-    private int LeftScrollOffset;
-    private int RightScrollOffset;
 
     public SelfProfileEventMetadataTab(string prefabName)
         : base(prefabName, false)
@@ -105,21 +108,13 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
         LeftRows = CreateColumn(LeftContainer, LeftRect.Height);
         RightRows = CreateColumn(RightContainer, RightRect.Height);
 
-        LeftScrollBar = CreateScrollBar(
-            LeftRect,
-            v =>
-            {
-                LeftScrollOffset = v;
-                Dirty = true;
-            });
+        LeftScrollBar = CreateScrollBar(LeftRect);
+        RightScrollBar = CreateScrollBar(RightRect);
 
-        RightScrollBar = CreateScrollBar(
-            RightRect,
-            v =>
-            {
-                RightScrollOffset = v;
-                Dirty = true;
-            });
+        LeftBinder = new ScrollBarBinder(LeftModel, LeftScrollBar);
+        RightBinder = new ScrollBarBinder(RightModel, RightScrollBar);
+        LeftModel.Changed += _ => Dirty = true;
+        RightModel.Changed += _ => Dirty = true;
 
         NextButton = CreateButton("NEXT");
         PrevButton = CreateButton("PREV");
@@ -130,8 +125,8 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
                 if (CurrentPage < (MAX_DISPLAY_PAGES - 1))
                 {
                     CurrentPage++;
-                    LeftScrollOffset = 0;
-                    RightScrollOffset = 0;
+                    LeftModel.ScrollToStart();
+                    RightModel.ScrollToStart();
                     SetBackgroundFrame(CurrentPage);
                     Dirty = true;
                 }
@@ -143,8 +138,8 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
                 if (CurrentPage > 0)
                 {
                     CurrentPage--;
-                    LeftScrollOffset = 0;
-                    RightScrollOffset = 0;
+                    LeftModel.ScrollToStart();
+                    RightModel.ScrollToStart();
                     SetBackgroundFrame(CurrentPage);
                     Dirty = true;
                 }
@@ -161,14 +156,10 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
 
         CompletedEventIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         CurrentPage = 0;
-        LeftScrollOffset = 0;
-        RightScrollOffset = 0;
-        LeftScrollBar.TotalItems = 0;
-        LeftScrollBar.MaxValue = 0;
-        LeftScrollBar.Value = 0;
-        RightScrollBar.TotalItems = 0;
-        RightScrollBar.MaxValue = 0;
-        RightScrollBar.Value = 0;
+        LeftModel.SetMetrics(0, MAX_VISIBLE_ROWS);
+        LeftModel.ScrollToStart();
+        RightModel.SetMetrics(0, MAX_VISIBLE_ROWS);
+        RightModel.ScrollToStart();
         SetBackgroundFrame(0);
         Dirty = true;
     }
@@ -200,17 +191,15 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
         return rows;
     }
 
-    private ScrollBarControl CreateScrollBar(Rectangle columnRect, ScrollValueChangedHandler onValueChanged)
+    private ScrollBarControl CreateScrollBar(Rectangle columnRect)
     {
         var scrollBar = new ScrollBarControl
         {
             X = columnRect.X + columnRect.Width - ScrollBarControl.DEFAULT_WIDTH,
             Y = columnRect.Y,
-            Height = columnRect.Height,
-            VisibleItems = MAX_VISIBLE_ROWS
+            Height = columnRect.Height
         };
 
-        scrollBar.OnValueChanged += onValueChanged;
         AddChild(scrollBar);
 
         return scrollBar;
@@ -254,9 +243,9 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
         var leftEntries = leftSlot < MAX_DISPLAY_SLOTS ? DisplaySlots[leftSlot] : [];
         var rightEntries = rightSlot < MAX_DISPLAY_SLOTS ? DisplaySlots[rightSlot] : [];
 
-        RefreshColumn(LeftRows, leftEntries, LeftScrollOffset);
+        RefreshColumn(LeftRows, leftEntries, LeftModel.Offset);
 
-        RefreshColumn(RightRows, rightEntries, RightScrollOffset);
+        RefreshColumn(RightRows, rightEntries, RightModel.Offset);
     }
 
     private EventState ResolveEventState(EventMetadataEntry entry)
@@ -335,8 +324,8 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
         }
 
         CurrentPage = 0;
-        LeftScrollOffset = 0;
-        RightScrollOffset = 0;
+        LeftModel.ScrollToStart();
+        RightModel.ScrollToStart();
         SetBackgroundFrame(0);
         UpdateScrollBars();
         Dirty = true;
@@ -351,15 +340,11 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
 
         if (LeftContainer.ContainsPoint(e.ScreenX, e.ScreenY) && (leftCount > MAX_VISIBLE_ROWS))
         {
-            LeftScrollOffset = Math.Clamp(LeftScrollOffset - e.Delta, 0, leftCount - MAX_VISIBLE_ROWS);
-            LeftScrollBar.Value = LeftScrollOffset;
-            Dirty = true;
+            LeftModel.WheelBy(e.Delta);
             e.Handled = true;
         } else if (RightContainer.ContainsPoint(e.ScreenX, e.ScreenY) && (rightCount > MAX_VISIBLE_ROWS))
         {
-            RightScrollOffset = Math.Clamp(RightScrollOffset - e.Delta, 0, rightCount - MAX_VISIBLE_ROWS);
-            RightScrollBar.Value = RightScrollOffset;
-            Dirty = true;
+            RightModel.WheelBy(e.Delta);
             e.Handled = true;
         }
     }
@@ -381,12 +366,7 @@ public sealed class SelfProfileEventMetadataTab : PrefabPanel
         var leftCount = leftSlot < MAX_DISPLAY_SLOTS ? DisplaySlots[leftSlot].Count : 0;
         var rightCount = rightSlot < MAX_DISPLAY_SLOTS ? DisplaySlots[rightSlot].Count : 0;
 
-        LeftScrollBar.TotalItems = leftCount;
-        LeftScrollBar.MaxValue = Math.Max(0, leftCount - MAX_VISIBLE_ROWS);
-        LeftScrollBar.Value = Math.Min(LeftScrollOffset, LeftScrollBar.MaxValue);
-
-        RightScrollBar.TotalItems = rightCount;
-        RightScrollBar.MaxValue = Math.Max(0, rightCount - MAX_VISIBLE_ROWS);
-        RightScrollBar.Value = Math.Min(RightScrollOffset, RightScrollBar.MaxValue);
+        LeftModel.SetMetrics(leftCount, MAX_VISIBLE_ROWS);
+        RightModel.SetMetrics(rightCount, MAX_VISIBLE_ROWS);
     }
 }

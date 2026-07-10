@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Networking;
 using Brigid.Rendering.Models;
 using Chaos.DarkAges.Definitions;
@@ -52,7 +53,10 @@ public sealed class NpcSessionControl : PrefabPanel
 
     //portrait texture (owned illustration or cached sprite frame)
     private Texture2D? PortraitTexture;
-    private int ScrollLine;
+
+    //arrows-only dialog-text scroll: a bare model (no bar) drives the label offset; the nd_arw.spf buttons stay
+    private readonly ScrollModel DialogScroll = new();
+    private readonly LabelScrollSource DialogSource;
     public DialogType? CurrentDialogType { get; private set; }
     public MenuType? CurrentMenuType { get; private set; }
     public ushort DialogId { get; private set; }
@@ -170,6 +174,9 @@ public sealed class NpcSessionControl : PrefabPanel
         };
 
         AddChild(DialogTextLabel);
+
+        DialogSource = new LabelScrollSource(DialogTextLabel);
+        DialogScroll.Changed += DialogSource.ApplyOffset;
 
         //wire container button events
         if (CloseButton is not null)
@@ -393,9 +400,8 @@ public sealed class NpcSessionControl : PrefabPanel
         MenuShop.Hide();
         MenuList.Hide();
         DialogProtectedTextEntry.Hide();
-        ScrollLine = 0;
-        DialogTextLabel.ScrollOffset = 0;
         DialogTextLabel.Text = string.Empty;
+        DialogScroll.Configure(DialogSource);
         UpdateScrollButtons();
     }
 
@@ -449,22 +455,15 @@ public sealed class NpcSessionControl : PrefabPanel
 
     private void ScrollText(int direction)
     {
-        var totalLines = DialogTextLabel.ContentHeight / TextRenderer.CHAR_HEIGHT;
-        var innerH = DialogTextLabel.Height - DialogTextLabel.PaddingTop + DialogTextLabel.PaddingBottom;
-        var visibleLines = innerH / TextRenderer.CHAR_HEIGHT;
-        var maxScroll = Math.Max(0, totalLines - visibleLines);
-
-        ScrollLine = Math.Clamp(ScrollLine + direction, 0, maxScroll);
-        DialogTextLabel.ScrollOffset = ScrollLine * TextRenderer.CHAR_HEIGHT;
-
+        DialogScroll.ScrollBy(direction);
         UpdateScrollButtons();
     }
 
     private void SetDialogText(string? text)
     {
-        ScrollLine = 0;
-        DialogTextLabel.ScrollOffset = 0;
         DialogTextLabel.Text = text ?? string.Empty;
+        DialogScroll.Configure(DialogSource);
+        DialogScroll.ScrollToStart();
         UpdateScrollButtons();
     }
 
@@ -802,11 +801,7 @@ public sealed class NpcSessionControl : PrefabPanel
 
     private void UpdateScrollButtons()
     {
-        var totalLines = DialogTextLabel.ContentHeight / TextRenderer.CHAR_HEIGHT;
-        var innerH = DialogTextLabel.Height - DialogTextLabel.PaddingTop + DialogTextLabel.PaddingBottom;
-        var visibleLines = innerH / TextRenderer.CHAR_HEIGHT;
-
-        if (totalLines <= visibleLines)
+        if (!DialogScroll.CanScroll)
         {
             ScrollUpButton?.Visible = false;
 
@@ -815,18 +810,16 @@ public sealed class NpcSessionControl : PrefabPanel
             return;
         }
 
-        var maxScroll = totalLines - visibleLines;
-
         if (ScrollUpButton is not null)
         {
-            ScrollUpButton.Visible = ScrollLine > 0;
-            ScrollUpButton.Enabled = ScrollLine > 0;
+            ScrollUpButton.Visible = DialogScroll.Offset > 0;
+            ScrollUpButton.Enabled = DialogScroll.Offset > 0;
         }
 
         if (ScrollDownButton is not null)
         {
-            ScrollDownButton.Visible = ScrollLine < maxScroll;
-            ScrollDownButton.Enabled = ScrollLine < maxScroll;
+            ScrollDownButton.Visible = DialogScroll.Offset < DialogScroll.Max;
+            ScrollDownButton.Enabled = DialogScroll.Offset < DialogScroll.Max;
         }
     }
 }

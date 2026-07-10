@@ -134,12 +134,7 @@ public abstract class UIElement : IDisposable
                 DrawRectClipped(spriteBatch, bounds, BackgroundColor.Value);
 
             if (BorderColor.HasValue)
-            {
-                DrawRectClipped(spriteBatch, new Rectangle(bounds.X, bounds.Y, bounds.Width, 1), BorderColor.Value);
-                DrawRectClipped(spriteBatch, new Rectangle(bounds.X, bounds.Y + bounds.Height - 1, bounds.Width, 1), BorderColor.Value);
-                DrawRectClipped(spriteBatch, new Rectangle(bounds.X, bounds.Y, 1, bounds.Height), BorderColor.Value);
-                DrawRectClipped(spriteBatch, new Rectangle(bounds.X + bounds.Width - 1, bounds.Y, 1, bounds.Height), BorderColor.Value);
-            }
+                DrawBorderClipped(spriteBatch, bounds, BorderColor.Value);
         }
     }
 
@@ -354,6 +349,17 @@ public abstract class UIElement : IDisposable
 
         if ((clipped.Width > 0) && (clipped.Height > 0))
             spriteBatch.Draw(GetPixel(), clipped, color);
+    }
+
+    /// <summary>
+    ///     Draws a 1px rectangle border clipped to this element's ClipRect.
+    /// </summary>
+    protected void DrawBorderClipped(SpriteBatch spriteBatch, Rectangle bounds, Color color)
+    {
+        DrawRectClipped(spriteBatch, new Rectangle(bounds.X, bounds.Y, bounds.Width, 1), color);
+        DrawRectClipped(spriteBatch, new Rectangle(bounds.X, bounds.Bottom - 1, bounds.Width, 1), color);
+        DrawRectClipped(spriteBatch, new Rectangle(bounds.X, bounds.Y, 1, bounds.Height), color);
+        DrawRectClipped(spriteBatch, new Rectangle(bounds.Right - 1, bounds.Y, 1, bounds.Height), color);
     }
 
     /// <summary>

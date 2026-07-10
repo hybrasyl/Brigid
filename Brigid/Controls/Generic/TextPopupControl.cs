@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Scrolling;
 using Brigid.Data;
 using Brigid.Utilities;
 using Microsoft.Xna.Framework;
@@ -36,7 +37,7 @@ public sealed class TextPopupControl : UIPanel
     private const int CLOSE_NORMAL = 3;
     private const int CLOSE_PRESSED = 4;
     private readonly UIButton CloseButton;
-    private readonly ScrollBarControl Scrollbar;
+    private readonly ScrollView TextScroll;
 
     private readonly UILabel TextLabel;
     private Texture2D? DialogBackground;
@@ -57,7 +58,12 @@ public sealed class TextPopupControl : UIPanel
             WordWrap = true,
             ForegroundColor = Color.White
         };
-        AddChild(TextLabel);
+
+        //the label lives inside a ScrollView that owns the bar and handles the wheel over the whole text area
+        TextScroll = new ScrollView();
+        TextScroll.AddChild(TextLabel);
+        AddChild(TextScroll);
+        TextScroll.SetSource(new LabelScrollSource(TextLabel));
 
         //close button — bottom-right, under the scrollbar
         var cache = UiRenderer.Instance!;
@@ -78,19 +84,6 @@ public sealed class TextPopupControl : UIPanel
         };
         CloseButton.Clicked += Hide;
         AddChild(CloseButton);
-
-        //scrollbar — right side, above the close button
-        var scrollHeight = CloseButton.Y - FRAME_INSET;
-
-        Scrollbar = new ScrollBarControl
-        {
-            X = POPUP_WIDTH - FRAME_INSET - ScrollBarControl.DEFAULT_WIDTH,
-            Y = FRAME_INSET,
-            Height = scrollHeight,
-            Visible = false
-        };
-        Scrollbar.OnValueChanged += value => TextLabel.ScrollOffset = value * TextRenderer.CHAR_HEIGHT;
-        AddChild(Scrollbar);
 
         LoadBackgrounds();
     }
@@ -130,40 +123,36 @@ public sealed class TextPopupControl : UIPanel
     /// </summary>
     public void Show(string text, PopupStyle style = PopupStyle.Scroll)
     {
-        var contentHeight = Scrollbar.Height;
-
         if (style == PopupStyle.Wooden)
         {
             Background = WoodBackground;
-            TextLabel.X = WOOD_INSET_X;
-            TextLabel.Y = WOOD_INSET_TOP;
-            TextLabel.Width = POPUP_WIDTH - WOOD_INSET_X * 2;
-            contentHeight = POPUP_HEIGHT - WOOD_INSET_TOP - WOOD_INSET_BOTTOM;
-            TextLabel.Height = contentHeight;
-            Scrollbar.Visible = false;
+            TextScroll.X = WOOD_INSET_X;
+            TextScroll.Y = WOOD_INSET_TOP;
+            TextScroll.Width = POPUP_WIDTH - WOOD_INSET_X * 2;
+            TextScroll.Height = POPUP_HEIGHT - WOOD_INSET_TOP - WOOD_INSET_BOTTOM;
+            TextScroll.Bar.Visible = false;
             CloseButton.Visible = false;
         } else
         {
             //scroll and nonscroll are identical per original client re
             Background = DialogBackground;
-            TextLabel.X = FRAME_INSET;
-            TextLabel.Y = FRAME_INSET;
-            TextLabel.Width = POPUP_WIDTH - FRAME_INSET * 2 - ScrollBarControl.DEFAULT_WIDTH;
-            TextLabel.Height = contentHeight;
-            Scrollbar.Visible = true;
+            TextScroll.X = FRAME_INSET;
+            TextScroll.Y = FRAME_INSET;
+            TextScroll.Width = POPUP_WIDTH - FRAME_INSET * 2;
+            TextScroll.Height = CloseButton.Y - FRAME_INSET;
+            TextScroll.Bar.Visible = true;
             CloseButton.Visible = true;
         }
 
-        TextLabel.ScrollOffset = 0;
+        //label fills the scroll region (bar strip reserved by ContentWidth when the bar is shown)
+        TextLabel.X = 0;
+        TextLabel.Y = 0;
+        TextLabel.Width = TextScroll.ContentWidth;
+        TextLabel.Height = TextScroll.ContentHeight;
         TextLabel.Text = text;
 
-        var visibleLines = contentHeight / TextRenderer.CHAR_HEIGHT;
-        var totalLines = TextLabel.ContentHeight / TextRenderer.CHAR_HEIGHT;
-        var scrollMax = Math.Max(0, totalLines - visibleLines);
-        Scrollbar.Value = 0;
-        Scrollbar.MaxValue = scrollMax;
-        Scrollbar.TotalItems = totalLines;
-        Scrollbar.VisibleItems = visibleLines;
+        TextScroll.Sync();
+        TextScroll.ScrollToStart();
 
         InputDispatcher.Instance?.PushControl(this);
         Visible = true;
@@ -176,23 +165,5 @@ public sealed class TextPopupControl : UIPanel
             Hide();
             e.Handled = true;
         }
-    }
-
-    public override void OnMouseScroll(MouseScrollEvent e)
-    {
-        if (TextLabel.ContentHeight <= TextLabel.Height)
-            return;
-
-        var visibleLines = TextLabel.Height / TextRenderer.CHAR_HEIGHT;
-        var totalLines = TextLabel.ContentHeight / TextRenderer.CHAR_HEIGHT;
-        var maxScroll = Math.Max(0, totalLines - visibleLines);
-        var newValue = Math.Clamp(Scrollbar.Value - e.Delta, 0, maxScroll);
-
-        if (newValue == Scrollbar.Value)
-            return;
-
-        Scrollbar.Value = newValue;
-        TextLabel.ScrollOffset = newValue * TextRenderer.CHAR_HEIGHT;
-        e.Handled = true;
     }
 }
