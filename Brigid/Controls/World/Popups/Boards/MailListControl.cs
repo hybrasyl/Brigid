@@ -21,10 +21,8 @@ public sealed class MailListControl : PrefabPanel
     private const int POSTID_CHARS = 6;
     private const int AUTHOR_CHARS = 17;
     private const int DATE_CHARS = 7;
-    private const int PREFIX_CHARS = POSTID_CHARS + AUTHOR_CHARS + DATE_CHARS;
 
     private readonly Rectangle MailListRect;
-    private readonly int MaxSubjectChars;
     private readonly int MaxVisibleRows;
     private readonly UILabel[] RowLabels;
     private readonly ScrollBarControl ScrollBar;
@@ -116,7 +114,6 @@ public sealed class MailListControl : PrefabPanel
 
         //row labels — one per visible row, columns via fixed-width string formatting
         var usableWidth = MailListRect.Width - ScrollBarControl.DEFAULT_WIDTH;
-        MaxSubjectChars = Math.Max(0, (usableWidth - TEXT_INDENT) / TextRenderer.CHAR_WIDTH - PREFIX_CHARS);
 
         RowLabels = new UILabel[MaxVisibleRows];
 
@@ -188,9 +185,10 @@ public sealed class MailListControl : PrefabPanel
     {
         //truncate to the fixed column widths so a long author can't push the later columns over
         var author = entry.Author.Length > AUTHOR_CHARS ? entry.Author[..AUTHOR_CHARS] : entry.Author;
-        var subject = entry.Subject.Length > MaxSubjectChars ? entry.Subject[..MaxSubjectChars] : entry.Subject;
 
-        return $"{entry.PostId,-POSTID_CHARS}{author,-AUTHOR_CHARS}{entry.Month + "/" + entry.Day,-DATE_CHARS}{subject}";
+        //the subject is the final column and runs to the panel edge, where the label's clip trims it — so the cutoff
+        //tracks the control rectangle exactly, independent of font size.
+        return $"{entry.PostId,-POSTID_CHARS}{author,-AUTHOR_CHARS}{entry.Month + "/" + entry.Day,-DATE_CHARS}{entry.Subject}";
     }
 
     public override void Hide()

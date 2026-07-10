@@ -20,16 +20,10 @@ public sealed class ArticleListControl : PrefabPanel
     private const int POSTID_CHARS = 5;
     private const int AUTHOR_CHARS = 14; //wide enough for system authors like "Mundane Gossip" (14) so the date stays aligned
     private const int DATE_CHARS = 5;
-    private const int SPACER5_LEN = 5;
-    private const int SPACER3_LEN = 3;
-    //prefix width in characters, including the inter-column spacers, so MaxSubjectChars leaves room for them
-    private const int PREFIX_CHARS = POSTID_CHARS + SPACER5_LEN + AUTHOR_CHARS + SPACER5_LEN + DATE_CHARS + SPACER3_LEN;
     private const string SPACER5 = "     ";
     private const string SPACER3 = "   ";
-    private const int SUBJECT_SLACK = 4; //extra subject characters allowed past the column estimate before the clip trims
 
     private readonly Rectangle ArticleListRect;
-    private readonly int MaxSubjectChars;
     private readonly int MaxVisibleRows;
     private readonly UILabel[] RowLabels;
     private readonly ScrollBarControl ScrollBar;
@@ -121,10 +115,8 @@ public sealed class ArticleListControl : PrefabPanel
 
         AddChild(ScrollBar);
 
-        //row labels — one per visible row, columns via fixed-width string formatting. SUBJECT_SLACK lets the subject
-        //run a few characters past the conservative column estimate; the label's hard clip trims any real overflow.
+        //row labels — one per visible row, columns via fixed-width string formatting
         var usableWidth = ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH;
-        MaxSubjectChars = Math.Max(0, usableWidth / TextRenderer.CHAR_WIDTH - PREFIX_CHARS + SUBJECT_SLACK);
 
         RowLabels = new UILabel[MaxVisibleRows];
 
@@ -196,11 +188,12 @@ public sealed class ArticleListControl : PrefabPanel
     {
         //truncate to the fixed column widths so a long author (e.g. "Mundane Gossip") can't push the later columns over
         var author = entry.Author.Length > AUTHOR_CHARS ? entry.Author[..AUTHOR_CHARS] : entry.Author;
-        var subject = entry.Subject.Length > MaxSubjectChars ? entry.Subject[..MaxSubjectChars] : entry.Subject;
 
         var date = $"{entry.Month,2}/{entry.Day,2}";
 
-        return $"{entry.PostId,POSTID_CHARS}{SPACER5}{author,-AUTHOR_CHARS}{SPACER5}{date,DATE_CHARS}{SPACER3}{subject}";
+        //the subject is the final column and runs to the panel edge, where the label's clip trims it — so the cutoff
+        //tracks the control rectangle exactly, independent of font size.
+        return $"{entry.PostId,POSTID_CHARS}{SPACER5}{author,-AUTHOR_CHARS}{SPACER5}{date,DATE_CHARS}{SPACER3}{entry.Subject}";
     }
 
     public override void Hide()
