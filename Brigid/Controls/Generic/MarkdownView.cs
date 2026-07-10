@@ -14,7 +14,8 @@ using SkiaSharp;
 namespace Brigid.Controls.Generic;
 
 /// <summary>
-///     Large markdown-rendered notice window (SystemMessageType.MarkdownNotice, a Hybrasyl/USDA extension).
+///     Large markdown-rendered notice window (HybrasylMessageType.MarkdownNotice = 0x20, a Hybrasyl extension
+///     to the retail SystemMessageType channel byte).
 ///     Covers the world viewport by default; the title-bar maximize button toggles a full-window (640x480) mode,
 ///     and that choice is deliberately sticky across notices for the session (a new Show() keeps the current mode).
 ///     Non-modal: the HUD stays interactive, but the panel consumes clicks over itself so nothing reaches the

@@ -243,8 +243,8 @@ public sealed partial class WorldScreen
 
     private void HandleServerMessage(SystemMessagePacket args)
     {
-        //Hybrasyl/USDA extension — not part of the retail ServerMessageType block the switch below models
-        if (args.MessageType == SystemMessageType.MarkdownNotice)
+        //Hybrasyl extension value — not part of the retail block DALib names or the switch below models
+        if (args.MessageType == HybrasylMessageType.MarkdownNotice)
         {
             MarkdownNotice.Show(args.Message);
 
