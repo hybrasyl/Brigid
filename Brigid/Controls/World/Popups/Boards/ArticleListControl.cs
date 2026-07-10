@@ -167,9 +167,10 @@ public sealed class ArticleListControl : PrefabPanel
                 added++;
             }
 
-        //keep paging only while a full page of genuinely new posts keeps arriving; a short or fully-duplicate batch
-        //means we have reached the oldest post (or the server does not page) — stop requesting.
-        MoreMayExist = added >= BoardProtocol.PageSize;
+        //keep paging while a batch brings at least one genuinely new post. retail's paged response is inclusive of the
+        //cursor post, so a full page always overlaps by one — gating on "a full page of new" would stop after a single
+        //fetch. a batch that adds nothing new means we reached the oldest post (or the server does not page).
+        MoreMayExist = added > 0;
         DataVersion++;
 
         UpdateScrollBar();
