@@ -24,12 +24,19 @@ public enum ChatMode
 public sealed class ChatInputControl : UIPanel
 {
     private const int MAX_WHISPER_HISTORY = 5;
+    private const int MAX_MESSAGE_HISTORY = 20;
 
     private readonly int FullWidth;
+    private readonly List<string> MessageHistory = [];
     private readonly UILabel PrefixLabel;
     private readonly UITextBox TextBox;
     private readonly List<string> WhisperHistory = [];
 
+    //in-progress text preserved when cycling into history, restored when cycling back past newest
+    private string DraftMessage = string.Empty;
+
+    //-1 = not cycling (live input / draft); 0 = most recent sent message
+    private int MessageHistoryIndex = -1;
     private Action<string>? PromptCallback;
     private Color? SavedFocusedBackgroundColor;
     private int SavedMaxLength;
@@ -126,6 +133,8 @@ public sealed class ChatInputControl : UIPanel
     private void FocusInternal(ChatMode mode, string prefix, Color color)
     {
         Mode = mode;
+        MessageHistoryIndex = -1;
+        DraftMessage = string.Empty;
         UpdateLayout(prefix, color);
         TextBox.ForegroundColor = color;
         TextBox.IsFocused = true;
@@ -209,6 +218,40 @@ public sealed class ChatInputControl : UIPanel
         PrefixLabel.BackgroundColor = Color.Black;
     }
 
+    //--- message history ---
+
+    private void AddMessageHistory(string message)
+    {
+        MessageHistory.Remove(message);
+        MessageHistory.Insert(0, message);
+
+        if (MessageHistory.Count > MAX_MESSAGE_HISTORY)
+            MessageHistory.RemoveAt(MessageHistory.Count - 1);
+    }
+
+    /// <summary>
+    ///     Cycles the input through previously sent messages. Positive direction = older; stepping past the
+    ///     newest entry restores whatever was typed before cycling began.
+    /// </summary>
+    private void CycleMessageHistory(int direction)
+    {
+        if (MessageHistory.Count == 0)
+            return;
+
+        var newIndex = Math.Clamp(MessageHistoryIndex + direction, -1, MessageHistory.Count - 1);
+
+        if (newIndex == MessageHistoryIndex)
+            return;
+
+        //entering history preserves the in-progress draft
+        if (MessageHistoryIndex < 0)
+            DraftMessage = TextBox.Text;
+
+        MessageHistoryIndex = newIndex;
+        var text = newIndex < 0 ? DraftMessage : MessageHistory[newIndex];
+        SetText(text, text.Length);
+    }
+
     //--- whisper history ---
 
     private void AddWhisperTarget(string name)
@@ -268,12 +311,18 @@ public sealed class ChatInputControl : UIPanel
         switch (Mode)
         {
             case ChatMode.Normal:
+                if (message.Length > 0)
+                    AddMessageHistory(message);
+
                 MessageSent?.Invoke(message);
                 Unfocus();
 
                 break;
 
             case ChatMode.Shout:
+                if (message.Length > 0)
+                    AddMessageHistory(message);
+
                 ShoutSent?.Invoke(message);
                 Unfocus();
 
@@ -316,6 +365,9 @@ public sealed class ChatInputControl : UIPanel
             case ChatMode.WhisperMessage:
                 if (WhisperTarget is not null)
                 {
+                    if (message.Length > 0)
+                        AddMessageHistory(message);
+
                     AddWhisperTarget(WhisperTarget);
                     WhisperSent?.Invoke(WhisperTarget, message);
                 }
@@ -386,12 +438,26 @@ public sealed class ChatInputControl : UIPanel
     {
         base.Update(gameTime);
 
-        if ((Mode != ChatMode.WhisperName) || !IsFocused)
+        if (!IsFocused)
             return;
 
-        if (InputBuffer.WasKeyPressed(Keys.Up))
-            CycleWhisperTarget(1);
-        else if (InputBuffer.WasKeyPressed(Keys.Down))
-            CycleWhisperTarget(-1);
+        switch (Mode)
+        {
+            case ChatMode.WhisperName:
+                if (InputBuffer.WasKeyPressed(Keys.Up))
+                    CycleWhisperTarget(1);
+                else if (InputBuffer.WasKeyPressed(Keys.Down))
+                    CycleWhisperTarget(-1);
+
+                break;
+
+            case ChatMode.Normal or ChatMode.Shout or ChatMode.WhisperMessage:
+                if (InputBuffer.WasKeyPressed(Keys.Up))
+                    CycleMessageHistory(1);
+                else if (InputBuffer.WasKeyPressed(Keys.Down))
+                    CycleMessageHistory(-1);
+
+                break;
+        }
     }
 }

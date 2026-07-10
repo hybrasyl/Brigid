@@ -10,15 +10,13 @@ namespace Brigid;
 ///     mouse wheel events from SDL via a single <c>SDL_AddEventWatch</c> callback so that
 ///     every discrete event is preserved in its true OS post order and carries the modifier
 ///     state that was live at the moment it fired. Also tracks the live cursor position
-///     (refreshed from <c>SDL_GetMouseState</c> on every <see cref="Update" />) and the
-///     per-window button-held flags.
+///     (refreshed from <c>SDL_GetMouseState</c> on every <see cref="Update" />).
 ///     <para>
 ///         Lifecycle: call <see cref="Initialize" /> once at startup (installs the SDL
 ///         watcher), then <see cref="Update" /> at the start of every frame (drains the
 ///         accumulated events into the frame snapshot and refreshes the cursor position),
 ///         and <see cref="Shutdown" /> on application exit (removes the watcher). Any code
 ///         can read the static query surface: <see cref="MouseX" /> / <see cref="MouseY" />,
-///         <see cref="IsLeftButtonHeld" /> / <see cref="IsRightButtonHeld" />,
 ///         <see cref="IsKeyHeld" /> / <see cref="WasKeyPressed" /> / <see cref="WasKeyReleased" />,
 ///         <see cref="TextInput" />, and the chronologically-ordered <see cref="Events" /> stream.
 ///     </para>
@@ -92,19 +90,6 @@ public static class InputBuffer
     //(the render target is stretch-drawn to fill in that case, not letterboxed).
     private static int ToVirtualX(int raw) => (int)(raw / VirtualScaleX);
     private static int ToVirtualY(int raw) => (int)(raw / VirtualScaleY);
-
-    /// <summary>
-    ///     True while the left mouse button is held down. Flipped per-event by the SDL
-    ///     watcher — a click in another application never sets this to <c>true</c>,
-    ///     unlike MonoGame's <c>Mouse.GetState().LeftButton</c> which reports global state.
-    /// </summary>
-    public static bool IsLeftButtonHeld { get; private set; }
-
-    /// <summary>
-    ///     True while the right mouse button is held down. Same per-window semantics as
-    ///     <see cref="IsLeftButtonHeld" />.
-    /// </summary>
-    public static bool IsRightButtonHeld { get; private set; }
 
     /// <summary>
     ///     Returns true if the key is currently held down (event-tracked, not polled).
@@ -219,14 +204,10 @@ public static class InputBuffer
         FrameKeyReleases.Clear();
 
         //clear stuck held state on the active→inactive edge. while another window has
-        //focus SDL doesn't deliver key/button-up events to us, so held flags would
-        //otherwise persist as stale state until the user refocuses and re-taps.
+        //focus SDL doesn't deliver key-up events to us, so held keys would otherwise
+        //persist as stale state until the user refocuses and re-taps.
         if (WasActivePreviousFrame && !isActive)
-        {
             HeldKeys.Clear();
-            IsLeftButtonHeld = false;
-            IsRightButtonHeld = false;
-        }
 
         WasActivePreviousFrame = isActive;
 
@@ -386,15 +367,6 @@ public static class InputBuffer
 
         if ((int)mouseButton < 0)
             return;
-
-        //flip held flags so IsLeftButtonHeld / IsRightButtonHeld report per-window
-        //state. SDL only delivers button events for our window, so a click in another
-        //application never sets these to true — which was the whole reason the
-        //pre-refactor Mouse.GetState() path needed a mouseOutsideClient guard.
-        if (mouseButton == MouseButton.Left)
-            IsLeftButtonHeld = isPress;
-        else if (mouseButton == MouseButton.Right)
-            IsRightButtonHeld = isPress;
 
         //capture click position at the exact moment of the event in raw window pixels,
         //then translate to virtual coordinates via ToVirtual so polled and event

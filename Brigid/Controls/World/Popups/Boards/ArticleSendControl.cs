@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -12,8 +13,18 @@ namespace Brigid.Controls.World.Popups.Boards;
 /// </summary>
 public sealed class ArticleSendControl : PrefabPanel
 {
+    //the anchor art (_nartin.txt references the shared _nmails.spf[0]) has a bare black
+    //scrollbar strip at (483,65), 16px wide by 214px tall — measured from the rendered art;
+    //it does NOT align with the prefab Content rect (21,69)-(501,273), sitting 18px inside
+    //its right edge and 4px above its top. A live scrollbar is overlaid on the strip and
+    //the body text stops at its left edge (matching the retail client).
+    private const int SCROLLBAR_X = 483;
+    private const int SCROLLBAR_Y = 65;
+    private const int SCROLLBAR_HEIGHT = 214;
+
     private readonly UILabel? AuthorLabel;
     private readonly UITextBox BodyBox;
+    private readonly ScrollBarControl BodyScrollBar;
     private readonly UITextBox? TitleBox;
     private int TargetX;
 
@@ -53,7 +64,7 @@ public sealed class ArticleSendControl : PrefabPanel
         {
             X = contentRect.X,
             Y = contentRect.Y,
-            Width = contentRect.Width - 2,
+            Width = SCROLLBAR_X - contentRect.X,
             Height = contentRect.Height,
             IsMultiLine = true,
             IsSelectable = true,
@@ -67,6 +78,35 @@ public sealed class ArticleSendControl : PrefabPanel
         };
 
         AddChild(BodyBox);
+
+        BodyScrollBar = new ScrollBarControl
+        {
+            Name = "BodyScrollBar",
+            X = SCROLLBAR_X,
+            Y = SCROLLBAR_Y,
+            Height = SCROLLBAR_HEIGHT
+        };
+
+        BodyScrollBar.OnValueChanged += v => BodyBox.ScrollOffset = v * TextRenderer.CHAR_HEIGHT;
+        AddChild(BodyScrollBar);
+    }
+
+    /// <summary>
+    ///     Keeps the scrollbar range and thumb in sync with the editable body as it changes.
+    /// </summary>
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+
+        BodyScrollBar.TotalItems = BodyBox.LineCount;
+        BodyScrollBar.VisibleItems = BodyBox.VisibleLineCount;
+        BodyScrollBar.MaxValue = Math.Max(0, BodyBox.LineCount - BodyBox.VisibleLineCount);
+
+        //content can shrink while scrolled down (e.g. deleting near the bottom) — pull the view
+        //back in range, otherwise the scrollbar disables itself while early lines are stranded
+        //out of reach above the viewport
+        BodyBox.ScrollOffset = Math.Min(BodyBox.ScrollOffset, BodyScrollBar.MaxValue * TextRenderer.CHAR_HEIGHT);
+        BodyScrollBar.Value = Math.Clamp(BodyBox.ScrollOffset / TextRenderer.CHAR_HEIGHT, 0, BodyScrollBar.MaxValue);
     }
 
     private void HandleSend()
