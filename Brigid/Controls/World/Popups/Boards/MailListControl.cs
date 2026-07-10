@@ -2,6 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Models;
+using Brigid.Networking;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -15,8 +16,6 @@ namespace Brigid.Controls.World.Popups.Boards;
 /// </summary>
 public sealed class MailListControl : PrefabPanel
 {
-    //server caps board responses at sbyte.maxvalue posts per page
-    private const int MAX_POSTS_PER_PAGE = 127;
     private const int ROW_HEIGHT = Constants.BOARD_ROW_HEIGHT;
     private const int TEXT_INDENT = 24;
     private const int POSTID_CHARS = 6;
@@ -32,7 +31,8 @@ public sealed class MailListControl : PrefabPanel
     private int DataVersion;
 
     private List<MailEntry> Entries = [];
-    private bool HasMorePosts;
+    private bool LoadingMore;
+    private bool MoreMayExist;
     private int RenderedVersion = -1;
     private int ScrollOffset;
     private int SelectedIndex = -1;
@@ -110,6 +110,7 @@ public sealed class MailListControl : PrefabPanel
         {
             ScrollOffset = v;
             DataVersion++;
+            MaybeRequestOlder();
         };
         AddChild(ScrollBar);
 
@@ -135,10 +136,37 @@ public sealed class MailListControl : PrefabPanel
         }
     }
 
+    /// <summary>
+    ///     Whether a scroll-paging request is currently in flight (fired but not yet answered). The server-handler uses
+    ///     this to route a post-list reply to <see cref="AppendEntries" /> vs a fresh replace.
+    /// </summary>
+    public bool IsPaging => LoadingMore;
+
+    /// <summary>
+    ///     Clears the in-flight paging flag without appending — used when a paging reply arrives after the user has
+    ///     already left this list, so the next time it is shown it can page again.
+    /// </summary>
+    public void CancelPaging() => LoadingMore = false;
+
     public void AppendEntries(List<MailEntry> entries)
     {
-        Entries.AddRange(entries);
-        HasMorePosts = entries.Count >= MAX_POSTS_PER_PAGE;
+        LoadingMore = false;
+
+        //dedupe against posts we already hold: a server that ignores the paging cursor (Hybrasyl drops navOffset and
+        //re-sends the same set) or a final overlapping batch must not append duplicate rows or re-arm paging forever.
+        var existingIds = new HashSet<short>(Entries.Select(e => e.PostId));
+        var added = 0;
+
+        foreach (var entry in entries)
+            if (existingIds.Add(entry.PostId))
+            {
+                Entries.Add(entry);
+                added++;
+            }
+
+        //keep paging only while a full page of genuinely new posts keeps arriving; a short or fully-duplicate batch
+        //means we have reached the oldest post (or the server does not page) — stop requesting.
+        MoreMayExist = added >= BoardProtocol.PageSize;
         DataVersion++;
 
         UpdateScrollBar();
@@ -162,6 +190,9 @@ public sealed class MailListControl : PrefabPanel
 
     public override void Hide()
     {
+        //never let an in-flight paging flag outlive the visible list — otherwise a dropped/error reply would wedge it
+        //and divert the next fresh open into the paging branch.
+        LoadingMore = false;
         InputDispatcher.Instance?.RemoveControl(this);
         Visible = false;
     }
@@ -170,8 +201,8 @@ public sealed class MailListControl : PrefabPanel
     public event DeletePostHandler? OnDeletePost;
 
     /// <summary>
-    ///     Fired when the user clicks the "Load More" row at the bottom of a full page. The short is the last visible PostId
-    ///     to use as the startPostId for the next page request.
+    ///     Fired when the user scrolls to the oldest loaded row and more posts may exist, mirroring retail's scroll-back
+    ///     paging. The short is the last (oldest) PostId held, used as the startPostId for the next older page request.
     /// </summary>
     public event LoadMorePostsHandler? OnLoadMorePosts;
 
@@ -179,6 +210,22 @@ public sealed class MailListControl : PrefabPanel
     public event ReplyPostHandler? OnReplyPost;
     public event UpHandler? OnUp;
     public event ViewPostHandler? OnViewPost;
+
+    /// <summary>
+    ///     Requests the next older page when the view has scrolled to the oldest loaded row, paging is not exhausted, and
+    ///     no request is already in flight. Mirrors retail, which re-sends 0x02 continuously as the user scrolls back.
+    /// </summary>
+    private void MaybeRequestOlder()
+    {
+        if (!MoreMayExist || LoadingMore || (Entries.Count == 0))
+            return;
+
+        if (ScrollOffset + MaxVisibleRows < Entries.Count)
+            return;
+
+        LoadingMore = true;
+        OnLoadMorePosts?.Invoke(Entries[^1].PostId);
+    }
 
     private void RefreshLabels()
     {
@@ -191,11 +238,7 @@ public sealed class MailListControl : PrefabPanel
         {
             var entryIndex = ScrollOffset + i;
 
-            if (HasMorePosts && (entryIndex == Entries.Count))
-            {
-                RowLabels[i].ForegroundColor = Color.LightGray;
-                RowLabels[i].Text = "-- Load More --";
-            } else if (entryIndex < Entries.Count)
+            if (entryIndex < Entries.Count)
             {
                 var entry = Entries[entryIndex];
                 var isSelected = entryIndex == SelectedIndex;
@@ -248,7 +291,8 @@ public sealed class MailListControl : PrefabPanel
     {
         BoardId = boardId;
         Entries = entries;
-        HasMorePosts = entries.Count >= MAX_POSTS_PER_PAGE;
+        MoreMayExist = entries.Count >= BoardProtocol.PageSize;
+        LoadingMore = false;
         SelectedIndex = -1;
         ScrollOffset = 0;
         DataVersion++;
@@ -277,15 +321,6 @@ public sealed class MailListControl : PrefabPanel
             return;
 
         var entryIndex = ScrollOffset + row;
-
-        //"load more" row
-        if (HasMorePosts && (entryIndex == Entries.Count))
-        {
-            if (Entries.Count > 0)
-                OnLoadMorePosts?.Invoke(Entries[^1].PostId);
-
-            return;
-        }
 
         if (entryIndex >= Entries.Count)
             return;
@@ -345,6 +380,7 @@ public sealed class MailListControl : PrefabPanel
             ScrollBar.Value = newValue;
             ScrollOffset = newValue;
             DataVersion++;
+            MaybeRequestOlder();
         }
 
         e.Handled = true;
@@ -363,11 +399,8 @@ public sealed class MailListControl : PrefabPanel
 
     private void UpdateScrollBar()
     {
-        //add 1 virtual row for the "load more" indicator when more posts exist
-        var totalRows = Entries.Count + (HasMorePosts ? 1 : 0);
-
-        ScrollBar.TotalItems = totalRows;
+        ScrollBar.TotalItems = Entries.Count;
         ScrollBar.VisibleItems = MaxVisibleRows;
-        ScrollBar.MaxValue = Math.Max(0, totalRows - MaxVisibleRows);
+        ScrollBar.MaxValue = Math.Max(0, Entries.Count - MaxVisibleRows);
     }
 }

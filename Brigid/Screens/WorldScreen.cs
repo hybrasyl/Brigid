@@ -144,9 +144,6 @@ public sealed partial class WorldScreen : IScreen
     private LargeWorldHudControl LargeHud = null!;
     private TileClickTracker LeftClickTracker;
     private readonly LightingSystem Lighting = new();
-
-    //true while awaiting a paginated board response (append instead of replace)
-    private bool LoadingMoreBoardPosts;
     private MacrosListControl MacrosList = null!;
     private MailListControl MailList = null!;
     private MailReadControl MailRead = null!;

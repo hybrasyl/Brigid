@@ -54,15 +54,11 @@ public sealed class Board
     public bool WasOpenedFromBoardList { get; set; }
 
     /// <summary>
-    ///     The list of posts in the current board view.
+    ///     The posts from the most recent board response only. On a scroll-paging fetch this holds just the newly
+    ///     returned page, not the full accumulated list — the list control accumulates the displayed set. Read this as
+    ///     "the latest page", not "what is on screen".
     /// </summary>
     public IReadOnlyList<MailEntry> Posts => PostList;
-
-    public void AppendPosts(List<MailEntry> posts)
-    {
-        PostList.AddRange(posts);
-        PostListChanged?.Invoke();
-    }
 
     /// <summary>
     ///     Fired when a board list is received (multiple boards available).
