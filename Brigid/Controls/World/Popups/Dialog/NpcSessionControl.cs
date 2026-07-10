@@ -62,6 +62,33 @@ public sealed class NpcSessionControl : PrefabPanel
     public ushort DialogId { get; private set; }
     public bool IsDialogOpcode { get; private set; }
 
+    // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+    //  RETAIL-COMPAT DIALOG PACING LATCH  —  DIVERGENCE POINT
+    //
+    //  The retail world server validates that each 0x3A dialog response's pursuitIndex is within ±1 of the
+    //  server's own tracked position, and DROPS THE CONNECTION on a violation (see 0x3A-dialog-use.md). Our
+    //  DialogId only advances when the server's *next* dialog packet arrives, so a second click before that
+    //  packet resends a stale index (DialogId + 1 twice) → the index desyncs past ±1 → retail disconnects and
+    //  the user is kicked to login. Retail's own client sidesteps this by making the dialog inert until the
+    //  next frame arrives — you physically cannot click ahead.
+    //
+    //  So we hard-gate to ONE outstanding dialog action: after any advancing response is sent, further
+    //  advancing input is dropped and the nav buttons are disabled until the next dialog/menu packet
+    //  (ShowDialog/ShowMenu) or the session closes (HideAll). A safety timeout releases the latch if the
+    //  expected packet never arrives (dropped packet) so the user is never permanently stranded.
+    //
+    //  ⚠ DIVERGE WHEN ON HYBRASYL: this lock exists ONLY to satisfy retail's strict ±1 validation. Once the
+    //  client can detect it is talking to a Hybrasyl server (capability handshake), Hybrasyl can accept
+    //  optimistic / queued dialog input and this whole latch should be relaxed or removed for that server —
+    //  it needlessly throttles a modern server that does not punish fast input. Gate the divergence on that
+    //  handshake, do not delete this for retail.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+    private const float ResponsePendingTimeoutMs = 5000f;
+    private bool ResponsePending;
+    private float ResponsePendingElapsedMs;
+    private bool LastHasNext;
+    private bool LastHasPrevious;
+
     //menu args echoed back for menuwithargs
     public string? MenuArgs { get; private set; }
 
@@ -187,14 +214,25 @@ public sealed class NpcSessionControl : PrefabPanel
             };
 
         if (NextButton is not null)
-            NextButton.Clicked += () => OnNext?.Invoke();
+            NextButton.Clicked += () =>
+            {
+                if (BeginResponse())
+                    OnNext?.Invoke();
+            };
 
         if (PreviousButton is not null)
-            PreviousButton.Clicked += () => OnPrevious?.Invoke();
+            PreviousButton.Clicked += () =>
+            {
+                if (BeginResponse())
+                    OnPrevious?.Invoke();
+            };
 
         if (TopButton is not null)
             TopButton.Clicked += () =>
             {
+                if (!BeginResponse())
+                    return;
+
                 HideAll();
                 OnTop?.Invoke();
             };
@@ -214,8 +252,12 @@ public sealed class NpcSessionControl : PrefabPanel
         AddChild(MenuList);
         AddChild(DialogProtectedTextEntry);
 
-        //wire sub-panel events — forward to container events
-        DialogOption.OnOptionSelected += index => OnOptionSelected?.Invoke(index);
+        //wire sub-panel events — forward to container events. advancing responses pass through the pacing latch.
+        DialogOption.OnOptionSelected += index =>
+        {
+            if (BeginResponse())
+                OnOptionSelected?.Invoke(index);
+        };
 
         DialogOption.OnClose += () =>
         {
@@ -223,7 +265,11 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        DialogTextEntry.OnTextSubmit += text => OnTextSubmit?.Invoke(text);
+        DialogTextEntry.OnTextSubmit += text =>
+        {
+            if (BeginResponse())
+                OnTextSubmit?.Invoke(text);
+        };
 
         DialogTextEntry.OnClose += () =>
         {
@@ -231,7 +277,11 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        MenuTextEntry.OnTextSubmit += text => OnTextSubmit?.Invoke(text);
+        MenuTextEntry.OnTextSubmit += text =>
+        {
+            if (BeginResponse())
+                OnTextSubmit?.Invoke(text);
+        };
 
         MenuTextEntry.OnClose += () =>
         {
@@ -239,7 +289,12 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        MenuShop.OnItemSelected += index => OnMerchantItemSelected?.Invoke(index);
+        MenuShop.OnItemSelected += index =>
+        {
+            if (BeginResponse())
+                OnMerchantItemSelected?.Invoke(index);
+        };
+
         MenuShop.OnItemHoverEnter += name => OnItemHoverEnter?.Invoke(name);
         MenuShop.OnItemHoverExit += () => OnItemHoverExit?.Invoke();
 
@@ -249,7 +304,11 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        MenuList.OnItemSelected += index => OnListItemSelected?.Invoke(index);
+        MenuList.OnItemSelected += index =>
+        {
+            if (BeginResponse())
+                OnListItemSelected?.Invoke(index);
+        };
 
         MenuList.OnClose += () =>
         {
@@ -257,7 +316,11 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        DialogProtectedTextEntry.OnProtectedSubmit += (id, pw) => OnProtectedSubmit?.Invoke(id, pw);
+        DialogProtectedTextEntry.OnProtectedSubmit += (id, pw) =>
+        {
+            if (BeginResponse())
+                OnProtectedSubmit?.Invoke(id, pw);
+        };
 
         DialogProtectedTextEntry.OnClose += () =>
         {
@@ -387,6 +450,7 @@ public sealed class NpcSessionControl : PrefabPanel
     /// </summary>
     public void HideAll()
     {
+        ResetDialogLock();
         DisposePortrait();
         HideAllSubPanels();
         Hide();
@@ -469,6 +533,10 @@ public sealed class NpcSessionControl : PrefabPanel
 
     private void SetNavigationButtons(bool hasNext, bool hasPrevious)
     {
+        //remembered so the pacing-latch timeout can restore the correct enabled state (see the latch block)
+        LastHasNext = hasNext;
+        LastHasPrevious = hasPrevious;
+
         if (NextButton is not null)
         {
             NextButton.Visible = true;
@@ -492,6 +560,49 @@ public sealed class NpcSessionControl : PrefabPanel
             TopButton.Visible = false;
             TopButton.Enabled = false;
         }
+    }
+
+    /// <summary>
+    ///     Gates an advancing dialog response (next/prev/top/option/text/list/merchant). Returns false — dropping
+    ///     the input — while a prior response is still awaiting the server's reply. See the pacing-latch block.
+    /// </summary>
+    private bool BeginResponse()
+    {
+        if (ResponsePending)
+            return false;
+
+        ResponsePending = true;
+        ResponsePendingElapsedMs = 0f;
+
+        //visually reflect the lock — the buttons come back when the next dialog packet renders (or on timeout)
+        if (NextButton is not null)
+            NextButton.Enabled = false;
+
+        if (PreviousButton is not null)
+            PreviousButton.Enabled = false;
+
+        if (TopButton is not null)
+            TopButton.Enabled = false;
+
+        return true;
+    }
+
+    //cleared whenever a new dialog/menu packet arrives or the session closes — the outstanding response resolved
+    private void ResetDialogLock() => ResponsePending = false;
+
+    private void TickResponsePending(float elapsedMs)
+    {
+        if (!ResponsePending)
+            return;
+
+        ResponsePendingElapsedMs += elapsedMs;
+
+        if (ResponsePendingElapsedMs < ResponsePendingTimeoutMs)
+            return;
+
+        //server never answered (dropped packet) — release the latch so the user can retry instead of being stuck
+        ResponsePending = false;
+        SetNavigationButtons(LastHasNext, LastHasPrevious);
     }
 
     /// <summary>
@@ -524,6 +635,9 @@ public sealed class NpcSessionControl : PrefabPanel
     /// </summary>
     public void ShowDialog(NpcDialogPacket pkt)
     {
+        //the awaited server reply has arrived — release the pacing latch (HideAll also clears it on close)
+        ResetDialogLock();
+
         if (pkt.DialogType is NpcDialogType.Close)
         {
             HideAll();
@@ -621,6 +735,9 @@ public sealed class NpcSessionControl : PrefabPanel
     /// </summary>
     public void ShowMenu(NpcMenuPacket pkt)
     {
+        //the awaited server reply has arrived — release the pacing latch
+        ResetDialogLock();
+
         var menuType = (MenuType)(byte)pkt.MenuType;
 
         IsDialogOpcode = false;
@@ -741,6 +858,10 @@ public sealed class NpcSessionControl : PrefabPanel
 
     public override void Update(GameTime gameTime)
     {
+        //release the pacing latch if the server never answered. runs before the visibility guard below; the
+        //latch is only ever pending while the dialog is visible and waiting, so the timeout always gets to fire.
+        TickResponsePending((float)gameTime.ElapsedGameTime.TotalMilliseconds);
+
         if (!Visible || !Enabled)
             return;
 
@@ -782,13 +903,26 @@ public sealed class NpcSessionControl : PrefabPanel
         //space/enter — advance normal dialogs via next button, or select first option in menus
         if (e.Key is Keys.Space or Keys.Enter)
         {
+            //while awaiting the server's reply, swallow advance keys — don't fall through to the close branch
+            //below (Next is temporarily disabled by the pacing latch, which would otherwise read as "no next").
+            if (ResponsePending)
+            {
+                e.Handled = true;
+
+                return;
+            }
+
             if (DialogOption is { Visible: true, OptionCount: > 0 })
             {
-                OnOptionSelected?.Invoke(0);
+                if (BeginResponse())
+                    OnOptionSelected?.Invoke(0);
+
                 e.Handled = true;
             } else if (NextButton is { Visible: true, Enabled: true })
             {
-                OnNext?.Invoke();
+                if (BeginResponse())
+                    OnNext?.Invoke();
+
                 e.Handled = true;
             } else if (!DialogOption.Visible || (DialogOption.OptionCount == 0))
             {
