@@ -30,8 +30,12 @@ public sealed partial class WorldScreen
 
     private void HandleDisplayAisling(DisplayUserPacket args)
     {
-        //update player name in hud when the player's own aisling is displayed
-        if (args.Id == Game.Connection.AislingId)
+        //update player name in hud when the player's own aisling is displayed.
+        //a hidden aisling (Hide/invisibility) is broadcast with a blank name so no floating name tag renders
+        //over the invisible sprite — but that blank must NOT reach the persistent HUD "ID" box (which shows who
+        //you are, not your on-map visibility). Guard on a non-empty name so hide/unhide never clears it; the
+        //on-map tag still hides correctly via entity.Name in AddOrUpdateAisling.
+        if (args.Id == Game.Connection.AislingId && !string.IsNullOrEmpty(args.Name))
         {
             WorldState.PlayerName = args.Name;
             UpdateHuds(HudOps.SetPlayerName, args.Name);
