@@ -188,6 +188,7 @@ public sealed partial class WorldScreen : IScreen
     private TabMapRenderer TabMapRenderer = null!;
     private bool TabMapVisible;
     private TextPopupControl TextPopup = null!;
+    private MarkdownView MarkdownNotice = null!;
     private Texture2D? TileCursorDragTexture;
 
     //tile cursor: dashed ellipse drawn on the hovered tile
@@ -622,6 +623,11 @@ public sealed partial class WorldScreen : IScreen
             ZIndex = 2
         };
 
+        MarkdownNotice = new MarkdownView(Device, viewport)
+        {
+            ZIndex = 4
+        };
+
         Notepad = new NotepadControl
         {
             ZIndex = 2
@@ -706,6 +712,7 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(EventMetadataDetails);
         Root.AddChild(OtherProfile);
         Root.AddChild(TextPopup);
+        Root.AddChild(MarkdownNotice);
         Root.AddChild(Notepad);
         Root.AddChild(ChantEdit);
         Root.AddChild(WorldMap);

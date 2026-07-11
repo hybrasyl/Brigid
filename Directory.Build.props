@@ -25,17 +25,17 @@
         <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
         <Authors>Sichi</Authors>
         <PackageTags>darkages; doomvas; private server;</PackageTags>
-        <!-- Version is owned by Nerdbank.GitVersioning (version.json at the repo root); do not set <Version> here. -->
+        <!-- Local/dev version — keep matching the latest release tag so the login-screen label reads
+             correctly and the update check doesn't false-positive. Release builds override this with
+             -p:Version from the tag (see .github/workflows/release.yml). -->
+        <Version>0.2.0</Version>
 
         <!-- DALib is consumed from the pinned NuGet package by default. Opt into the sibling checkout
-             with -p:UseLocalDALib=true when co-developing DALib alongside Brigid. -->
+             with -p:UseLocalDALib=true when co-developing DALib alongside Brigid.
+             Hybrasyl protocol divergence deliberately does NOT live in DALib (retail/USDA ground
+             truth) — see Brigid.Networking/Definitions/HybrasylExtensions.cs. -->
         <UseLocalDALib Condition="'$(UseLocalDALib)' == ''">false</UseLocalDALib>
         <LocalDALibProjectPath Condition="'$(LocalDALibProjectPath)' == ''">$(MSBuildThisFileDirectory)..\dalib\DALib\DALib.csproj</LocalDALibProjectPath>
     </PropertyGroup>
 
-    <ItemGroup>
-        <PackageReference Include="Nerdbank.GitVersioning" Condition="!Exists('packages.config')">
-            <PrivateAssets>all</PrivateAssets>
-        </PackageReference>
-    </ItemGroup>
 </Project>

@@ -16,6 +16,9 @@ public class UITextBox : UIElement
 
     private static UITextBox? FocusedTextBox;
 
+    /// <summary>The textbox that currently holds focus, if any. One box holds focus at a time, process-wide.</summary>
+    public static UITextBox? CurrentlyFocused => FocusedTextBox;
+
     private readonly TextElement TextElement = new();
     private string CachedLayoutText = string.Empty;
     private int CachedLayoutWidth;
@@ -60,7 +63,15 @@ public class UITextBox : UIElement
         set
         {
             if (field == value)
+            {
+                //re-assert the dispatcher bridge on a redundant focus-set: a popup can clear the
+                //dispatcher's explicit focus without unfocusing this box (stale-true state), and a
+                //transition-only event would leave keyboard routing unrecoverable by click or hotkey
+                if (value)
+                    TextBoxFocusGained?.Invoke(this);
+
                 return;
+            }
 
             field = value;
             BackgroundColor = value ? FocusedBackgroundColor : null;
@@ -133,6 +144,11 @@ public class UITextBox : UIElement
 
     private int FirstVisibleLine => ScrollOffset / TextRenderer.CHAR_HEIGHT;
 
+    /// <summary>
+    ///     Number of laid-out lines in the current text (multiline only; 1 when empty).
+    /// </summary>
+    public int LineCount => LineStarts.Count;
+
     public bool HasSelection => IsSelectable && (SelectionAnchor != CursorPosition);
 
     public string SelectedText => HasSelection ? Text[SelectionStart..Math.Min(SelectionEnd, Text.Length)] : string.Empty;
@@ -142,7 +158,7 @@ public class UITextBox : UIElement
 
     public int SelectionStart => Math.Min(SelectionAnchor, CursorPosition);
 
-    private int VisibleLineCount => (Height - PaddingTop + PaddingBottom) / TextRenderer.CHAR_HEIGHT;
+    public int VisibleLineCount => (Height - PaddingTop - PaddingBottom) / TextRenderer.CHAR_HEIGHT;
 
     public UITextBox()
     {
@@ -335,7 +351,7 @@ public class UITextBox : UIElement
         var sx = ScreenX;
         var sy = ScreenY;
         var textY = sy + PaddingTop;
-        var textHeight = Height - PaddingTop + PaddingBottom;
+        var textHeight = Height - PaddingTop - PaddingBottom;
 
         //prefix offset — non-editable text rendered before editable content
         var prefixWidth = 0;
@@ -820,6 +836,66 @@ public class UITextBox : UIElement
         }
     }
 
+    /// <summary>
+    ///     Inserts a newline at the caret (replacing any selection), honoring MaxLength and ClampToVisibleArea.
+    ///     Multiline only; reached from both the Enter key and any '\r'/'\n' text-input event.
+    /// </summary>
+    private void InsertNewline()
+    {
+        //snapshot state before additive mutation for potential overflow revert
+        var savedText = Text;
+        var savedCursor = CursorPosition;
+        var savedAnchor = SelectionAnchor;
+
+        if (HasSelection)
+            DeleteSelection();
+
+        if (Text.Length < MaxLength)
+        {
+            var nlInsertPos = CursorPosition;
+            Text = Text.Insert(nlInsertPos, "\n");
+            CursorPosition = nlInsertPos + 1;
+            SelectionAnchor = CursorPosition;
+            ResetCursor();
+        }
+
+        if (ClampToVisibleArea && ExceedsVisibleArea())
+        {
+            Text = savedText;
+            CursorPosition = savedCursor;
+            SelectionAnchor = savedAnchor;
+            CachedLayoutText = string.Empty;
+        }
+
+        EnsureCursorVisible();
+    }
+
+    /// <summary>
+    ///     Moves the caret to the start of the current visual line (start of text when single-line).
+    /// </summary>
+    private void MoveToLineStart(bool extendSelection)
+    {
+        if (IsMultiLine)
+        {
+            var line = GetLineForPosition(CursorPosition);
+            MoveCursor(LineStarts[line], extendSelection);
+        } else
+            MoveCursor(0, extendSelection);
+    }
+
+    /// <summary>
+    ///     Moves the caret to the end of the current visual line (end of text when single-line).
+    /// </summary>
+    private void MoveToLineEnd(bool extendSelection)
+    {
+        if (IsMultiLine)
+        {
+            var line = GetLineForPosition(CursorPosition);
+            MoveCursor(LineStarts[line] + GetLineText(line).Length, extendSelection);
+        } else
+            MoveCursor(Text.Length, extendSelection);
+    }
+
     private void ResetCursor()
     {
         CursorVisible = true;
@@ -1045,33 +1121,41 @@ public class UITextBox : UIElement
                 break;
 
             case Keys.Home:
-                if (IsMultiLine && !ctrl)
-                {
-                    var cursorLine = GetLineForPosition(CursorPosition);
-                    MoveCursor(LineStarts[cursorLine], shift);
-                } else
+                if (ctrl)
                     MoveCursor(0, shift);
+                else
+                    MoveToLineStart(shift);
 
                 e.Handled = true;
 
                 break;
 
             case Keys.End:
-                if (IsMultiLine && !ctrl)
-                {
-                    var cursorLine = GetLineForPosition(CursorPosition);
-                    var lineText = GetLineText(cursorLine);
-                    MoveCursor(LineStarts[cursorLine] + lineText.Length, shift);
-                } else
+                if (ctrl)
                     MoveCursor(Text.Length, shift);
+                else
+                    MoveToLineEnd(shift);
 
                 e.Handled = true;
 
                 break;
 
             //── selection / clipboard ──
-            case Keys.A when ctrl && IsSelectable:
+            case Keys.A when ctrl && shift && IsSelectable:
                 SelectAll();
+                e.Handled = true;
+
+                break;
+
+            //readline-style caret movement: ctrl+a line start, ctrl+e line end
+            case Keys.A when ctrl:
+                MoveToLineStart(false);
+                e.Handled = true;
+
+                break;
+
+            case Keys.E when ctrl:
+                MoveToLineEnd(false);
                 e.Handled = true;
 
                 break;
@@ -1154,6 +1238,14 @@ public class UITextBox : UIElement
 
                 break;
 
+            //enter never arrives as a text-input event (SDL only raises SDL_TEXTINPUT for
+            //printable characters), so the newline has to be inserted from the key event.
+            case Keys.Enter when IsMultiLine && !IsReadOnly:
+                InsertNewline();
+                e.Handled = true;
+
+                break;
+
             default:
                 //consume all other key presses while focused so they don't bubble
                 //to hotkey handlers. actual character insertion happens via ontextinput.
@@ -1188,35 +1280,8 @@ public class UITextBox : UIElement
             if (!IsMultiLine)
                 return;
 
-            //snapshot state before additive mutation for potential overflow revert
-            var savedText = Text;
-            var savedCursor = CursorPosition;
-            var savedAnchor = SelectionAnchor;
-
-            if (HasSelection)
-                DeleteSelection();
-
-            if (Text.Length < MaxLength)
-            {
-                var nlInsertPos = CursorPosition;
-                Text = Text.Insert(nlInsertPos, "\n");
-                CursorPosition = nlInsertPos + 1;
-                SelectionAnchor = CursorPosition;
-                ResetCursor();
-            }
-
-            if (ClampToVisibleArea && IsMultiLine && ExceedsVisibleArea())
-            {
-                Text = savedText;
-                CursorPosition = savedCursor;
-                SelectionAnchor = savedAnchor;
-                CachedLayoutText = string.Empty;
-            }
-
+            InsertNewline();
             e.Handled = true;
-
-            if (IsMultiLine)
-                EnsureCursorVisible();
 
             return;
         }

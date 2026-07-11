@@ -15,7 +15,7 @@ dotnet run --project Brigid/Brigid.csproj
 
 The client requires a Dark Ages game-data directory (the folder containing `*.dat` archives). Point `GlobalSettings.DataPath` at that directory before running; `LobbyHost`/`LobbyPort` and `ClientVersion` also live in `GlobalSettings`.
 
-No test projects exist currently.
+Tests live in `Brigid.Tests` (xunit): `dotnet test Brigid.slnx`. Coverage is currently a handful of targeted regression/smoke tests, not a full suite.
 
 ## Solution Structure
 
@@ -24,10 +24,11 @@ Brigid.slnx (.NET 10.0, C# 14)
 ├── Brigid               — MonoGame Game class, screens, UI controls, systems, entry point
 ├── Brigid.Data           — Asset repositories, DALib integration, archive loading, caching
 ├── Brigid.Rendering      — Texture conversion, sprite renderers, map rendering, text, camera
-└── Brigid.Networking     — TCP client, crypto, packet framing, connection state machine
+├── Brigid.Networking     — TCP client, connection state machine (protocol/crypto via DALib)
+└── Brigid.Tests          — xunit regression/smoke tests
 ```
 
-DALib (Dark Ages file format + networking support) is consumed from the sibling checkout at `../dalib` by default (`UseLocalDALib=true` in `Directory.Build.props`) until a DALib release with the networking layer is published; build with `-p:UseLocalDALib=false` to use the pinned NuGet package instead.
+DALib (Dark Ages file format + networking support) comes from the pinned NuGet package (1.0.0-alpha3) by default. Build with `-p:UseLocalDALib=true` to use the sibling checkout at `../dalib` when co-developing DALib alongside Brigid. DALib models the retail/USDA wire format as ground truth; Hybrasyl protocol divergence lives in `Brigid.Networking/Definitions/HybrasylExtensions.cs`, never in DALib.
 
 **Dependency flow:** Data <- Rendering <- Client, Networking <- Client
 
@@ -53,6 +54,8 @@ DALib (Dark Ages file format + networking support) is consumed from the sibling 
 |--------------------------------------------|---------------------------------------------------------------------------|
 | DALib                                      | Dark Ages file formats, SkiaSharp rendering, protocol packets + crypto    |
 | MonoGame.Framework.DesktopGL 3.8.4.1       | Cross-platform graphics/windowing                                         |
+| FontStashSharp.MonoGame 1.5.6              | Runtime font rasterization (`FontEngine`/`TextRenderer`/`UILabel`)        |
+| Markdig 1.3.2                              | Markdown parsing (`MarkdownLayoutEngine`; AST only, rendering is ours)    |
 | Chaos.Common 1.11.0-preview                | Shared extension methods (NuGet)                                          |
 | Chaos.DarkAges 1.11.0-preview              | Dark Ages protocol types (NuGet)                                          |
 | Chaos.Geometry 1.11.0-preview              | Geometry types -- rectangles, points (NuGet)                              |
@@ -60,11 +63,11 @@ DALib (Dark Ages file format + networking support) is consumed from the sibling 
 | Microsoft.Extensions.Caching.Memory 10.0.5 | MemoryCache infrastructure                                                |
 | TextCopy 6.2.1                             | Cross-platform clipboard access (used by `Utilities/Clipboard`)           |
 
-The `Chaos.*` preview packages (`Chaos.Networking`, `Chaos.Common`, `Chaos.DarkAges`, `Chaos.Geometry`, `Chaos.Pathfinding`) are inherited from the upstream project and are slated for replacement with Hybrasyl equivalents.
+The `Chaos.*` preview packages (`Chaos.Common`, `Chaos.DarkAges`, `Chaos.Geometry`, `Chaos.Pathfinding`) are inherited from the upstream project and are slated for replacement with Hybrasyl equivalents. `Chaos.Networking` and `Chaos.Cryptography` were already removed in the DALib networking cutover (2026-06/07); the remaining packages supply shared definition enums, extension methods, geometry, and pathfinding only — no protocol serialization.
 
 ## Build Configuration
 
-Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implicit usings, TieredPGO + TieredCompilation (+ QuickJit) enabled, WarningLevel 4, EnforceCodeStyleInBuild. Package versions managed centrally in `Directory.Packages.props`. Versioning via Nerdbank.GitVersioning.
+Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implicit usings, TieredPGO + TieredCompilation (+ QuickJit) enabled, WarningLevel 4, EnforceCodeStyleInBuild. Package versions managed centrally in `Directory.Packages.props`. Versioning is explicit: `<Version>` in `Directory.Build.props` (kept matching the latest release tag) for local builds; release builds stamp `-p:Version` from the git tag in `release.yml`.
 
 ## Architecture
 
@@ -104,6 +107,8 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 - **`SilhouetteRenderer`** -- Silhouette effect for blocked entities.
 - **`PaletteCyclingManager`** -- Animated palette shimmer effects.
 - **`FontAtlas`** -- Font glyph atlas management.
+- **`FontEngine`** -- FontStashSharp-backed text backend: loads real TTFs, rasterizes glyphs on demand into a dynamic atlas (anti-aliased, full Unicode incl. CJK fallback), replacing the legacy `.fnt` bitmap fonts. Multiple selectable faces via `CycleFont`/`SetActiveFont`, persisted by the client. Faces may ship bold/italic variant files selected per call via the `[Flags]` `FontStyle` enum (missing variants fall back to regular; `FontStyle.Mono` redirects to the Noto Sans Mono face for code spans). Styled `DrawLine`/`MeasureWidth`/`GetLineHeight` overloads take an explicit pixel size (used by markdown headers/code); implements `ITextMeasurer` so layout logic is testable without fonts. `Generation` bumps on face change *and* layout-scale change (window resize) so measurement caches invalidate.
+- **`MarkdownLayoutEngine`/`MarkdownLayout`** (`Markdown/`) -- Pure markdown layout: parses via Markdig and lays out positioned styled spans + code-background/rule rects at a fixed wrap width through an `ITextMeasurer`. Supports headings, emphasis, lists, thematic breaks, fenced/inline code; everything else degrades to plain text (links render their text, hostile over-nested input falls back to verbatim text instead of throwing). Consumed by `MarkdownView`; colors are the view's concern via `MarkdownSpanKind`.
 - **`CreatureRenderer`/`AislingRenderer`/`EffectRenderer`/`ItemRenderer`** -- Per-frame texture caches. `Clear()` on map change.
 - **`LegendColors`** -- Named color constants for UI text. Initialized at startup.
 - **`LightSource`** -- Light source model for darkness system.
@@ -116,10 +121,10 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 - **Asset pipeline:** `DatArchives -> Repository -> Palettized<T> -> DALib Graphics.RenderXxx() -> SKImage -> TextureConverter.ToTexture2D() -> Texture2D -> SpriteBatch.Draw()`
 
 ### Networking Layer (`Brigid.Networking`)
-- **`GameClient`** -- Low-level TCP: crypto, packet framing (0xAA + 2-byte BE length), sequence tracking, `InboundQueue` via `DrainPackets()`. Auto-responds to HeartBeat/SynchronizeTicks.
-- **`ConnectionManager`** -- State machine (Disconnected->Connecting->Lobby->Login->World), array-indexed handler dispatch (60+ handlers), 48+ events. Full lobby/login/world-entry flows. Player action methods, communication, NPC/dialog, requests.
-- **`ServerTableData`** -- Zlib-compressed server list parser.
-- Protocol types come from the `Chaos.Networking` / `Chaos.DarkAges` NuGet packages (preview 1.11.0) — serialization, opcodes, and args types are all defined there rather than in this project.
+- **`GameClient`** -- Owns the TCP socket; hands framing, encryption, and (de)serialization to DALib's `PacketCodec` (stateless, shared across connections; per-connection `CryptoState` replaced wholesale at each handshake). Inbound packets surface as typed `IServerPacket` values via `DrainPackets()`; outbound are sent as typed `IClientPacket` via `Send()`. Auto-responds to byte/tick heartbeats. `TryGetTcpSmoothedRttMs()` exposes the kernel's RTT estimate for `LatencyMonitor`.
+- **`ConnectionManager`** -- State machine (Disconnected->Connecting->Lobby->Login->World), array-indexed handler dispatch (60+ handlers), 48+ events. Full lobby/login/world-entry flows. Player action methods, communication, NPC/dialog, requests. `ProcessPackets()` (called from the game loop) drains the client queue and dispatches; handler exceptions are logged to `NoticeDebugLog` rather than rethrown, so protocol divergence is visible instead of fatal.
+- **`NoticeDebugLog`** -- Static diagnostic logger (stdout + `notice-debug.log` in the app base directory). The networking layer's standing debug channel.
+- Protocol types come from DALib: packets in `DALib.Networking.Packets.Client`/`.Server`, opcodes + codec in `DALib.Networking.Wire`, crypto in `DALib.Networking.Crypto`. Shared definition enums (stats, directions, etc.) still come from `Chaos.DarkAges.Definitions` / `Chaos.Geometry`. The server-table blob is parsed by DALib's `ServerTableDataPacket`; the `name;description` field is split client-side via `ServerEntryExtensions.SplitNameDescription()`.
 
 ### Client Project (`Brigid`) Internal Organization
 
@@ -163,7 +168,7 @@ Brigid/
 
 **Login Flow (`Controls/LobbyLogin/`):** LobbyLoginControl, LoginControl, ServerSelectControl, CharacterCreationControl, LoginNoticeControl, PasswordChangeControl, LogoImage.
 
-**Generic Controls (`Controls/Generic/`):** OkPopupMessageControl, TextPopupControl, ScrollBarControl, SliderControl, DebugOverlay.
+**Generic Controls (`Controls/Generic/`):** OkPopupMessageControl, TextPopupControl, MarkdownView (near-fullscreen markdown notice for `SystemMessageType.MarkdownNotice` = 0x20, a Hybrasyl/USDA extension: title bar with close/maximize, scrollbar, Escape dismisses, non-modal; debug-test via F11 overlay + Ctrl+M), ScrollBarControl, SliderControl, DebugOverlay.
 
 **World HUD (`Controls/World/Hud/`):** IWorldHud interface, WorldHudControl (classic compact HUD), LargeWorldHudControl (expanded HUD), OrangeBarControl, ChatInputControl, EffectBarControl/EffectSlotControl, MailButton (unread-mail pulse indicator driven by `PlayerAttributes.HasUnreadMail`).
 
@@ -208,7 +213,7 @@ Authoritative state objects exposed as static properties on WorldState, updated 
 
 ### Entry Point
 - **`ChaosGame : Game`** -- 640x480 virtual resolution MonoGame window. Owns ConnectionManager, shared renderers (Aisling/Creature/Effect/Item), SoundSystem, InputDispatcher, ScreenManager. Global entity event wiring at construction. WorldState, ClientSettings, and InputBuffer are static classes (not owned by ChaosGame).
-- **`InputBuffer`** (static) -- Process-global input buffer driven by a single `SDL_AddEventWatch` callback. Unified event stream for keyboard, text, mouse button, and mouse wheel events in true OS post order (chronological `Events` buffer), with live cursor position refreshed each frame from `SDL_GetMouseState`. Query API: `WasKeyPressed()`, `IsKeyHeld()`, `TextInput`, `MouseX`/`MouseY`, `IsLeftButtonHeld`/`IsRightButtonHeld`. Lifecycle: `Initialize()` / `Update(isActive)` / `Shutdown()`.
+- **`InputBuffer`** (static) -- Process-global input buffer driven by a single `SDL_AddEventWatch` callback. Unified event stream for keyboard, text, mouse button, and mouse wheel events in true OS post order (chronological `Events` buffer), with live cursor position refreshed each frame from `SDL_GetMouseState`. Query API: `WasKeyPressed()`, `IsKeyHeld()`, `TextInput`, `MouseX`/`MouseY`, plus the chronological `Events` stream (mouse buttons are event-only — no polled held flags). Lifecycle: `Initialize()` / `Update(isActive)` / `Shutdown()`.
 
 ### Input Dispatch (`InputDispatcher`)
 Per-frame processor that reads `InputBuffer` state and produces UI events. Key concepts:
@@ -224,9 +229,9 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - Use `Lock` with `EnterScope()` instead of the `lock` keyword -- e.g. `using var scope = SendLock.EnterScope();`. This is the new .NET 9+ lock primitive with better usage semantics and performance.
 
 ### Packet Dispatch
-- Use array-indexed handler dispatch (not switch-case) for opcode routing, mirroring the server's opcode-routing convention (the array-indexed dispatch used by the `Chaos.Networking` library)
+- Use array-indexed handler dispatch (not switch-case) for opcode routing, mirroring the server's opcode-routing convention
 - Delegate arrays sized `byte.MaxValue + 1`, indexed by opcode byte, registered via `IndexHandlers()`
-- **Adding a handler:** write `private void OnXxx(ref ServerPacket packet)` in `ConnectionManager`, register it in `IndexHandlers()` as `Handlers[(byte)ServerOpCode.Xxx] = OnXxx`, deserialize via the appropriate `Chaos.Networking` converter, then raise an event on the manager for `WorldScreen` to subscribe to.
+- **Adding a handler:** write `private void HandleXxx(IServerPacket p)` in `ConnectionManager` (cast to the concrete `Server.XxxPacket` from `DALib.Networking.Packets.Server`), register it in `IndexHandlers()` as `PacketHandlers[(byte)ServerOpcode.Xxx] = HandleXxx`, then raise an event on the manager for `WorldScreen` to subscribe to.
 
 ### UI Patterns
 - All UI panels derive from `PrefabPanel` (for prefab-based layouts) or `UIPanel` (for manual layouts)
@@ -236,6 +241,7 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - HUD tab panels share the center-bottom area via `ShowTab(HudTab)` -- only one visible at a time
 - World controls organized into subdirectories: `Hud/`, `Hud/Panel/`, `Hud/Panel/Slots/`, `Popups/`, `Popups/Boards/`, `Popups/Dialog/`, `Popups/Exchange/`, `Popups/Options/`, `Popups/Profile/`, `Popups/WorldList/`, `ViewPort/`
 - Hotkeys: A=Inventory, S=Skills, D=Spells, Shift+S/D=Alt panels, F=Chat, Shift+F=MessageHistory, G=Stats, Shift+G=ExtendedStats, H=Tools, F9=Ignore, Tab=TabMap, F1=Help, F3=Macros, F4=Settings, F5=Refresh, F7=Mail, F8=Group, F10=Friends
+- Textbox editing keys (UITextBox, deliberate departure from platform convention): Ctrl+A=line start, Ctrl+E=line end (readline-style), Ctrl+Shift+A=select all; Enter inserts a newline in multiline boxes. Chat input: Up/Down cycles sent-message history (draft preserved).
 - Grid panels use `PanelBase` -> `PanelSlot` with slot number overlays and cooldown rendering
 - Server-driven UI: many panels (exchange, dialog, equipment, profile) are populated by server packets, not client state
 - Emote hotkeys: Ctrl+1-0/- (BodyAnimation 9-19), Ctrl+Alt+1-0/- (23-33), Alt+1-0/- (34-44)

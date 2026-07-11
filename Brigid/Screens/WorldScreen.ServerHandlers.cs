@@ -247,6 +247,14 @@ public sealed partial class WorldScreen
 
     private void HandleServerMessage(SystemMessagePacket args)
     {
+        //Hybrasyl extension value — not part of the retail block DALib names or the switch below models
+        if (args.MessageType == HybrasylMessageType.MarkdownNotice)
+        {
+            MarkdownNotice.Show(args.Message);
+
+            return;
+        }
+
         switch ((ServerMessageType)(byte)args.MessageType)
         {
             case ServerMessageType.Whisper:
@@ -312,6 +320,7 @@ public sealed partial class WorldScreen
 
             case ServerMessageType.ClosePopup:
                 TextPopup.Hide();
+                MarkdownNotice.Hide();
 
                 break;
 

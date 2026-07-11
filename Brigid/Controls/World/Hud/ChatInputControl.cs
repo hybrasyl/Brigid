@@ -24,12 +24,19 @@ public enum ChatMode
 public sealed class ChatInputControl : UIPanel
 {
     private const int MAX_WHISPER_HISTORY = 5;
+    private const int MAX_MESSAGE_HISTORY = 20;
 
     private readonly int FullWidth;
+    private readonly List<string> MessageHistory = [];
     private readonly UILabel PrefixLabel;
     private readonly UITextBox TextBox;
     private readonly List<string> WhisperHistory = [];
 
+    //in-progress text preserved when cycling into history, restored when cycling back past newest
+    private string DraftMessage = string.Empty;
+
+    //-1 = not cycling (live input / draft); 0 = most recent sent message
+    private int MessageHistoryIndex = -1;
     private Action<string>? PromptCallback;
     private Color? SavedFocusedBackgroundColor;
     private int SavedMaxLength;
@@ -125,7 +132,15 @@ public sealed class ChatInputControl : UIPanel
 
     private void FocusInternal(ChatMode mode, string prefix, Color color)
     {
+        //claim the sticky-chat registration for this HUD's box: both HUD implementations construct
+        //a ChatInputControl, and construction order must not decide which box popups treat as the
+        //protected chat input — the one actually being focused is the real one
+        if (InputDispatcher.Instance is { } dispatcher)
+            dispatcher.ChatInputTextBox = TextBox;
+
         Mode = mode;
+        MessageHistoryIndex = -1;
+        DraftMessage = string.Empty;
         UpdateLayout(prefix, color);
         TextBox.ForegroundColor = color;
         TextBox.IsFocused = true;
@@ -189,7 +204,12 @@ public sealed class ChatInputControl : UIPanel
         TextBox.Text = string.Empty;
         TextBox.ForegroundColor = Color.White;
         UpdateLayout(string.Empty, Color.White);
-        InputDispatcher.Instance?.ClearExplicitFocus();
+
+        //only release explicit focus we actually hold — when unfocusing because keyboard routing
+        //moved elsewhere (self-heal path), clearing would steal focus from its rightful owner
+        if (InputDispatcher.Instance is { } dispatcher && (dispatcher.ExplicitFocus == TextBox))
+            dispatcher.ClearExplicitFocus();
+
         FocusChanged?.Invoke(false);
     }
 
@@ -209,16 +229,49 @@ public sealed class ChatInputControl : UIPanel
         PrefixLabel.BackgroundColor = Color.Black;
     }
 
+    //--- message history ---
+
+    //bounded MRU shared by message and whisper history: newest first, dedup by move-to-front, oldest trimmed
+    private static void AddMru(List<string> list, string entry, int max)
+    {
+        if (entry.Length == 0)
+            return;
+
+        list.Remove(entry);
+        list.Insert(0, entry);
+
+        if (list.Count > max)
+            list.RemoveAt(list.Count - 1);
+    }
+
+    private void AddMessageHistory(string message) => AddMru(MessageHistory, message, MAX_MESSAGE_HISTORY);
+
+    /// <summary>
+    ///     Cycles the input through previously sent messages. Positive direction = older; stepping past the
+    ///     newest entry restores whatever was typed before cycling began.
+    /// </summary>
+    private void CycleMessageHistory(int direction)
+    {
+        if (MessageHistory.Count == 0)
+            return;
+
+        var newIndex = Math.Clamp(MessageHistoryIndex + direction, -1, MessageHistory.Count - 1);
+
+        if (newIndex == MessageHistoryIndex)
+            return;
+
+        //entering history preserves the in-progress draft
+        if (MessageHistoryIndex < 0)
+            DraftMessage = TextBox.Text;
+
+        MessageHistoryIndex = newIndex;
+        var text = newIndex < 0 ? DraftMessage : MessageHistory[newIndex];
+        SetText(text, text.Length);
+    }
+
     //--- whisper history ---
 
-    private void AddWhisperTarget(string name)
-    {
-        WhisperHistory.Remove(name);
-        WhisperHistory.Insert(0, name);
-
-        if (WhisperHistory.Count > MAX_WHISPER_HISTORY)
-            WhisperHistory.RemoveAt(WhisperHistory.Count - 1);
-    }
+    private void AddWhisperTarget(string name) => AddMru(WhisperHistory, name, MAX_WHISPER_HISTORY);
 
     private void CycleWhisperTarget(int direction)
     {
@@ -244,6 +297,16 @@ public sealed class ChatInputControl : UIPanel
 
     //--- input handling ---
 
+    public override void OnMouseDown(MouseDownEvent e)
+    {
+        //clicking anywhere on the chat bar while it is active reclaims keyboard focus — the escape
+        //hatch for a focus desync (dispatcher routing lost while the box still shows a caret). the
+        //redundant-set path in UITextBox.IsFocused re-fires the dispatcher bridge even when the
+        //box already believes it is focused.
+        if ((e.Button == MouseButton.Left) && (Mode != ChatMode.None))
+            TextBox.IsFocused = true;
+    }
+
     public override void OnKeyDown(KeyDownEvent e)
     {
         if (e.Key == Keys.Enter)
@@ -268,12 +331,14 @@ public sealed class ChatInputControl : UIPanel
         switch (Mode)
         {
             case ChatMode.Normal:
+                AddMessageHistory(message);
                 MessageSent?.Invoke(message);
                 Unfocus();
 
                 break;
 
             case ChatMode.Shout:
+                AddMessageHistory(message);
                 ShoutSent?.Invoke(message);
                 Unfocus();
 
@@ -316,6 +381,7 @@ public sealed class ChatInputControl : UIPanel
             case ChatMode.WhisperMessage:
                 if (WhisperTarget is not null)
                 {
+                    AddMessageHistory(message);
                     AddWhisperTarget(WhisperTarget);
                     WhisperSent?.Invoke(WhisperTarget, message);
                 }
@@ -386,12 +452,39 @@ public sealed class ChatInputControl : UIPanel
     {
         base.Update(gameTime);
 
-        if ((Mode != ChatMode.WhisperName) || !IsFocused)
+        //self-heal a focus desync: the bar renders active (Mode set) but the box lost focus without
+        //going through Unfocus. The bar is hit-invisible while unfocused (by design — idle clicks
+        //fall through to the world), so no click can ever repair this state; the control must.
+        if ((Mode != ChatMode.None) && !TextBox.IsFocused)
+        {
+            //keyboard genuinely owned elsewhere (another textbox, or a panel holding explicit
+            //focus): stop pretending to be active. Otherwise nothing owns it — reclaim.
+            if ((UITextBox.CurrentlyFocused is not null) || (InputDispatcher.Instance?.ExplicitFocus is not null))
+                Unfocus();
+            else
+                TextBox.IsFocused = true;
+        }
+
+        if (!IsFocused)
             return;
 
-        if (InputBuffer.WasKeyPressed(Keys.Up))
-            CycleWhisperTarget(1);
-        else if (InputBuffer.WasKeyPressed(Keys.Down))
-            CycleWhisperTarget(-1);
+        switch (Mode)
+        {
+            case ChatMode.WhisperName:
+                if (InputBuffer.WasKeyPressed(Keys.Up))
+                    CycleWhisperTarget(1);
+                else if (InputBuffer.WasKeyPressed(Keys.Down))
+                    CycleWhisperTarget(-1);
+
+                break;
+
+            case ChatMode.Normal or ChatMode.Shout or ChatMode.WhisperMessage:
+                if (InputBuffer.WasKeyPressed(Keys.Up))
+                    CycleMessageHistory(1);
+                else if (InputBuffer.WasKeyPressed(Keys.Down))
+                    CycleMessageHistory(-1);
+
+                break;
+        }
     }
 }

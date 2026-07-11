@@ -11,6 +11,7 @@ using Brigid.Extensions;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Systems;
+using Brigid.Utilities;
 using Chaos.DarkAges.Definitions;
 using DALib.Cryptography;
 using DALib.Networking.Packets.Server;
@@ -319,17 +320,7 @@ public sealed class LobbyLoginScreen : IScreen
             //homepage url not yet received
             return;
 
-        try
-        {
-            Process.Start(
-                new ProcessStartInfo(HomepageUrl)
-                {
-                    UseShellExecute = true
-                });
-        } catch
-        {
-            //could not open browser
-        }
+        Browser.Open(HomepageUrl);
     }
 
     private void OnLoginOkClicked()

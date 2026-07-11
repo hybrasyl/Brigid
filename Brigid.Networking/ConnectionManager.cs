@@ -879,10 +879,7 @@ public sealed class ConnectionManager : IDisposable
             ClientGroupSwitch.AcceptInvite => Cli.GroupRequestPacket.AcceptInvite(name),
             ClientGroupSwitch.RemoveGroupBox => Cli.GroupRequestPacket.RemoveGroupBox(name),
             ClientGroupSwitch.RequestToJoin => Cli.GroupRequestPacket.RecruitJoin(name),
-
-            //ViewGroupBox = Hybrasyl group stage 5 (RecruitInfo); DALib's GroupRequestPacket has no stage-5 factory,
-            //so it is emitted via a raw stage-5 group packet ([5][string8 name]).
-            ClientGroupSwitch.ViewGroupBox => new ViewRecruitInfoPacket(name),
+            ClientGroupSwitch.ViewGroupBox => Cli.GroupRequestPacket.ViewRecruitInfo(name),
             _ => null
         };
 
@@ -1552,22 +1549,3 @@ internal sealed record RawClientPacket(byte ForcedOpcode, byte[] Body) : ClientP
     public override void WriteBody(IPacketWriter writer) => writer.WriteBytes(Body);
 }
 
-/// <summary>
-///     The Hybrasyl group stage-5 "view recruit info" request (<c>[0x2E][5][string8 name]</c>). DALib's
-///     <see cref="DALib.Networking.Packets.Client.GroupRequestPacket" /> models stages 2/3/4/6/7 but not stage 5, so this
-///     local packet covers <see cref="Chaos.DarkAges.Definitions.ClientGroupSwitch.ViewGroupBox" />. Not expressible via
-///     <c>GroupRequestPacket { Stage = 5 }</c>: its simple form appends a trailing zero byte that stage 5 omits.
-///     Candidate for an upstream DALib stage-5 factory.
-/// </summary>
-internal sealed record ViewRecruitInfoPacket(string Name) : ClientPacket
-{
-    private const byte StageRecruitInfo = 5;
-
-    public override byte Opcode => (byte)ClientOpcode.GroupRequest;
-
-    public override void WriteBody(IPacketWriter writer)
-    {
-        writer.WriteByte(StageRecruitInfo);
-        writer.WriteString8(Name);
-    }
-}

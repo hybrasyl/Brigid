@@ -1,5 +1,7 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -12,8 +14,18 @@ namespace Brigid.Controls.World.Popups.Boards;
 /// </summary>
 public sealed class MailSendControl : PrefabPanel
 {
+    //the _nmails.spf[0] anchor art has a bare black scrollbar strip at (483,65), 16px wide
+    //by 214px tall — measured from the rendered art; it does NOT align with the prefab
+    //Content rect (21,69)-(501,273), sitting 18px inside its right edge and 4px above its
+    //top. A live scrollbar is overlaid on the strip and the body text stops at its left
+    //edge (matching the retail client).
+    private const int SCROLLBAR_X = 483;
+    private const int SCROLLBAR_Y = 65;
+    private const int SCROLLBAR_HEIGHT = 214;
+
     //content area — multi-line body
     private readonly UITextBox BodyBox;
+    private readonly ScrollBarControl BodyScrollBar;
 
     //receiver — editable overlay
     private readonly UITextBox? ReceiverEditBox;
@@ -62,7 +74,7 @@ public sealed class MailSendControl : PrefabPanel
         {
             X = contentRect.X,
             Y = contentRect.Y,
-            Width = contentRect.Width - 2,
+            Width = SCROLLBAR_X - contentRect.X,
             Height = contentRect.Height,
             IsMultiLine = true,
             IsSelectable = true,
@@ -76,6 +88,26 @@ public sealed class MailSendControl : PrefabPanel
         };
 
         AddChild(BodyBox);
+
+        BodyScrollBar = new ScrollBarControl
+        {
+            Name = "BodyScrollBar",
+            X = SCROLLBAR_X,
+            Y = SCROLLBAR_Y,
+            Height = SCROLLBAR_HEIGHT
+        };
+
+        TextBoxScrollSync.Wire(BodyBox, BodyScrollBar);
+        AddChild(BodyScrollBar);
+    }
+
+    /// <summary>
+    ///     Keeps the scrollbar range and thumb in sync with the editable body as it changes.
+    /// </summary>
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+        TextBoxScrollSync.Sync(BodyBox, BodyScrollBar);
     }
 
     private void HandleSend()

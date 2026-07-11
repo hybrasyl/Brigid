@@ -155,6 +155,12 @@ public sealed class OkPopupMessageControl : UIPanel
     {
         MessageLabel.Text = message;
 
+        //a second Show while already up (back-to-back server messages) must not re-stash:
+        //explicit focus is already cleared at that point, so stashing again would overwrite
+        //the real PreviousFocus with null and lose the focus restore on dismiss
+        if (Visible)
+            return;
+
         //remember who had focus so we can restore it on dismiss, then clear focus so
         //keyboard input routes to this popup via the control stack instead of being
         //eaten by the previously-focused textbox.

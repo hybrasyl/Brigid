@@ -34,6 +34,12 @@ public static class GlobalSettings
     /// <summary>Lobby server host. Empty until resolved from env/config or the launcher screen.</summary>
     public static string LobbyHost { get; set; } = "";
 
+    /// <summary>GitHub API endpoint queried by the startup release check (<see cref="UpdateChecker" />).</summary>
+    public const string LatestReleaseApiUrl = "https://api.github.com/repos/hybrasyl/Brigid/releases/latest";
+
+    /// <summary>Fallback releases page for the update notice when the API response carries no html_url.</summary>
+    public const string ReleasesUrl = "https://github.com/hybrasyl/Brigid/releases";
+
     /// <summary>Lobby server port. Defaults to 2610.</summary>
     public static int LobbyPort { get; set; } = 2610;
 
