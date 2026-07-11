@@ -817,7 +817,7 @@ public static class WorldState
                                   (Chaos.DarkAges.Definitions.SocialStatus)(byte)m.SocialStatus))
                               .ToList();
 
-            WorldList.Update(entries, (ushort)args.Users.Count);
+            WorldList.Update(entries, args.TotalUserCount ?? (ushort)args.Users.Count);
         };
     }
 
