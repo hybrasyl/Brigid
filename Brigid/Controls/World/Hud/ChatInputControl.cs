@@ -80,9 +80,9 @@ public sealed class ChatInputControl : UIPanel
             Y = 0,
             Width = rect.Width,
             Height = rect.Height,
-            //225 leaves headroom under the 255-byte string8 wire cap for the server's "Name: " echo prefix
-            //(name width is moving to 24 chars: 255 - (24 + 2) = 229). Long messages scroll horizontally rather than
-            //hard-block at the visible box width (~77 chars) — single-line UITextBox scrolls to follow the caret.
+            //225 is a deliberate conservative cap that keeps headroom under the 255-byte string8 wire cap for the
+            //server's "Name: " echo prefix (~4x the old visible-width limit). Long messages scroll horizontally rather
+            //than hard-block at the visible box width (~77 chars) — single-line UITextBox scrolls to follow the caret.
             MaxLength = 225,
             PaddingLeft = 1,
             PaddingRight = 1,
@@ -262,9 +262,9 @@ public sealed class ChatInputControl : UIPanel
     {
         if (SentHistory.Count == 0)
         {
-            //the TextBox already moved the caret to column 0 (Up) during dispatch; keep it at the end so a following
-            //keystroke appends rather than prepends
-            TextBox.CursorPosition = TextBox.Text.Length;
+            //the TextBox already moved the caret to column 0 (Up) during dispatch; snap it back to the end so a
+            //following keystroke appends rather than prepends
+            SnapCaretToEnd();
 
             return;
         }
@@ -284,7 +284,7 @@ public sealed class ChatInputControl : UIPanel
             //already at the oldest entry — stay put, but re-assert the caret (Up moved it to column 0 during dispatch)
             if (next < 0)
             {
-                TextBox.CursorPosition = TextBox.Text.Length;
+                SnapCaretToEnd();
 
                 return;
             }
@@ -304,6 +304,14 @@ public sealed class ChatInputControl : UIPanel
 
         var recalled = SentHistory[SentHistoryIndex];
         SetText(recalled, recalled.Length);
+    }
+
+    //re-assert the caret at the end after the TextBox's own Up/Down dispatch moved it; ClearSelection re-syncs the
+    //anchor so the recalled/draft text isn't left fully selected (which the next keystroke would replace).
+    private void SnapCaretToEnd()
+    {
+        TextBox.CursorPosition = TextBox.Text.Length;
+        TextBox.ClearSelection();
     }
 
     private string GetBracketedWhisperTarget()
@@ -484,6 +492,8 @@ public sealed class ChatInputControl : UIPanel
 
         if (Mode is ChatMode.Normal or ChatMode.Shout or ChatMode.WhisperMessage)
         {
+            //WasKeyPressed surfaces OS key-repeat, so holding Up/Down intentionally walks through history shell-style;
+            //recall parks at the oldest entry / restores the draft, so there's no wrap or runaway.
             if (InputBuffer.WasKeyPressed(Keys.Up))
                 RecallSentHistory(-1);
             else if (InputBuffer.WasKeyPressed(Keys.Down))

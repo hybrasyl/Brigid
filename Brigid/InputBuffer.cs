@@ -112,8 +112,9 @@ public static class InputBuffer
     public static bool IsKeyHeld(Keys key) => HeldKeys.Contains(key);
 
     /// <summary>
-    ///     Returns true if the key had a rising edge (was pressed) during this frame. OS
-    ///     key-repeat events are filtered out — only the initial press fires.
+    ///     Returns true if a KeyDown for this key landed during this frame. OS key-repeat is NOT filtered — a held key
+    ///     re-fires every frame after the repeat delay, so callers that want a single action per physical press must
+    ///     debounce themselves (e.g. via <see cref="WasKeyReleased" /> or <see cref="IsKeyHeld" />).
     /// </summary>
     public static bool WasKeyPressed(Keys key) => FrameKeyPresses.Contains(key);
 
