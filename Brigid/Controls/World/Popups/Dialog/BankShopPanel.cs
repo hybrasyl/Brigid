@@ -1,6 +1,7 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
 using Brigid.Data;
 using Brigid.Definitions;
@@ -54,17 +55,16 @@ public sealed class BankShopPanel : UIPanel
     private const int TOOLTIP_WIDTH = 190;
     private const int TOOLTIP_PAD = 6;
 
-    private static readonly Color FrameFill = new(6, 8, 14, 240);
-    private static readonly Color FrameBorder = new(150, 126, 78);
-    private static readonly Color DividerColor = new(64, 56, 36);
-    private static readonly Color TitleColor = new(226, 202, 120);
-    private static readonly Color RowHoverFill = new(38, 40, 48);
-    private static readonly Color RowSelectedFill = new(74, 58, 22);
-    private static readonly Color SelectedTextColor = new(255, 208, 96);
-    private static readonly Color TabIdleFill = new(24, 26, 34);
-    private static readonly Color TabSelectedFill = new(74, 58, 22);
-    private static readonly Color TabIdleBorder = new(80, 70, 44);
-    private static readonly Color TabSelectedBorder = new(210, 176, 96);
+    private static readonly Color FrameFill = DialogPalette.FrameFill;
+    private static readonly Color FrameBorder = DialogPalette.FrameBorder;
+    private static readonly Color TitleColor = DialogPalette.Title;
+    private static readonly Color RowHoverFill = DialogPalette.RowHoverFill;
+    private static readonly Color RowSelectedFill = DialogPalette.RowSelectedFill;
+    private static readonly Color SelectedTextColor = DialogPalette.SelectedText;
+    private static readonly Color TabIdleFill = DialogPalette.TabIdleFill;
+    private static readonly Color TabSelectedFill = DialogPalette.TabSelectedFill;
+    private static readonly Color TabIdleBorder = DialogPalette.TabIdleBorder;
+    private static readonly Color TabSelectedBorder = DialogPalette.TabSelectedBorder;
 
     private readonly List<string> Categories = [];
     private readonly List<MerchantEntry> Entries = [];
@@ -886,103 +886,6 @@ public sealed class BankShopPanel : UIPanel
                 return;
 
             Clicked?.Invoke();
-            e.Handled = true;
-        }
-    }
-
-    /// <summary>A primitive text button (bg/border + centered label) with hover/pressed/disabled states.</summary>
-    private sealed class TextButton : UIPanel
-    {
-        private static readonly Color IdleFill = new(30, 32, 42);
-        private static readonly Color HoverFill = new(52, 54, 66);
-        private static readonly Color PressFill = new(74, 58, 22);
-        private static readonly Color EdgeColor = new(150, 126, 78);
-        private static readonly Color DisabledText = new(96, 96, 96);
-
-        private readonly UILabel Label;
-        private bool Hovered;
-        private bool Pressed;
-
-        public event ClickedHandler? Clicked;
-
-        public TextButton(string text, int width, int height)
-        {
-            Width = width;
-            Height = height;
-            BorderColor = EdgeColor;
-
-            Label = new UILabel
-            {
-                X = 0,
-                Y = 0,
-                Width = width,
-                Height = height,
-                Text = text,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                ForegroundColor = LegendColors.White,
-                ShrinkToFit = false,
-                IsHitTestVisible = false
-            };
-
-            AddChild(Label);
-            RefreshVisual();
-        }
-
-        //Enabled has no change hook on UIElement, so callers flip state through here to refresh the visual
-        public void SetEnabled(bool value)
-        {
-            Enabled = value;
-            RefreshVisual();
-        }
-
-        private void RefreshVisual()
-        {
-            BackgroundColor = Enabled ? Pressed ? PressFill : Hovered ? HoverFill : IdleFill : IdleFill;
-            Label.ForegroundColor = Enabled ? LegendColors.White : DisabledText;
-            BorderColor = Enabled ? EdgeColor : DividerColor;
-        }
-
-        public override void OnMouseEnter()
-        {
-            Hovered = true;
-            RefreshVisual();
-        }
-
-        public override void OnMouseLeave()
-        {
-            Hovered = false;
-            Pressed = false;
-            RefreshVisual();
-        }
-
-        public override void OnMouseDown(MouseDownEvent e)
-        {
-            if (e.Button != MouseButton.Left)
-                return;
-
-            Pressed = true;
-            RefreshVisual();
-            e.Handled = true;
-        }
-
-        public override void OnMouseUp(MouseUpEvent e)
-        {
-            if (e.Button == MouseButton.Left)
-            {
-                Pressed = false;
-                RefreshVisual();
-            }
-        }
-
-        public override void OnClick(ClickEvent e)
-        {
-            if (e.Button != MouseButton.Left)
-                return;
-
-            if (Enabled)
-                Clicked?.Invoke();
-
             e.Handled = true;
         }
     }

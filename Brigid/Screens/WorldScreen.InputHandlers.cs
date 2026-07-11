@@ -688,7 +688,7 @@ public sealed partial class WorldScreen
             ForceCloseOtherTogglePanels(Keys.E);
 
             if (WorldList.Visible)
-                WorldList.SlideClose();
+                WorldList.Close();
             else
             {
                 WorldHud.UsersButton?.IsSelected = true;

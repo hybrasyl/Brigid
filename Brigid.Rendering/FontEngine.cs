@@ -279,16 +279,19 @@ public sealed class FontEngine : ITextMeasurer
         Vector2 position,
         Color color,
         Rectangle? clip,
-        float characterSpacing = 0f)
+        float characterSpacing = 0f,
+        FontStyle style = FontStyle.Regular)
     {
         if (string.IsNullOrEmpty(text))
             return;
 
-        //legacy path: active face at RENDER_SIZE, line box centered in the 12px layout band
-        var active = Faces[ActiveIndex];
-        var pos = new Vector2(position.X, position.Y + active.VerticalOffset);
+        //legacy path: active face at RENDER_SIZE, line box centered in the 12px layout band. A style (e.g. bold)
+        //resolves to the active face's variant while keeping that band centering, so styled and regular runs on the
+        //same baseline align vertically. style defaults to Regular, so untyped callers are unchanged.
+        var (face, faceStyle) = Resolve(style);
+        var pos = new Vector2(position.X, position.Y + face.VerticalOffset);
 
-        DrawLineCore(spriteBatch, SanitizeSurrogates(text), pos, color, clip, active, FontStyle.Regular, RENDER_SIZE, characterSpacing);
+        DrawLineCore(spriteBatch, SanitizeSurrogates(text), pos, color, clip, face, faceStyle, RENDER_SIZE, characterSpacing);
     }
 
     /// <summary>
