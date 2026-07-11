@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Rendering;
 using Brigid.Systems;
 using Brigid.Utilities;
 using Microsoft.Xna.Framework;
@@ -107,7 +108,9 @@ public sealed class LobbyLoginControl : PrefabPanel
                 Width = VersionLabel.Width,
                 Height = VersionLabel.Height,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                ForegroundColor = Color.Yellow,
+                ForegroundColor = Color.Red,
+                HoverColor = Color.OrangeRed,
+                TextStyle = FontStyle.Bold,
                 Visible = false
             };
 
@@ -127,7 +130,7 @@ public sealed class LobbyLoginControl : PrefabPanel
 
             //shrink the hit box to the rendered text (right edge fixed) so clicks on the
             //blank strip to the left don't open the browser
-            var textWidth = TextRenderer.MeasureWidth(notice.Text) + 2;
+            var textWidth = notice.MeasureTextWidth() + 2;
             notice.X = notice.X + notice.Width - textWidth;
             notice.Width = textWidth;
             notice.Visible = true;

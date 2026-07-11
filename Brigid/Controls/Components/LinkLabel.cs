@@ -1,12 +1,15 @@
 #region
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 #endregion
 
 namespace Brigid.Controls.Components;
 
 /// <summary>
 ///     A UILabel that raises <see cref="Clicked" /> on left-click, for link-style text (e.g. the update notice on
-///     the start screen).
+///     the start screen). Single-line only: it draws its text itself through the styled FontEngine path so it can
+///     render bold/italic, which the shared UILabel pipeline doesn't plumb.
 /// </summary>
 public sealed class LinkLabel : UILabel
 {
@@ -15,7 +18,39 @@ public sealed class LinkLabel : UILabel
     /// <summary>Text color while hovered, so the label reads as clickable. Defaults to white.</summary>
     public Color HoverColor { get; set; } = Color.White;
 
+    /// <summary>Font style for the link text (e.g. bold for the update notice).</summary>
+    public FontStyle TextStyle { get; set; } = FontStyle.Regular;
+
     public event Action? Clicked;
+
+    /// <summary>Pixel width of the current text under <see cref="TextStyle" /> — use for hit-box sizing.</summary>
+    public int MeasureTextWidth() => FontEngine.Instance.MeasureWidth(Text, FontEngine.RENDER_SIZE, TextStyle);
+
+    public override void Draw(SpriteBatch spriteBatch)
+    {
+        if (!Visible || string.IsNullOrEmpty(Text))
+            return;
+
+        UpdateClipRect();
+
+        var engine = FontEngine.Instance;
+        var textWidth = engine.MeasureWidth(Text, FontEngine.RENDER_SIZE, TextStyle);
+
+        var x = HorizontalAlignment == HorizontalAlignment.Right
+            ? ScreenX + Width - textWidth
+            : ScreenX;
+
+        var y = ScreenY + (Height - engine.GetLineHeight(FontEngine.RENDER_SIZE, TextStyle)) / 2;
+
+        engine.DrawLine(
+            spriteBatch,
+            Text,
+            new Vector2(x, y),
+            ForegroundColor,
+            ClipRect,
+            FontEngine.RENDER_SIZE,
+            TextStyle);
+    }
 
     public override void OnClick(ClickEvent e)
     {
