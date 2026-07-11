@@ -18,6 +18,12 @@ namespace Brigid.Rendering;
 /// </summary>
 public sealed class CreatureRenderer : IDisposable
 {
+    //square footprint of the missing-creature placeholder, in pixels. Bottom-center anchored so the checkerboard
+    //box sits on the entity's tile — large enough to be an unmissable "this sprite is absent" marker and to give the
+    //entity a clickable hitbox (see WorldScreen.DrawEntity, which only registers a hitbox when the draw returns a
+    //non-zero bottom edge).
+    private const int MISSING_CREATURE_SIZE = 48;
+
     private readonly Dictionary<(int SpriteId, int FrameIndex), SpriteFrame> FrameCache = [];
     private readonly Dictionary<Texture2D, Texture2D> GroupTintCache = [];
     private readonly Dictionary<Texture2D, Texture2D> HighlightTintCache = [];
@@ -37,6 +43,11 @@ public sealed class CreatureRenderer : IDisposable
     //lazily on first frame request, cleared on map change.
     private readonly Dictionary<int, SKRectI> PackCreatureUnionBboxCache = [];
 
+    //shared checkerboard frame served for any creature sprite that resolves in neither the pack nor legacy MPF.
+    //Built once, reused across every missing sprite (never stored in FrameCache so map-change disposal doesn't
+    //double-free it), and rebuilt lazily after Clear disposes it.
+    private SpriteFrame? MissingCreatureFrame;
+
     /// <inheritdoc />
     public void Dispose() => Clear();
 
@@ -49,7 +60,33 @@ public sealed class CreatureRenderer : IDisposable
         AverageTopOffsetCache.Clear();
         PackCreatureUnionBboxCache.Clear();
         GroundTintCache.DisposeAndClear();
+        MissingCreatureFrame?.Dispose();
+        MissingCreatureFrame = null;
         ClearTintCaches();
+    }
+
+    /// <summary>
+    ///     Lazily builds (and caches) the checkerboard placeholder frame served when a creature sprite is present in
+    ///     neither the <c>creature_sprites</c> pack nor the legacy MPF archive. Bottom-center anchored to the tile,
+    ///     matching the pack-frame anchor convention.
+    /// </summary>
+    private SpriteFrame GetMissingCreatureFrame()
+    {
+        if (MissingCreatureFrame is not null)
+            return MissingCreatureFrame.Value;
+
+        var texture = ImageUtil.BuildMissingPlaceholder(TextureConverter.Device, MISSING_CREATURE_SIZE, MISSING_CREATURE_SIZE);
+
+        var frame = new SpriteFrame(
+            texture,
+            CenterX: (short)(MISSING_CREATURE_SIZE / 2),
+            CenterY: MISSING_CREATURE_SIZE,
+            Left: 0,
+            Top: 0);
+
+        MissingCreatureFrame = frame;
+
+        return frame;
     }
 
     /// <summary>
@@ -173,7 +210,16 @@ public sealed class CreatureRenderer : IDisposable
         var palettized = DataContext.CreatureSprites.GetCreatureSprite(spriteId);
 
         if (palettized is null)
-            return 0;
+        {
+            //sprite absent from both sources — the placeholder box is fully above the anchor (bottom-center), so its
+            //"top offset" is its full height. Keeps overlay positioning consistent with the drawn placeholder.
+            if (spriteId <= 0)
+                return 0;
+
+            AverageTopOffsetCache[spriteId] = MISSING_CREATURE_SIZE;
+
+            return MISSING_CREATURE_SIZE;
+        }
 
         var mpf = palettized.Entity;
 
@@ -209,7 +255,9 @@ public sealed class CreatureRenderer : IDisposable
         var palettized = DataContext.CreatureSprites.GetCreatureSprite(spriteId);
 
         if (palettized is null)
-            return null;
+            //sprite absent from both sources — hand back single-frame info so DrawCreature proceeds to the placeholder
+            //frame (GetFrame serves the same checkerboard) instead of bailing out and leaving the entity invisible.
+            return spriteId > 0 ? SynthesizeStaticAnimInfo(1) : null;
 
         var mpf = palettized.Entity;
 
@@ -273,16 +321,25 @@ public sealed class CreatureRenderer : IDisposable
             var packed = LoadPackFrame(pack, spriteId, frameIndex);
 
             if (packed is not null)
+            {
                 FrameCache[key] = packed.Value;
 
-            return packed;
+                return packed;
+            }
+
+            //pack claims the sprite but the entry is degenerate/undecodable — serve the placeholder rather than
+            //letting the entity vanish (a malformed pack shouldn't be less visible than a missing one).
+            return spriteId > 0 ? GetMissingCreatureFrame() : null;
         }
 
 
         var palettized = DataContext.CreatureSprites.GetCreatureSprite(spriteId);
 
         if (palettized is null)
-            return null;
+            //sprite absent from both pack and legacy MPF — the terminal miss. Serve the checkerboard placeholder so a
+            //referenced-but-absent creature (e.g. a custom sprite id the client has no asset for) is visible and
+            //clickable instead of silently invisible.
+            return spriteId > 0 ? GetMissingCreatureFrame() : null;
 
         var mpf = palettized.Entity;
 

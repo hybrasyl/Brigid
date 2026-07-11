@@ -2,6 +2,7 @@
 using Brigid.Data;
 using Brigid.Data.AssetPacks;
 using Brigid.Data.Models;
+using Brigid.Rendering.Utility;
 using DALib.Data;
 using DALib.Definitions;
 using DALib.Drawing;
@@ -21,7 +22,13 @@ public sealed class MapRenderer : IDisposable
     private readonly Dictionary<int, SKImage> FgImageCache = [];
     private readonly Lock FgImageCacheLock = new();
     private readonly Dictionary<int, Texture2D> FgTextureCache = [];
-    
+
+    //shared checkerboard placeholders served for a background/foreground tile id present in neither the static_tiles
+    //pack nor legacy tileset. Kept out of the Bg/FgTextureCache (which dispose every value) so they can never be
+    //double-freed; rebuilt lazily after Dispose. A referenced-but-absent tile becomes a visible marker, not a hole.
+    private Texture2D? MissingBgTile;
+    private Texture2D? MissingFgTile;
+
     private TextureAtlas? BgAtlas;
     private PaletteCyclingManager? CyclingManager;
     private TextureAtlas? FgAtlas;
@@ -57,7 +64,22 @@ public sealed class MapRenderer : IDisposable
         BgImageCache.Clear();
         FgTextureCache.Clear();
         FgImageCache.Clear();
+
+        MissingBgTile?.Dispose();
+        MissingBgTile = null;
+        MissingFgTile?.Dispose();
+        MissingFgTile = null;
     }
+
+    //lazily built once, reused for every missing background tile id; the caller (DrawBackground) only reaches
+    //GetOrCreateBgTexture for bgIndex > 0, so this is always a real referenced tile.
+    private Texture2D GetMissingBgTile()
+        => MissingBgTile ??= ImageUtil.BuildMissingPlaceholder(TextureConverter.Device, CONSTANTS.TILE_WIDTH, CONSTANTS.TILE_HEIGHT);
+
+    //lazily built once, reused for every missing foreground tile id; DrawSingleFgTile only reaches
+    //GetOrCreateFgTexture for IsRenderedTileIndex ids. Half-tile wide, full-tile tall so it bottom-aligns like a wall.
+    private Texture2D GetMissingFgTile()
+        => MissingFgTile ??= ImageUtil.BuildMissingPlaceholder(TextureConverter.Device, CONSTANTS.HALF_TILE_WIDTH, CONSTANTS.HALF_TILE_HEIGHT * 2);
 
     private void BuildBgAtlas(GraphicsDevice device)
     {
@@ -440,7 +462,9 @@ public sealed class MapRenderer : IDisposable
         var palettized = DataContext.Tiles.GetBackgroundTile(tileId);
 
         if (palettized is null)
-            return null;
+            //terminal miss: tile absent from both the static_tiles pack and the legacy tileset. Serve the shared
+            //checkerboard so a referenced-but-absent floor id is a visible marker instead of a hole in the map.
+            return GetMissingBgTile();
 
         using var image = Graphics.RenderTile(palettized.Entity, palettized.Palette);
         var texture = TextureConverter.ToTexture2D(image);
@@ -470,7 +494,9 @@ public sealed class MapRenderer : IDisposable
         var palettized = DataContext.Tiles.GetForegroundTile(tileId);
 
         if (palettized is null)
-            return null;
+            //terminal miss: foreground tile absent from both the static_tiles pack and legacy hpf art. Serve the
+            //shared checkerboard so a referenced-but-absent wall/object id is a visible marker instead of a gap.
+            return GetMissingFgTile();
 
         using var image = Graphics.RenderImage(palettized.Entity.Decompress(), palettized.Palette);
         var texture = TextureConverter.ToTexture2D(image);

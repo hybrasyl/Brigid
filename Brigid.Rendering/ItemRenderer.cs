@@ -16,10 +16,18 @@ namespace Brigid.Rendering;
 /// </summary>
 public sealed class ItemRenderer : IDisposable
 {
+    //square footprint of the missing-item placeholder, in pixels — roughly a tile-sized checkerboard centered on the
+    //ground tile so a referenced-but-absent item sprite is a visible marker instead of an invisible pickup.
+    private const int MISSING_ITEM_SIZE = 28;
+
     private readonly Dictionary<(int SpriteId, byte Color), ItemSprite?> SpriteCache = [];
 
     //keyed by (source sprite texture, paint height, packed argb) — gndattr water-tile tint applied to the lower portion of the sprite. Cleared on map change.
     private readonly Dictionary<(Texture2D Source, int PaintHeight, uint PackedColor), Texture2D> GroundTintCache = [];
+
+    //shared checkerboard sprite served for any item present in neither the pack nor legacy EPF. Not stored in
+    //SpriteCache (which disposes every value on map change), so it can never be double-freed; rebuilt lazily after Clear.
+    private ItemSprite? MissingItemSprite;
 
     public void Dispose() => Clear();
 
@@ -33,6 +41,24 @@ public sealed class ItemRenderer : IDisposable
 
         SpriteCache.Clear();
         GroundTintCache.DisposeAndClear();
+        MissingItemSprite?.Texture.Dispose();
+        MissingItemSprite = null;
+    }
+
+    /// <summary>
+    ///     Lazily builds (and caches) the checkerboard placeholder served when an item sprite is present in neither the
+    ///     <c>item_icons</c> pack nor the legacy EPF archive. Tightly cropped (no frame padding) so it centers on the tile.
+    /// </summary>
+    private ItemSprite GetMissingItemSprite()
+    {
+        if (MissingItemSprite is not null)
+            return MissingItemSprite.Value;
+
+        var texture = ImageUtil.BuildMissingPlaceholder(TextureConverter.Device, MISSING_ITEM_SIZE, MISSING_ITEM_SIZE);
+        var sprite = new ItemSprite(texture, 0, 0);
+        MissingItemSprite = sprite;
+
+        return sprite;
     }
 
     /// <summary>
@@ -108,13 +134,22 @@ public sealed class ItemRenderer : IDisposable
 
         var key = (spriteId, color);
 
-        if (SpriteCache.TryGetValue(key, out var cached))
-            return cached;
+        if (!SpriteCache.TryGetValue(key, out var sprite))
+        {
+            sprite = packCovers
+                ? LoadSpriteFromPack(pack!, spriteId, color)
+                : LoadSpriteFromLegacy(spriteId, color);
 
-        var sprite = packCovers
-            ? LoadSpriteFromPack(pack!, spriteId, color)
-            : LoadSpriteFromLegacy(spriteId, color);
-        SpriteCache[key] = sprite;
+            //memoize the load, misses included — a cached null means "absent from both sources", so the expensive
+            //legacy lookup runs at most once per (id, color) rather than every frame the missing item is on screen.
+            SpriteCache[key] = sprite;
+        }
+
+        //terminal miss: serve the shared placeholder (never itself cached, so it can't be double-freed) so a
+        //referenced-but-absent item id is a visible marker rather than an invisible ground pickup. spriteId 0 stays
+        //null — it is the "no sprite" sentinel, not a missing asset.
+        if (sprite is null && spriteId > 0)
+            return GetMissingItemSprite();
 
         return sprite;
     }
