@@ -24,6 +24,20 @@ public static class ImageUtil
     public static readonly Color HitTint = LegendColors.Red;
 
     /// <summary>
+    ///     Canonical missing-asset checkerboard colors and cell size — the single visual language for a
+    ///     referenced-but-absent asset (present in neither a <c>.datf</c> pack nor the legacy archives).
+    ///     <see cref="UiRenderer" />'s <c>MissingTexture</c> and the world-layer placeholders
+    ///     (<see cref="BuildMissingPlaceholder" />) all draw from these so every "missing" marker reads identically.
+    /// </summary>
+    public static readonly Color MissingAssetColorA = new(255, 0, 255); //neon purple
+
+    /// <inheritdoc cref="MissingAssetColorA" />
+    public static readonly Color MissingAssetColorB = new(0, 255, 0); //neon green
+
+    /// <inheritdoc cref="MissingAssetColorA" />
+    public const int MISSING_ASSET_CELL_SIZE = 4;
+
+    /// <summary>
     ///     Applies a 50/50 per-channel additive blend with <paramref name="tint" /> in-place. Alpha is preserved and
     ///     fully-transparent pixels are skipped.
     /// </summary>
@@ -174,15 +188,7 @@ public static class ImageUtil
     ///     cells. <paramref name="pixels" /> must contain at least <c>totalSize * totalSize</c> entries.
     /// </summary>
     public static void FillCheckerPattern(Color[] pixels, int totalSize, int cellSize, Color a, Color b)
-    {
-        for (var y = 0; y < totalSize; y++)
-            for (var x = 0; x < totalSize; x++)
-            {
-                var cellX = x / cellSize;
-                var cellY = y / cellSize;
-                pixels[y * totalSize + x] = ((cellX + cellY) % 2) == 0 ? a : b;
-            }
-    }
+        => FillCheckerPatternRect(pixels, totalSize, totalSize, cellSize, a, b);
 
     /// <summary>
     ///     Returns a new <see cref="CachedTexture2D" /> containing a <paramref name="totalSize" />x<paramref name="totalSize" />
@@ -194,6 +200,40 @@ public static class ImageUtil
         FillCheckerPattern(pixels, totalSize, cellSize, a, b);
 
         var result = new CachedTexture2D(device, totalSize, totalSize);
+        result.SetData(pixels);
+
+        return result;
+    }
+
+    /// <summary>
+    ///     Fills <paramref name="pixels" /> in-place with a <paramref name="cellSize" />-pixel checker pattern across a
+    ///     rectangular <paramref name="width" />x<paramref name="height" /> region. <paramref name="pixels" /> must
+    ///     contain at least <c>width * height</c> entries.
+    /// </summary>
+    public static void FillCheckerPatternRect(Color[] pixels, int width, int height, int cellSize, Color a, Color b)
+    {
+        for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var cellX = x / cellSize;
+                var cellY = y / cellSize;
+                pixels[y * width + x] = ((cellX + cellY) % 2) == 0 ? a : b;
+            }
+    }
+
+    /// <summary>
+    ///     Builds a <paramref name="width" />x<paramref name="height" /> neon checkerboard placeholder for a
+    ///     referenced-but-absent asset, using the canonical <see cref="MissingAssetColorA" />/<see cref="MissingAssetColorB" />
+    ///     colors and <see cref="MISSING_ASSET_CELL_SIZE" />. The world renderers (creatures, ground items, static
+    ///     tiles) draw this when an asset resolves in neither a <c>.datf</c> pack nor the legacy archives, so the miss
+    ///     surfaces as a visible, clickable marker instead of an invisible entity or a hole in the map.
+    /// </summary>
+    public static Texture2D BuildMissingPlaceholder(GraphicsDevice device, int width, int height)
+    {
+        var pixels = new Color[width * height];
+        FillCheckerPatternRect(pixels, width, height, MISSING_ASSET_CELL_SIZE, MissingAssetColorA, MissingAssetColorB);
+
+        var result = new Texture2D(device, width, height);
         result.SetData(pixels);
 
         return result;

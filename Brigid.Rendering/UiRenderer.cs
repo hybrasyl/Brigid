@@ -21,9 +21,9 @@ namespace Brigid.Rendering;
 public sealed class UiRenderer : IDisposable
 {
     private const int CHECKER_SIZE = 32;
-    private const int CELL_SIZE = 4;
-    private static readonly Color CheckerA = new(255, 0, 255); //neon purple
-    private static readonly Color CheckerB = new(0, 255, 0); //neon green
+    private const int CELL_SIZE = ImageUtil.MISSING_ASSET_CELL_SIZE;
+    private static readonly Color CheckerA = ImageUtil.MissingAssetColorA; //neon purple
+    private static readonly Color CheckerB = ImageUtil.MissingAssetColorB; //neon green
 
     private const int MAX_ATLAS_ENTRY_SIZE = 512;
 
@@ -111,24 +111,6 @@ public sealed class UiRenderer : IDisposable
 
     private CachedTexture2D Convert(SKImage image)
         => TextureConverter.ConvertImage(image, static (d, w, h) => new CachedTexture2D(d, w, h));
-
-    private CachedTexture2D CreateMissingTexture()
-    {
-        var pixels = new Color[CHECKER_SIZE * CHECKER_SIZE];
-
-        for (var y = 0; y < CHECKER_SIZE; y++)
-            for (var x = 0; x < CHECKER_SIZE; x++)
-            {
-                var cellX = x / CELL_SIZE;
-                var cellY = y / CELL_SIZE;
-                pixels[y * CHECKER_SIZE + x] = ((cellX + cellY) % 2) == 0 ? CheckerA : CheckerB;
-            }
-
-        var texture = new CachedTexture2D(Device, CHECKER_SIZE, CHECKER_SIZE);
-        texture.SetData(pixels);
-
-        return texture;
-    }
 
     private CachedTexture2D CreateCooldownTintedTexture(Texture2D source, Color tint)
     {
