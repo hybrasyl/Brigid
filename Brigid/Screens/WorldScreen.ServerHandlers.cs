@@ -569,32 +569,42 @@ public sealed partial class WorldScreen
         var board = WorldState.Board;
         var posts = board.Posts.ToList();
 
-        //ensure session is open — server can send board data directly (e.g. tile click) without going through BoardList
+        //reply to a scroll-paging request: the list itself tracks whether it asked for a page. append only while that
+        //list is still open on this board; if the user left before the reply arrived, drop it — never reopen the board.
+        if (board.IsPublicBoard)
+        {
+            if (ArticleList.IsPaging)
+            {
+                if (ArticleList.Visible && (ArticleList.BoardId == board.BoardId))
+                    ArticleList.AppendEntries(posts);
+                else
+                    ArticleList.CancelPaging();
+
+                return;
+            }
+        } else if (MailList.IsPaging)
+        {
+            if (MailList.Visible && (MailList.BoardId == board.BoardId))
+                MailList.AppendEntries(posts);
+            else
+                MailList.CancelPaging();
+
+            return;
+        }
+
+        //fresh open (or server-pushed board, e.g. signpost click): replace the list. ensure the session is open first —
+        //the server can send board data directly without going through the board list.
         if (!board.IsSessionOpen)
             board.OpenSession();
 
+        HideAllBoardControls();
+
         if (board.IsPublicBoard)
         {
-            if (LoadingMoreBoardPosts && ArticleList.Visible && (ArticleList.BoardId == board.BoardId))
-                ArticleList.AppendEntries(posts);
-            else
-            {
-                HideAllBoardControls();
-                ArticleList.ShowArticles(board.BoardId, posts);
-                ArticleList.SetHighlightEnabled(IsGameMaster);
-            }
+            ArticleList.ShowArticles(board.BoardId, posts);
+            ArticleList.SetHighlightEnabled(IsGameMaster);
         } else
-        {
-            if (LoadingMoreBoardPosts && MailList.Visible && (MailList.BoardId == board.BoardId))
-                MailList.AppendEntries(posts);
-            else
-            {
-                HideAllBoardControls();
-                MailList.ShowMailList(board.BoardId, posts);
-            }
-        }
-
-        LoadingMoreBoardPosts = false;
+            MailList.ShowMailList(board.BoardId, posts);
     }
 
     private void HandleBoardPostViewed()

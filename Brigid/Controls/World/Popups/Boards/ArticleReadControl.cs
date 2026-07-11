@@ -1,6 +1,6 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -15,10 +15,9 @@ public sealed class ArticleReadControl : PrefabPanel
 {
     private readonly UILabel? AuthorLabel;
     private readonly UILabel BodyLabel;
+    private readonly ScrollView BodyScroll;
     private readonly UILabel? DateLabel;
-    private readonly ScrollBarControl ScrollBar;
     private readonly UILabel? TitleLabel;
-    private readonly int VisibleHeight;
     private int TargetX;
 
     public ushort BoardId { get; set; }
@@ -73,16 +72,23 @@ public sealed class ArticleReadControl : PrefabPanel
         DateLabel = CreateLabel("Mmdd");
         DateLabel?.ForegroundColor = LegendColors.White;
 
-        //body content area
+        //body content area — the selectable label lives in a ScrollView that owns the bar and wheel
         var contentRect = GetRect("Content");
-        VisibleHeight = contentRect.Height;
 
-        BodyLabel = new UILabel
+        BodyScroll = new ScrollView
         {
             X = contentRect.X,
             Y = contentRect.Y,
-            Width = contentRect.Width - ScrollBarControl.DEFAULT_WIDTH,
-            Height = contentRect.Height,
+            Width = contentRect.Width,
+            Height = contentRect.Height
+        };
+
+        BodyLabel = new UILabel
+        {
+            X = 0,
+            Y = 0,
+            Width = BodyScroll.ContentWidth,
+            Height = BodyScroll.ContentHeight,
             PaddingLeft = 0,
             PaddingRight = 2,
             PaddingTop = 0,
@@ -91,22 +97,9 @@ public sealed class ArticleReadControl : PrefabPanel
             IsSelectable = true
         };
 
-        AddChild(BodyLabel);
-
-        ScrollBar = new ScrollBarControl
-        {
-            Name = "ScrollBar",
-            X = contentRect.X + contentRect.Width - ScrollBarControl.DEFAULT_WIDTH,
-            Y = contentRect.Y,
-            Height = contentRect.Height
-        };
-
-        ScrollBar.OnValueChanged += v =>
-        {
-            BodyLabel.ScrollOffset = v * TextRenderer.CHAR_HEIGHT;
-        };
-
-        AddChild(ScrollBar);
+        BodyScroll.AddChild(BodyLabel);
+        AddChild(BodyScroll);
+        BodyScroll.SetSource(new LabelScrollSource(BodyLabel));
     }
 
     public override void Hide()
@@ -156,9 +149,9 @@ public sealed class ArticleReadControl : PrefabPanel
 
         PrevButton?.Enabled = enablePrev;
 
-        BodyLabel.ScrollOffset = 0;
         BodyLabel.Text = message;
-        UpdateScrollBar();
+        BodyScroll.Sync();
+        BodyScroll.ScrollToStart();
 
         Show();
     }
@@ -170,32 +163,5 @@ public sealed class ArticleReadControl : PrefabPanel
             OnUp?.Invoke();
             e.Handled = true;
         }
-    }
-
-    public override void OnMouseScroll(MouseScrollEvent e)
-    {
-        if (ScrollBar.TotalItems <= ScrollBar.VisibleItems)
-            return;
-
-        var newValue = Math.Clamp(ScrollBar.Value - e.Delta, 0, ScrollBar.MaxValue);
-
-        if (newValue != ScrollBar.Value)
-        {
-            ScrollBar.Value = newValue;
-            BodyLabel.ScrollOffset = newValue * TextRenderer.CHAR_HEIGHT;
-        }
-
-        e.Handled = true;
-    }
-
-    private void UpdateScrollBar()
-    {
-        var totalLines = BodyLabel.ContentHeight / TextRenderer.CHAR_HEIGHT;
-        var visibleLines = VisibleHeight / TextRenderer.CHAR_HEIGHT;
-
-        ScrollBar.TotalItems = totalLines;
-        ScrollBar.VisibleItems = visibleLines;
-        ScrollBar.MaxValue = Math.Max(0, totalLines - visibleLines);
-        ScrollBar.Value = 0;
     }
 }

@@ -156,9 +156,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         ZoneNameLabel = CreateLabel("SZ_ZONE", HorizontalAlignment.Center)!;
         ZoneNameLabel.ForegroundColor = LegendColors.White;
         ZoneNameLabel.ShrinkToFit = false;
-        ZoneNameLabel.X -= 10;
-        ZoneNameLabel.Width += 15;
-        
+
         WeightLabel = CreateLabel("SZ_WEIGHT", HorizontalAlignment.Center)!;
         WeightLabel.PaddingLeft = 0;
         WeightLabel.PaddingRight = 0;

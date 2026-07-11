@@ -1,9 +1,9 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Models;
+using Brigid.Networking;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
 
@@ -15,28 +15,23 @@ namespace Brigid.Controls.World.Popups.Boards;
 /// </summary>
 public sealed class ArticleListControl : PrefabPanel
 {
-    //server caps board responses at sbyte.maxvalue posts per page
-    private const int MAX_POSTS_PER_PAGE = 127;
     private const int ROW_HEIGHT = Constants.BOARD_ROW_HEIGHT;
     private const int POSTID_CHARS = 5;
-    private const int AUTHOR_CHARS = 12;
+    private const int AUTHOR_CHARS = 14; //wide enough for system authors like "Mundane Gossip" (14) so the date stays aligned
     private const int DATE_CHARS = 5;
-    private const int PREFIX_CHARS = POSTID_CHARS + AUTHOR_CHARS + DATE_CHARS;
+    //row-block alignment to the board art, captured from the in-client nudge tool (3px left, 4px up)
+    private const int ROW_OFFSET_X = -3;
+    private const int ROW_OFFSET_Y = -4;
     private const string SPACER5 = "     ";
     private const string SPACER3 = "   ";
 
-    private readonly Rectangle ArticleListRect;
-    private readonly int MaxSubjectChars;
-    private readonly int MaxVisibleRows;
-    private readonly UILabel[] RowLabels;
-    private readonly ScrollBarControl ScrollBar;
-    private int DataVersion;
+    private static readonly Color SelectedColor = new(100, 149, 237);
+
+    private readonly VirtualizedListView<MailEntry, UILabel> ListView;
 
     private List<MailEntry> Entries = [];
-    private bool HasMorePosts;
-    private int RenderedVersion = -1;
-    private int ScrollOffset;
-    private int SelectedIndex = -1;
+    private bool LoadingMore;
+    private bool MoreMayExist;
     private int TargetX;
 
     public ushort BoardId { get; private set; }
@@ -66,8 +61,8 @@ public sealed class ArticleListControl : PrefabPanel
         if (ViewButton is not null)
             ViewButton.Clicked += () =>
             {
-                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
-                    OnViewPost?.Invoke(Entries[SelectedIndex].PostId);
+                if (TrySelected(out var i))
+                    OnViewPost?.Invoke(Entries[i].PostId);
             };
 
         if (NewButton is not null)
@@ -76,8 +71,8 @@ public sealed class ArticleListControl : PrefabPanel
         if (DeleteButton is not null)
             DeleteButton.Clicked += () =>
             {
-                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
-                    OnDeletePost?.Invoke(Entries[SelectedIndex].PostId);
+                if (TrySelected(out var i))
+                    OnDeletePost?.Invoke(Entries[i].PostId);
             };
 
         if (UpButton is not null)
@@ -91,82 +86,133 @@ public sealed class ArticleListControl : PrefabPanel
 
             HighlightButton.Clicked += () =>
             {
-                if ((SelectedIndex >= 0) && (SelectedIndex < Entries.Count))
-                    OnHighlight?.Invoke(Entries[SelectedIndex].PostId);
+                if (TrySelected(out var i))
+                    OnHighlight?.Invoke(Entries[i].PostId);
             };
         }
 
-        ArticleListRect = GetRect("ArticleList");
-        MaxVisibleRows = ArticleListRect.Height > 0 ? ArticleListRect.Height / ROW_HEIGHT : 0;
+        var articleListRect = GetRect("ArticleList");
 
-        //scrollbar
-        ScrollBar = new ScrollBarControl
-        {
-            Name = "ScrollBar",
-            X = ArticleListRect.X + ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH,
-            Y = ArticleListRect.Y,
-            Height = ArticleListRect.Height
-        };
+        //nudge the whole list block onto the board art. rows are clipped to the list panel's bounds, so the offset must
+        //move the bounds (moving the panel + its clip region) — a negative row inset would only clip, not shift. the bar
+        //rides along by a few px, which is immaterial against its own art.
+        var listBounds = new Rectangle(
+            articleListRect.X + ROW_OFFSET_X,
+            articleListRect.Y + ROW_OFFSET_Y,
+            articleListRect.Width,
+            articleListRect.Height);
 
-        ScrollBar.OnValueChanged += v =>
-        {
-            ScrollOffset = v;
-            DataVersion++;
-        };
-
-        AddChild(ScrollBar);
-
-        //row labels — one per visible row, columns via fixed-width string formatting
-        var usableWidth = ArticleListRect.Width - ScrollBarControl.DEFAULT_WIDTH;
-        MaxSubjectChars = Math.Max(0, usableWidth / TextRenderer.CHAR_WIDTH - PREFIX_CHARS);
-
-        RowLabels = new UILabel[MaxVisibleRows];
-
-        for (var i = 0; i < MaxVisibleRows; i++)
-        {
-            RowLabels[i] = new UILabel
+        ListView = new VirtualizedListView<MailEntry, UILabel>(
+            listBounds,
+            ROW_HEIGHT,
+            (w, i) => new UILabel
             {
-                X = ArticleListRect.X,
-                Y = ArticleListRect.Y + i * ROW_HEIGHT,
-                Width = usableWidth,
+                Name = $"Article{i}",
+                Width = w,
                 Height = ROW_HEIGHT,
                 PaddingLeft = 0,
-                PaddingTop = 0
-            };
+                PaddingTop = 0,
+                //fixed-width columns: clip the subject at the panel edge instead of squishing the line to fit
+                ShrinkToFit = false
+            },
+            BindRow)
+        {
+            Selectable = true
+        };
 
-            AddChild(RowLabels[i]);
-        }
+        ListView.SelectionChanged += _ => UpdateButtonStates();
+
+        ListView.ItemActivated += i =>
+        {
+            if ((i >= 0) && (i < Entries.Count))
+                OnViewPost?.Invoke(Entries[i].PostId);
+        };
+
+        //retail-style scroll-back paging: reaching the oldest loaded row requests the next older page. this relies on a
+        //full page overflowing the viewport so the bottom is scroll-reachable — the board panels show well under
+        //BoardProtocol.PageSize (16) rows, so a full page always scrolls.
+        ListView.ReachedEnd += MaybeRequestOlder;
+
+        AddChild(ListView);
     }
+
+    private bool TrySelected(out int index)
+    {
+        index = ListView.SelectedIndex;
+
+        return (index >= 0) && (index < Entries.Count);
+    }
+
+    private void BindRow(UILabel label, VirtualRow<MailEntry> row)
+    {
+        if (row.Kind != VirtualRowKind.Item)
+        {
+            label.Text = string.Empty;
+
+            return;
+        }
+
+        label.ForegroundColor = row.Selected
+            ? SelectedColor
+            : row.Item.IsHighlighted
+                ? Color.Yellow
+                : TextColors.Default;
+        label.Text = FormatRow(row.Item);
+    }
+
+    /// <summary>
+    ///     Whether a scroll-paging request is currently in flight (fired but not yet answered). The server-handler uses
+    ///     this to route a post-list reply to <see cref="AppendEntries" /> vs a fresh replace.
+    /// </summary>
+    public bool IsPaging => LoadingMore;
+
+    /// <summary>
+    ///     Clears the in-flight paging flag without appending — used when a paging reply arrives after the user has
+    ///     already left this list, so the next time it is shown it can page again.
+    /// </summary>
+    public void CancelPaging() => LoadingMore = false;
 
     public void AppendEntries(List<MailEntry> entries)
     {
-        Entries.AddRange(entries);
-        HasMorePosts = entries.Count >= MAX_POSTS_PER_PAGE;
-        DataVersion++;
+        LoadingMore = false;
 
-        UpdateScrollBar();
-    }
+        //dedupe against posts we already hold: a server that ignores the paging cursor (Hybrasyl drops navOffset and
+        //re-sends the same set) or a final overlapping batch must not append duplicate rows or re-arm paging forever.
+        var existingIds = new HashSet<short>(Entries.Select(e => e.PostId));
+        var added = 0;
 
-    public override void Draw(SpriteBatch spriteBatch)
-    {
-        if (!Visible)
-            return;
+        foreach (var entry in entries)
+            if (existingIds.Add(entry.PostId))
+            {
+                Entries.Add(entry);
+                added++;
+            }
 
-        RefreshLabels();
-        base.Draw(spriteBatch);
+        //keep paging while a batch brings at least one genuinely new post. retail's paged response is inclusive of the
+        //cursor post, so a full page always overlaps by one — gating on "a full page of new" would stop after a single
+        //fetch. a batch that adds nothing new means we reached the oldest post (or the server does not page).
+        MoreMayExist = added > 0;
+
+        ListView.Refresh();
     }
 
     private string FormatRow(MailEntry entry)
     {
-        var subject = entry.Subject.Length > MaxSubjectChars ? entry.Subject[..MaxSubjectChars] : entry.Subject;
+        //truncate to the fixed column widths so a long author (e.g. "Mundane Gossip") can't push the later columns over
+        var author = entry.Author.Length > AUTHOR_CHARS ? entry.Author[..AUTHOR_CHARS] : entry.Author;
 
         var date = $"{entry.Month,2}/{entry.Day,2}";
 
-        return $"{entry.PostId,POSTID_CHARS}{SPACER5}{entry.Author,-AUTHOR_CHARS}{SPACER5}{date,DATE_CHARS}{SPACER3}{subject}";
+        //the subject is the final column and runs to the panel edge, where the label's clip trims it — so the cutoff
+        //tracks the control rectangle exactly, independent of font size.
+        return $"{entry.PostId,POSTID_CHARS}{SPACER5}{author,-AUTHOR_CHARS}{SPACER5}{date,DATE_CHARS}{SPACER3}{entry.Subject}";
     }
 
     public override void Hide()
     {
+        //never let an in-flight paging flag outlive the visible list — otherwise a dropped/error reply would wedge it
+        //and divert the next fresh open into the paging branch.
+        LoadingMore = false;
         InputDispatcher.Instance?.RemoveControl(this);
         Visible = false;
     }
@@ -176,8 +222,8 @@ public sealed class ArticleListControl : PrefabPanel
     public event HighlightPostHandler? OnHighlight;
 
     /// <summary>
-    ///     Fired when the user clicks the "Load More" row at the bottom of a full page. The short is the last visible PostId
-    ///     to use as the startPostId for the next page request.
+    ///     Fired when the user scrolls to the oldest loaded row and more posts may exist, mirroring retail's scroll-back
+    ///     paging. The short is the last (oldest) PostId held, used as the startPostId for the next older page request.
     /// </summary>
     public event LoadMorePostsHandler? OnLoadMorePosts;
 
@@ -185,37 +231,22 @@ public sealed class ArticleListControl : PrefabPanel
     public event UpHandler? OnUp;
     public event ViewPostHandler? OnViewPost;
 
-    private void RefreshLabels()
+    /// <summary>
+    ///     Requests the next older page when the view has scrolled to the oldest loaded row (raised as
+    ///     <see cref="VirtualizedListView{TItem,TRow}.ReachedEnd" />), paging is not exhausted, and no request is already
+    ///     in flight. Mirrors retail, which re-sends 0x02 continuously as the user scrolls back.
+    /// </summary>
+    private void MaybeRequestOlder()
     {
-        if (RenderedVersion == DataVersion)
+        if (!MoreMayExist || LoadingMore || (Entries.Count == 0))
             return;
 
-        RenderedVersion = DataVersion;
-
-        for (var i = 0; i < MaxVisibleRows; i++)
-        {
-            var entryIndex = ScrollOffset + i;
-
-            if (entryIndex < Entries.Count)
-            {
-                var entry = Entries[entryIndex];
-                var isSelected = entryIndex == SelectedIndex;
-
-                var textColor = isSelected
-                    ? new Color(100, 149, 237)
-                    : entry.IsHighlighted
-                        ? Color.Yellow
-                        : TextColors.Default;
-
-                RowLabels[i].ForegroundColor = textColor;
-                RowLabels[i].Text = FormatRow(entry);
-            } else
-                RowLabels[i].Text = string.Empty;
-        }
+        LoadingMore = true;
+        OnLoadMorePosts?.Invoke(Entries[^1].PostId);
     }
 
     /// <summary>
-    ///     Appends additional entries from a subsequent page to the existing list.
+    ///     Removes an entry by post id and re-clamps the selection.
     /// </summary>
     public void RemoveEntry(short postId)
     {
@@ -226,11 +257,11 @@ public sealed class ArticleListControl : PrefabPanel
 
         Entries.RemoveAt(index);
 
-        if (SelectedIndex >= Entries.Count)
-            SelectedIndex = Entries.Count - 1;
+        if (ListView.SelectedIndex >= Entries.Count)
+            ListView.SetSelectedIndex(Entries.Count - 1);
 
-        DataVersion++;
-        UpdateScrollBar();
+        ListView.Refresh();
+        UpdateButtonStates();
     }
 
     public void ToggleHighlight(short postId)
@@ -242,7 +273,7 @@ public sealed class ArticleListControl : PrefabPanel
 
         var entry = Entries[index];
         Entries[index] = entry with { IsHighlighted = !entry.IsHighlighted };
-        DataVersion++;
+        ListView.Refresh();
     }
 
     /// <summary>
@@ -250,7 +281,8 @@ public sealed class ArticleListControl : PrefabPanel
     /// </summary>
     public void SetHighlightEnabled(bool enabled)
     {
-        HighlightButton?.Visible = enabled;
+        if (HighlightButton is not null)
+            HighlightButton.Visible = enabled;
     }
 
     public void SetViewportBounds(Rectangle viewport)
@@ -273,127 +305,89 @@ public sealed class ArticleListControl : PrefabPanel
     {
         BoardId = boardId;
         Entries = entries;
-        HasMorePosts = entries.Count >= MAX_POSTS_PER_PAGE;
-        SelectedIndex = -1;
-        ScrollOffset = 0;
-        DataVersion++;
+        MoreMayExist = entries.Count >= BoardProtocol.PageSize;
+        LoadingMore = false;
 
-        UpdateScrollBar();
+        ListView.SetItems(Entries);
+        ListView.SetSelectedIndex(-1);
         UpdateButtonStates();
         Show();
     }
 
-    public override void OnClick(ClickEvent e)
-    {
-        base.OnClick(e);
-
-        if (e.Button != MouseButton.Left)
-            return;
-
-        var localX = e.ScreenX - ScreenX - ArticleListRect.X;
-        var localY = e.ScreenY - ScreenY - ArticleListRect.Y;
-
-        if ((localX < 0) || (localX >= ArticleListRect.Width) || (localY < 0) || (localY >= ArticleListRect.Height))
-            return;
-
-        var row = localY / ROW_HEIGHT;
-
-        if (row >= MaxVisibleRows)
-            return;
-
-        var entryIndex = ScrollOffset + row;
-
-        //"load more" row
-        if (HasMorePosts && (entryIndex == Entries.Count))
-        {
-            if (Entries.Count > 0)
-                OnLoadMorePosts?.Invoke(Entries[^1].PostId);
-
-            return;
-        }
-
-        if (entryIndex >= Entries.Count)
-            return;
-
-        SelectedIndex = entryIndex;
-        DataVersion++;
-        UpdateButtonStates();
-    }
-
-    public override void OnDoubleClick(DoubleClickEvent e)
-    {
-        base.OnDoubleClick(e);
-
-        if (e.Button != MouseButton.Left)
-            return;
-
-        var localX = e.ScreenX - ScreenX - ArticleListRect.X;
-        var localY = e.ScreenY - ScreenY - ArticleListRect.Y;
-
-        if ((localX < 0) || (localX >= ArticleListRect.Width) || (localY < 0) || (localY >= ArticleListRect.Height))
-            return;
-
-        var row = localY / ROW_HEIGHT;
-
-        if (row >= MaxVisibleRows)
-            return;
-
-        var entryIndex = ScrollOffset + row;
-
-        if (entryIndex >= Entries.Count)
-            return;
-
-        SelectedIndex = entryIndex;
-        DataVersion++;
-        UpdateButtonStates();
-        OnViewPost?.Invoke(Entries[entryIndex].PostId);
-    }
-
     public override void OnKeyDown(KeyDownEvent e)
     {
-        if (e.Key == Keys.Escape)
+        switch (e.Key)
         {
-            OnUp?.Invoke();
-            e.Handled = true;
+            case Keys.Escape:
+                OnUp?.Invoke();
+                e.Handled = true;
+
+                break;
+            case Keys.Up:
+                MoveSelection(-1);
+                e.Handled = true;
+
+                break;
+            case Keys.Down:
+                MoveSelection(1);
+                e.Handled = true;
+
+                break;
+            case Keys.PageUp:
+                MoveSelection(-ListView.VisibleRows);
+                e.Handled = true;
+
+                break;
+            case Keys.PageDown:
+                MoveSelection(ListView.VisibleRows);
+                e.Handled = true;
+
+                break;
+            case Keys.Enter:
+                if (TrySelected(out var viewIndex))
+                    OnViewPost?.Invoke(Entries[viewIndex].PostId);
+
+                e.Handled = true;
+
+                break;
+            case Keys.Delete:
+                if (TrySelected(out var deleteIndex))
+                    OnDeletePost?.Invoke(Entries[deleteIndex].PostId);
+
+                e.Handled = true;
+
+                break;
         }
     }
 
-    public override void OnMouseScroll(MouseScrollEvent e)
+    //keyboard row navigation: move the selection, keeping it on screen; reaching the bottom pages older posts via ReachedEnd
+    private void MoveSelection(int delta)
     {
-        if (ScrollBar.TotalItems <= ScrollBar.VisibleItems)
+        if (Entries.Count == 0)
             return;
 
-        var newValue = Math.Clamp(ScrollBar.Value - e.Delta, 0, ScrollBar.MaxValue);
+        var current = ListView.SelectedIndex;
 
-        if (newValue != ScrollBar.Value)
-        {
-            ScrollBar.Value = newValue;
-            ScrollOffset = newValue;
-            DataVersion++;
-        }
+        var newIndex = current < 0
+            ? delta > 0 ? 0 : Entries.Count - 1
+            : Math.Clamp(current + delta, 0, Entries.Count - 1);
 
-        e.Handled = true;
+        ListView.SetSelectedIndex(newIndex);
+        ListView.EnsureVisible(newIndex);
+        UpdateButtonStates();
     }
 
     private void UpdateButtonStates()
     {
-        var hasSelection = (SelectedIndex >= 0) && (SelectedIndex < Entries.Count);
+        var hasSelection = TrySelected(out _);
 
-        ViewButton?.Enabled = hasSelection;
+        if (ViewButton is not null)
+            ViewButton.Enabled = hasSelection;
 
-        DeleteButton?.Enabled = hasSelection;
+        if (DeleteButton is not null)
+            DeleteButton.Enabled = hasSelection;
 
         if (HighlightButton is { Visible: true })
             HighlightButton.Enabled = hasSelection;
-    }
-
-    private void UpdateScrollBar()
-    {
-        //add 1 virtual row for the "load more" indicator when more posts exist
-        var totalRows = Entries.Count + (HasMorePosts ? 1 : 0);
-
-        ScrollBar.TotalItems = totalRows;
-        ScrollBar.VisibleItems = MaxVisibleRows;
-        ScrollBar.MaxValue = Math.Max(0, totalRows - MaxVisibleRows);
     }
 }

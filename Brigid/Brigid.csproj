@@ -1,6 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <OutputType>Exe</OutputType>
+        <!-- WinExe (GUI subsystem): a game client owns no console. As a console Exe, a direct
+             binary spawn (e.g. Epona) pops a stray console and, when spawned with SW_HIDE, the
+             window can be created hidden. WinExe removes the console entirely; stdout still flows
+             to a redirected/inherited pipe (dotnet-run, Epona LogPane) when a parent provides one.
+             Trade-off: NoticeDebugLog's Console.Write no longer echoes to an attached terminal on
+             a bare double-click — the notice-debug.log file remains the durable sink. -->
+        <OutputType>WinExe</OutputType>
         <IsPackable>false</IsPackable>
         <!-- Entry assembly / apphost: Brigid / Brigid.exe / Brigid.dll. -->
         <AssemblyName>Brigid</AssemblyName>

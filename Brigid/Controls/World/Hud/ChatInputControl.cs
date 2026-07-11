@@ -81,10 +81,9 @@ public sealed class ChatInputControl : UIPanel
             Width = rect.Width,
             Height = rect.Height,
             //225 leaves headroom under the 255-byte string8 wire cap for the server's "Name: " echo prefix
-            //(name width is moving to 24 chars: 255 - (24 + 2) = 229). AllowHorizontalScroll lets long messages
-            //scroll instead of hard-blocking at the visible box width (~77 chars).
+            //(name width is moving to 24 chars: 255 - (24 + 2) = 229). Long messages scroll horizontally rather than
+            //hard-block at the visible box width (~77 chars) — single-line UITextBox scrolls to follow the caret.
             MaxLength = 225,
-            AllowHorizontalScroll = true,
             PaddingLeft = 1,
             PaddingRight = 1,
             PaddingTop = 1,

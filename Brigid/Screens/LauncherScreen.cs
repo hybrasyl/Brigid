@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Data;
+using Brigid.Definitions;
 using Brigid.Rendering;
 using Brigid.Systems;
 using Brigid.Utilities;
@@ -75,7 +76,6 @@ public sealed class LauncherScreen : IScreen
     private AddField AddFocused = AddField.Host;
     private string AssetPath = "";
     private bool AssetPathValid;
-    private bool PreviousLeftHeld;
     private bool Completed;
     private double CaretTimer;
 
@@ -84,6 +84,7 @@ public sealed class LauncherScreen : IScreen
     private Rectangle ResolutionButton;
     private Rectangle AssetButton;
     private Rectangle ConnectButton;
+    private Rectangle SkipLauncherRow;
     private Rectangle AddRow;
     private Rectangle SaveButton;
     private Rectangle CancelButton;
@@ -186,6 +187,9 @@ public sealed class LauncherScreen : IScreen
         ResolutionButton = new Rectangle(Panel.X + 90, Panel.Y + 186, Panel.Right - 20 - (Panel.X + 90), ROW_HEIGHT);
         ConnectButton = new Rectangle(Panel.Right - 120, Panel.Bottom - 40, 100, 26);
 
+        //clickable box + label at the bottom-left; toggles LauncherConfig.SuppressLauncher
+        SkipLauncherRow = new Rectangle(Panel.X + 20, Panel.Bottom - 34, 210, 16);
+
         DropdownRows.Clear();
         ResolutionRows.Clear();
 
@@ -239,36 +243,42 @@ public sealed class LauncherScreen : IScreen
 
     private void HandleMouse()
     {
-        var leftHeld = InputBuffer.IsLeftButtonHeld;
-        var pressed = leftHeld && !PreviousLeftHeld;
-        PreviousLeftHeld = leftHeld;
-
-        if (!pressed)
-            return;
-
-        var cursor = new Point(InputBuffer.MouseX, InputBuffer.MouseY);
-
-        switch (CurrentMode)
+        //consume the discrete per-event stream (same contract as InputDispatcher) rather than edge-detecting the
+        //polled IsLeftButtonHeld bool — polling drops a click whose down+up are drained in the same frame, which is
+        //timing-dependent and diverged by platform (dead on Windows, fine on macOS).
+        foreach (var evt in InputBuffer.Events)
         {
-            case Mode.Main:
-                HandleMainClick(cursor);
+            if ((evt.Kind != BufferedInputKind.MouseButton) || (evt.Button != MouseButton.Left) || !evt.IsPress)
+                continue;
 
-                break;
+            var cursor = new Point(evt.X, evt.Y);
 
-            case Mode.Dropdown:
-                HandleDropdownClick(cursor);
+            switch (CurrentMode)
+            {
+                case Mode.Main:
+                    HandleMainClick(cursor);
 
-                break;
+                    break;
 
-            case Mode.ResolutionDropdown:
-                HandleResolutionDropdownClick(cursor);
+                case Mode.Dropdown:
+                    HandleDropdownClick(cursor);
 
-                break;
+                    break;
 
-            case Mode.AddServer:
-                HandleAddClick(cursor);
+                case Mode.ResolutionDropdown:
+                    HandleResolutionDropdownClick(cursor);
 
-                break;
+                    break;
+
+                case Mode.AddServer:
+                    HandleAddClick(cursor);
+
+                    break;
+            }
+
+            //Connect() replaces this screen mid-loop — stop touching state once that happens.
+            if (Completed)
+                return;
         }
     }
 
@@ -291,6 +301,14 @@ public sealed class LauncherScreen : IScreen
         if (ResolutionButton.Contains(cursor))
         {
             CurrentMode = Mode.ResolutionDropdown;
+
+            return;
+        }
+
+        if (SkipLauncherRow.Contains(cursor))
+        {
+            LauncherConfig.SuppressLauncher = !LauncherConfig.SuppressLauncher;
+            LauncherConfig.Save();
 
             return;
         }
@@ -445,8 +463,10 @@ public sealed class LauncherScreen : IScreen
     {
         var picked = FolderPicker.Pick("Select your Dark Ages data folder", AssetPath);
 
-        //the modal dialog blocked the game loop; resync the edge tracker so the return click isn't double-counted
-        PreviousLeftHeld = InputBuffer.IsLeftButtonHeld;
+        //the modal ran its own message loop while our game loop was stalled; drop anything the SDL watcher buffered
+        //during that time (e.g. a dialog-dismiss click delivered via SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH) so it isn't
+        //replayed as a launcher click next frame.
+        InputBuffer.DiscardPending();
 
         if (picked is null)
             return;
@@ -515,6 +535,7 @@ public sealed class LauncherScreen : IScreen
 
         DrawAssetRow();
         DrawResolutionRow();
+        DrawSkipLauncherCheckbox();
         DrawButton(ConnectButton, "Connect", CanConnect(), new Color(60, 110, 70), new Color(110, 180, 120));
 
         if (CurrentMode == Mode.Dropdown)
@@ -565,6 +586,18 @@ public sealed class LauncherScreen : IScreen
             DrawClippedFront("not a Dark Ages data folder (need khanpal.dat + legend.dat)", pathBox, BadColor, HINT_SIZE);
             DrawButton(AssetButton, "Browse", true, new Color(60, 70, 92), FocusBorder);
         }
+    }
+
+    private void DrawSkipLauncherCheckbox()
+    {
+        var box = new Rectangle(SkipLauncherRow.X, SkipLauncherRow.Y, 14, 14);
+        FillRect(box, FieldFill);
+        BorderRect(box, LauncherConfig.SuppressLauncher ? FocusBorder : FieldBorder);
+
+        if (LauncherConfig.SuppressLauncher)
+            FillRect(new Rectangle(box.X + 3, box.Y + 3, 8, 8), OkColor);
+
+        DrawText("Skip this launcher next time", new Vector2(box.Right + 8, box.Y - 2), LabelColor, HINT_SIZE);
     }
 
     private void DrawDropdownList()

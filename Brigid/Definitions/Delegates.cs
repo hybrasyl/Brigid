@@ -199,6 +199,21 @@ public delegate void CloseHandler();
 ///     A scrollbar value changed.
 /// </summary>
 public delegate void ScrollValueChangedHandler(int value);
+
+/// <summary>
+///     A scroll model's offset changed.
+/// </summary>
+public delegate void ScrollOffsetChangedHandler(int offset);
+
+/// <summary>
+///     A scroll model's content/viewport metrics changed (extent or viewport).
+/// </summary>
+public delegate void ScrollMetricsChangedHandler();
+
+/// <summary>
+///     A virtualized list row was selected or activated, by item index.
+/// </summary>
+public delegate void ListRowHandler(int index);
 #endregion
 
 #region Controls/World/Hud Delegates

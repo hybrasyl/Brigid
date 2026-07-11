@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -18,10 +19,13 @@ public sealed class ChatPanel : ExpandablePanel
     private const int MAX_CHAT_LINES = 200;
     private const int GLYPH_HEIGHT = 12;
     private readonly List<ChatLine> ChatLog = [];
+    private readonly ScrollBarControl Bar;
+    private readonly ScrollBarBinder Binder;
+    //Offset is lines-from-bottom (0 = newest at bottom); Inverted maps wheel/page + the bar thumb accordingly
+    private readonly ScrollModel Model = new() { Inverted = true };
     private readonly Rectangle NormalDisplayBounds;
     private readonly int PanelOriginX;
     private readonly int PanelOriginY;
-    private readonly ScrollBarControl ScrollBar;
 
     private Rectangle DisplayBounds;
     private Rectangle ExpandedDisplayBounds;
@@ -29,7 +33,6 @@ public sealed class ChatPanel : ExpandablePanel
     private int LogVersion;
     private int MaxVisibleLines;
     private int RenderedVersion = -1;
-    private int ScrollOffset;
 
     public ChatPanel(Rectangle displayBounds, Rectangle panelBounds)
     {
@@ -66,20 +69,17 @@ public sealed class ChatPanel : ExpandablePanel
         //position relative to panel origin (panel is placed at panelbounds by registertab)
         var relY = displayBounds.Y - panelBounds.Y;
 
-        ScrollBar = new ScrollBarControl
+        Bar = new ScrollBarControl
         {
             X = relX + displayBounds.Width - ScrollBarControl.DEFAULT_WIDTH,
             Y = relY,
             Height = displayBounds.Height
         };
 
-        ScrollBar.OnValueChanged += v =>
-        {
-            ScrollOffset = ScrollBar.MaxValue - v;
-            LogVersion++;
-        };
+        Binder = new ScrollBarBinder(Model, Bar);
+        Model.Changed += _ => LogVersion++;
 
-        AddChild(ScrollBar);
+        AddChild(Bar);
         WorldState.Chat.MessageAdded += OnMessageAdded;
     }
 
@@ -108,18 +108,13 @@ public sealed class ChatPanel : ExpandablePanel
         if (ChatLog.Count > MAX_CHAT_LINES)
             ChatLog.RemoveRange(0, ChatLog.Count - MAX_CHAT_LINES);
 
-        var wasAtBottom = ScrollOffset == 0;
+        var wasAtBottom = Model.Offset == 0;
 
-        ScrollBar.TotalItems = ChatLog.Count;
-        ScrollBar.VisibleItems = MaxVisibleLines;
-        ScrollBar.MaxValue = Math.Max(0, ChatLog.Count - MaxVisibleLines);
+        Model.SetMetrics(ChatLog.Count, MaxVisibleLines);
 
+        //stick to the bottom when already there; otherwise SetMetrics keeps the same lines-from-bottom offset
         if (wasAtBottom)
-        {
-            ScrollOffset = 0;
-            ScrollBar.Value = ScrollBar.MaxValue;
-        } else
-            ScrollBar.Value = ScrollBar.MaxValue - ScrollOffset;
+            Model.ScrollToStart();
 
         LogVersion++;
     }
@@ -167,7 +162,7 @@ public sealed class ChatPanel : ExpandablePanel
         }
 
         //in the large hud, the compact chat area is too small for a scrollbar
-        ScrollBar.Visible = false;
+        Bar.Visible = false;
     }
 
     public override void Dispose()
@@ -189,7 +184,7 @@ public sealed class ChatPanel : ExpandablePanel
         RenderedVersion = LogVersion;
 
         var maxLines = Math.Min(MaxVisibleLines, Lines.Length);
-        var startIndex = Math.Max(0, ChatLog.Count - maxLines - ScrollOffset);
+        var startIndex = Math.Max(0, ChatLog.Count - maxLines - Model.Offset);
         var lineIndex = 0;
 
         for (var i = startIndex; (i < ChatLog.Count) && (lineIndex < maxLines); i++)
@@ -225,8 +220,10 @@ public sealed class ChatPanel : ExpandablePanel
 
         DisplayBounds = expanded ? ExpandedDisplayBounds : NormalDisplayBounds;
         MaxVisibleLines = Math.Min(DisplayBounds.Height / GLYPH_HEIGHT, Lines.Length);
-        ScrollBar.Visible = expanded;
-        ScrollBar.Height = DisplayBounds.Height;
+        Bar.Visible = expanded;
+        Bar.Height = DisplayBounds.Height;
+
+        Model.SetMetrics(ChatLog.Count, MaxVisibleLines);
 
         //show/hide labels based on current line count
         for (var i = 0; i < Lines.Length; i++)
@@ -238,8 +235,7 @@ public sealed class ChatPanel : ExpandablePanel
 
     public void ScrollToBottom()
     {
-        ScrollOffset = 0;
-        ScrollBar.Value = ScrollBar.MaxValue;
+        Model.ScrollToStart();
         LogVersion++;
     }
 
@@ -251,12 +247,11 @@ public sealed class ChatPanel : ExpandablePanel
 
     public bool Scroll(int delta)
     {
-        if (ChatLog.Count <= MaxVisibleLines)
+        if (!Model.CanScroll)
             return false;
 
-        ScrollOffset = Math.Clamp(ScrollOffset + delta, 0, ChatLog.Count - MaxVisibleLines);
-        ScrollBar.Value = ScrollBar.MaxValue - ScrollOffset;
-        LogVersion++;
+        //Inverted: a positive wheel notch scrolls back into history; consume while scrollable (matches legacy)
+        Model.WheelBy(delta);
 
         return true;
     }
