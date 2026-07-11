@@ -241,7 +241,19 @@ public sealed class InputDispatcher
             var containingPanel = FindContainingStackEntry(ExplicitFocusElement) ?? ExplicitFocusElement.Parent;
 
             if (containingPanel is not null && !containingPanel.ContainsPoint(mouseX, mouseY))
-                mouseBlocked = true;
+            {
+                //the chat bar is exempt from blocking: a click on it must always be deliverable
+                //so it can reclaim focus after a desync (explicit focus stuck on another visible
+                //element while the chat box still renders a caret) — otherwise the recovery
+                //click is consumed right here and the wedge is permanent
+                var chatBar = (UIElement?)ChatInputTextBox?.Parent ?? ChatInputTextBox;
+
+                var overChatBar = chatBar is not null
+                                  && IsEffectivelyVisible(chatBar)
+                                  && chatBar.ContainsPoint(mouseX, mouseY);
+
+                mouseBlocked = !overChatBar;
+            }
         }
 
         if (!mouseBlocked)

@@ -16,6 +16,9 @@ public class UITextBox : UIElement
 
     private static UITextBox? FocusedTextBox;
 
+    /// <summary>The textbox that currently holds focus, if any. One box holds focus at a time, process-wide.</summary>
+    public static UITextBox? CurrentlyFocused => FocusedTextBox;
+
     private readonly TextElement TextElement = new();
     private string CachedLayoutText = string.Empty;
     private int CachedLayoutWidth;
@@ -60,7 +63,15 @@ public class UITextBox : UIElement
         set
         {
             if (field == value)
+            {
+                //re-assert the dispatcher bridge on a redundant focus-set: a popup can clear the
+                //dispatcher's explicit focus without unfocusing this box (stale-true state), and a
+                //transition-only event would leave keyboard routing unrecoverable by click or hotkey
+                if (value)
+                    TextBoxFocusGained?.Invoke(this);
+
                 return;
+            }
 
             field = value;
             BackgroundColor = value ? FocusedBackgroundColor : null;

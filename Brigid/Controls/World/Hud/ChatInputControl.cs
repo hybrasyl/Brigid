@@ -132,6 +132,12 @@ public sealed class ChatInputControl : UIPanel
 
     private void FocusInternal(ChatMode mode, string prefix, Color color)
     {
+        //claim the sticky-chat registration for this HUD's box: both HUD implementations construct
+        //a ChatInputControl, and construction order must not decide which box popups treat as the
+        //protected chat input — the one actually being focused is the real one
+        if (InputDispatcher.Instance is { } dispatcher)
+            dispatcher.ChatInputTextBox = TextBox;
+
         Mode = mode;
         MessageHistoryIndex = -1;
         DraftMessage = string.Empty;
@@ -198,7 +204,12 @@ public sealed class ChatInputControl : UIPanel
         TextBox.Text = string.Empty;
         TextBox.ForegroundColor = Color.White;
         UpdateLayout(string.Empty, Color.White);
-        InputDispatcher.Instance?.ClearExplicitFocus();
+
+        //only release explicit focus we actually hold — when unfocusing because keyboard routing
+        //moved elsewhere (self-heal path), clearing would steal focus from its rightful owner
+        if (InputDispatcher.Instance is { } dispatcher && (dispatcher.ExplicitFocus == TextBox))
+            dispatcher.ClearExplicitFocus();
+
         FocusChanged?.Invoke(false);
     }
 
@@ -285,6 +296,16 @@ public sealed class ChatInputControl : UIPanel
     }
 
     //--- input handling ---
+
+    public override void OnMouseDown(MouseDownEvent e)
+    {
+        //clicking anywhere on the chat bar while it is active reclaims keyboard focus — the escape
+        //hatch for a focus desync (dispatcher routing lost while the box still shows a caret). the
+        //redundant-set path in UITextBox.IsFocused re-fires the dispatcher bridge even when the
+        //box already believes it is focused.
+        if ((e.Button == MouseButton.Left) && (Mode != ChatMode.None))
+            TextBox.IsFocused = true;
+    }
 
     public override void OnKeyDown(KeyDownEvent e)
     {
@@ -430,6 +451,19 @@ public sealed class ChatInputControl : UIPanel
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
+
+        //self-heal a focus desync: the bar renders active (Mode set) but the box lost focus without
+        //going through Unfocus. The bar is hit-invisible while unfocused (by design — idle clicks
+        //fall through to the world), so no click can ever repair this state; the control must.
+        if ((Mode != ChatMode.None) && !TextBox.IsFocused)
+        {
+            //keyboard genuinely owned elsewhere (another textbox, or a panel holding explicit
+            //focus): stop pretending to be active. Otherwise nothing owns it — reclaim.
+            if ((UITextBox.CurrentlyFocused is not null) || (InputDispatcher.Instance?.ExplicitFocus is not null))
+                Unfocus();
+            else
+                TextBox.IsFocused = true;
+        }
 
         if (!IsFocused)
             return;
