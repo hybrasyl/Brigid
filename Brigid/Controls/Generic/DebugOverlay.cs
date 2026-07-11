@@ -45,6 +45,7 @@ public static class DebugOverlay
     private static UIElement? NudgeTarget;
     private static int NudgeOrigX, NudgeOrigY, NudgeOrigW, NudgeOrigH;
     private static string NudgeLastPrint = "";
+    private static TextElement? FocusReadout;
     private static TextElement? NudgeReadout;
 
     private static readonly float[] FrameTimeHistory = new float[FRAME_TIME_HISTORY];
@@ -530,6 +531,9 @@ public static class DebugOverlay
         //nudge readout draws whenever something is grabbed, independent of the perf sub-toggle
         DrawNudgeReadout(spriteBatch);
 
+        //dispatcher focus state — names the culprit when keyboard focus wedges
+        DrawFocusReadout(spriteBatch);
+
         spriteBatch.End();
 
         DebugDrawCount = ChaosGame.Device.Metrics.DrawCount - SnappedDrawCount;
@@ -559,6 +563,51 @@ public static class DebugOverlay
             Color.Black * 0.66f);
 
         NudgeReadout.Draw(spriteBatch, new Vector2(StatsX, ry));
+    }
+
+    //live keyboard-routing state: the dispatcher's explicit-focus target, the chat box's own focus
+    //flag, and the control-stack top. When focus wedges (caret blinking but keys going elsewhere),
+    //this line names which element is holding the routing.
+    private static void DrawFocusReadout(SpriteBatch spriteBatch)
+    {
+        if (InputDispatcher.Instance is not { } dispatcher)
+            return;
+
+        var explicitEl = dispatcher.ExplicitFocus;
+
+        var explicitName = explicitEl is null
+            ? "none"
+            : explicitEl.Name.Length > 0
+                ? explicitEl.Name
+                : explicitEl.GetType().Name;
+
+        var top = dispatcher.TopControl;
+
+        var topName = top is null
+            ? "none"
+            : top.Name.Length > 0
+                ? top.Name
+                : top.GetType().Name;
+
+        var chatFocused = dispatcher.ChatInputTextBox?.IsFocused == true;
+
+        var text = $"FOCUS explicit={explicitName}  chatbox={(chatFocused ? "focused" : "-")}"
+                 + $"  stacktop={topName}({dispatcher.ControlStackCount})";
+
+        FocusReadout ??= new TextElement();
+        FocusReadout.Update(text, Color.Cyan);
+
+        if (!FocusReadout.HasContent)
+            return;
+
+        var ry = (int)(ShowPerf ? StatsY + STATS_BG_HEIGHT + 4 : GraphY) + (NudgeTarget is not null ? FocusReadout.Height + 4 : 0);
+
+        UIElement.DrawRect(
+            spriteBatch,
+            new Rectangle((int)StatsX - 2, ry - 1, FocusReadout.Width + 4, FocusReadout.Height + 2),
+            Color.Black * 0.66f);
+
+        FocusReadout.Draw(spriteBatch, new Vector2(StatsX, ry));
     }
 
     /// <summary>
