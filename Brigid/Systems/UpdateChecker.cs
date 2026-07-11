@@ -1,7 +1,7 @@
 #region
 using System.Net.Http;
-using System.Reflection;
 using System.Text.Json;
+using Brigid.Utilities;
 using Chaos.Extensions.Common;
 #endregion
 
@@ -60,22 +60,11 @@ public static class UpdateChecker
     }
 
     /// <summary>
-    ///     Informational version without +commit metadata (e.g. "0.1.0" or "1.0.0-alpha1"). Also consumed by the
-    ///     start-screen version label so the displayed version and the compared version can never drift.
+    ///     The version compared against the remote tag. Delegates to <see cref="VersionInfo.Display" /> — the same
+    ///     string shown by the start-screen label and window title — so the displayed and compared versions can
+    ///     never drift.
     /// </summary>
-    public static string GetCurrentVersion()
-    {
-        var info = typeof(UpdateChecker).Assembly
-                                        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-                                        ?.InformationalVersion;
-
-        if (string.IsNullOrEmpty(info))
-            return typeof(UpdateChecker).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-
-        var metadata = info.IndexOf('+');
-
-        return metadata < 0 ? info : info[..metadata];
-    }
+    public static string GetCurrentVersion() => VersionInfo.Display;
 
     /// <summary>
     ///     Whether a remote release tag (e.g. "v0.2.0") is newer than a local version string (e.g. "0.1.0" or

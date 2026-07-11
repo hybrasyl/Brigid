@@ -92,7 +92,7 @@ public sealed class LobbyLoginControl : PrefabPanel
 
         //version label — type 7, 0 images
         VersionLabel = CreateLabel("Version", HorizontalAlignment.Right);
-        VersionLabel?.Text = $"Brigid v{UpdateChecker.GetCurrentVersion()}";
+        VersionLabel?.Text = $"Brigid v{VersionInfo.Display}";
         VersionLabel?.ForegroundColor = Color.Blue;
 
         //update notice — stacked above the version label, populated when the startup

@@ -38,6 +38,9 @@ public sealed partial class WorldScreen
         if (ExitInProgressSecondsRemaining > 0f)
             ExitInProgressSecondsRemaining -= elapsedMs / 1000f;
 
+        //ease the transfer loading bar while it's up across the reconnect gap (cosmetic; see MapLoadingBar)
+        MapLoading.Tick(elapsedMs);
+
         //global tile animation tick — 100ms resolution (matches tile animation table format)
         AnimationTick = (int)(gameTime.TotalGameTime.TotalMilliseconds / 100);
         MapRenderer.UpdatePaletteCycling(AnimationTick);

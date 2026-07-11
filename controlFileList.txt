@@ -384,6 +384,9 @@ _nload.txt
   Class:    LoadingBar : PrefabPanel
   File:     Controls/World/ViewPort/LoadingBar.cs
   Purpose:  Generic loading screen with progress bar
+  Controls: Noname (anchor bg), Head (start-cap slot), Body (fill slot),
+            Tail (end-cap slot) — the Head/Body/Tail rects position the bar
+            pieces in the art's recessed groove (panel 310x87; bar row y=44).
   Images referenced by controls:
     _nload.epf/.spf      — Anchor background
   Also manually loads:
@@ -395,8 +398,15 @@ _nloadm.txt
   Class:    MapLoadingBar : PrefabPanel
   File:     Controls/World/ViewPort/MapLoadingBar.cs
   Purpose:  Map-specific loading screen
+  Controls: Noname (anchor bg), Head (start-cap slot), Body (fill slot),
+            Tail (end-cap slot) — the Head/Body/Tail rects position the bar
+            pieces in the art's recessed groove (panel 310x87; bar row y=44).
   Images referenced by controls:
     _nloadm.epf/.spf     — Anchor background
+  Also manually loads:
+    _nloadb0.spf         — Loading bar start cap
+    _nloadb1.spf         — Loading bar fill segment
+    _nloadb2.spf         — Loading bar end cap
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

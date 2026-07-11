@@ -152,6 +152,30 @@ internal static partial class Sdl
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial nint SDL_RWFromConstMem(nint mem, int size);
 
+    //window-icon path: wrap a raw pixel buffer as an SDL_Surface and hand it to SDL_SetWindowIcon. We set the icon
+    //ourselves (from a SkiaSharp-decoded PNG) because MonoGame's built-in Icon.bmp loader can't parse our BMP and
+    //falls back to its default. SDL_SetWindowIcon copies the surface, so we free it (and unpin the pixels) right after.
+    [LibraryImport("SDL2")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial nint SDL_CreateRGBSurfaceFrom(
+        nint pixels,
+        int width,
+        int height,
+        int depth,
+        int pitch,
+        uint rMask,
+        uint gMask,
+        uint bMask,
+        uint aMask);
+
+    [LibraryImport("SDL2")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial void SDL_SetWindowIcon(nint window, nint icon);
+
+    [LibraryImport("SDL2")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial void SDL_FreeSurface(nint surface);
+
     /// <summary>Copies the current SDL error string for diagnostics — returns empty if SDL has no pending error.</summary>
     public static string GetError()
     {
