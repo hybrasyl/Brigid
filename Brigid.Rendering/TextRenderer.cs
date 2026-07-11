@@ -35,6 +35,15 @@ public static class TextRenderer
         => DrawCore(spriteBatch, position, text, color, colorCodesEnabled, opacity, null, characterSpacing);
 
     /// <summary>
+    ///     Draws a single line in an explicit font style (e.g. <see cref="FontStyle.Bold" />) on the band-centered
+    ///     legacy baseline, so a styled run aligns vertically with regular runs. No inline color-code parsing — for
+    ///     short single-colour emphasis runs (counts, labels). Pair with the styled <see cref="MeasureWidth(string,
+    ///     FontStyle)" /> for alignment.
+    /// </summary>
+    public static void DrawText(SpriteBatch spriteBatch, Vector2 position, string text, Color color, FontStyle style)
+        => FontEngine.Instance.DrawLine(spriteBatch, text, position, color, clip: null, style: style);
+
+    /// <summary>
     ///     Draws a single line of text with a dual diagonal drop shadow. The shadow is drawn at (-1,+1) and (+1,+1)
     ///     relative to the main text, matching the original Dark Ages client name-tag rendering.
     /// </summary>
@@ -248,6 +257,14 @@ public static class TextRenderer
 
         return width;
     }
+
+    /// <summary>
+    ///     Pixel width of a single-run string in an explicit font style, matching the styled <see cref="DrawText(
+    ///     SpriteBatch, Vector2, string, Color, FontStyle)" /> advance. No color-code handling — bold/italic glyphs are
+    ///     wider than regular, so alignment must measure in the style it draws.
+    /// </summary>
+    public static int MeasureWidth(string text, FontStyle style)
+        => string.IsNullOrEmpty(text) ? 0 : FontEngine.Instance.MeasureWidth(text, FontEngine.RENDER_SIZE, style);
 
     /// <summary>
     ///     Clips <paramref name="text" /> to at most <paramref name="maxChars" /> characters, appending a single-glyph

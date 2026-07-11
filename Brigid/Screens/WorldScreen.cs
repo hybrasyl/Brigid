@@ -428,7 +428,7 @@ public sealed partial class WorldScreen : IScreen
 
         GroupBoxViewer.OnRequestJoin += name => Game.Connection.SendGroupInvite(ClientGroupSwitch.RequestToJoin, name);
 
-        WorldList = new WorldListControl
+        WorldList = new WorldListControl(Game.Connection.ServerName)
         {
             ZIndex = -2
         };

@@ -405,7 +405,7 @@ public sealed partial class WorldScreen
         }
 
         if ((except != Keys.E) && WorldList.Visible)
-            WorldList.SlideClose();
+            WorldList.Close();
 
         if ((except != Keys.R) && SocialStatusPicker.Visible)
         {
