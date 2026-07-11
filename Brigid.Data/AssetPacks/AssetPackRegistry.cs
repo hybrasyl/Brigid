@@ -46,7 +46,8 @@ public static class AssetPackRegistry
         ["creature_sprites"]    = static (a, m) => new CreaturePack(a, m),
         ["music"]               = static (a, m) => new MusicPack(a, m),
         ["sound_effects"]       = static (a, m) => new SfxPack(a, m),
-        ["world_maps"]          = static (a, m) => new WorldMapPack(a, m)
+        ["world_maps"]          = static (a, m) => new WorldMapPack(a, m),
+        ["town_maps"]           = static (a, m) => new TownMapPack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -242,6 +243,12 @@ public static class AssetPackRegistry
     ///     present.
     /// </summary>
     public static WorldMapPack? GetWorldMapPack() => Packs.GetValueOrDefault("world_maps") as WorldMapPack;
+
+    /// <summary>
+    ///     Returns the currently-registered town-map pack, or null if no pack of <c>content_type: town_maps</c> is
+    ///     present.
+    /// </summary>
+    public static TownMapPack? GetTownMapPack() => Packs.GetValueOrDefault("town_maps") as TownMapPack;
 
     private static void TryRegisterPack(string path)
     {
