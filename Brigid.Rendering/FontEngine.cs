@@ -43,7 +43,7 @@ public sealed class FontEngine : ITextMeasurer
     //the regular file. IsMono marks the face FontStyle.Mono resolves to, independent of the active face.
     private static readonly FaceDef[] FaceDefs =
     [
-        new("Noto Sans Mono", "NotoSansMono-Regular.ttf", IsMono: true),
+        new("Noto Sans Mono", "NotoSansMono-Regular.ttf", Bold: "NotoSansMono-Bold.ttf", IsMono: true),
         new(
             "Anonymous Mono",
             "AnonymousPro-Regular.ttf",
@@ -53,11 +53,14 @@ public sealed class FontEngine : ITextMeasurer
         new("Iosevka Mono", "IosevkaCharonMono-Regular.ttf")
     ];
 
-    //optional fallback faces for codepoints the primaries lack (CJK etc.), added to every face. Loaded if present.
+    //optional fallback faces for codepoints the primaries lack (CJK, emoji), added to every face. Loaded if
+    //present. NotoEmoji is the MONOCHROME variable font (glyf outlines, default instance) — FontStashSharp's
+    //rasterizer cannot read color tables (CBDT/COLR), so emoji render as line art tinted with the text color.
     private static readonly string[] FallbackFonts =
     [
         "NotoSansCJK-Regular.ttf",
-        "NotoSansKR-Regular.ttf"
+        "NotoSansKR-Regular.ttf",
+        "NotoEmoji-Regular.ttf"
     ];
 
     private readonly Face[] Faces;
