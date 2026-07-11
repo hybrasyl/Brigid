@@ -370,6 +370,7 @@ public sealed class LobbyLoginScreen : IScreen
         var server = ServerList.FirstOrDefault(s => s.Id == serverId);
 
         if (server is not null)
+            //assigning ServerName raises ServerNameChanged → the window title refreshes itself (see ChaosGame ctor)
             Game.Connection.ServerName = server.SplitNameDescription().Name;
 
         Game.Connection.SelectServer(serverId);
@@ -423,7 +424,7 @@ public sealed class LobbyLoginScreen : IScreen
             ServerSelectControl.Visible = true;
         } else if (servers.Count > 0)
         {
-            //auto-select the first (or only) server
+            //auto-select the first (or only) server — the ServerName assignment refreshes the window title via its event
             Game.Connection.ServerName = servers[0].SplitNameDescription().Name;
             Game.Connection.SelectServer(servers[0].Id);
         }

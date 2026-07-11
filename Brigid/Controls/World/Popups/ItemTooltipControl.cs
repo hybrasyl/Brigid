@@ -104,12 +104,7 @@ public sealed class ItemTooltipControl : UIPanel
     ///     <see cref="UIElement.Height"/> are set.
     /// </summary>
     public void UpdatePosition(int mouseX, int mouseY)
-    {
-        var rightX = mouseX + 15;
-
-        X = (rightX + Width) <= ChaosGame.VIRTUAL_WIDTH ? rightX : mouseX - Width;
-        Y = Math.Clamp(mouseY + 15, 0, ChaosGame.VIRTUAL_HEIGHT - Height);
-    }
+        => (X, Y) = TooltipPlacement.CursorAnchored(mouseX, mouseY, Width, Height);
 
     public void Show(
         string itemName,

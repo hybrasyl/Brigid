@@ -27,11 +27,20 @@ public sealed class NpcSessionControl : PrefabPanel
     //container controls from lnpcd prefab
     private readonly UIButton? CloseButton;
     private readonly UILabel DialogTextLabel;
-    private readonly MenuShopPanel MenuShop;
+    private readonly BankShopPanel MenuShop;
     private readonly UIButton? NextButton;
 
     private readonly UILabel? NpcNameLabel;
     private readonly UIImage? NpcTileImage;
+    private readonly UIImage? MessageBarImage;
+    private readonly DialogAlphaGradient AlphaGradient;
+
+    /// <summary>
+    ///     When true, the legacy session chrome (bottom dialog bar, NPC portrait, name, dialog text, nav buttons) is
+    ///     hidden so a from-scratch content panel — currently the <see cref="BankShopPanel" /> for ShowItems — owns the
+    ///     whole screen region. <see cref="WorldScreen" /> also skips portrait rendering while this is set.
+    /// </summary>
+    public bool ChromeSuppressed { get; private set; }
     private readonly Rectangle PortraitRect;
     private readonly UIButton? PreviousButton;
 
@@ -61,6 +70,33 @@ public sealed class NpcSessionControl : PrefabPanel
     public MenuType? CurrentMenuType { get; private set; }
     public ushort DialogId { get; private set; }
     public bool IsDialogOpcode { get; private set; }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+    //  RETAIL-COMPAT DIALOG PACING LATCH  —  DIVERGENCE POINT
+    //
+    //  The retail world server validates that each 0x3A dialog response's pursuitIndex is within ±1 of the
+    //  server's own tracked position, and DROPS THE CONNECTION on a violation (see 0x3A-dialog-use.md). Our
+    //  DialogId only advances when the server's *next* dialog packet arrives, so a second click before that
+    //  packet resends a stale index (DialogId + 1 twice) → the index desyncs past ±1 → retail disconnects and
+    //  the user is kicked to login. Retail's own client sidesteps this by making the dialog inert until the
+    //  next frame arrives — you physically cannot click ahead.
+    //
+    //  So we hard-gate to ONE outstanding dialog action: after any advancing response is sent, further
+    //  advancing input is dropped and the nav buttons are disabled until the next dialog/menu packet
+    //  (ShowDialog/ShowMenu) or the session closes (HideAll). A safety timeout releases the latch if the
+    //  expected packet never arrives (dropped packet) so the user is never permanently stranded.
+    //
+    //  ⚠ DIVERGE WHEN ON HYBRASYL: this lock exists ONLY to satisfy retail's strict ±1 validation. Once the
+    //  client can detect it is talking to a Hybrasyl server (capability handshake), Hybrasyl can accept
+    //  optimistic / queued dialog input and this whole latch should be relaxed or removed for that server —
+    //  it needlessly throttles a modern server that does not punish fast input. Gate the divergence on that
+    //  handshake, do not delete this for retail.
+    // ─────────────────────────────────────────────────────────────────────────────────────────────────────
+    private const float ResponsePendingTimeoutMs = 5000f;
+    private bool ResponsePending;
+    private float ResponsePendingElapsedMs;
+    private bool LastHasNext;
+    private bool LastHasPrevious;
 
     //menu args echoed back for menuwithargs
     public string? MenuArgs { get; private set; }
@@ -104,10 +140,11 @@ public sealed class NpcSessionControl : PrefabPanel
         Y = 0;
 
         //darkness gradient (behind everything else in the dialog)
-        AddChild(new DialogAlphaGradient());
+        AlphaGradient = new DialogAlphaGradient();
+        AddChild(AlphaGradient);
 
         //background images (drawn after gradient so they render on top of it)
-        CreateImage("MessageDialog"); //nd_talk.spf — bottom dialog bar
+        MessageBarImage = CreateImage("MessageDialog"); //nd_talk.spf — bottom dialog bar
         NpcTileImage = CreateImage("NPCTile"); //nd_npcbg.spf — portrait background
 
         //container buttons (added after images so they draw on top)
@@ -187,14 +224,25 @@ public sealed class NpcSessionControl : PrefabPanel
             };
 
         if (NextButton is not null)
-            NextButton.Clicked += () => OnNext?.Invoke();
+            NextButton.Clicked += () =>
+            {
+                if (BeginResponse())
+                    OnNext?.Invoke();
+            };
 
         if (PreviousButton is not null)
-            PreviousButton.Clicked += () => OnPrevious?.Invoke();
+            PreviousButton.Clicked += () =>
+            {
+                if (BeginResponse())
+                    OnPrevious?.Invoke();
+            };
 
         if (TopButton is not null)
             TopButton.Clicked += () =>
             {
+                if (!BeginResponse())
+                    return;
+
                 HideAll();
                 OnTop?.Invoke();
             };
@@ -203,7 +251,7 @@ public sealed class NpcSessionControl : PrefabPanel
         DialogOption = new DialogOptionPanel();
         DialogTextEntry = new DialogTextEntryPanel();
         MenuTextEntry = new MenuTextEntryPanel();
-        MenuShop = new MenuShopPanel();
+        MenuShop = new BankShopPanel();
         MenuList = new MenuListPanel();
         DialogProtectedTextEntry = new DialogProtectedTextEntryPanel();
 
@@ -214,8 +262,12 @@ public sealed class NpcSessionControl : PrefabPanel
         AddChild(MenuList);
         AddChild(DialogProtectedTextEntry);
 
-        //wire sub-panel events — forward to container events
-        DialogOption.OnOptionSelected += index => OnOptionSelected?.Invoke(index);
+        //wire sub-panel events — forward to container events. advancing responses pass through the pacing latch.
+        DialogOption.OnOptionSelected += index =>
+        {
+            if (BeginResponse())
+                OnOptionSelected?.Invoke(index);
+        };
 
         DialogOption.OnClose += () =>
         {
@@ -223,7 +275,11 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        DialogTextEntry.OnTextSubmit += text => OnTextSubmit?.Invoke(text);
+        DialogTextEntry.OnTextSubmit += text =>
+        {
+            if (BeginResponse())
+                OnTextSubmit?.Invoke(text);
+        };
 
         DialogTextEntry.OnClose += () =>
         {
@@ -231,7 +287,11 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        MenuTextEntry.OnTextSubmit += text => OnTextSubmit?.Invoke(text);
+        MenuTextEntry.OnTextSubmit += text =>
+        {
+            if (BeginResponse())
+                OnTextSubmit?.Invoke(text);
+        };
 
         MenuTextEntry.OnClose += () =>
         {
@@ -239,9 +299,11 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        MenuShop.OnItemSelected += index => OnMerchantItemSelected?.Invoke(index);
-        MenuShop.OnItemHoverEnter += name => OnItemHoverEnter?.Invoke(name);
-        MenuShop.OnItemHoverExit += () => OnItemHoverExit?.Invoke();
+        MenuShop.OnItemSelected += index =>
+        {
+            if (BeginResponse())
+                OnMerchantItemSelected?.Invoke(index);
+        };
 
         MenuShop.OnClose += () =>
         {
@@ -249,7 +311,11 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        MenuList.OnItemSelected += index => OnListItemSelected?.Invoke(index);
+        MenuList.OnItemSelected += index =>
+        {
+            if (BeginResponse())
+                OnListItemSelected?.Invoke(index);
+        };
 
         MenuList.OnClose += () =>
         {
@@ -257,7 +323,11 @@ public sealed class NpcSessionControl : PrefabPanel
             OnClose?.Invoke();
         };
 
-        DialogProtectedTextEntry.OnProtectedSubmit += (id, pw) => OnProtectedSubmit?.Invoke(id, pw);
+        DialogProtectedTextEntry.OnProtectedSubmit += (id, pw) =>
+        {
+            if (BeginResponse())
+                OnProtectedSubmit?.Invoke(id, pw);
+        };
 
         DialogProtectedTextEntry.OnClose += () =>
         {
@@ -321,7 +391,7 @@ public sealed class NpcSessionControl : PrefabPanel
 
     private void DrawPortrait(SpriteBatch spriteBatch)
     {
-        if (PortraitTexture is null)
+        if (ChromeSuppressed || (PortraitTexture is null))
             return;
 
         if (OwnsPortraitTexture)
@@ -373,11 +443,6 @@ public sealed class NpcSessionControl : PrefabPanel
     public string? GetMerchantEntryName(int index) => MenuShop.GetEntryName(index);
 
     /// <summary>
-    ///     Returns the slot byte for the merchant entry at the given index.
-    /// </summary>
-    public byte? GetMerchantEntrySlot(int index) => MenuShop.GetEntrySlot(index);
-
-    /// <summary>
     ///     Returns the pursuit ID for the option at the given index in the OptionMenu sub-panel.
     /// </summary>
     public ushort GetOptionPursuitId(int index) => DialogOption.GetOptionPursuitId(index);
@@ -387,8 +452,13 @@ public sealed class NpcSessionControl : PrefabPanel
     /// </summary>
     public void HideAll()
     {
+        ResetDialogLock();
         DisposePortrait();
         HideAllSubPanels();
+
+        //restore chrome so the next dialog/menu opens in the default (non-suppressed) state
+        ApplyChromeSuppression(false);
+
         Hide();
     }
 
@@ -403,6 +473,27 @@ public sealed class NpcSessionControl : PrefabPanel
         DialogTextLabel.Text = string.Empty;
         DialogScroll.Configure(DialogSource);
         UpdateScrollButtons();
+    }
+
+    //single owner of the suppress-flag ⇄ chrome-visibility relationship so the two can never drift apart
+    private void ApplyChromeSuppression(bool suppressed)
+    {
+        ChromeSuppressed = suppressed;
+        SetSessionChrome(!suppressed);
+    }
+
+    /// <summary>
+    ///     Toggles the legacy session chrome (bottom dialog bar, NPC name, dialog text). The portrait is gated separately
+    ///     in <see cref="DrawPortrait" /> via <see cref="ChromeSuppressed" />; nav buttons are handled by the callers.
+    /// </summary>
+    private void SetSessionChrome(bool visible)
+    {
+        //the alpha gradient is shaped for the bottom-anchored dialog; over the centered bank it reads as a stray
+        //diagonal shadow, so it's part of the chrome we suppress
+        AlphaGradient.Visible = visible;
+        MessageBarImage?.Visible = visible;
+        NpcNameLabel?.Visible = visible;
+        DialogTextLabel.Visible = visible;
     }
 
     private void HideNavigationButtons()
@@ -442,8 +533,6 @@ public sealed class NpcSessionControl : PrefabPanel
 
     //events — worldscreen.wiring subscribes to these
     public event CloseHandler? OnClose;
-    public event ItemHoverEnterHandler? OnItemHoverEnter;
-    public event ItemHoverExitHandler? OnItemHoverExit;
     public event ItemSelectedHandler? OnListItemSelected;
     public event ItemSelectedHandler? OnMerchantItemSelected;
     public event NextHandler? OnNext;
@@ -469,6 +558,10 @@ public sealed class NpcSessionControl : PrefabPanel
 
     private void SetNavigationButtons(bool hasNext, bool hasPrevious)
     {
+        //remembered so the pacing-latch timeout can restore the correct enabled state (see the latch block)
+        LastHasNext = hasNext;
+        LastHasPrevious = hasPrevious;
+
         if (NextButton is not null)
         {
             NextButton.Visible = true;
@@ -492,6 +585,53 @@ public sealed class NpcSessionControl : PrefabPanel
             TopButton.Visible = false;
             TopButton.Enabled = false;
         }
+    }
+
+    /// <summary>
+    ///     Gates an advancing dialog response (next/prev/top/option/text/list/merchant). Returns false — dropping
+    ///     the input — while a prior response is still awaiting the server's reply. See the pacing-latch block.
+    /// </summary>
+    private bool BeginResponse()
+    {
+        if (ResponsePending)
+            return false;
+
+        ResponsePending = true;
+        ResponsePendingElapsedMs = 0f;
+
+        //visually reflect the lock — the buttons come back when the next dialog packet renders (or on timeout)
+        if (NextButton is not null)
+            NextButton.Enabled = false;
+
+        if (PreviousButton is not null)
+            PreviousButton.Enabled = false;
+
+        if (TopButton is not null)
+            TopButton.Enabled = false;
+
+        return true;
+    }
+
+    //cleared whenever a new dialog/menu packet arrives or the session closes — the outstanding response resolved
+    private void ResetDialogLock() => ResponsePending = false;
+
+    private void TickResponsePending(float elapsedMs)
+    {
+        if (!ResponsePending)
+            return;
+
+        ResponsePendingElapsedMs += elapsedMs;
+
+        if (ResponsePendingElapsedMs < ResponsePendingTimeoutMs)
+            return;
+
+        //server never answered (dropped packet) — release the latch so the user can retry instead of being stuck
+        ResponsePending = false;
+
+        //don't resurrect the legacy nav buttons over a from-scratch panel that suppresses the chrome (e.g. the bank) —
+        //re-showing them would float stale Next/Prev/Close over it, and a stale enabled Next could fire a bogus response
+        if (!ChromeSuppressed)
+            SetNavigationButtons(LastHasNext, LastHasPrevious);
     }
 
     /// <summary>
@@ -524,6 +664,9 @@ public sealed class NpcSessionControl : PrefabPanel
     /// </summary>
     public void ShowDialog(NpcDialogPacket pkt)
     {
+        //the awaited server reply has arrived — release the pacing latch (HideAll also clears it on close)
+        ResetDialogLock();
+
         if (pkt.DialogType is NpcDialogType.Close)
         {
             HideAll();
@@ -533,6 +676,9 @@ public sealed class NpcSessionControl : PrefabPanel
 
         //Chaos DialogType and DALib NpcDialogType share wire byte values; convert and reuse the existing switch.
         var dialogType = (DialogType)(byte)pkt.DialogType;
+
+        //dialogs always use the default chrome (no from-scratch content panel suppresses it)
+        ApplyChromeSuppression(false);
 
         IsDialogOpcode = true;
         CurrentDialogType = dialogType;
@@ -621,11 +767,18 @@ public sealed class NpcSessionControl : PrefabPanel
     /// </summary>
     public void ShowMenu(NpcMenuPacket pkt)
     {
+        //the awaited server reply has arrived — release the pacing latch
+        ResetDialogLock();
+
         var menuType = (MenuType)(byte)pkt.MenuType;
 
         IsDialogOpcode = false;
         CurrentDialogType = null;
         CurrentMenuType = menuType;
+
+        //the from-scratch BankShopPanel owns the whole screen for ShowItems — hide the legacy bar/portrait/name chrome
+        ApplyChromeSuppression(menuType == MenuType.ShowItems);
+
         SourceEntityType = pkt.EntityType switch
         {
             2 => EntityType.Item,
@@ -702,22 +855,26 @@ public sealed class NpcSessionControl : PrefabPanel
                 return;
         }
 
-        if (CloseButton is not null)
+        //the BankShopPanel supplies its own OK/close; leave the legacy nav buttons hidden when chrome is suppressed
+        if (!ChromeSuppressed)
         {
-            CloseButton.Visible = true;
-            CloseButton.Enabled = true;
-        }
+            if (CloseButton is not null)
+            {
+                CloseButton.Visible = true;
+                CloseButton.Enabled = true;
+            }
 
-        if (TopButton is not null)
-        {
-            TopButton.Visible = true;
-            TopButton.Enabled = true;
-        }
+            if (TopButton is not null)
+            {
+                TopButton.Visible = true;
+                TopButton.Enabled = true;
+            }
 
-        if (NpcNameLabel is not null)
-        {
-            NpcNameLabel.Text = pkt.Name;
-            NpcNameLabel.ForegroundColor = LegendColors.Lime;
+            if (NpcNameLabel is not null)
+            {
+                NpcNameLabel.Text = pkt.Name;
+                NpcNameLabel.ForegroundColor = LegendColors.Lime;
+            }
         }
 
         Show();
@@ -741,6 +898,10 @@ public sealed class NpcSessionControl : PrefabPanel
 
     public override void Update(GameTime gameTime)
     {
+        //release the pacing latch if the server never answered. runs before the visibility guard below; the
+        //latch is only ever pending while the dialog is visible and waiting, so the timeout always gets to fire.
+        TickResponsePending((float)gameTime.ElapsedGameTime.TotalMilliseconds);
+
         if (!Visible || !Enabled)
             return;
 
@@ -782,13 +943,26 @@ public sealed class NpcSessionControl : PrefabPanel
         //space/enter — advance normal dialogs via next button, or select first option in menus
         if (e.Key is Keys.Space or Keys.Enter)
         {
+            //while awaiting the server's reply, swallow advance keys — don't fall through to the close branch
+            //below (Next is temporarily disabled by the pacing latch, which would otherwise read as "no next").
+            if (ResponsePending)
+            {
+                e.Handled = true;
+
+                return;
+            }
+
             if (DialogOption is { Visible: true, OptionCount: > 0 })
             {
-                OnOptionSelected?.Invoke(0);
+                if (BeginResponse())
+                    OnOptionSelected?.Invoke(0);
+
                 e.Handled = true;
             } else if (NextButton is { Visible: true, Enabled: true })
             {
-                OnNext?.Invoke();
+                if (BeginResponse())
+                    OnNext?.Invoke();
+
                 e.Handled = true;
             } else if (!DialogOption.Visible || (DialogOption.OptionCount == 0))
             {

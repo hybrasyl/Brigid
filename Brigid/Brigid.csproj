@@ -10,13 +10,19 @@
         <IsPackable>false</IsPackable>
         <!-- Entry assembly / apphost: Brigid / Brigid.exe / Brigid.dll. -->
         <AssemblyName>Brigid</AssemblyName>
-        <ApplicationIcon>ChaosClientIcon.ico</ApplicationIcon>
+        <ApplicationIcon>BrigidIcon.ico</ApplicationIcon>
     </PropertyGroup>
 
+    <!-- Window icon: decoded by SkiaSharp and applied via SDL_SetWindowIcon in ChaosGame (MonoGame's built-in
+         Icon.bmp loader can't parse it, so we set it ourselves). The .ico above is the Windows exe/apphost icon. -->
     <ItemGroup>
-        <EmbeddedResource Include="Icon.bmp">
-            <LogicalName>Icon.bmp</LogicalName>
+        <EmbeddedResource Include="BrigidIcon.png">
+            <LogicalName>BrigidIcon.png</LogicalName>
         </EmbeddedResource>
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Brigid.Tests" />
     </ItemGroup>
 
     <!-- Native SDL2_mixer binaries per runtime; copied to bin/.../runtimes/{rid}/native/ so the

@@ -30,8 +30,12 @@ public sealed partial class WorldScreen
 
     private void HandleDisplayAisling(DisplayUserPacket args)
     {
-        //update player name in hud when the player's own aisling is displayed
-        if (args.Id == Game.Connection.AislingId)
+        //update player name in hud when the player's own aisling is displayed.
+        //a hidden aisling (Hide/invisibility) is broadcast with a blank name so no floating name tag renders
+        //over the invisible sprite — but that blank must NOT reach the persistent HUD "ID" box (which shows who
+        //you are, not your on-map visibility). Guard on a non-empty name so hide/unhide never clears it; the
+        //on-map tag still hides correctly via entity.Name in AddOrUpdateAisling.
+        if (args.Id == Game.Connection.AislingId && !string.IsNullOrEmpty(args.Name))
         {
             WorldState.PlayerName = args.Name;
             UpdateHuds(HudOps.SetPlayerName, args.Name);
@@ -405,6 +409,14 @@ public sealed partial class WorldScreen
 
     private void RenderNpcSessionPortrait()
     {
+        //the BankShopPanel (ShowItems) suppresses the portrait entirely — don't load/own an illustration for it
+        if (NpcSession.ChromeSuppressed)
+        {
+            NpcSession.SetPortrait(null, false);
+
+            return;
+        }
+
         //phase 1: try full-art illustration spf. The original DA client attempts this unconditionally for every
         //dialog/menu packet — the only gate is whether the NPC name matches an entry in the merged illustration
         //metadata (npci.tbl inside npcbase.dat + server-pushed NPCIllust metafile). IllustrationIndex picks which
@@ -548,7 +560,19 @@ public sealed partial class WorldScreen
         BoardResponsePopup.Show(message);
     }
 
-    private void HandleRedirectReceived(RedirectInfo _) => RedirectInProgress = true;
+    private void HandleRedirectReceived(RedirectInfo info)
+    {
+        RedirectInProgress = true;
+
+        //server-initiated world transfer (dachaidh, express ship, Temuair↔Medenia): cover the reconnect gap
+        //with the map loading screen and stop drawing the now-stale map, matching retail's black screen +
+        //progress bar. a logout redirect (TargetState=Login) is bound for the login screen, so skip it there.
+        if (info.TargetState == ConnectionState.World)
+        {
+            MapPreloaded = false;
+            MapLoading.Show();
+        }
+    }
 
     private void HandleBoardListReceived()
     {
@@ -1288,6 +1312,15 @@ public sealed partial class WorldScreen
             RedirectInProgress = false;
             ExitInProgressSecondsRemaining = 0f;
             PendingLoginSwitch = true;
+
+            return;
+        }
+
+        //server transfer (e.g. Temuair↔Medenia) reconnected straight back into World: clear the redirect
+        //latch so a genuine drop afterward still surfaces the "connection lost" popup.
+        if (newState == ConnectionState.World)
+        {
+            RedirectInProgress = false;
 
             return;
         }

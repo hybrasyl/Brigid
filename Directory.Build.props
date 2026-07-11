@@ -25,7 +25,7 @@
         <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
         <Authors>Sichi</Authors>
         <PackageTags>darkages; doomvas; private server;</PackageTags>
-        <Version>0.1.0</Version>
+        <!-- Version is owned by Nerdbank.GitVersioning (version.json at the repo root); do not set <Version> here. -->
 
         <!-- DALib is consumed from the pinned NuGet package by default. Opt into the sibling checkout
              with -p:UseLocalDALib=true when co-developing DALib alongside Brigid. -->

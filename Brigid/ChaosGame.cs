@@ -9,6 +9,7 @@ using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
 using Brigid.Systems;
+using Brigid.Utilities;
 using Chaos.DarkAges.Definitions;
 using DALib.Cryptography;
 using DALib.Extensions;
@@ -30,6 +31,76 @@ public sealed class ChaosGame : Game
 
     //the window opens at this integer multiple of the virtual resolution (2 → 1280×960); the F-key cycle continues from here
     private const int DEFAULT_WINDOW_MULTIPLIER = 2;
+
+    /// <summary>
+    ///     Sets the window title to <c>Brigid {version}</c>, with <c> - {server}</c> appended once a server is
+    ///     selected. The server suffix reuses <see cref="ConnectionManager.ServerName" /> — the friendly name the
+    ///     lobby resolves (the same value the HUD's SZ_SERVER label shows), so retail reads "Dark Ages" and
+    ///     Hybrasyl reads "Hybrasyl" without a duplicate host→name mapping here. Driven by <see cref="ConnectionManager.ServerNameChanged" />.
+    /// </summary>
+    private void UpdateWindowTitle()
+    {
+        var server = Connection.ServerName;
+        var version = VersionInfo.Display;
+        Window.Title = string.IsNullOrWhiteSpace(server) ? $"Brigid {version}" : $"Brigid {version} - {server}";
+    }
+
+    /// <summary>
+    ///     Sets the SDL window (title-bar + taskbar) icon to the embedded Brigid logo. MonoGame's built-in Icon.bmp
+    ///     loader can't parse our BMP and falls back to its default icon, so we decode a PNG with SkiaSharp and set the
+    ///     icon directly via SDL. Best-effort: any missing resource/handle just leaves MonoGame's default in place.
+    /// </summary>
+    private void SetWindowIcon()
+    {
+        var window = Window.Handle;
+
+        if (window == nint.Zero)
+            return;
+
+        using var stream = typeof(ChaosGame).Assembly.GetManifestResourceStream("BrigidIcon.png");
+
+        if (stream is null)
+            return;
+
+        using var decoded = SKBitmap.Decode(stream);
+
+        if (decoded is null)
+            return;
+
+        //straight (unpremultiplied) RGBA8888: byte order R,G,B,A matches SDL's ABGR8888 masks on little-endian
+        var info = new SKImageInfo(decoded.Width, decoded.Height, SKColorType.Rgba8888, SKAlphaType.Unpremul);
+        var pixels = new byte[info.BytesSize];
+        var pin = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+
+        try
+        {
+            using var image = SKImage.FromBitmap(decoded);
+
+            if (!image.ReadPixels(info, pin.AddrOfPinnedObject(), info.RowBytes, 0, 0))
+                return;
+
+            var surface = Sdl.SDL_CreateRGBSurfaceFrom(
+                pin.AddrOfPinnedObject(),
+                info.Width,
+                info.Height,
+                32,
+                info.RowBytes,
+                0x000000FFu,
+                0x0000FF00u,
+                0x00FF0000u,
+                0xFF000000u);
+
+            if (surface == nint.Zero)
+                return;
+
+            //SDL_SetWindowIcon copies the surface, so it's safe to free the surface and unpin the buffer right after
+            Sdl.SDL_SetWindowIcon(window, surface);
+            Sdl.SDL_FreeSurface(surface);
+        } finally
+        {
+            pin.Free();
+        }
+    }
 
     private readonly GraphicsDeviceManager Graphics;
     private string MetaFilePath => Path.Combine(GlobalSettings.DataPath, "metafile");
@@ -125,6 +196,8 @@ public sealed class ChaosGame : Game
         InactiveSleepTime = TimeSpan.Zero;
 
         Connection = new ConnectionManager();
+        //the friendly server name drives the window-title suffix; refresh from the write itself so no caller has to remember
+        Connection.ServerNameChanged += UpdateWindowTitle;
         Connection.OnMetaData += HandleMetaData;
         Connection.OnWorldEntryComplete += () => Connection.SendMetaDataRequest(MetaDataRequestType.AllCheckSums);
         Connection.StateChanged += OnConnectionStateChanged;
@@ -162,7 +235,7 @@ public sealed class ChaosGame : Game
         };
         Connection.OnCreatureTurn += (id, dir) => WorldState.HandleCreatureTurn(id, dir);
 
-        Window.Title = "Darkages";
+        UpdateWindowTitle();
         Window.AllowUserResizing = true;
         IsMouseVisible = true;
     }
@@ -400,6 +473,10 @@ public sealed class ChaosGame : Game
     protected override void Initialize()
     {
         base.Initialize();
+
+        //set the window icon here (not in the ctor) — the SDL window doesn't exist until Run() creates it, so
+        //Window.Handle is only valid once base.Initialize() has run
+        SetWindowIcon();
 
         Window.ClientSizeChanged += OnClientSizeChanged;
     }
