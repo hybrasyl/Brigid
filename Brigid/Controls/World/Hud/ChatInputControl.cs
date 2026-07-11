@@ -27,6 +27,11 @@ public sealed class ChatInputControl : UIPanel
     private const int MAX_WHISPER_HISTORY = 5;
     private const int MAX_SENT_HISTORY = 50;
 
+    //deliberate conservative cap that keeps headroom under the 255-byte string8 wire cap for the server's "Name: "
+    //echo prefix (~4x the old visible-width limit). Long messages scroll horizontally rather than hard-block at the
+    //visible box width (~77 chars) — single-line UITextBox scrolls to follow the caret.
+    private const int MAX_MESSAGE_LENGTH = 225;
+
     private readonly int FullWidth;
     private readonly UILabel PrefixLabel;
     private readonly UITextBox TextBox;
@@ -80,10 +85,7 @@ public sealed class ChatInputControl : UIPanel
             Y = 0,
             Width = rect.Width,
             Height = rect.Height,
-            //225 is a deliberate conservative cap that keeps headroom under the 255-byte string8 wire cap for the
-            //server's "Name: " echo prefix (~4x the old visible-width limit). Long messages scroll horizontally rather
-            //than hard-block at the visible box width (~77 chars) — single-line UITextBox scrolls to follow the caret.
-            MaxLength = 225,
+            MaxLength = MAX_MESSAGE_LENGTH,
             PaddingLeft = 1,
             PaddingRight = 1,
             PaddingTop = 1,
