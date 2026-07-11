@@ -67,7 +67,7 @@ The `Chaos.*` preview packages (`Chaos.Common`, `Chaos.DarkAges`, `Chaos.Geometr
 
 ## Build Configuration
 
-Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implicit usings, TieredPGO + TieredCompilation (+ QuickJit) enabled, WarningLevel 4, EnforceCodeStyleInBuild. Package versions managed centrally in `Directory.Packages.props`. Versioning via Nerdbank.GitVersioning.
+Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implicit usings, TieredPGO + TieredCompilation (+ QuickJit) enabled, WarningLevel 4, EnforceCodeStyleInBuild. Package versions managed centrally in `Directory.Packages.props`. Versioning is explicit: `<Version>` in `Directory.Build.props` (kept matching the latest release tag) for local builds; release builds stamp `-p:Version` from the git tag in `release.yml`.
 
 ## Architecture
 
