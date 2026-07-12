@@ -454,7 +454,15 @@ public sealed partial class WorldScreen
         {
             case EntityType.Creature:
             {
-                var frame = RenderCreaturePortrait(NpcSession.PortraitSpriteId);
+                //the wire portrait sprite carries the 0x4000 creature-range offset (0x2F/0x30 sprite encoding); strip it
+                //to the real mns id before lookup, mirroring the world-object path in WorldState. GetCreatureSprite
+                //expects the bare id, so without this the lookup misses and the placeholder checkerboard surfaces
+                //instead of the creature's portrait. Guard the sub-0x4000 case so a raw/unoffset value can't underflow.
+                var creatureSpriteId = NpcSession.PortraitSpriteId >= 0x4000
+                    ? (ushort)(NpcSession.PortraitSpriteId - 0x4000)
+                    : NpcSession.PortraitSpriteId;
+
+                var frame = RenderCreaturePortrait(creatureSpriteId);
 
                 if (frame is not null)
                     NpcSession.SetPortrait(frame.Value);
