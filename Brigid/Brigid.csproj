@@ -48,6 +48,10 @@
 
     <ItemGroup>
         <PackageReference Include="Chaos.Pathfinding"/>
+        <!-- SkiaSharp ships win32/macOS natives transitively (via DALib), but Linux natives
+             live in a separate package that must be referenced explicitly — without it a
+             linux-x64 publish has no libSkiaSharp.so and crashes at the first text draw. -->
+        <PackageReference Include="SkiaSharp.NativeAssets.Linux"/>
         <PackageReference Include="TextCopy"/>
     </ItemGroup>
 </Project>

@@ -37,4 +37,8 @@ RuntimeHelpers.RunClassConstructor(typeof(GlobalSettings).TypeHandle);
 NoticeDebugLog.Write("GlobalSettings initialized");
 
 using var game = new ChaosGame();
+
+//MonoGame loaded SDL2 inside the ChaosGame ctor; verify it bound the same instance we did
+DllResolver.LogLoadedSdlModules();
+
 game.Run();
