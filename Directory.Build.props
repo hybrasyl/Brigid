@@ -28,7 +28,7 @@
         <!-- Local/dev version — keep matching the latest release tag so the login-screen label reads
              correctly and the update check doesn't false-positive. Release builds override this with
              -p:Version from the tag (see .github/workflows/release.yml). -->
-        <Version>0.2.0</Version>
+        <Version>0.4.0</Version>
 
         <!-- DALib is consumed from the pinned NuGet package by default. Opt into the sibling checkout
              with -p:UseLocalDALib=true when co-developing DALib alongside Brigid.
