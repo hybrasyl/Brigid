@@ -107,6 +107,7 @@ public sealed class LobbyLoginScreen : IScreen
         StartPanel.PasswordButton?.Clicked += OnPasswordClicked;
         StartPanel.CreditButton?.Clicked += OnCreditClicked;
         StartPanel.HomepageButton?.Clicked += OnHomepageClicked;
+        StartPanel.ConfigButton?.Clicked += OnConfigClicked;
 
         //track last-clicked start panel button so enter can repeat it
         foreach (var btn in (UIButton?[]) [
@@ -220,6 +221,10 @@ public sealed class LobbyLoginScreen : IScreen
     }
 
     private void OnExitClicked() => Game.Exit();
+
+    //open the launcher/config screen over the loaded session. openedFromMainMenu: true surfaces its Return-to-Main-Menu
+    //close and locks the data-folder selector (the data folder is loaded once at startup and can't change in-session).
+    private void OnConfigClicked() => Game.Screens.Switch(new LauncherScreen(openedFromMainMenu: true));
 
     private void OnCreateClicked()
     {
