@@ -12,7 +12,21 @@ namespace Brigid.Controls.LobbyLogin;
 
 public sealed class LobbyLoginControl : PrefabPanel
 {
+    //config button — a hand-placed primitive (the _nstart prefab has no slot for it), styled as a discreet dark rect
+    //so it reads as a button without competing with the prefab-art menu buttons.
+    private const int CONFIG_BTN_WIDTH = 58;
+    private const int CONFIG_BTN_HEIGHT = 18;
+    private const int CONFIG_BTN_MARGIN = 6;
+
+    private static readonly Color ConfigButtonBg = new(36, 36, 40, 220);
+    private static readonly Color ConfigButtonHoverBg = new(70, 70, 80, 235);
+    private static readonly Color ConfigButtonBorder = new(170, 170, 180, 255);
+
     public LogoImage? AnimatedLogo { get; }
+
+    //opens the launcher/config screen (server, asset folder, resolution). Always enabled — it is local and does not
+    //depend on the lobby connection, so it is deliberately left out of SetButtonsEnabled.
+    public UIButton? ConfigButton { get; }
     public UIButton? ContinueButton { get; }
     public UIButton? CreditButton { get; }
     public UIButton? ExitButton { get; }
@@ -117,6 +131,37 @@ public sealed class LobbyLoginControl : PrefabPanel
             UpdateNotice.Clicked += () => Browser.Open(UpdateChecker.Available?.Url ?? string.Empty);
             AddChild(UpdateNotice);
         }
+
+        //config button — bottom-left corner. Left always enabled (unlike the prefab menu buttons, which gate on the
+        //lobby connection) so the launcher/config screen is reachable from the main menu at any time.
+        ConfigButton = new UIButton
+        {
+            Name = "ConfigButton",
+            X = CONFIG_BTN_MARGIN,
+            Y = Height - CONFIG_BTN_HEIGHT - CONFIG_BTN_MARGIN,
+            Width = CONFIG_BTN_WIDTH,
+            Height = CONFIG_BTN_HEIGHT,
+            BackgroundColor = ConfigButtonBg,
+            BorderColor = ConfigButtonBorder
+        };
+
+        ConfigButton.Hovered += _ => ConfigButton.BackgroundColor = ConfigButtonHoverBg;
+        ConfigButton.Unhovered += _ => ConfigButton.BackgroundColor = ConfigButtonBg;
+        AddChild(ConfigButton);
+
+        AddChild(
+            new UILabel
+            {
+                Name = "ConfigButtonLabel",
+                X = ConfigButton.X,
+                Y = ConfigButton.Y + 3,
+                Width = ConfigButton.Width,
+                Height = ConfigButton.Height - 3,
+                Text = "Config",
+                ForegroundColor = Color.White,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                IsHitTestVisible = false
+            });
     }
 
     public override void Update(GameTime gameTime)

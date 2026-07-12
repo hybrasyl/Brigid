@@ -79,15 +79,24 @@ public sealed class LauncherScreen : IScreen
     private bool Completed;
     private double CaretTimer;
 
+    //true when summoned from the in-game main menu (vs the cold-startup launcher). Surfaces a Return-to-Main-Menu
+    //button and locks the data-folder selector — the data folder is loaded exactly once at startup and cannot change
+    //in-session, so it must stay fixed here.
+    private readonly bool OpenedFromMainMenu;
+
     //recomputed each frame from current state
     private Rectangle DropdownButton;
     private Rectangle ResolutionButton;
     private Rectangle AssetButton;
     private Rectangle ConnectButton;
     private Rectangle SkipLauncherRow;
+    private Rectangle ReturnButton;
     private Rectangle AddRow;
     private Rectangle SaveButton;
     private Rectangle CancelButton;
+
+    //cold startup uses the parameterless form (openedFromMainMenu defaults false); the main-menu Config button passes true.
+    public LauncherScreen(bool openedFromMainMenu = false) => OpenedFromMainMenu = openedFromMainMenu;
 
     public UIPanel? Root => null;
 
@@ -190,6 +199,10 @@ public sealed class LauncherScreen : IScreen
         //clickable box + label at the bottom-left; toggles LauncherConfig.SuppressLauncher
         SkipLauncherRow = new Rectangle(Panel.X + 20, Panel.Bottom - 34, 210, 16);
 
+        //return-to-main-menu button, top-right — only present when summoned from the main menu (see OpenedFromMainMenu)
+        if (OpenedFromMainMenu)
+            ReturnButton = new Rectangle(Panel.Right - 172, Panel.Y + 10, 160, 22);
+
         DropdownRows.Clear();
         ResolutionRows.Clear();
 
@@ -284,6 +297,20 @@ public sealed class LauncherScreen : IScreen
 
     private void HandleMainClick(Point cursor)
     {
+        //return to the main menu without connecting — reuses the already-loaded assets (no FinishAssetInitialization).
+        //set Completed so the post-click guards short-circuit the rest of the frame, since Switch disposes this screen.
+        if (OpenedFromMainMenu && ReturnButton.Contains(cursor))
+        {
+            //persist any in-session server pick (resolution and skip-launcher already save on change; Connect, which
+            //normally persists the selection, is hidden in this mode). Data folder is locked, so it is unchanged.
+            LauncherConfig.Save();
+
+            Completed = true;
+            Game.Screens.Switch(new LobbyLoginScreen());
+
+            return;
+        }
+
         if (DropdownButton.Contains(cursor))
         {
             CurrentMode = Mode.Dropdown;
@@ -291,7 +318,8 @@ public sealed class LauncherScreen : IScreen
             return;
         }
 
-        if (AssetButton.Contains(cursor))
+        //data folder is locked when summoned from the main menu — it can only change at startup
+        if (!OpenedFromMainMenu && AssetButton.Contains(cursor))
         {
             BrowseForAssetFolder();
 
@@ -313,7 +341,9 @@ public sealed class LauncherScreen : IScreen
             return;
         }
 
-        if (ConnectButton.Contains(cursor) && CanConnect())
+        //Connect is hidden when summoned from the main menu — connecting re-runs the once-only FinishAssetInitialization
+        //(re-news every repository, leaking the prior instances). Return to Main Menu is the only exit in that mode.
+        if (!OpenedFromMainMenu && ConnectButton.Contains(cursor) && CanConnect())
             Connect();
     }
 
@@ -536,7 +566,13 @@ public sealed class LauncherScreen : IScreen
         DrawAssetRow();
         DrawResolutionRow();
         DrawSkipLauncherCheckbox();
-        DrawButton(ConnectButton, "Connect", CanConnect(), new Color(60, 110, 70), new Color(110, 180, 120));
+
+        //Connect is only meaningful at startup (it runs the once-only asset init + enters the lobby). When summoned
+        //from the main menu the session is already loaded, so Connect is hidden and Return to Main Menu is the exit.
+        if (OpenedFromMainMenu)
+            DrawButton(ReturnButton, "Return to Main Menu", true, new Color(50, 54, 68), FieldBorder);
+        else
+            DrawButton(ConnectButton, "Connect", CanConnect(), new Color(60, 110, 70), new Color(110, 180, 120));
 
         if (CurrentMode == Mode.Dropdown)
             DrawDropdownList();
@@ -573,9 +609,19 @@ public sealed class LauncherScreen : IScreen
     private void DrawAssetRow()
     {
         var labelY = Panel.Y + 118;
-        DrawText("Data folder", new Vector2(Panel.X + 20, labelY), LabelColor, TEXT_SIZE);
-
         var pathBox = new Rectangle(Panel.X + 20, labelY + 20, AssetButton.X - 8 - (Panel.X + 20), ROW_HEIGHT - 2);
+
+        //locked when summoned from the main menu — the data folder loads once at startup and can't change in-session
+        if (OpenedFromMainMenu)
+        {
+            DrawText("Data folder (startup only)", new Vector2(Panel.X + 20, labelY), LabelColor, TEXT_SIZE);
+            DrawClippedFront(AssetPath, pathBox, LabelColor, HINT_SIZE);
+            DrawButton(AssetButton, "Locked", false, FieldFill, FieldBorder);
+
+            return;
+        }
+
+        DrawText("Data folder", new Vector2(Panel.X + 20, labelY), LabelColor, TEXT_SIZE);
 
         if (AssetPathValid)
         {
