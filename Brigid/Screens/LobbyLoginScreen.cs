@@ -43,6 +43,7 @@ public sealed class LobbyLoginScreen : IScreen
     private LoginControl LoginControl = null!;
     private PasswordChangeControl PasswordChangeControl = null!;
     private bool PendingWorldSwitch;
+    private bool PendingConfigSwitch;
     private OkPopupMessageControl LobbyLoginPopupMessage = null!;
     private IList<ServerEntry> ServerList = [];
     private ServerSelectControl ServerSelectControl = null!;
@@ -204,6 +205,17 @@ public sealed class LobbyLoginScreen : IScreen
             return;
         }
 
+        //deferred so the switch happens at the top of a frame, not inside ProcessInput below: OnConfigClicked fires
+        //from within input dispatch, and switching there would dispose this screen's control tree mid-walk (the same
+        //reason PendingWorldSwitch exists). Reuses the loaded assets — no FinishAssetInitialization.
+        if (PendingConfigSwitch)
+        {
+            PendingConfigSwitch = false;
+            Game.Screens.Switch(new LauncherScreen(openedFromMainMenu: true));
+
+            return;
+        }
+
         Game.Dispatcher.ProcessInput(Root!, gameTime);
         Root!.Update(gameTime);
     }
@@ -222,9 +234,10 @@ public sealed class LobbyLoginScreen : IScreen
 
     private void OnExitClicked() => Game.Exit();
 
-    //open the launcher/config screen over the loaded session. openedFromMainMenu: true surfaces its Return-to-Main-Menu
-    //close and locks the data-folder selector (the data folder is loaded once at startup and can't change in-session).
-    private void OnConfigClicked() => Game.Screens.Switch(new LauncherScreen(openedFromMainMenu: true));
+    //open the launcher/config screen over the loaded session. Deferred (PendingConfigSwitch) rather than switched here:
+    //this runs inside input dispatch, and switching mid-walk would dispose this screen's tree while it's being handled.
+    //The summoned launcher surfaces its Return-to-Main-Menu close and locks the data-folder selector.
+    private void OnConfigClicked() => PendingConfigSwitch = true;
 
     private void OnCreateClicked()
     {
