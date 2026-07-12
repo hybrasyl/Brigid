@@ -231,6 +231,34 @@ public sealed class UiRenderer : IDisposable
     }
 
     /// <summary>
+    ///     Returns the cached full-panel town-map texture supplied by a <c>town_maps</c> .datf pack for the given map
+    ///     ID, or null when no pack provides one — signalling the caller to fall back to the legacy
+    ///     <c>national.dat</c> town-map composite. Unlike <see cref="GetFieldImage" /> there is no built-in art
+    ///     fallback here (the legacy path is a multi-layer composite the control assembles itself), so absence must be
+    ///     distinguishable from a missing-texture placeholder.
+    /// </summary>
+    public Texture2D? GetTownMapImage(short mapId)
+    {
+        var key = $"townmap:{mapId}";
+
+        if (Cache.TryGetValue(key, out var cached))
+            return cached;
+
+        var pack = AssetPackRegistry.GetTownMapPack();
+
+        if ((pack is not null) && pack.TryGetTownMapImage(mapId, out var modern) && (modern is not null))
+            using (modern)
+            {
+                var texture = Convert(modern);
+                Cache[key] = texture;
+
+                return texture;
+            }
+
+        return null;
+    }
+
+    /// <summary>
     ///     Renders and caches a half-size (15x15) spell icon for the effect bar. Tries the modern .datf pack first,
     ///     falls back to the legacy EPF sheet. The 15x15 downscale happens on whichever source is used — no 1px offset
     ///     math needed at this size since the icon is being rescaled anyway.

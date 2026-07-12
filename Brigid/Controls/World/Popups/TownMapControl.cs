@@ -10,9 +10,10 @@ using Microsoft.Xna.Framework.Input;
 namespace Brigid.Controls.World.Popups;
 
 /// <summary>
-///     Display-only town map overlay composited from national.dat assets. Shows the player's current location on the
-///     national map background with an animated player marker. Triggered by T key or HUD button, dismissed by Escape, T,
-///     or any click.
+///     Display-only town map overlay. When a <c>town_maps</c> .datf pack provides a full-panel image for the current
+///     map it is drawn as-is (no marker); otherwise it falls back to the legacy composite built from
+///     <c>national.dat</c> assets — the national map background with an animated player marker. Triggered by T key or
+///     HUD button, dismissed by Escape, T, or any click.
 /// </summary>
 public sealed class TownMapControl : UIPanel
 {
@@ -59,6 +60,18 @@ public sealed class TownMapControl : UIPanel
     /// </summary>
     public void Show(short mapId, int playerTileX, int playerTileY)
     {
+        //modern path: a town_maps .datf pack supplies a complete, pre-composited full-panel image (frame + art +
+        //name baked in). Draw it in place of the legacy national.dat five-layer composite. No player marker — a full
+        //interactive town map is a later redesign. Authored at 568x406 so a native 1:1 draw fills the panel.
+        var modernTexture = UiRenderer.Instance?.GetTownMapImage(mapId);
+
+        if (modernTexture is not null)
+        {
+            ShowModern(modernTexture);
+
+            return;
+        }
+
         EnsureCoordsParsed();
 
         //find matching entry
@@ -136,6 +149,37 @@ public sealed class TownMapControl : UIPanel
             UpdateMarkerPosition(playerTileX, playerTileY);
             AddChild(MarkerImage);
         }
+
+        MarkerFrame = 0;
+        MarkerTimer = 0;
+        MouseDownReceived = false;
+        InputDispatcher.Instance?.PushControl(this);
+        Visible = true;
+    }
+
+    /// <summary>
+    ///     Shows a pack-provided full-panel town map: a single image child at the panel origin, no marker/name/icon
+    ///     layers. The texture is a cached <see cref="UiRenderer" /> asset, so its disposal is a no-op — <see
+    ///     cref="ClearLayers" /> just detaches it like the legacy layers.
+    /// </summary>
+    private void ShowModern(Texture2D texture)
+    {
+        ClearLayers();
+
+        //ActiveEntry stays default and MarkerImage/MarkerFrames stay null — the modern path has no player marker, so
+        //Update's marker animation and UpdateMarkerPosition both null-guard out. A full interactive town map (marker
+        //included) is a later redesign; do not wire the legacy projection math against a full-panel image.
+        TownImageLayer = new UIImage
+        {
+            Texture = texture,
+            Width = texture.Width,
+            Height = texture.Height,
+            //centered so a pack that ships a non-568x406 image degrades gracefully; a correctly-authored full panel
+            //(568x406) lands at (0, 0) and fills the frame exactly.
+            X = (FRAME_WIDTH - texture.Width) / 2,
+            Y = (FRAME_HEIGHT - texture.Height) / 2
+        };
+        AddChild(TownImageLayer);
 
         MarkerFrame = 0;
         MarkerTimer = 0;
