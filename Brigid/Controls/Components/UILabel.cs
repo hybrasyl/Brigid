@@ -737,7 +737,7 @@ public class UILabel : UIElement
 
                 break;
 
-            case Keys.A when ctrl && (PlainText.Length > 0):
+            case Keys.A when ctrl && shift && (PlainText.Length > 0):
                 SelectionAnchor = 0;
                 CursorPosition = PlainText.Length;
                 e.Handled = true;

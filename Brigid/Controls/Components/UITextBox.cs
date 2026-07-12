@@ -30,6 +30,16 @@ public class UITextBox : UIElement
     private int LastClickPosition = -1;
     private List<int> LineStarts = [0];
     private int SelectionAnchor;
+
+    //── single-level undo/redo (one step back, one forward) ──
+    private readonly record struct UndoSnapshot(string Text, int Cursor, int Anchor);
+
+    private enum EditKind { None, Typing, Delete, Paste, Newline, Cut, Other }
+
+    private UndoSnapshot? UndoState;
+    private UndoSnapshot? RedoState;
+    private EditKind LastEditKind = EditKind.None;
+
     public HorizontalAlignment HorizontalAlignment { get; set; } = HorizontalAlignment.Left;
 
     /// <summary>
@@ -244,6 +254,72 @@ public class UITextBox : UIElement
     }
 
     public void ClearSelection() => SelectionAnchor = CursorPosition;
+
+    /// <summary>
+    ///     Captures the pre-edit state for single-level undo. Called before a user mutation. Contiguous same-kind runs
+    ///     (typing after typing, delete after delete) coalesce so one undo reverts the whole burst rather than one keystroke;
+    ///     any other edit, or a caret move (see <see cref="MoveCursor" />), starts a fresh group.
+    /// </summary>
+    private void RecordUndo(EditKind kind)
+    {
+        var groupable = kind is EditKind.Typing or EditKind.Delete;
+
+        if (!(groupable && (kind == LastEditKind) && (UndoState is not null)))
+            UndoState = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
+
+        RedoState = null;
+        LastEditKind = kind;
+    }
+
+    private void RestoreSnapshot(UndoSnapshot s)
+    {
+        Text = s.Text;
+        CursorPosition = Math.Min(s.Cursor, Text.Length);
+        SelectionAnchor = Math.Min(s.Anchor, Text.Length);
+        ResetCursor();
+
+        if (IsMultiLine)
+        {
+            //invalidate the cached layout so Update recomputes line starts for the restored text
+            CachedLayoutText = string.Empty;
+            EnsureCursorVisible();
+        }
+    }
+
+    /// <summary>
+    ///     Drops the single undo/redo slot. Call after a programmatic <see cref="Text" /> replacement (e.g. clearing the box
+    ///     or swapping in message history) so a later Ctrl+Z can't resurrect content the user did not type.
+    /// </summary>
+    public void ResetUndoHistory()
+    {
+        UndoState = null;
+        RedoState = null;
+        LastEditKind = EditKind.None;
+    }
+
+    /// <summary>Reverts the most recent edit group (single level). A second consecutive undo is inert.</summary>
+    public void Undo()
+    {
+        if (UndoState is not { } s)
+            return;
+
+        RedoState = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
+        RestoreSnapshot(s);
+        UndoState = null;
+        LastEditKind = EditKind.Other;
+    }
+
+    /// <summary>Re-applies the edit reverted by the last <see cref="Undo" />; only valid immediately after an undo.</summary>
+    public void Redo()
+    {
+        if (RedoState is not { } s)
+            return;
+
+        UndoState = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
+        RestoreSnapshot(s);
+        RedoState = null;
+        LastEditKind = EditKind.Other;
+    }
 
     private void DeleteSelection()
     {
@@ -656,6 +732,11 @@ public class UITextBox : UIElement
 
     private void HandleBackspace()
     {
+        if (!HasSelection && (CursorPosition <= 0))
+            return;
+
+        RecordUndo(EditKind.Delete);
+
         if (HasSelection)
             DeleteSelection();
         else if (CursorPosition > 0)
@@ -787,6 +868,8 @@ public class UITextBox : UIElement
         if (!extendSelection)
             SelectionAnchor = CursorPosition;
 
+        //caret navigation ends the current typing/delete run so the next keystroke snapshots afresh
+        LastEditKind = EditKind.Other;
         ResetCursor();
     }
 
@@ -802,6 +885,20 @@ public class UITextBox : UIElement
         //strip newlines for single-line textboxes
         if (!IsMultiLine)
             clipText = clipText.Replace("\r", "").Replace("\n", "");
+
+        //re-check after stripping — a newline-only clipboard becomes empty and must not record a no-op undo
+        if (clipText.Length == 0)
+            return;
+
+        //nothing to do if the box is full and there is no selection to replace
+        if (!HasSelection && ((MaxLength - Text.Length) <= 0))
+            return;
+
+        //record undo before mutating (remember prior undo/redo state so an overflow revert can roll it back)
+        var prevUndo = UndoState;
+        var prevRedo = RedoState;
+        var prevKind = LastEditKind;
+        RecordUndo(EditKind.Paste);
 
         //snapshot for potential clamptovisiblearea revert
         var savedText = Text;
@@ -833,6 +930,11 @@ public class UITextBox : UIElement
             CursorPosition = savedCursor;
             SelectionAnchor = savedAnchor;
             CachedLayoutText = string.Empty;
+
+            //the paste was rejected — roll back the undo/redo state it recorded
+            UndoState = prevUndo;
+            RedoState = prevRedo;
+            LastEditKind = prevKind;
         }
     }
 
@@ -842,6 +944,16 @@ public class UITextBox : UIElement
     /// </summary>
     private void InsertNewline()
     {
+        //nothing to do if the box is full and there is no selection to replace
+        if (!HasSelection && (Text.Length >= MaxLength))
+            return;
+
+        //record undo before mutating (remember prior undo/redo state so an overflow revert can roll it back)
+        var prevUndo = UndoState;
+        var prevRedo = RedoState;
+        var prevKind = LastEditKind;
+        RecordUndo(EditKind.Newline);
+
         //snapshot state before additive mutation for potential overflow revert
         var savedText = Text;
         var savedCursor = CursorPosition;
@@ -865,6 +977,11 @@ public class UITextBox : UIElement
             CursorPosition = savedCursor;
             SelectionAnchor = savedAnchor;
             CachedLayoutText = string.Empty;
+
+            //the newline was rejected — roll back the undo/redo state it recorded
+            UndoState = prevUndo;
+            RedoState = prevRedo;
+            LastEditKind = prevKind;
         }
 
         EnsureCursorVisible();
@@ -917,6 +1034,10 @@ public class UITextBox : UIElement
 
         SelectionAnchor = 0;
         CursorPosition = Text.Length;
+
+        //selecting all ends the current typing/delete run so a following edit is its own undo unit
+        //(mouse-based selection is already covered by OnMouseDown; this guards the Ctrl+Shift+A path)
+        LastEditKind = EditKind.Other;
     }
 
     public override void Update(GameTime gameTime)
@@ -954,6 +1075,9 @@ public class UITextBox : UIElement
         }
 
         Dragging = true;
+
+        //establishing a caret/selection by mouse ends the current typing/delete run
+        LastEditKind = EditKind.Other;
         ResetCursor();
 
         if (!IsFocused)
@@ -1173,6 +1297,7 @@ public class UITextBox : UIElement
             {
                 var clipboardText = IsMasked ? new string('*', SelectionLength) : StripColorCodes(SelectedText);
                 Clipboard.SetText(clipboardText);
+                RecordUndo(EditKind.Cut);
                 DeleteSelection();
                 ResetCursor();
                 e.Handled = true;
@@ -1186,8 +1311,25 @@ public class UITextBox : UIElement
 
                 break;
 
+            //── undo / redo (single level) ──
+            case Keys.Z when ctrl && !shift && !IsReadOnly:
+                Undo();
+                e.Handled = true;
+
+                break;
+
+            case Keys.Z when ctrl && shift && !IsReadOnly:
+            case Keys.Y when ctrl && !IsReadOnly:
+                Redo();
+                e.Handled = true;
+
+                break;
+
             //── editing ──
             case Keys.Delete when ctrl && !IsReadOnly:
+                if (HasSelection || (CursorPosition < Text.Length))
+                    RecordUndo(EditKind.Delete);
+
                 if (HasSelection)
                     DeleteSelection();
                 else if (CursorPosition < Text.Length)
@@ -1202,6 +1344,9 @@ public class UITextBox : UIElement
                 break;
 
             case Keys.Delete when !IsReadOnly:
+                if (HasSelection || (CursorPosition < Text.Length))
+                    RecordUndo(EditKind.Delete);
+
                 if (HasSelection)
                     DeleteSelection();
                 else if (CursorPosition < Text.Length)
@@ -1217,6 +1362,9 @@ public class UITextBox : UIElement
                 break;
 
             case Keys.Back when ctrl && !IsReadOnly:
+                if (HasSelection || (CursorPosition > 0))
+                    RecordUndo(EditKind.Delete);
+
                 if (HasSelection)
                     DeleteSelection();
                 else if (CursorPosition > 0)
@@ -1289,6 +1437,16 @@ public class UITextBox : UIElement
         if (char.IsControl(c))
             return;
 
+        //nothing to insert if the box is full and there is no selection to replace
+        if (!HasSelection && (Text.Length >= MaxLength))
+            return;
+
+        //record undo before mutating (remember prior undo/redo state so an overflow revert can roll it back)
+        var prevUndo = UndoState;
+        var prevRedo = RedoState;
+        var prevKind = LastEditKind;
+        RecordUndo(EditKind.Typing);
+
         //snapshot state before additive mutation for potential overflow revert
         var priorText = Text;
         var priorCursor = CursorPosition;
@@ -1315,6 +1473,11 @@ public class UITextBox : UIElement
             CursorPosition = priorCursor;
             SelectionAnchor = priorAnchor;
             CachedLayoutText = string.Empty;
+
+            //the edit was rejected — roll back the undo/redo state it recorded
+            UndoState = prevUndo;
+            RedoState = prevRedo;
+            LastEditKind = prevKind;
         }
 
         e.Handled = true;
