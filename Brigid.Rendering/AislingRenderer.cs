@@ -188,7 +188,9 @@ public sealed class AislingRenderer : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        ClearCache();
+        // Only instance-owned caches; the EPF cache belongs to DataContext.AislingDrawData
+        // (whose lifetime is DataContext's) and may not exist yet when quitting from the
+        // launcher — ClearCache stays a map-change concern.
         ClearRestCache();
         ClearSwimCache();
         ClearCompositeCache();
@@ -201,7 +203,15 @@ public sealed class AislingRenderer : IDisposable
     /// <summary>
     ///     Clears the cached EPF files. Call on map change to free memory.
     /// </summary>
-    public void ClearCache() => DrawData.ClearEpfCache();
+    public void ClearCache()
+    {
+        // Dispose can run before DataContext.Initialize populates the repository (e.g.
+        // quitting from the launcher) — there is no EPF cache to clear yet.
+        if (DataContext.AislingDrawData is null)
+            return;
+
+        DrawData.ClearEpfCache();
+    }
 
     /// <summary>
     ///     Clears all cached composite textures. Call on map change or F5 refresh.
