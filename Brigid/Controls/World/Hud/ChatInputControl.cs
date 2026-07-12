@@ -26,6 +26,13 @@ public sealed class ChatInputControl : UIPanel
     private const int MAX_WHISPER_HISTORY = 5;
     private const int MAX_MESSAGE_HISTORY = 20;
 
+    //retail (Kru) Dark Ages caps the say/shout/whisper input field at 55 characters (empirically verified against the
+    //retail client — a flat cap, independent of the "Name: " echo prefix / player-name length). On those servers we
+    //hold that limit so we don't emit messages a retail client can't enter; other servers keep the 255-byte string8
+    //wire max. Only the cap changes — the editing/history behavior is identical. Gated on GlobalSettings.IsCursed
+    //(host ends in kru.com).
+    private const int RETAIL_MESSAGE_LENGTH = 55;
+
     private readonly int FullWidth;
     private readonly List<string> MessageHistory = [];
     private readonly UILabel PrefixLabel;
@@ -80,7 +87,7 @@ public sealed class ChatInputControl : UIPanel
             Y = 0,
             Width = rect.Width,
             Height = rect.Height,
-            MaxLength = 255,
+            MaxLength = GlobalSettings.IsCursed ? RETAIL_MESSAGE_LENGTH : 255,
             PaddingLeft = 1,
             PaddingRight = 1,
             PaddingTop = 1,
