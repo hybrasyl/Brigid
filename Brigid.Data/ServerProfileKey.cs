@@ -36,7 +36,8 @@ public static class ServerProfileKey
         if (IsHybrasyl(host, serverName))
             return HybrasylKey;
 
-        var slug = Sanitize(FirstNonBlank(host, serverName));
+        //slug the host, falling back to the server name when the host is blank (kept as a slug source, not just a null check)
+        var slug = Sanitize(!string.IsNullOrWhiteSpace(host) ? host : serverName);
 
         return slug.Length > 0 ? slug : UnknownKey;
     }
@@ -46,15 +47,6 @@ public static class ServerProfileKey
 
     private static bool Contains(string? value, string term) =>
         !string.IsNullOrEmpty(value) && value.Contains(term, StringComparison.OrdinalIgnoreCase);
-
-    private static string? FirstNonBlank(params string?[] values)
-    {
-        foreach (var value in values)
-            if (!string.IsNullOrWhiteSpace(value))
-                return value;
-
-        return null;
-    }
 
     private static string Sanitize(string? value)
     {
