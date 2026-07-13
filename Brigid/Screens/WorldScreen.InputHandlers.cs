@@ -871,7 +871,14 @@ public sealed partial class WorldScreen
             return;
         }
 
-        //f8 — unused (group panel moved to y key)
+        //f8 — keybind menu (mirrors f3 → macros)
+        if (Keybinds.Matches(e, CommandId.World_KeybindMenu))
+        {
+            OptionsModal.Show(OptionsModalControl.OptionsTab.Keybinds);
+            e.Handled = true;
+
+            return;
+        }
 
         //f9 — ignore list management (toggle)
         if (Keybinds.Matches(e, CommandId.World_IgnoreList))

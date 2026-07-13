@@ -79,6 +79,7 @@ public static class KeybindCatalog
         new(CommandId.World_Settings, "Settings", KeybindSection.FunctionKeys),
         new(CommandId.World_Refresh, "Refresh", KeybindSection.FunctionKeys),
         new(CommandId.World_BoardList, "Board List", KeybindSection.FunctionKeys),
+        new(CommandId.World_KeybindMenu, "Keybinds", KeybindSection.FunctionKeys),
         new(CommandId.World_IgnoreList, "Ignore List", KeybindSection.FunctionKeys),
         new(CommandId.World_FriendsList, "Friends List", KeybindSection.FunctionKeys)
     ];

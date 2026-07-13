@@ -212,6 +212,7 @@ public sealed class KeybindsTests
     [InlineData(Keys.F4, CommandId.World_Settings)]
     [InlineData(Keys.F5, CommandId.World_Refresh)]
     [InlineData(Keys.F7, CommandId.World_BoardList)]
+    [InlineData(Keys.F8, CommandId.World_KeybindMenu)]
     [InlineData(Keys.F9, CommandId.World_IgnoreList)]
     [InlineData(Keys.F10, CommandId.World_FriendsList)]
     [InlineData(Keys.Q, CommandId.World_TogglePauseMenu)]

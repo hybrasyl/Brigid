@@ -84,6 +84,7 @@ public static class Keybinds
         [CommandId.World_Settings]            = new(new KeyChord(Keys.F4), KeybindContext.WorldHud),
         [CommandId.World_Refresh]             = new(new KeyChord(Keys.F5), KeybindContext.WorldHud),
         [CommandId.World_BoardList]           = new(new KeyChord(Keys.F7), KeybindContext.WorldHud),
+        [CommandId.World_KeybindMenu]         = new(new KeyChord(Keys.F8), KeybindContext.WorldHud),
         [CommandId.World_IgnoreList]          = new(new KeyChord(Keys.F9), KeybindContext.WorldHud),
         [CommandId.World_FriendsList]         = new(new KeyChord(Keys.F10), KeybindContext.WorldHud),
         [CommandId.World_SwapHudLayout]       = new(new KeyChord(Keys.OemQuestion), KeybindContext.WorldHud),

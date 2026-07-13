@@ -95,6 +95,9 @@ public enum CommandId
     World_Settings,
     World_Refresh,
     World_BoardList,
+
+    /// <summary>F8 — open the Options modal to the Keybinds tab (mirrors F3 → Macros).</summary>
+    World_KeybindMenu,
     World_IgnoreList,
     World_FriendsList,
 
