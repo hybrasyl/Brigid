@@ -117,5 +117,17 @@ public enum CommandId
     World_GroupPanel,
 
     World_ChatScrollUp,
-    World_ChatScrollDown
+    World_ChatScrollDown,
+
+    // ── Movement (WorldScreen.OnRootKeyDown direction switch) ── keydown-driven, NOT polled: the handler
+    // resolves each keydown to a direction via Matches, then the existing turn / predict-walk / queue logic
+    // runs unchanged. Each direction carries the arrow key (primary) and the Z/X/C/V key (secondary).
+    // Movement stays exact-chord like the other WorldHud commands, so a keydown with extra modifiers no
+    // longer walks (the old switch ignored modifiers). Held-walking still rides OS key-repeat; Keybinds.IsHeld
+    // is reserved for a future polled / fluid-movement model, which is where the plan's original "poll via
+    // IsHeld" premise actually belongs.
+    Move_Up,
+    Move_Down,
+    Move_Left,
+    Move_Right
 }

@@ -11,13 +11,13 @@ namespace Brigid.Systems.Keybinds;
 
 /// <summary>
 ///     Central keybinding registry and resolver. Handlers ask <see cref="Matches" />/<see cref="Resolve" />
-///     (discrete key events) or <see cref="IsHeld" /> (poll-time movement) instead of testing literal
-///     <see cref="Keys" /> values, so every bound action honours user overrides and the per-OS
-///     <see cref="ChordMods.Meta" /> resolution.
+///     (discrete key events) instead of testing literal <see cref="Keys" /> values, so every bound action
+///     honours user overrides and the per-OS <see cref="ChordMods.Meta" /> resolution. <see cref="IsHeld" />
+///     is a poll-time variant reserved for a future fluid-movement model (no consumer yet).
 ///     <para>
 ///         Defaults live in code (<see cref="Defaults" />); <see cref="Load" /> merges overrides-only from
-///         <c>keybinds.json</c>. Nothing consumes the resolver in the B1 foundation — migrations wire it in
-///         later phases.
+///         <c>keybinds.json</c>. The WorldHud and editor hotkeys resolve through <see cref="Matches" /> (Phases
+///         B3/B4); the rebinding UI (Track C) will edit overrides via <see cref="SetBinding" />.
 ///     </para>
 /// </summary>
 public static class Keybinds
@@ -93,7 +93,15 @@ public static class Keybinds
         [CommandId.World_TownMap]             = new(new KeyChord(Keys.T), KeybindContext.WorldHud),
         [CommandId.World_GroupPanel]          = new(new KeyChord(Keys.Y), KeybindContext.WorldHud),
         [CommandId.World_ChatScrollUp]        = new(new KeyChord(Keys.Up, ChordMods.Shift), KeybindContext.WorldHud),
-        [CommandId.World_ChatScrollDown]      = new(new KeyChord(Keys.Down, ChordMods.Shift), KeybindContext.WorldHud)
+        [CommandId.World_ChatScrollDown]      = new(new KeyChord(Keys.Down, ChordMods.Shift), KeybindContext.WorldHud),
+
+        // ── Movement ── arrow (primary) + Z/X/C/V (secondary), both bare — byte-for-byte the old direction
+        // switch (Up/C, Right/V, Down/X, Left/Z), now exact-chord and rebindable. The bare arrows carry no
+        // Shift, so they never collide with the Shift-arrow chat-scroll chords above.
+        [CommandId.Move_Up]    = new(new KeyChord(Keys.Up), new KeyChord(Keys.C), KeybindContext.WorldHud),
+        [CommandId.Move_Right] = new(new KeyChord(Keys.Right), new KeyChord(Keys.V), KeybindContext.WorldHud),
+        [CommandId.Move_Down]  = new(new KeyChord(Keys.Down), new KeyChord(Keys.X), KeybindContext.WorldHud),
+        [CommandId.Move_Left]  = new(new KeyChord(Keys.Left), new KeyChord(Keys.Z), KeybindContext.WorldHud)
     }.ToFrozenDictionary();
 
     /// <summary>The binding currently bound to <paramref name="id" /> (override if set, else default).</summary>
@@ -131,8 +139,9 @@ public static class Keybinds
     }
 
     /// <summary>
-    ///     Poll-time held check for movement/hold commands (B4): a bound chord's key is down and the live
-    ///     modifier state matches.
+    ///     Poll-time held check for a bound chord: its key is down and the live modifier state matches.
+    ///     Reserved for a future polled / fluid-movement model — B4 kept movement keydown-driven and resolves
+    ///     it via <see cref="Matches" />, so nothing consumes this yet.
     /// </summary>
     public static bool IsHeld(CommandId id)
     {

@@ -993,19 +993,15 @@ public sealed partial class WorldScreen
             }
         }
 
-        //player movement — arrow keys and zxcv
-        Direction? direction = e.Key switch
-        {
-            Keys.Up    => Direction.Up,
-            Keys.Right => Direction.Right,
-            Keys.Down  => Direction.Down,
-            Keys.Left  => Direction.Left,
-            Keys.C     => Direction.Up,
-            Keys.V     => Direction.Right,
-            Keys.X     => Direction.Down,
-            Keys.Z     => Direction.Left,
-            _          => null
-        };
+        //player movement — arrow keys and zxcv, resolved from the registry (arrow = primary, zxcv = secondary).
+        //keydown-driven, not polled: Matches maps the keystroke to a direction and the turn/walk/queue logic
+        //below is unchanged. Exact-chord like the other WorldHud commands, so a modifier+key no longer walks.
+        Direction? direction =
+            Keybinds.Matches(e, CommandId.Move_Up) ? Direction.Up
+            : Keybinds.Matches(e, CommandId.Move_Right) ? Direction.Right
+            : Keybinds.Matches(e, CommandId.Move_Down) ? Direction.Down
+            : Keybinds.Matches(e, CommandId.Move_Left) ? Direction.Left
+            : null;
 
         if (direction.HasValue)
         {

@@ -240,20 +240,47 @@ public sealed class KeybindsTests
         Assert.Equal(CommandId.World_ChatScrollDown, Keybinds.Resolve(WinKey(Keys.Down, shift: true), KeybindContext.WorldHud));
     }
 
+    [Theory]
+    [InlineData(Keys.Up, CommandId.Move_Up)]
+    [InlineData(Keys.C, CommandId.Move_Up)]
+    [InlineData(Keys.Right, CommandId.Move_Right)]
+    [InlineData(Keys.V, CommandId.Move_Right)]
+    [InlineData(Keys.Down, CommandId.Move_Down)]
+    [InlineData(Keys.X, CommandId.Move_Down)]
+    [InlineData(Keys.Left, CommandId.Move_Left)]
+    [InlineData(Keys.Z, CommandId.Move_Left)]
+    public void WorldHud_MovementKeys_ResolveToDirection(Keys key, CommandId expected)
+    {
+        Keybinds.ResetAll();
+
+        //both the arrow (primary) and its zxcv twin (secondary) resolve to the same direction command.
+        Assert.Equal(expected, Keybinds.Resolve(WinKey(key), KeybindContext.WorldHud));
+    }
+
+    [Fact]
+    public void WorldHud_Movement_IsExactChord_And_DisjointFromChatScroll()
+    {
+        Keybinds.ResetAll();
+
+        //the old switch walked on any modifier; movement is now exact-chord, so Ctrl+C no longer walks.
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.C, ctrl: true), KeybindContext.WorldHud));
+
+        //bare Up walks; Shift+Up is chat-scroll — the shared arrow key is split cleanly by Shift.
+        Assert.Equal(CommandId.Move_Up, Keybinds.Resolve(WinKey(Keys.Up), KeybindContext.WorldHud));
+        Assert.Equal(CommandId.World_ChatScrollUp, Keybinds.Resolve(WinKey(Keys.Up, shift: true), KeybindContext.WorldHud));
+    }
+
     [Fact]
     public void WorldHud_Defaults_AvoidReservedLiteralKeys()
     {
-        //A/S/D/F/G/H (HUD tab switch) and Z/X/C/V (letter movement) are handled by modifier-agnostic literal
-        //switches in OnRootKeyDown that run/return regardless of a resolver Matches check, so a WorldHud
-        //command bound to one would be silently shadowed. The migration keeps the catalog clear of them; this
-        //fails if a future command lands on one. Arrow/number-row keys are deliberately NOT reserved: their
-        //literal movement/slot/emote handlers sit after the resolver checks that use them and Shift
-        //disambiguates — hence Shout=Shift+1 and ChatScroll=Shift+Arrow are legitimate.
-        var reserved = new HashSet<Keys>
-        {
-            Keys.A, Keys.S, Keys.D, Keys.F, Keys.G, Keys.H,
-            Keys.Z, Keys.X, Keys.C, Keys.V
-        };
+        //A/S/D/F/G/H (HUD tab switch) is handled by a modifier-agnostic literal switch in OnRootKeyDown that
+        //runs before the F-key/letter resolver checks, so a WorldHud command bound to one of those letters
+        //would be silently shadowed. The migration keeps the catalog clear of them; this fails if a future
+        //command lands on one. Z/X/C/V are NOT reserved: B4 made the movement switch resolver-driven, so those
+        //letters are now owned by Move_* rather than a literal handler. Arrow/number-row keys aren't reserved
+        //either — their movement/slot/emote handlers sit after the resolver checks that use them and Shift
+        //disambiguates (Shout=Shift+1, ChatScroll=Shift+Arrow).
+        var reserved = new HashSet<Keys> { Keys.A, Keys.S, Keys.D, Keys.F, Keys.G, Keys.H };
 
         foreach (var (_, def) in Keybinds.Defaults)
         {
