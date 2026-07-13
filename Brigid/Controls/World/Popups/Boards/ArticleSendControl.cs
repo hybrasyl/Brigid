@@ -140,11 +140,15 @@ public sealed class ArticleSendControl : PrefabPanel
         {
             TitleBox.Text = string.Empty;
             TitleBox.IsFocused = true;
+            TitleBox.ResetUndoHistory();
         }
 
         BodyBox.Text = string.Empty;
         BodyBox.ScrollOffset = 0;
         BodyBox.CursorPosition = 0;
+
+        //this compose panel is a reused singleton — drop undo so Ctrl+Z can't resurrect a prior post's contents
+        BodyBox.ResetUndoHistory();
 
         Show();
     }

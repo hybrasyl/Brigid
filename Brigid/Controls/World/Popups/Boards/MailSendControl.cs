@@ -158,13 +158,18 @@ public sealed class MailSendControl : PrefabPanel
             ReceiverEditBox.ForegroundColor = isReply ? TextColors.Default : LegendColors.White;
             ReceiverEditBox.IsTabStop = !isReply;
             ReceiverEditBox.IsFocused = !isReply;
+            ReceiverEditBox.ResetUndoHistory();
         }
 
         TitleBox?.Text = string.Empty;
+        TitleBox?.ResetUndoHistory();
 
         BodyBox.Text = string.Empty;
         BodyBox.ScrollOffset = 0;
         BodyBox.CursorPosition = 0;
+
+        //this compose panel is a reused singleton — drop undo so Ctrl+Z can't resurrect a prior message's contents
+        BodyBox.ResetUndoHistory();
 
         Show();
 
