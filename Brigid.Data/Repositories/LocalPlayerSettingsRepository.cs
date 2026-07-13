@@ -112,6 +112,15 @@ public sealed class LocalPlayerSettingsRepository
         if (string.IsNullOrEmpty(DataContext.DataPath))
             return;
 
+        //characterName is server-supplied. The legacy folder is always a single direct child of DataPath, so reject any
+        //name that isn't a plain segment — blank, "."/"..", or anything carrying a separator or drive/volume qualifier
+        //(GetFileName strips those, so it would differ). This stops a crafted name from pointing the import source
+        //outside the game folder, including via Path.Combine honoring a rooted second argument.
+        if (string.IsNullOrWhiteSpace(characterName)
+            || characterName is "." or ".."
+            || !string.Equals(characterName, Path.GetFileName(characterName), StringComparison.Ordinal))
+            return;
+
         var legacyDir = Path.Combine(DataContext.DataPath, characterName);
 
         if (!Directory.Exists(legacyDir) || string.Equals(legacyDir, PlayerDirectory, StringComparison.OrdinalIgnoreCase))
