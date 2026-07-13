@@ -256,16 +256,23 @@ public class UITextBox : UIElement
     public void ClearSelection() => SelectionAnchor = CursorPosition;
 
     /// <summary>
-    ///     Captures the pre-edit state for single-level undo. Called before a user mutation. Contiguous same-kind runs
-    ///     (typing after typing, delete after delete) coalesce so one undo reverts the whole burst rather than one keystroke;
-    ///     any other edit, or a caret move (see <see cref="MoveCursor" />), starts a fresh group.
+    ///     Records the pre-edit state for single-level undo, for a mutation that cannot be rejected (delete/backspace/cut).
+    ///     The current text is the pre-edit state since this is called before mutating. See <see cref="CommitUndo" />.
     /// </summary>
-    private void RecordUndo(EditKind kind)
+    private void RecordUndo(EditKind kind) => CommitUndo(kind, new UndoSnapshot(Text, CursorPosition, SelectionAnchor));
+
+    /// <summary>
+    ///     Commits <paramref name="preEdit" /> as the undo point for an edit that stuck. Contiguous same-kind runs (typing
+    ///     after typing, delete after delete) coalesce so one undo reverts the whole burst rather than one keystroke; any
+    ///     other edit, or a caret move (see <see cref="MoveCursor" />), starts a fresh group. Additive handlers capture the
+    ///     snapshot up front and only call this once the edit is known to fit, so a rejected overflow never touches undo.
+    /// </summary>
+    private void CommitUndo(EditKind kind, UndoSnapshot preEdit)
     {
         var groupable = kind is EditKind.Typing or EditKind.Delete;
 
         if (!(groupable && (kind == LastEditKind) && (UndoState is not null)))
-            UndoState = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
+            UndoState = preEdit;
 
         RedoState = null;
         LastEditKind = kind;
@@ -894,16 +901,8 @@ public class UITextBox : UIElement
         if (!HasSelection && ((MaxLength - Text.Length) <= 0))
             return;
 
-        //record undo before mutating (remember prior undo/redo state so an overflow revert can roll it back)
-        var prevUndo = UndoState;
-        var prevRedo = RedoState;
-        var prevKind = LastEditKind;
-        RecordUndo(EditKind.Paste);
-
-        //snapshot for potential clamptovisiblearea revert
-        var savedText = Text;
-        var savedCursor = CursorPosition;
-        var savedAnchor = SelectionAnchor;
+        //capture pre-edit state once; commit it to undo only if the edit sticks (a rejected overflow never touches undo)
+        var preEdit = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
 
         if (HasSelection)
             DeleteSelection();
@@ -912,7 +911,12 @@ public class UITextBox : UIElement
         var available = MaxLength - Text.Length;
 
         if (available <= 0)
+        {
+            //the selection deletion above is a real mutation — keep it undoable
+            CommitUndo(EditKind.Paste, preEdit);
+
             return;
+        }
 
         if (clipText.Length > available)
             clipText = clipText[..available];
@@ -926,16 +930,13 @@ public class UITextBox : UIElement
         //single-line boxes scroll horizontally rather than reject overflow; only multiline clamp-to-area reverts here
         if (ClampToVisibleArea && IsMultiLine && ExceedsVisibleArea())
         {
-            Text = savedText;
-            CursorPosition = savedCursor;
-            SelectionAnchor = savedAnchor;
-            CachedLayoutText = string.Empty;
+            //rejected — restore pre-edit state; undo was never committed, so nothing to roll back
+            RestoreSnapshot(preEdit);
 
-            //the paste was rejected — roll back the undo/redo state it recorded
-            UndoState = prevUndo;
-            RedoState = prevRedo;
-            LastEditKind = prevKind;
+            return;
         }
+
+        CommitUndo(EditKind.Paste, preEdit);
     }
 
     /// <summary>
@@ -948,16 +949,8 @@ public class UITextBox : UIElement
         if (!HasSelection && (Text.Length >= MaxLength))
             return;
 
-        //record undo before mutating (remember prior undo/redo state so an overflow revert can roll it back)
-        var prevUndo = UndoState;
-        var prevRedo = RedoState;
-        var prevKind = LastEditKind;
-        RecordUndo(EditKind.Newline);
-
-        //snapshot state before additive mutation for potential overflow revert
-        var savedText = Text;
-        var savedCursor = CursorPosition;
-        var savedAnchor = SelectionAnchor;
+        //capture pre-edit state once; commit it to undo only if the edit sticks (a rejected overflow never touches undo)
+        var preEdit = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
 
         if (HasSelection)
             DeleteSelection();
@@ -973,17 +966,13 @@ public class UITextBox : UIElement
 
         if (ClampToVisibleArea && ExceedsVisibleArea())
         {
-            Text = savedText;
-            CursorPosition = savedCursor;
-            SelectionAnchor = savedAnchor;
-            CachedLayoutText = string.Empty;
+            //rejected — restore pre-edit state (also re-runs EnsureCursorVisible); undo was never committed
+            RestoreSnapshot(preEdit);
 
-            //the newline was rejected — roll back the undo/redo state it recorded
-            UndoState = prevUndo;
-            RedoState = prevRedo;
-            LastEditKind = prevKind;
+            return;
         }
 
+        CommitUndo(EditKind.Newline, preEdit);
         EnsureCursorVisible();
     }
 
@@ -1441,23 +1430,20 @@ public class UITextBox : UIElement
         if (!HasSelection && (Text.Length >= MaxLength))
             return;
 
-        //record undo before mutating (remember prior undo/redo state so an overflow revert can roll it back)
-        var prevUndo = UndoState;
-        var prevRedo = RedoState;
-        var prevKind = LastEditKind;
-        RecordUndo(EditKind.Typing);
-
-        //snapshot state before additive mutation for potential overflow revert
-        var priorText = Text;
-        var priorCursor = CursorPosition;
-        var priorAnchor = SelectionAnchor;
+        //capture pre-edit state once; commit it to undo only if the edit sticks (a rejected overflow never touches undo)
+        var preEdit = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
 
         //replace selection with typed character
         if (HasSelection)
             DeleteSelection();
 
         if (Text.Length >= MaxLength)
+        {
+            //the selection deletion above is a real mutation — keep it undoable
+            CommitUndo(EditKind.Typing, preEdit);
+
             return;
+        }
 
         //capture position before mutation to avoid setter interactions
         var insertPos = CursorPosition;
@@ -1469,17 +1455,14 @@ public class UITextBox : UIElement
         //single-line boxes scroll horizontally rather than reject overflow; only multiline clamp-to-area reverts here
         if (ClampToVisibleArea && IsMultiLine && ExceedsVisibleArea())
         {
-            Text = priorText;
-            CursorPosition = priorCursor;
-            SelectionAnchor = priorAnchor;
-            CachedLayoutText = string.Empty;
+            //rejected — restore pre-edit state; undo was never committed, so nothing to roll back
+            RestoreSnapshot(preEdit);
+            e.Handled = true;
 
-            //the edit was rejected — roll back the undo/redo state it recorded
-            UndoState = prevUndo;
-            RedoState = prevRedo;
-            LastEditKind = prevKind;
+            return;
         }
 
+        CommitUndo(EditKind.Typing, preEdit);
         e.Handled = true;
 
         if (IsMultiLine)
