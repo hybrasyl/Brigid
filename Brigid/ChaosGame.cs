@@ -3,6 +3,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Runtime.InteropServices;
 using Brigid.Collections;
+using Brigid.Data;
 using DALib.Utility;
 using Brigid.Controls.Generic;
 using Brigid.Networking;
@@ -103,7 +104,7 @@ public sealed class ChaosGame : Game
     }
 
     private readonly GraphicsDeviceManager Graphics;
-    private string MetaFilePath => Path.Combine(GlobalSettings.DataPath, "metafile");
+    private static string MetaFilePath => AppPaths.MetaFileDir;
     private readonly Dictionary<string, uint> MetaPendingChecksums = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<IServerPacket> PacketBuffer = [];
     private int CursorOffsetX;
@@ -318,19 +319,26 @@ public sealed class ChaosGame : Game
 
     private void SaveScreenshot()
     {
-        var dataPath = GlobalSettings.DataPath;
+        var dir = AppPaths.ScreenshotsDir;
+
+        //retail keeps DA's "lod" prefix; Hybrasyl / any non-retail server uses "hyb". Numbering is per-prefix.
+        var prefix = GlobalSettings.IsCursed ? "lod" : "hyb";
+
+        if (!DataDiagnostics.Try(() => Directory.CreateDirectory(dir), "create screenshots dir"))
+            return;
+
         var highestNumber = 0;
 
-        foreach (var file in Directory.EnumerateFiles(dataPath, "lod*.*"))
+        foreach (var file in Directory.EnumerateFiles(dir, $"{prefix}*.*"))
         {
             var name = Path.GetFileNameWithoutExtension(file);
 
-            if ((name.Length >= 4) && int.TryParse(name.AsSpan(3), out var num) && (num > highestNumber))
+            if ((name.Length > prefix.Length) && int.TryParse(name.AsSpan(prefix.Length), out var num) && (num > highestNumber))
                 highestNumber = num;
         }
 
         var nextNumber = highestNumber + 1;
-        var fileName = Path.Combine(dataPath, $"lod{nextNumber:D3}.png");
+        var fileName = Path.Combine(dir, $"{prefix}{nextNumber:D3}.png");
 
         var pixels = new Color[VIRTUAL_WIDTH * VIRTUAL_HEIGHT];
         RenderTarget.GetData(pixels);
@@ -355,7 +363,7 @@ public sealed class ChaosGame : Game
             rgbPalette.Add(((uint)c.Red << 16) | ((uint)c.Green << 8) | c.Blue);
         }
 
-        WritePalettizedPng(fileName, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, indices, rgbPalette);
+        DataDiagnostics.Try(() => WritePalettizedPng(fileName, VIRTUAL_WIDTH, VIRTUAL_HEIGHT, indices, rgbPalette), "SaveScreenshot");
     }
 
     private static void WritePalettizedPng(string fileName, int width, int height, byte[] indices, List<uint> palette)
@@ -522,7 +530,7 @@ public sealed class ChaosGame : Game
     public void FinishAssetInitialization()
     {
         GlobalSettings.InitializeAssetData();
-        Directory.CreateDirectory(MetaFilePath);
+        DataDiagnostics.Try(() => Directory.CreateDirectory(MetaFilePath), "create metafile dir");
         ClientSettings.Load();
         //LoadContent constructed FontEngine early (with the default face) so the launcher's frames have a non-null
         //Instance; now that ClientSettings is loaded, switch to the user's saved face before the lobby appears.
@@ -856,7 +864,7 @@ public sealed class ChaosGame : Game
         if (string.IsNullOrEmpty(info.Name) || (info.Data.Length == 0))
             return;
 
-        File.WriteAllBytes(Path.Combine(MetaFilePath, info.Name), info.Data);
+        DataDiagnostics.Try(() => File.WriteAllBytes(Path.Combine(MetaFilePath, info.Name), info.Data), "write metafile");
         MetaPendingChecksums.Remove(info.Name);
 
         if (MetaSyncStarted && (MetaPendingChecksums.Count == 0))

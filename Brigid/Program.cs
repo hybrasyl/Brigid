@@ -2,11 +2,15 @@
 using System.Runtime;
 using System.Runtime.CompilerServices;
 using Brigid;
+using Brigid.Data;
 using Brigid.Networking;
 #endregion
 
 NoticeDebugLog.Reset();
 NoticeDebugLog.Write("Program.Main entered");
+
+//route data-layer IO diagnostics (best-effort file writes that are caught, never rethrown) into the notice log
+DataDiagnostics.Log = NoticeDebugLog.Write;
 
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 {

@@ -49,7 +49,7 @@ public static class GlobalSettings
     ///     (and other modern hosts) send clean newline-delimited notices that should be shown verbatim. Used to gate the
     ///     retail-only notice normalization.
     /// </summary>
-    public static bool IsCursed => LobbyHost.EndsWith("kru.com", StringComparison.OrdinalIgnoreCase);
+    public static bool IsCursed => ServerProfileKey.IsRetail(LobbyHost);
 
     /// <summary>
     ///     True when the launcher screen should be shown at startup (the normal case). False when the client

@@ -6,8 +6,10 @@ using Brigid.Data.Models;
 namespace Brigid.Data.Repositories;
 
 /// <summary>
-///     Manages per-character config files (macros, chants, friends, family) stored in a subdirectory of DataPath named
-///     after the character.
+///     Manages per-character config files (macros, chants, friends, family) stored per-server, per-character under
+///     <c>{AppPaths.ProfilesDir}/{serverKey}/{characterName}</c> — a writable per-user location, keyed by server so the
+///     same character name on different servers no longer shares one folder. Legacy config from the old in-game-folder
+///     location is imported once on init.
 /// </summary>
 public sealed class LocalPlayerSettingsRepository
 {
@@ -34,22 +36,98 @@ public sealed class LocalPlayerSettingsRepository
         var path = Path.Combine(PlayerDirectory, fileName);
 
         if (!File.Exists(path))
-            File.Create(path)
-                .Dispose();
+            DataDiagnostics.Try(() => File.Create(path).Dispose(), $"create {fileName}");
     }
 
     /// <summary>
-    ///     Initializes the repository for a specific character. Creates the directory and default config files if they don't
-    ///     exist.
+    ///     Initializes the repository for a specific character on a specific server. Character config lives under
+    ///     <c>{AppPaths.ProfilesDir}/{serverKey}/{characterName}</c> (writable per-user location, keyed by server so the
+    ///     same name on different servers doesn't collide). Creates the directory, imports any legacy config from the old
+    ///     in-game-folder location on first use, and ensures the default files exist.
     /// </summary>
-    public void Initialize(string characterName)
+    public void Initialize(string characterName, string serverKey, bool importLegacy)
     {
-        PlayerDirectory = Path.Combine(DataContext.DataPath, characterName);
-        Directory.CreateDirectory(PlayerDirectory);
+        //the character name is server-supplied — sanitize it before it becomes a path segment so a hostile/odd name
+        //can't escape the profiles root. The legacy import still reads the raw-named legacy folder as its source.
+        PlayerDirectory = AppPaths.ProfileDir(serverKey, SafeSegment(characterName));
+        DataDiagnostics.Try(() => Directory.CreateDirectory(PlayerDirectory), "create profile dir");
+
+        //only pull in the old in-game-folder config if the user opted into the one-time import
+        if (importLegacy)
+            ImportLegacyCharacterFiles(characterName);
 
         EnsureFileExists(FAMILY_LIST_FILE);
         EnsureFileExists(FRIEND_LIST_FILE);
         EnsureFileExists(MACRO_FILE);
+    }
+
+    /// <summary>
+    ///     True when the old in-game-folder location holds per-character config worth importing — a subdirectory of
+    ///     <c>DataPath</c> containing at least one recognizable config file. Drives the one-time import offer.
+    /// </summary>
+    public bool HasLegacyCharacterData()
+    {
+        if (string.IsNullOrEmpty(DataContext.DataPath) || !Directory.Exists(DataContext.DataPath))
+            return false;
+
+        string[] probe = [FAMILY_LIST_FILE, FRIEND_LIST_FILE, MACRO_FILE, SKILL_BOOK_FILE, SPELL_BOOK_FILE];
+        var found = false;
+
+        DataDiagnostics.Try(
+            () =>
+            {
+                foreach (var dir in Directory.EnumerateDirectories(DataContext.DataPath))
+                    if (probe.Any(f => File.Exists(Path.Combine(dir, f))))
+                    {
+                        found = true;
+
+                        break;
+                    }
+            }, "scan legacy character data");
+
+        return found;
+    }
+
+    /// <summary>Strips path-unsafe characters from a name so it can be used as a single directory segment.</summary>
+    private static string SafeSegment(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return "_";
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new string(name.Where(c => Array.IndexOf(invalid, c) < 0).ToArray()).Trim();
+
+        //reject empties and dot-only names (".", "..") that would self-reference or traverse
+        return (cleaned.Length == 0) || cleaned.All(c => c == '.') ? "_" : cleaned;
+    }
+
+    /// <summary>
+    ///     One-time best-effort import of a character's legacy config from the old <c>{DataPath}/{characterName}</c>
+    ///     location (where retail Dark Ages and older Brigid builds wrote it) into the new per-user profile directory.
+    ///     Copies only files that don't already exist in the target, so it runs harmlessly on every init and does nothing
+    ///     once migrated. The legacy files are left in place (the source may be read-only).
+    /// </summary>
+    private void ImportLegacyCharacterFiles(string characterName)
+    {
+        if (string.IsNullOrEmpty(DataContext.DataPath))
+            return;
+
+        var legacyDir = Path.Combine(DataContext.DataPath, characterName);
+
+        if (!Directory.Exists(legacyDir) || string.Equals(legacyDir, PlayerDirectory, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        //materialize the listing under a guard — enumeration itself can throw (denied listing) on the legacy dir
+        var sources = Array.Empty<string>();
+        DataDiagnostics.Try(() => sources = Directory.GetFiles(legacyDir), "list legacy character files");
+
+        foreach (var source in sources)
+        {
+            var target = Path.Combine(PlayerDirectory, Path.GetFileName(source));
+
+            if (!File.Exists(target))
+                DataDiagnostics.Try(() => File.Copy(source, target), $"import {Path.GetFileName(source)}");
+        }
     }
 
     /// <summary>
@@ -102,6 +180,10 @@ public sealed class LocalPlayerSettingsRepository
     public FamilyList LoadFamilyList()
     {
         var family = new FamilyList();
+
+        if (!File.Exists(FamilyListPath))
+            return family;
+
         var lines = File.ReadAllLines(FamilyListPath);
 
         if (lines.Length > 0)
@@ -141,10 +223,12 @@ public sealed class LocalPlayerSettingsRepository
     ///     Loads friend names from Friendlist.cfg. Returns the first 20 non-empty lines.
     /// </summary>
     public List<string> LoadFriendList()
-        => File.ReadAllLines(FriendListPath)
-               .Where(line => !string.IsNullOrWhiteSpace(line))
-               .Take(20)
-               .ToList();
+        => !File.Exists(FriendListPath)
+            ? []
+            : File.ReadAllLines(FriendListPath)
+                  .Where(line => !string.IsNullOrWhiteSpace(line))
+                  .Take(20)
+                  .ToList();
 
     /// <summary>
     ///     Loads macro text from Macro.cfg. Returns a 10-element array of macro strings.
@@ -246,19 +330,20 @@ public sealed class LocalPlayerSettingsRepository
     /// <summary>
     ///     Saves skill chant entries to a chant book config file.
     /// </summary>
-    private static void SaveChantBook(string path, List<SkillChantEntry> entries)
-    {
-        using var writer = new StreamWriter(path, false, Encoding.UTF8);
-        writer.NewLine = "\n";
-
-        writer.WriteLine("SkillbookUsed");
-
-        foreach (var entry in entries)
+    private static void SaveChantBook(string path, List<SkillChantEntry> entries) => DataDiagnostics.Try(
+        () =>
         {
-            writer.WriteLine(entry.Name);
-            writer.WriteLine($"Skill:{entry.Chant}");
-        }
-    }
+            using var writer = new StreamWriter(path, false, Encoding.UTF8);
+            writer.NewLine = "\n";
+
+            writer.WriteLine("SkillbookUsed");
+
+            foreach (var entry in entries)
+            {
+                writer.WriteLine(entry.Name);
+                writer.WriteLine($"Skill:{entry.Chant}");
+            }
+        }, "SaveChantBook");
 
     /// <summary>
     ///     Saves the family list to Familylist.cfg.
@@ -279,13 +364,14 @@ public sealed class LocalPlayerSettingsRepository
             family.Brother6
         };
 
-        File.WriteAllLines(FamilyListPath, lines);
+        DataDiagnostics.Try(() => File.WriteAllLines(FamilyListPath, lines), "SaveFamilyList");
     }
 
     /// <summary>
     ///     Saves friend names to Friendlist.cfg.
     /// </summary>
-    public void SaveFriendList(List<string> names) => File.WriteAllLines(FriendListPath, names.Take(20));
+    public void SaveFriendList(List<string> names) =>
+        DataDiagnostics.Try(() => File.WriteAllLines(FriendListPath, names.Take(20)), "SaveFriendList");
 
     /// <summary>
     ///     Saves macro text to Macro.cfg.
@@ -301,7 +387,7 @@ public sealed class LocalPlayerSettingsRepository
             lines[i] = $"{label}: \"{value}\"";
         }
 
-        File.WriteAllLines(MacroPath, lines);
+        DataDiagnostics.Try(() => File.WriteAllLines(MacroPath, lines), "SaveMacros");
     }
 
     public void SaveSkillChants(List<SkillChantEntry> entries) => SaveChantBook(SkillBookPath, entries);
@@ -309,19 +395,20 @@ public sealed class LocalPlayerSettingsRepository
     /// <summary>
     ///     Saves spell chant entries to SpellBook.cfg.
     /// </summary>
-    public void SaveSpellChants(List<SpellChantEntry> entries)
-    {
-        using var writer = new StreamWriter(SpellBookPath, false, Encoding.UTF8);
-        writer.NewLine = "\n";
-
-        writer.WriteLine("SpellbookUsed");
-
-        foreach (var entry in entries)
+    public void SaveSpellChants(List<SpellChantEntry> entries) => DataDiagnostics.Try(
+        () =>
         {
-            writer.WriteLine(entry.Name);
+            using var writer = new StreamWriter(SpellBookPath, false, Encoding.UTF8);
+            writer.NewLine = "\n";
 
-            for (var i = 0; i < 10; i++)
-                writer.WriteLine($"Spell{i}:{entry.Chants[i]}");
-        }
-    }
+            writer.WriteLine("SpellbookUsed");
+
+            foreach (var entry in entries)
+            {
+                writer.WriteLine(entry.Name);
+
+                for (var i = 0; i < 10; i++)
+                    writer.WriteLine($"Spell{i}:{entry.Chants[i]}");
+            }
+        }, "SaveSpellChants");
 }
