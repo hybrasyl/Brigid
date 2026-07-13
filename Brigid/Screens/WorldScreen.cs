@@ -280,11 +280,13 @@ public sealed partial class WorldScreen : IScreen
         //from the static WorldState.UserOptions — otherwise a handler leaks per world re-entry)
         userOptions.SettingToggled += HandleSettingToggled;
 
+        //ZIndex 10 = the top modal tier (matches the exit/disconnect popups), so it renders above the HUD
+        //(-1). No SetViewportBounds call: it keeps the default full-window viewport and centers on the window
+        //rather than the play-area viewport.
         OptionsModal = new OptionsModalControl
         {
-            ZIndex = -3
+            ZIndex = 10
         };
-        OptionsModal.SetViewportBounds(WorldHud.ViewportBounds);
         OptionsModal.SettingsRequested += () => Game.Connection.SendOptionToggle(UserOption.Request);
         OptionsModal.FriendsCommitted += SavePlayerFriendList;
 

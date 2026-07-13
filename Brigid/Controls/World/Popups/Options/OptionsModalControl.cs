@@ -47,6 +47,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     private const int MACRO_COUNT = 10;
     private const int MACRO_MAX_LENGTH = 63;
+    private const int MACRO_LABEL_W = 16;
     private const int FRIEND_ROWS = 10;
     private const int FRIEND_MAX_LENGTH = 12;
     private const int ROW_STRIDE = 22;
@@ -176,19 +177,37 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     private void BuildMacrosPane(Rectangle pane)
     {
-        var content = new UIPanel { X = pane.X, Y = pane.Y, Width = pane.Width, Height = pane.Height };
+        var content = new InputSlotPane { X = pane.X, Y = pane.Y, Width = pane.Width, Height = pane.Height };
 
         for (var i = 0; i < MACRO_COUNT; i++)
         {
+            var rowY = i * ROW_STRIDE;
+
+            //the leading number is the slot's chat-window shortcut key: 1-9 for the first nine, 0 for the tenth.
+            content.AddChild(
+                new UILabel
+                {
+                    X = 0,
+                    Y = rowY,
+                    Width = MACRO_LABEL_W,
+                    Height = BOX_HEIGHT,
+                    Text = i < 9 ? (i + 1).ToString() : "0",
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    ForegroundColor = DialogPalette.SelectedText,
+                    IsHitTestVisible = false
+                });
+
             MacroBoxes[i] = new UITextBox
             {
                 Name = $"Macro{i}",
-                X = 0,
-                Y = i * ROW_STRIDE,
-                Width = pane.Width,
+                X = MACRO_LABEL_W + 4,
+                Y = rowY,
+                Width = pane.Width - MACRO_LABEL_W - 4,
                 Height = BOX_HEIGHT,
                 MaxLength = MACRO_MAX_LENGTH,
                 ForegroundColor = LegendColors.White,
+                FocusedBackgroundColor = DialogPalette.RowHoverFill,
                 IsTabStop = true
             };
 
@@ -201,7 +220,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     private void BuildFriendsPane(Rectangle pane)
     {
-        var content = new UIPanel { X = pane.X, Y = pane.Y, Width = pane.Width, Height = pane.Height };
+        var content = new InputSlotPane { X = pane.X, Y = pane.Y, Width = pane.Width, Height = pane.Height };
         var colWidth = (pane.Width - PANE_GAP) / 2;
 
         for (var i = 0; i < FRIEND_ROWS; i++)
@@ -215,6 +234,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 Height = BOX_HEIGHT,
                 MaxLength = FRIEND_MAX_LENGTH,
                 ForegroundColor = LegendColors.White,
+                FocusedBackgroundColor = DialogPalette.RowHoverFill,
                 IsTabStop = true
             };
 
@@ -227,6 +247,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 Height = BOX_HEIGHT,
                 MaxLength = FRIEND_MAX_LENGTH,
                 ForegroundColor = LegendColors.White,
+                FocusedBackgroundColor = DialogPalette.RowHoverFill,
                 IsTabStop = true
             };
 
@@ -452,5 +473,29 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
         //vertical divider between the tab column and the content pane.
         DrawRectClipped(spriteBatch, new Rectangle(ScreenX + PaneX - PANE_GAP / 2, ScreenY + ContentTop, 1, ContentBounds.Height), DialogPalette.Divider);
+    }
+
+    /// <summary>
+    ///     A content pane that draws a dark, bordered "input slot" box behind each of its <see cref="UITextBox" />
+    ///     children, so the fillable areas read as solid boxes. The legacy prefabs baked these into their
+    ///     background art; the from-scratch modal draws them.
+    /// </summary>
+    private sealed class InputSlotPane : UIPanel
+    {
+        private static readonly Color SlotFill = new(0, 0, 0, 205);
+        private static readonly Color SlotBorder = DialogPalette.Divider;
+
+        public override void Draw(SpriteBatch spriteBatch)
+        {
+            if (!Visible)
+                return;
+
+            //behind the children (drawn by base.Draw): a filled box per text field.
+            foreach (var child in Children)
+                if (child is UITextBox { Visible: true } box)
+                    DrawBorderedRect(spriteBatch, new Rectangle(box.ScreenX, box.ScreenY, box.Width, box.Height), SlotFill, SlotBorder);
+
+            base.Draw(spriteBatch);
+        }
     }
 }
