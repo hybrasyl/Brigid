@@ -13,9 +13,10 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Brigid.Controls.World.Popups.Options;
 
 /// <summary>
-///     The tabbed Options modal (Settings | Macros | Friends), built on <see cref="CenteredModalPanel" /> with a
-///     <see cref="SelectableTab" /> column. Re-homes the three legacy prefab panels
-///     (SettingsControl/MacrosListControl/FriendsListControl) onto one primitive modal.
+///     The tabbed Options modal (Settings | Macros | Friends | Keybinds), built on
+///     <see cref="CenteredModalPanel" /> with a <see cref="SelectableTab" /> column. The first three tabs
+///     re-home the legacy prefab panels (SettingsControl/MacrosListControl/FriendsListControl) onto one
+///     primitive modal; the Keybinds tab (<see cref="KeybindsTabControl" />) is the new rebinder.
 ///     <list type="bullet">
 ///         <item>Settings toggles auto-apply through <see cref="UserOptions" /> (server toggles route to the
 ///         server, client toggles persist) exactly as before; the font row cycles the UI face.</item>
@@ -31,7 +32,8 @@ public sealed class OptionsModalControl : CenteredModalPanel
     {
         Settings,
         Macros,
-        Friends
+        Friends,
+        Keybinds
     }
 
     private const int PANEL_W = 500;
@@ -53,10 +55,10 @@ public sealed class OptionsModalControl : CenteredModalPanel
     private const int ROW_STRIDE = 22;
     private const int BOX_HEIGHT = 20;
 
-    private static readonly string[] TabTitles = ["Settings", "Macros", "Friends"];
+    private static readonly string[] TabTitles = ["Settings", "Macros", "Friends", "Keybinds"];
 
-    private readonly SelectableTab[] Tabs = new SelectableTab[3];
-    private readonly UIPanel[] TabPanes = new UIPanel[3];
+    private readonly SelectableTab[] Tabs = new SelectableTab[4];
+    private readonly UIPanel[] TabPanes = new UIPanel[4];
 
     private readonly CheckBox[] SettingChecks = new CheckBox[UserOptions.SETTING_COUNT];
     private readonly UILabel[] SettingLabels = new UILabel[UserOptions.SETTING_COUNT];
@@ -70,6 +72,8 @@ public sealed class OptionsModalControl : CenteredModalPanel
     private List<string> Friends = [];
     private int FriendsDataVersion;
     private int FriendsRenderedVersion = -1;
+
+    private KeybindsTabControl KeybindsTab = null!;
 
     private int PaneX;
 
@@ -94,6 +98,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
         BuildSettingsPane(paneRect);
         BuildMacrosPane(paneRect);
         BuildFriendsPane(paneRect);
+        BuildKeybindsPane(paneRect);
 
         Options.SettingChanged += OnSettingChanged;
 
@@ -253,6 +258,13 @@ public sealed class OptionsModalControl : CenteredModalPanel
         AddChild(content);
     }
 
+    private void BuildKeybindsPane(Rectangle pane)
+    {
+        KeybindsTab = new KeybindsTabControl(pane);
+        TabPanes[3] = KeybindsTab;
+        AddChild(KeybindsTab);
+    }
+
     // ── tab selection ──
 
     public void SelectTab(OptionsTab tab)
@@ -281,6 +293,9 @@ public sealed class OptionsModalControl : CenteredModalPanel
             //F10 then Escape in the same input frame — reads real rows, not empty boxes. Version-gated, so
             //re-selecting Friends never clobbers in-progress edits.
             RefreshFriendsCache();
+        else if (tab == OptionsTab.Keybinds)
+            //re-read current chords each time the tab is shown (picks up any rebinds made in a prior visit).
+            KeybindsTab.Refresh();
     }
 
     private void CommitTab(OptionsTab tab)
