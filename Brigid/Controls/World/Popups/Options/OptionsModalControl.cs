@@ -261,6 +261,11 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
         if (tab == OptionsTab.Settings)
             SettingsRequested?.Invoke();
+        else if (tab == OptionsTab.Friends)
+            //populate eagerly (not just in Draw) so a commit that happens before the first Draw — e.g.
+            //F10 then Escape in the same input frame — reads real rows, not empty boxes. Version-gated, so
+            //re-selecting Friends never clobbers in-progress edits.
+            RefreshFriendsCache();
     }
 
     private void CommitTab(OptionsTab tab)
@@ -424,6 +429,15 @@ public sealed class OptionsModalControl : CenteredModalPanel
             var rightIndex = i + FRIEND_ROWS;
             FriendCol2[i].Text = rightIndex < Friends.Count ? Friends[rightIndex] : string.Empty;
         }
+    }
+
+    public override void Dispose()
+    {
+        //Options is the static WorldState.UserOptions singleton, which outlives this modal — detach so a
+        //re-created WorldScreen's modal doesn't accumulate handlers on it.
+        Options.SettingChanged -= OnSettingChanged;
+
+        base.Dispose();
     }
 
     public override void Draw(SpriteBatch spriteBatch)

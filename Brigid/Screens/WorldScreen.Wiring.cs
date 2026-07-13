@@ -390,9 +390,7 @@ public sealed partial class WorldScreen
     {
         if ((except != Keys.Q) && PauseMenu.Visible)
         {
-            SettingsDialog.Hide();
-            MacrosList.Hide();
-            FriendsList.Hide();
+            OptionsModal.Hide();
             PauseMenu.Hide();
         }
 
@@ -767,11 +765,7 @@ public sealed partial class WorldScreen
             hud.HelpButton.Clicked += () => HotkeyHelp.Show();
 
         if (hud.SettingsButton is not null)
-            hud.SettingsButton.Clicked += () =>
-            {
-                if (!MacrosList.Visible && !FriendsList.Visible)
-                    SettingsDialog.Show();
-            };
+            hud.SettingsButton.Clicked += () => OptionsModal.Show(OptionsModalControl.OptionsTab.Settings);
 
         if (hud.GroupButton is not null)
             hud.GroupButton.Clicked += () =>
@@ -1035,9 +1029,7 @@ public sealed partial class WorldScreen
     #region Options Dialog Wiring
     private void WireOptionsDialog()
     {
-        PauseMenu.OnMacro += () => ToggleSubPanel(MacrosList, SettingsDialog, FriendsList);
-        PauseMenu.OnSettings += () => ToggleSubPanel(SettingsDialog, MacrosList, FriendsList);
-        PauseMenu.OnFriends += () => ToggleSubPanel(FriendsList, MacrosList, SettingsDialog);
+        PauseMenu.OnSettings += () => OptionsModal.Show(OptionsModalControl.OptionsTab.Settings);
 
         PauseMenu.OnExit += BeginExit;
 
@@ -1068,21 +1060,6 @@ public sealed partial class WorldScreen
         PauseMenu.SetAmbienceVolume(ClientSettings.AmbienceVolume);
         Game.SoundSystem.SetSoundVolume(ClientSettings.SoundVolume);
         Game.SoundSystem.SetMusicVolume(ClientSettings.MusicVolume);
-    }
-
-    private static void ToggleSubPanel(PrefabPanel panel, PrefabPanel sibling1, PrefabPanel sibling2)
-    {
-        if (panel.Visible)
-            panel.Hide();
-        else if (sibling1.Visible || sibling2.Visible)
-            // ReSharper disable once RedundantJumpStatement
-            return;
-        else if (panel is MacrosListControl macro)
-            macro.SlideIn();
-        else if (panel is SettingsControl settings)
-            settings.SlideIn();
-        else if (panel is FriendsListControl friends)
-            friends.SlideIn();
     }
     #endregion
 }

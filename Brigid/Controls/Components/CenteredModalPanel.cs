@@ -170,8 +170,14 @@ public abstract class CenteredModalPanel : UIPanel
             return;
         }
 
-        //fall through for Tab-traversal among any child textboxes (Macros/Friends tabs).
+        //Tab traverses child textboxes (Macros/Friends tabs).
         base.OnKeyDown(e);
+
+        //a modal captures input: swallow every remaining key so world hotkeys that sit above the
+        //control-stack guard (Q/W/E/R panel toggles, Enter chat focus, …) don't fire underneath while it's
+        //open. Focused textboxes still receive their keys — explicit-focus (phase 1) dispatch runs before
+        //this phase-2 handler. Matches retail, where the options popups blocked other actions.
+        e.Handled = true;
     }
 
     //absorb the wheel so it never scrolls the world behind the modal; subclasses with a scroll list override

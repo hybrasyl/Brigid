@@ -483,16 +483,6 @@ public delegate void PreviousHandler();
 public delegate void ExitHandler();
 
 /// <summary>
-///     The friends list was requested.
-/// </summary>
-public delegate void FriendsHandler();
-
-/// <summary>
-///     The macro list was requested.
-/// </summary>
-public delegate void MacroHandler();
-
-/// <summary>
 ///     The settings panel was requested.
 /// </summary>
 public delegate void SettingsHandler();

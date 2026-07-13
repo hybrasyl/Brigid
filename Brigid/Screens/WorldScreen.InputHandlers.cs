@@ -5,6 +5,7 @@ using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Hud.Panel.Slots;
 using Brigid.Controls.World.Popups;
+using Brigid.Controls.World.Popups.Options;
 using Brigid.Data;
 using Brigid.Data.Models;
 using Brigid.Extensions;
@@ -278,19 +279,6 @@ public sealed partial class WorldScreen
     //base BodyAnimation value for Alt+<key> emotes (e.g. key 0 -> bodyanim 34)
     private const int ALT_EMOTE_BASE = 34;
 
-    /// <summary>
-    ///     Returns true when no mutually-exclusive options panel is currently visible. Used by the F3/F4/F10 shortcuts so
-    ///     pressing one hotkey cannot overlap another options popup.
-    /// </summary>
-    private static bool CanShowOptionsPanel(params UIElement[] others)
-    {
-        foreach (var other in others)
-            if (other.Visible)
-                return false;
-
-        return true;
-    }
-
     private bool HandleEmoteHotkey(KeyDownEvent e)
     {
         if (e is { Ctrl: false, Alt: false })
@@ -390,7 +378,7 @@ public sealed partial class WorldScreen
             case HudTab.Chat:
             case HudTab.MessageHistory:
             {
-                var macroText = MacrosList.GetMacroValue(slot - 1);
+                var macroText = OptionsModal.GetMacroValue(slot - 1);
 
                 if (macroText.Length > 0)
                 {
@@ -517,13 +505,13 @@ public sealed partial class WorldScreen
     {
         var names = DataContext.LocalPlayerSettings.LoadFriendList();
 
-        FriendsList.SetFriends(names);
+        OptionsModal.SetFriends(names);
         WorldList.SetFriendNames(names);
     }
 
     private void SavePlayerFriendList()
     {
-        var names = FriendsList.GetFriendNames();
+        var names = OptionsModal.GetFriendNames();
         DataContext.LocalPlayerSettings.SaveFriendList(names);
         WorldList.SetFriendNames(names);
     }
@@ -531,7 +519,7 @@ public sealed partial class WorldScreen
     private void LoadPlayerMacros()
     {
         var macros = DataContext.LocalPlayerSettings.LoadMacros();
-        MacrosList.SetMacros(macros);
+        OptionsModal.SetMacros(macros);
     }
 
     private void SaveSkillChants()
@@ -649,9 +637,7 @@ public sealed partial class WorldScreen
 
             if (PauseMenu.Visible)
             {
-                SettingsDialog.Hide();
-                MacrosList.Hide();
-                FriendsList.Hide();
+                OptionsModal.Hide();
                 PauseMenu.Hide();
             } else
                 PauseMenu.Show();
@@ -847,9 +833,7 @@ public sealed partial class WorldScreen
         //f3 — macro menu
         if (e.Key == Keys.F3)
         {
-            if (CanShowOptionsPanel(SettingsDialog, FriendsList))
-                MacrosList.Show();
-
+            OptionsModal.Show(OptionsModalControl.OptionsTab.Macros);
             e.Handled = true;
 
             return;
@@ -858,9 +842,7 @@ public sealed partial class WorldScreen
         //f4 — settings
         if (e.Key == Keys.F4)
         {
-            if (CanShowOptionsPanel(MacrosList, FriendsList))
-                SettingsDialog.Show();
-
+            OptionsModal.Show(OptionsModalControl.OptionsTab.Settings);
             e.Handled = true;
 
             return;
@@ -902,9 +884,7 @@ public sealed partial class WorldScreen
         //f10 — friends list
         if (e.Key == Keys.F10)
         {
-            if (CanShowOptionsPanel(MacrosList, SettingsDialog))
-                FriendsList.Show();
-
+            OptionsModal.Show(OptionsModalControl.OptionsTab.Friends);
             e.Handled = true;
 
             return;

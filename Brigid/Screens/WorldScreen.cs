@@ -127,8 +127,6 @@ public sealed partial class WorldScreen : IScreen
     private OkPopupMessageControl ExchangeResultPopup = null!;
     private ItemAmountControl ItemAmount = null!;
 
-    private FriendsListControl FriendsList = null!;
-
     private ChaosGame Game = null!;
     private GoldAmountControl GoldDrop = null!;
     private GroupRecruitPanel GroupBoxViewer = null!;
@@ -144,7 +142,6 @@ public sealed partial class WorldScreen : IScreen
     private LargeWorldHudControl LargeHud = null!;
     private TileClickTracker LeftClickTracker;
     private readonly LightingSystem Lighting = new();
-    private MacrosListControl MacrosList = null!;
     private MailListControl MailList = null!;
     private MailReadControl MailRead = null!;
     private MailSendControl MailSend = null!;
@@ -175,9 +172,9 @@ public sealed partial class WorldScreen : IScreen
     private RasterizerState ScissorRasterizerState = null!;
 
     //true when the client explicitly requested its own profile — prevents unsolicited selfprofile packets from opening the panel
+    private OptionsModalControl OptionsModal = null!;
     private bool SelfProfileRequested;
     private StatusBookTab SelfProfileRequestedTab = StatusBookTab.Equipment;
-    private SettingsControl SettingsDialog = null!;
     private SilhouetteRenderer SilhouetteRenderer = null!;
     private WorldHudControl SmallHud = null!;
     private SystemMessagePaneControl SystemMessagePane = null!;
@@ -270,12 +267,6 @@ public sealed partial class WorldScreen : IScreen
         PauseMenu.SetViewportBounds(WorldHud.ViewportBounds);
         WireOptionsDialog();
 
-        //sub-panels (Settings/Macros/Friends) slide out leftward from an anchor on the
-        //right side of the viewport
-        const int SUB_PANEL_ANCHOR_X_FROM_RIGHT = 170;
-        var optionsAnchorX = WorldHud.ViewportBounds.X + WorldHud.ViewportBounds.Width - SUB_PANEL_ANCHOR_X_FROM_RIGHT + 10;
-        var optionsAnchorY = WorldHud.ViewportBounds.Y;
-
         //initialize client-local settings into useroptions from persisted config
         var userOptions = WorldState.UserOptions;
         userOptions.SetValue(6, ClientSettings.UseGroupWindow);
@@ -285,70 +276,17 @@ public sealed partial class WorldScreen : IScreen
         userOptions.SetValue(11, ClientSettings.RecordNpcChat);
         userOptions.SetValue(12, ClientSettings.GroupOpen);
 
-        //route user-initiated toggles to server or local persistence
-        userOptions.SettingToggled += (index, value) =>
-        {
-            if (UserOptions.IsServerSetting(index))
-            {
-                var option = (UserOption)(index + 1);
-                Game.Connection.SendOptionToggle(option);
-            } else
-            {
-                switch (index)
-                {
-                    case 6:
-                        ClientSettings.UseGroupWindow = value;
+        //route user-initiated toggles to server or local persistence (named so UnloadContent can detach it
+        //from the static WorldState.UserOptions — otherwise a handler leaks per world re-entry)
+        userOptions.SettingToggled += HandleSettingToggled;
 
-                        break;
-                    case 8:
-                        ClientSettings.ScrollLevel = value ? 1 : 0;
-
-                        break;
-                    case 9:
-                        ClientSettings.UseShiftKeyForAltPanels = value;
-
-                        break;
-                    case 10:
-                        ClientSettings.EnableProfileClick = value;
-
-                        break;
-                    case 11:
-                        ClientSettings.RecordNpcChat = value;
-
-                        break;
-                    case 12:
-                        //optimistic local repaint — Hybrasyl's 0x2F handler doesn't push a profile back
-                        //unless the toggle actually leaves a group, and retail's response shape is unverified.
-                        //Legacy clients flip the indicator on click; we match that. Subsequent SelfProfile
-                        //updates (e.g., on next /stats) will reconcile if server state diverges.
-                        WorldHud.SetGroupOpen(value);
-                        StatusBook.SetGroupOpen(value);
-                        Game.Connection.ToggleGroup();
-
-                        return;
-                }
-
-                ClientSettings.Save();
-            }
-        };
-
-        SettingsDialog = new SettingsControl(userOptions)
+        OptionsModal = new OptionsModalControl
         {
             ZIndex = -3
         };
-        SettingsDialog.SetSlideAnchor(optionsAnchorX, optionsAnchorY);
-
-        SettingsDialog.VisibilityChanged += visible =>
-        {
-            if (visible)
-                Game.Connection.SendOptionToggle(UserOption.Request);
-        };
-
-        MacrosList = new MacrosListControl
-        {
-            ZIndex = -3
-        };
-        MacrosList.SetSlideAnchor(optionsAnchorX, optionsAnchorY);
+        OptionsModal.SetViewportBounds(WorldHud.ViewportBounds);
+        OptionsModal.SettingsRequested += () => Game.Connection.SendOptionToggle(UserOption.Request);
+        OptionsModal.FriendsCommitted += SavePlayerFriendList;
 
         HotkeyHelp = new HotkeyHelpControl();
 
@@ -433,13 +371,6 @@ public sealed partial class WorldScreen : IScreen
             ZIndex = -2
         };
         WorldList.SetViewportBounds(WorldHud.ViewportBounds);
-
-        FriendsList = new FriendsListControl
-        {
-            ZIndex = -3
-        };
-        FriendsList.SetSlideAnchor(optionsAnchorX, optionsAnchorY);
-        FriendsList.OnOk += SavePlayerFriendList;
 
         Exchange = new ExchangeControl(WorldHud.ViewportBounds);
 
@@ -686,13 +617,11 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(NpcSession);
         Root.AddChild(ItemTooltip);
         Root.AddChild(PauseMenu);
-        Root.AddChild(SettingsDialog);
-        Root.AddChild(MacrosList);
+        Root.AddChild(OptionsModal);
         Root.AddChild(HotkeyHelp);
         Root.AddChild(GroupPanel);
         Root.AddChild(GroupBoxViewer);
         Root.AddChild(WorldList);
-        Root.AddChild(FriendsList);
         Root.AddChild(Exchange);
         Root.AddChild(GoldDrop);
         Root.AddChild(ItemAmount);
@@ -738,8 +667,57 @@ public sealed partial class WorldScreen : IScreen
     }
 
     /// <inheritdoc />
+    //user-initiated settings toggle: server settings route to the server, client settings persist locally.
+    private void HandleSettingToggled(int index, bool value)
+    {
+        if (UserOptions.IsServerSetting(index))
+        {
+            var option = (UserOption)(index + 1);
+            Game.Connection.SendOptionToggle(option);
+
+            return;
+        }
+
+        switch (index)
+        {
+            case 6:
+                ClientSettings.UseGroupWindow = value;
+
+                break;
+            case 8:
+                ClientSettings.ScrollLevel = value ? 1 : 0;
+
+                break;
+            case 9:
+                ClientSettings.UseShiftKeyForAltPanels = value;
+
+                break;
+            case 10:
+                ClientSettings.EnableProfileClick = value;
+
+                break;
+            case 11:
+                ClientSettings.RecordNpcChat = value;
+
+                break;
+            case 12:
+                //optimistic local repaint — Hybrasyl's 0x2F handler doesn't push a profile back unless the
+                //toggle actually leaves a group, and retail's response shape is unverified. Legacy clients flip
+                //the indicator on click; we match that. Subsequent SelfProfile updates (e.g., on next /stats)
+                //will reconcile if server state diverges.
+                WorldHud.SetGroupOpen(value);
+                StatusBook.SetGroupOpen(value);
+                Game.Connection.ToggleGroup();
+
+                return;
+        }
+
+        ClientSettings.Save();
+    }
+
     public void UnloadContent()
     {
+        WorldState.UserOptions.SettingToggled -= HandleSettingToggled;
         Game.Connection.OnUserId -= HandleUserId;
         Game.Connection.OnMapInfo -= HandleMapInfo;
         Game.Connection.OnMapData -= HandleMapData;
