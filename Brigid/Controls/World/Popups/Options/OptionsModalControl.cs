@@ -157,14 +157,8 @@ public sealed class OptionsModalControl : CenteredModalPanel
         FontButton.Clicked += CycleFont;
         content.AddChild(FontButton);
 
-        //client-local default names (server settings are named by the server response)
-        SetSettingName(6, "Use Group Window");
-        SetSettingName(8, "Scroll Screen");
-        SetSettingName(9, "the Shift key.");
-        SetSettingName(10, "click character profile");
-        SetSettingName(11, "NPC Record Mundane Chat");
-        SetSettingName(12, "group recruiting");
-
+        //client-local settings draw their text from msg.tbl (see RefreshLabel); only server settings need a
+        //name pushed in later via SetSettingName.
         for (var i = 0; i < UserOptions.SETTING_COUNT; i++)
         {
             SettingChecks[i].Checked = Options[i];
@@ -354,20 +348,34 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     private void RefreshLabel(int index)
     {
-        var baseName = SettingBaseNames[index];
-
-        if (string.IsNullOrEmpty(baseName))
-            return;
-
         var value = Options[index];
+        string text;
 
-        var text = index switch
+        if (UserOptions.IsServerSetting(index))
         {
-            8 => $"Scroll Screen : {(value ? "Smooth" : "Rough")}",
-            9 => value ? "the Shift key." : "not use the Shift key.",
-            _ when UserOptions.IsServerSetting(index) => baseName,
-            _ => $"{baseName} :{(value ? "ON" : "OFF")}"
-        };
+            //server settings: the server response supplies the full formatted line (already includes :on/:off).
+            text = SettingBaseNames[index];
+
+            if (string.IsNullOrEmpty(text))
+                return;
+        } else
+        {
+            //client-local settings: full text from national.dat/msg.tbl by the opaque line indices the legacy
+            //client hardcodes. The on/off (and smooth/rough) variants live on adjacent lines in inconsistent
+            //order, so each is picked explicitly.
+            var msg = DataContext.Messages;
+
+            text = index switch
+            {
+                6 => msg.Get(65),                                                 // Use Group Window
+                8 => $"{msg.Get(66)} : {(value ? msg.Get(68) : msg.Get(67))}",    // Scroll Screen : Smooth/Rough
+                9 => value ? msg.Get(52) : msg.Get(53),                           // Use the Shift key. / Do not use the Shift key.
+                10 => $"{msg.Get(92)} : {(value ? msg.Get(93) : msg.Get(94))}",   // click character profile : ON/OFF
+                11 => $"{msg.Get(106)} : {(value ? msg.Get(108) : msg.Get(107))}", // NPC Record Mundane Chat : ON/OFF
+                12 => $"{msg.Get(109)} : {(value ? msg.Get(111) : msg.Get(110))}", // group recruiting : ON/OFF
+                _ => SettingBaseNames[index]
+            };
+        }
 
         SettingLabels[index].ForegroundColor = TextColors.Default;
         SettingLabels[index].Text = text;
