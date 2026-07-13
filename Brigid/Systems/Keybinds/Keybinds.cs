@@ -194,6 +194,113 @@ public static class Keybinds
         return !meta && !ctrl;
     }
 
+    //keys handled by a modifier-agnostic literal switch in WorldScreen.OnRootKeyDown (the HUD tab switch,
+    //A/S/D/F/G/H) that fires regardless of modifiers and returns before most resolver checks — so a WorldHud
+    //command rebound onto one would be silently shadowed. The rebinder rejects these via IsShadowed. (This is
+    //deliberately conservative: a couple of commands whose Matches sits above the tab switch could technically
+    //use them, but blocking the whole set keeps the rule simple and can never produce a dead binding.)
+    private static readonly FrozenSet<Keys> WorldHudShadowKeys =
+        new[] { Keys.A, Keys.S, Keys.D, Keys.F, Keys.G, Keys.H }.ToFrozenSet();
+
+    /// <summary>
+    ///     Keys the WorldHud rebinder refuses (see <see cref="IsShadowed" />). A hand-maintained mirror of
+    ///     <c>WorldScreen.HudTabHotkeys</c> — a test cross-asserts the two so they can't silently drift.
+    /// </summary>
+    public static IReadOnlySet<Keys> ReservedWorldHudKeys => WorldHudShadowKeys;
+
+    /// <summary>
+    ///     True if binding <paramref name="chord" /> in <paramref name="context" /> would be swallowed by a
+    ///     literal (non-resolver) handler that runs first, making the binding dead. The rebinding UI uses this
+    ///     to refuse such a chord. Currently only the WorldHud tab-switch keys are reserved (the slot/emote
+    ///     number-row handlers are a softer case left to the capture UI in C3).
+    /// </summary>
+    public static bool IsShadowed(KeybindContext context, KeyChord chord) =>
+        context == KeybindContext.WorldHud && WorldHudShadowKeys.Contains(chord.Key);
+
+    //bare modifier keys — never a chord on their own; the rebinder ignores them and waits for a real key.
+    private static readonly FrozenSet<Keys> ModifierKeys = new[]
+    {
+        Keys.LeftShift, Keys.RightShift, Keys.LeftControl, Keys.RightControl,
+        Keys.LeftAlt, Keys.RightAlt, Keys.LeftWindows, Keys.RightWindows
+    }.ToFrozenSet();
+
+    /// <summary>
+    ///     Converts a captured key event into the chord it represents, or null when the key is a bare modifier
+    ///     (the rebinder ignores pure-modifier presses and waits for a real key). Normalises the primary
+    ///     modifier: a press reporting <see cref="KeyModifiers.Meta" /> (Windows Ctrl, macOS Cmd) records the
+    ///     portable <see cref="ChordMods.Meta" />, while a macOS physical-Ctrl press (Ctrl without Meta) records
+    ///     literal <see cref="ChordMods.Ctrl" />. The decode counterpart to <see cref="EventForChord" />.
+    /// </summary>
+    public static KeyChord? ChordFromEvent(KeyEvent e)
+    {
+        if (e.Key == Keys.None || ModifierKeys.Contains(e.Key))
+            return null;
+
+        var mods = ChordMods.None;
+
+        if (e.Shift)
+            mods |= ChordMods.Shift;
+
+        if (e.Alt)
+            mods |= ChordMods.Alt;
+
+        if (e.Meta)
+            mods |= ChordMods.Meta;
+        else if (e.Ctrl)
+            mods |= ChordMods.Ctrl;
+
+        return new KeyChord(e.Key, mods);
+    }
+
+    /// <summary>
+    ///     Commands in <paramref name="context" /> — other than <paramref name="excluding" /> — whose effective
+    ///     binding fires on the same physical keystroke as <paramref name="candidate" />. Built by synthesising
+    ///     the event <paramref name="candidate" /> produces on the current OS (mirroring
+    ///     <c>InputBuffer.TranslateSdlMods</c>), so the Windows <see cref="ChordMods.Meta" />≡Ctrl overlap is
+    ///     honoured: a Meta chord and a literal-Ctrl chord on the same key conflict there but not on macOS.
+    /// </summary>
+    public static IReadOnlyList<CommandId> FindConflicts(CommandId excluding, KeyChord candidate, KeybindContext context)
+    {
+        var probe = EventForChord(candidate);
+        var conflicts = new List<CommandId>();
+
+        foreach (var (id, def) in Defaults)
+        {
+            if (id == excluding || def.Context != context)
+                continue;
+
+            if (Matches(probe, id))
+                conflicts.Add(id);
+        }
+
+        return conflicts;
+    }
+
+    //the KeyDownEvent a chord would produce on the current OS. Non-macOS collapses Meta and Ctrl onto the same
+    //physical key (both bits set), matching how InputBuffer reports a Ctrl press.
+    private static KeyEvent EventForChord(KeyChord chord)
+    {
+        var mods = KeyModifiers.None;
+
+        if (chord.HasShift)
+            mods |= KeyModifiers.Shift;
+
+        if (chord.HasAlt)
+            mods |= KeyModifiers.Alt;
+
+        if (OperatingSystem.IsMacOS())
+        {
+            if (chord.HasMeta)
+                mods |= KeyModifiers.Meta;
+
+            if (chord.HasCtrl)
+                mods |= KeyModifiers.Ctrl;
+        } else if (chord.HasMeta || chord.HasCtrl)
+            mods |= KeyModifiers.Ctrl | KeyModifiers.Meta;
+
+        return new KeyDownEvent { Key = chord.Key, Modifiers = mods };
+    }
+
     /// <summary>Sets (or replaces) a user override to a single-chord binding. Persist via <see cref="Save" />.</summary>
     public static void SetBinding(CommandId id, KeyChord primary) => SetBinding(id, new KeyBinding(primary));
 
@@ -236,8 +343,10 @@ public static class Keybinds
         try
         {
             loaded = JsonSerializer.Deserialize<Dictionary<string, KeyBinding>>(File.ReadAllText(path), JsonOptions);
-        } catch (Exception ex) when (ex is IOException or JsonException)
+        } catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException or System.Security.SecurityException)
         {
+            //Load() runs during startup (FinishAssetInitialization) with no enclosing handler, so a locked or
+            //permission-denied file must degrade to defaults rather than abort the launch.
             NoticeDebugLog.Write($"[Keybinds] failed to load {FILE_NAME}: {ex.Message}");
 
             return;

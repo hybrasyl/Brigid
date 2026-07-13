@@ -9,6 +9,7 @@ using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
 using Brigid.Systems;
+using Brigid.Systems.Keybinds;
 using Brigid.Utilities;
 using Chaos.DarkAges.Definitions;
 using DALib.Cryptography;
@@ -524,6 +525,8 @@ public sealed class ChaosGame : Game
         GlobalSettings.InitializeAssetData();
         Directory.CreateDirectory(MetaFilePath);
         ClientSettings.Load();
+        //load keybind overrides (DataPath was resolved during config/launcher setup); pure defaults if absent.
+        Keybinds.Load();
         //LoadContent constructed FontEngine early (with the default face) so the launcher's frames have a non-null
         //Instance; now that ClientSettings is loaded, switch to the user's saved face before the lobby appears.
         FontEngine.Instance.SetActiveFont(ClientSettings.FontIndex);

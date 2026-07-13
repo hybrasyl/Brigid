@@ -1,4 +1,5 @@
 #region
+using System.Collections.Frozen;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
@@ -242,6 +243,22 @@ public sealed partial class WorldScreen
     }
 
     //--- hotkeys ---
+
+    /// <summary>
+    ///     HUD tab hotkeys (bare letter → tab). The <b>authoritative</b> source for the tab-switch keys: the
+    ///     switch below reads it, and the keybind rebinder's reserved set (<c>Keybinds.ReservedWorldHudKeys</c>)
+    ///     mirrors it — the switch runs modifier-agnostically before the resolver checks, so it would shadow any
+    ///     command rebound onto one of these keys. A test cross-asserts the two stay in sync.
+    /// </summary>
+    public static readonly FrozenDictionary<Keys, HudTab> HudTabHotkeys = new Dictionary<Keys, HudTab>
+    {
+        [Keys.A] = HudTab.Inventory,
+        [Keys.S] = HudTab.Skills,
+        [Keys.D] = HudTab.Spells,
+        [Keys.F] = HudTab.Chat,
+        [Keys.G] = HudTab.Stats,
+        [Keys.H] = HudTab.Tools
+    }.ToFrozenDictionary();
 
     private static readonly Keys[] EmoteKeys =
     [
@@ -758,27 +775,14 @@ public sealed partial class WorldScreen
             return;
         }
 
-        //tab panel switching — blocked while dragging the orange bar
-        if (!WorldHud.IsOrangeBarDragging)
+        //tab panel switching — blocked while dragging the orange bar. Keyed off the authoritative HudTabHotkeys
+        //map (mirrored by Keybinds.ReservedWorldHudKeys); modifier-agnostic, Shift only picks the alt panel.
+        if (!WorldHud.IsOrangeBarDragging && HudTabHotkeys.TryGetValue(e.Key, out var hudTab))
         {
-            HudTab? tab = e.Key switch
-            {
-                Keys.A => HudTab.Inventory,
-                Keys.S => HudTab.Skills,
-                Keys.D => HudTab.Spells,
-                Keys.F => HudTab.Chat,
-                Keys.G => HudTab.Stats,
-                Keys.H => HudTab.Tools,
-                _      => null
-            };
+            WorldHud.HandleTabActivation(hudTab, e.Shift);
+            e.Handled = true;
 
-            if (tab is not null)
-            {
-                WorldHud.HandleTabActivation(tab.Value, e.Shift);
-                e.Handled = true;
-
-                return;
-            }
+            return;
         }
 
         //tab — toggle tab map overlay (suppressed by NoTabMap map flag)

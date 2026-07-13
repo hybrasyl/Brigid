@@ -326,6 +326,78 @@ public sealed class KeybindsTests
     }
 
     [Fact]
+    public void FindConflicts_ReportsSameContextCollisions_ExcludingSelf()
+    {
+        Keybinds.ResetAll();
+
+        //binding F1 (currently Help) to Refresh collides with World_HelpMerchant.
+        var conflicts = Keybinds.FindConflicts(CommandId.World_Refresh, new KeyChord(Keys.F1), WorldCtx);
+        Assert.Contains(CommandId.World_HelpMerchant, conflicts);
+
+        //a command never conflicts with its own current chord (excluding filters it out).
+        Assert.Empty(Keybinds.FindConflicts(CommandId.World_Refresh, new KeyChord(Keys.F5), WorldCtx));
+
+        //a genuinely-unbound key collides with nothing.
+        Assert.Empty(Keybinds.FindConflicts(CommandId.World_Refresh, new KeyChord(Keys.F12), WorldCtx));
+    }
+
+    [Fact]
+    public void FindConflicts_HonorsWindowsMetaCtrlOverlap()
+    {
+        Keybinds.ResetAll();
+
+        //on Windows a literal-Ctrl chord and a Meta chord on the same key fire on the same physical press, so
+        //assigning Ctrl+C somewhere in the editor context conflicts with Editor_Copy (Meta+C).
+        var conflicts = Keybinds.FindConflicts(CommandId.Editor_Cut, new KeyChord(Keys.C, ChordMods.Ctrl), KeybindContext.TextEditing);
+
+        if (OperatingSystem.IsMacOS())
+            Assert.DoesNotContain(CommandId.Editor_Copy, conflicts);
+        else
+            Assert.Contains(CommandId.Editor_Copy, conflicts);
+    }
+
+    [Fact]
+    public void IsShadowed_ReservesWorldHudTabKeys_Only()
+    {
+        //A/S/D/F/G/H are eaten by the literal HUD tab switch before the resolver runs — unbindable in WorldHud.
+        Assert.True(Keybinds.IsShadowed(WorldCtx, new KeyChord(Keys.A)));
+        Assert.True(Keybinds.IsShadowed(WorldCtx, new KeyChord(Keys.H, ChordMods.Shift)));
+
+        //a normal WorldHud key is fine, and the reservation doesn't leak into other contexts.
+        Assert.False(Keybinds.IsShadowed(WorldCtx, new KeyChord(Keys.Q)));
+        Assert.False(Keybinds.IsShadowed(KeybindContext.TextEditing, new KeyChord(Keys.A)));
+    }
+
+    private const KeybindContext WorldCtx = KeybindContext.WorldHud;
+
+    [Fact]
+    public void ReservedWorldHudKeys_MirrorTheHudTabSwitch()
+    {
+        //IsShadowed's reserved set is a hand-maintained mirror of WorldScreen's literal tab switch; if a tab
+        //key is added/moved/removed there, this fails so the two can't silently drift.
+        Assert.Equal(
+            Brigid.Screens.WorldScreen.HudTabHotkeys.Keys.OrderBy(k => k),
+            Keybinds.ReservedWorldHudKeys.OrderBy(k => k));
+    }
+
+    [Fact]
+    public void ChordFromEvent_NormalisesPrimaryModifier_AndIgnoresBareModifiers()
+    {
+        //Windows: Ctrl press carries both bits → records the portable Meta (Ctrl+Shift+Z = redo's primary).
+        Assert.Equal(new KeyChord(Keys.Z, ChordMods.Meta | ChordMods.Shift), Keybinds.ChordFromEvent(WinKey(Keys.Z, ctrl: true, shift: true)));
+        Assert.Equal(new KeyChord(Keys.F5), Keybinds.ChordFromEvent(WinKey(Keys.F5)));
+
+        //macOS: Cmd → Meta; physical Ctrl (no Meta) → literal Ctrl.
+        Assert.Equal(new KeyChord(Keys.C, ChordMods.Meta), Keybinds.ChordFromEvent(MacKey(Keys.C, cmd: true)));
+        Assert.Equal(new KeyChord(Keys.A, ChordMods.Ctrl), Keybinds.ChordFromEvent(MacKey(Keys.A, ctrl: true)));
+
+        //bare modifier presses produce no chord — the capture widget keeps waiting.
+        Assert.Null(Keybinds.ChordFromEvent(new KeyDownEvent { Key = Keys.LeftControl }));
+        Assert.Null(Keybinds.ChordFromEvent(new KeyDownEvent { Key = Keys.RightShift }));
+        Assert.Null(Keybinds.ChordFromEvent(new KeyDownEvent { Key = Keys.None }));
+    }
+
+    [Fact]
     public void EveryCommand_HasADefault()
     {
         foreach (CommandId id in Enum.GetValues<CommandId>())
