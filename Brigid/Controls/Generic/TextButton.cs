@@ -60,6 +60,8 @@ public sealed class TextButton : UIPanel
         RefreshVisual();
     }
 
+    public void SetText(string text) => Label.Text = text;
+
     private void RefreshVisual()
     {
         BackgroundColor = Enabled ? Pressed ? PressFill : Hovered ? HoverFill : IdleFill : IdleFill;
