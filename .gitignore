@@ -376,12 +376,8 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# VS Code files for those working on multiple tools
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# VS Code files
+.vscode/
 *.code-workspace
 
 # Local History for Visual Studio Code
@@ -413,7 +409,6 @@ runtimes/*
 
 # Epona launcher staging (local main checkout)
 .worktrees/
-.vscode/settings.json
 
 # diagnostic dumps from Scripts/dump-prefab-images.{sh,ps1} and similar
 output/
