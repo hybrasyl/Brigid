@@ -57,5 +57,65 @@ public enum CommandId
 
     // ── ReadView (UILabel, read-only) ──
     Read_Copy,
-    Read_SelectAll
+    Read_SelectAll,
+
+    // ── WorldHud (WorldScreen.OnRootKeyDown) ── discrete, single-chord player hotkeys. Contextual keys
+    // (Escape), shift-parameterized tab keys (A/S/D/F/G/H), the emote/slot key families, movement (B4), and
+    // the debug hotkeys stay literal in the handler — they don't fit the one-command-one-chord model, so
+    // they're not rebindable via this catalog. The distinction from the migrated Shift chords
+    // (Shout/Whisper/ChatScroll) is the role Shift plays: there it is part of the chord and one key+Shift maps
+    // to exactly one action; on the tab keys Shift instead selects an alternate panel through the same
+    // handler (bare and Shift both route to it), which the chord model can't express.
+
+    /// <summary>Alt+Enter — cycle window size.</summary>
+    World_CycleWindowSize,
+
+    /// <summary>Enter — focus the chat input.</summary>
+    World_ChatFocus,
+
+    World_TogglePauseMenu,
+    World_ToggleBoard,
+    World_ToggleWorldList,
+    World_ToggleSocialStatus,
+
+    /// <summary>Spacebar — assail.</summary>
+    World_Assail,
+
+    /// <summary>Shift+1 — focus chat for a shout.</summary>
+    World_Shout,
+
+    /// <summary>Shift+" — focus chat for a whisper.</summary>
+    World_Whisper,
+
+    World_ToggleTabMap,
+    World_TabMapZoomIn,
+    World_TabMapZoomOut,
+    World_HelpMerchant,
+    World_MacroMenu,
+    World_Settings,
+    World_Refresh,
+    World_BoardList,
+    World_IgnoreList,
+    World_FriendsList,
+
+    /// <summary>/ — swap between the compact and expanded HUD layouts.</summary>
+    World_SwapHudLayout,
+
+    /// <summary>` — unequip weapon and shield.</summary>
+    World_UnequipWeaponShield,
+
+    /// <summary>J — flash group-member highlighting.</summary>
+    World_GroupHighlight,
+
+    /// <summary>B — pick up an item from under / in front of the player.</summary>
+    World_PickupItem,
+
+    /// <summary>T — toggle the town map.</summary>
+    World_TownMap,
+
+    /// <summary>Y — open the group panel (members tab).</summary>
+    World_GroupPanel,
+
+    World_ChatScrollUp,
+    World_ChatScrollDown
 }

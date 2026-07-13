@@ -206,6 +206,98 @@ public sealed class KeybindsTests
         Assert.Equal(CommandId.Editor_Redo, Keybinds.Resolve(WinKey(Keys.Y, ctrl: true), KeybindContext.TextEditing));
     }
 
+    [Theory]
+    [InlineData(Keys.F1, CommandId.World_HelpMerchant)]
+    [InlineData(Keys.F3, CommandId.World_MacroMenu)]
+    [InlineData(Keys.F4, CommandId.World_Settings)]
+    [InlineData(Keys.F5, CommandId.World_Refresh)]
+    [InlineData(Keys.F7, CommandId.World_BoardList)]
+    [InlineData(Keys.F9, CommandId.World_IgnoreList)]
+    [InlineData(Keys.F10, CommandId.World_FriendsList)]
+    [InlineData(Keys.Q, CommandId.World_TogglePauseMenu)]
+    [InlineData(Keys.Space, CommandId.World_Assail)]
+    [InlineData(Keys.T, CommandId.World_TownMap)]
+    //Oem/Page keys — the most likely spot for a parity typo, so pin them explicitly.
+    [InlineData(Keys.PageUp, CommandId.World_TabMapZoomIn)]
+    [InlineData(Keys.PageDown, CommandId.World_TabMapZoomOut)]
+    [InlineData(Keys.OemQuestion, CommandId.World_SwapHudLayout)]
+    [InlineData(Keys.OemTilde, CommandId.World_UnequipWeaponShield)]
+    public void WorldHud_PlainHotkeys_ResolveToCurrentDefaults(Keys key, CommandId expected)
+    {
+        Keybinds.ResetAll();
+
+        Assert.Equal(expected, Keybinds.Resolve(WinKey(key), KeybindContext.WorldHud));
+    }
+
+    [Fact]
+    public void WorldHud_ShiftChords_ResolveToCurrentDefaults()
+    {
+        Keybinds.ResetAll();
+
+        //the migrated Shift chords: Shift is part of the chord (byte-for-byte the old handler's checks).
+        Assert.Equal(CommandId.World_Whisper, Keybinds.Resolve(WinKey(Keys.OemQuotes, shift: true), KeybindContext.WorldHud));
+        Assert.Equal(CommandId.World_ChatScrollUp, Keybinds.Resolve(WinKey(Keys.Up, shift: true), KeybindContext.WorldHud));
+        Assert.Equal(CommandId.World_ChatScrollDown, Keybinds.Resolve(WinKey(Keys.Down, shift: true), KeybindContext.WorldHud));
+    }
+
+    [Fact]
+    public void WorldHud_Defaults_AvoidReservedLiteralKeys()
+    {
+        //A/S/D/F/G/H (HUD tab switch) and Z/X/C/V (letter movement) are handled by modifier-agnostic literal
+        //switches in OnRootKeyDown that run/return regardless of a resolver Matches check, so a WorldHud
+        //command bound to one would be silently shadowed. The migration keeps the catalog clear of them; this
+        //fails if a future command lands on one. Arrow/number-row keys are deliberately NOT reserved: their
+        //literal movement/slot/emote handlers sit after the resolver checks that use them and Shift
+        //disambiguates — hence Shout=Shift+1 and ChatScroll=Shift+Arrow are legitimate.
+        var reserved = new HashSet<Keys>
+        {
+            Keys.A, Keys.S, Keys.D, Keys.F, Keys.G, Keys.H,
+            Keys.Z, Keys.X, Keys.C, Keys.V
+        };
+
+        foreach (var (_, def) in Keybinds.Defaults)
+        {
+            if (def.Context != KeybindContext.WorldHud)
+                continue;
+
+            Assert.DoesNotContain(def.Binding.Primary.Key, reserved);
+
+            if (def.Binding.Secondary is { } secondary)
+                Assert.DoesNotContain(secondary.Key, reserved);
+        }
+    }
+
+    [Fact]
+    public void WorldHud_AltEnter_IsCycleWindow_BareEnter_IsChatFocus()
+    {
+        Keybinds.ResetAll();
+
+        //the two Enter chords are disambiguated purely by Alt — the live handler checks Alt+Enter first.
+        Assert.Equal(CommandId.World_CycleWindowSize, Keybinds.Resolve(WinKey(Keys.Enter, alt: true), KeybindContext.WorldHud));
+        Assert.Equal(CommandId.World_ChatFocus, Keybinds.Resolve(WinKey(Keys.Enter), KeybindContext.WorldHud));
+    }
+
+    [Fact]
+    public void WorldHud_Shout_IsShiftOne_NotBareOne()
+    {
+        Keybinds.ResetAll();
+
+        //shout is Shift+1; bare 1 is a slot hotkey handled literally (never entered the resolver catalog).
+        Assert.Equal(CommandId.World_Shout, Keybinds.Resolve(WinKey(Keys.D1, shift: true), KeybindContext.WorldHud));
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.D1), KeybindContext.WorldHud));
+    }
+
+    [Fact]
+    public void WorldHud_PlainHotkey_RequiresExactModifiers()
+    {
+        Keybinds.ResetAll();
+
+        //the migration tightens each plain hotkey to its exact modifier set: Ctrl+F5 (or Shift+F5) no longer
+        //resolves to Refresh, where the old bare e.Key check would have fired regardless of held modifiers.
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.F5, ctrl: true), KeybindContext.WorldHud));
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.F5, shift: true), KeybindContext.WorldHud));
+    }
+
     [Fact]
     public void EveryCommand_HasADefault()
     {

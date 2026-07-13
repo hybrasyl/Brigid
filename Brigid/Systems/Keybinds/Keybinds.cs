@@ -61,7 +61,39 @@ public static class Keybinds
         // ── ReadView (UILabel, read-only) ── no line-start binding here, so Ctrl+A is free for select-all
         // (matches the live UILabel handler: select-all on plain Ctrl+A, → Cmd+A on macOS).
         [CommandId.Read_Copy]        = new(new KeyChord(Keys.C, ChordMods.Meta), KeybindContext.ReadView),
-        [CommandId.Read_SelectAll]   = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.ReadView)
+        [CommandId.Read_SelectAll]   = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.ReadView),
+
+        // ── WorldHud (WorldScreen.OnRootKeyDown) ── plain physical chords (no primary modifier unless the
+        // live handler already required one). These bind byte-for-byte to the current hotkeys; the handler
+        // resolves them via Matches, so extra modifiers no longer fall through (a deliberate tightening — the
+        // affected combos have no intended function). Shift is a real part of the shout/whisper/scroll chords.
+        [CommandId.World_CycleWindowSize]     = new(new KeyChord(Keys.Enter, ChordMods.Alt), KeybindContext.WorldHud),
+        [CommandId.World_ChatFocus]           = new(new KeyChord(Keys.Enter), KeybindContext.WorldHud),
+        [CommandId.World_TogglePauseMenu]     = new(new KeyChord(Keys.Q), KeybindContext.WorldHud),
+        [CommandId.World_ToggleBoard]         = new(new KeyChord(Keys.W), KeybindContext.WorldHud),
+        [CommandId.World_ToggleWorldList]     = new(new KeyChord(Keys.E), KeybindContext.WorldHud),
+        [CommandId.World_ToggleSocialStatus]  = new(new KeyChord(Keys.R), KeybindContext.WorldHud),
+        [CommandId.World_Assail]              = new(new KeyChord(Keys.Space), KeybindContext.WorldHud),
+        [CommandId.World_Shout]               = new(new KeyChord(Keys.D1, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_Whisper]             = new(new KeyChord(Keys.OemQuotes, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_ToggleTabMap]        = new(new KeyChord(Keys.Tab), KeybindContext.WorldHud),
+        [CommandId.World_TabMapZoomIn]        = new(new KeyChord(Keys.PageUp), KeybindContext.WorldHud),
+        [CommandId.World_TabMapZoomOut]       = new(new KeyChord(Keys.PageDown), KeybindContext.WorldHud),
+        [CommandId.World_HelpMerchant]        = new(new KeyChord(Keys.F1), KeybindContext.WorldHud),
+        [CommandId.World_MacroMenu]           = new(new KeyChord(Keys.F3), KeybindContext.WorldHud),
+        [CommandId.World_Settings]            = new(new KeyChord(Keys.F4), KeybindContext.WorldHud),
+        [CommandId.World_Refresh]             = new(new KeyChord(Keys.F5), KeybindContext.WorldHud),
+        [CommandId.World_BoardList]           = new(new KeyChord(Keys.F7), KeybindContext.WorldHud),
+        [CommandId.World_IgnoreList]          = new(new KeyChord(Keys.F9), KeybindContext.WorldHud),
+        [CommandId.World_FriendsList]         = new(new KeyChord(Keys.F10), KeybindContext.WorldHud),
+        [CommandId.World_SwapHudLayout]       = new(new KeyChord(Keys.OemQuestion), KeybindContext.WorldHud),
+        [CommandId.World_UnequipWeaponShield] = new(new KeyChord(Keys.OemTilde), KeybindContext.WorldHud),
+        [CommandId.World_GroupHighlight]      = new(new KeyChord(Keys.J), KeybindContext.WorldHud),
+        [CommandId.World_PickupItem]          = new(new KeyChord(Keys.B), KeybindContext.WorldHud),
+        [CommandId.World_TownMap]             = new(new KeyChord(Keys.T), KeybindContext.WorldHud),
+        [CommandId.World_GroupPanel]          = new(new KeyChord(Keys.Y), KeybindContext.WorldHud),
+        [CommandId.World_ChatScrollUp]        = new(new KeyChord(Keys.Up, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_ChatScrollDown]      = new(new KeyChord(Keys.Down, ChordMods.Shift), KeybindContext.WorldHud)
     }.ToFrozenDictionary();
 
     /// <summary>The binding currently bound to <paramref name="id" /> (override if set, else default).</summary>
