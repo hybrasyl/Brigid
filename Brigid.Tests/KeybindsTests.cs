@@ -271,6 +271,73 @@ public sealed class KeybindsTests
     }
 
     [Fact]
+    public void SetChord_EditsOneSlot_PreservesTheOther()
+    {
+        Keybinds.ResetAll();
+
+        var original = Keybinds.Defaults[CommandId.Move_Up].Binding; // Up (primary) / C (secondary)
+
+        //rebind only the primary; the secondary (C) must survive.
+        var newPrimary = new KeyChord(Keys.W);
+        Keybinds.SetChord(CommandId.Move_Up, ChordSlot.Primary, newPrimary);
+
+        var after = Keybinds.Effective(CommandId.Move_Up);
+        Assert.Equal(newPrimary, after.Primary);
+        Assert.Equal(original.Secondary, after.Secondary);
+
+        //now rebind only the secondary; the just-set primary (W) must survive.
+        var newSecondary = new KeyChord(Keys.K);
+        Keybinds.SetChord(CommandId.Move_Up, ChordSlot.Secondary, newSecondary);
+
+        after = Keybinds.Effective(CommandId.Move_Up);
+        Assert.Equal(newPrimary, after.Primary);
+        Assert.Equal(newSecondary, after.Secondary);
+
+        Keybinds.ResetAll();
+    }
+
+    [Fact]
+    public void SetChord_FirstEdit_SeedsFromDefault_NotEmpty()
+    {
+        Keybinds.ResetAll();
+
+        //no override exists yet; setting only the secondary must seed the primary from the default, not blank it.
+        var newSecondary = new KeyChord(Keys.N);
+        Keybinds.SetChord(CommandId.Move_Left, ChordSlot.Secondary, newSecondary);
+
+        var after = Keybinds.Effective(CommandId.Move_Left);
+        Assert.Equal(Keybinds.Defaults[CommandId.Move_Left].Binding.Primary, after.Primary);
+        Assert.Equal(newSecondary, after.Secondary);
+
+        Keybinds.ResetAll();
+    }
+
+    [Fact]
+    public void SupportsSecondary_TrueForMovement_FalseForSingleChordHotkeys()
+    {
+        Assert.True(Keybinds.SupportsSecondary(CommandId.Move_Up));
+        Assert.False(Keybinds.SupportsSecondary(CommandId.World_Refresh));
+    }
+
+    [Theory]
+    [InlineData(Keys.D1)]
+    [InlineData(Keys.D0)]
+    [InlineData(Keys.OemMinus)]
+    [InlineData(Keys.OemPlus)]
+    public void UsesContestedNumberRow_FlagsNumberRowInWorldHud(Keys key)
+    {
+        //number-row keys are scanned by the slot/emote handlers before the movement/chat-scroll resolver, so a
+        //rebind onto one is flagged (soft warning, not a hard reserve). Modifiers don't matter — the slot
+        //handler has no modifier guard.
+        Assert.True(Keybinds.UsesContestedNumberRow(KeybindContext.WorldHud, new KeyChord(key)));
+        Assert.True(Keybinds.UsesContestedNumberRow(KeybindContext.WorldHud, new KeyChord(key, ChordMods.Shift)));
+
+        //non-number keys and non-WorldHud contexts are never contested.
+        Assert.False(Keybinds.UsesContestedNumberRow(KeybindContext.WorldHud, new KeyChord(Keys.Up)));
+        Assert.False(Keybinds.UsesContestedNumberRow(KeybindContext.TextEditing, new KeyChord(key)));
+    }
+
+    [Fact]
     public void WorldHud_Defaults_AvoidReservedLiteralKeys()
     {
         //A/S/D/F/G/H (HUD tab switch) is handled by a modifier-agnostic literal switch in OnRootKeyDown that

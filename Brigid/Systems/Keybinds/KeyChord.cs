@@ -49,3 +49,14 @@ public readonly record struct KeyChord(Keys Key, ChordMods Mods = ChordMods.None
 ///     event hits <b>either</b> chord.
 /// </summary>
 public readonly record struct KeyBinding(KeyChord Primary, KeyChord? Secondary = null);
+
+/// <summary>
+///     Which chord of a <see cref="KeyBinding" /> a rebind targets. The Keybinds tab shows a
+///     <see cref="Primary" /> field for every command and a <see cref="Secondary" /> field for commands whose
+///     default has two chords (movement); a rebind edits one slot and preserves the other.
+/// </summary>
+public enum ChordSlot
+{
+    Primary,
+    Secondary
+}

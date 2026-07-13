@@ -17,6 +17,7 @@ using Brigid.Extensions;
 using Brigid.Models;
 using Brigid.Rendering.Models;
 using Brigid.Systems;
+using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Chaos.Geometry.Abstractions;
@@ -173,6 +174,7 @@ public sealed partial class WorldScreen : IScreen
 
     //true when the client explicitly requested its own profile — prevents unsolicited selfprofile packets from opening the panel
     private OptionsModalControl OptionsModal = null!;
+    private KeybindCaptureControl KeybindCapture = null!;
     private bool SelfProfileRequested;
     private StatusBookTab SelfProfileRequestedTab = StatusBookTab.Equipment;
     private SilhouetteRenderer SilhouetteRenderer = null!;
@@ -289,6 +291,17 @@ public sealed partial class WorldScreen : IScreen
         };
         OptionsModal.SettingsRequested += () => Game.Connection.SendOptionToggle(UserOption.Request);
         OptionsModal.FriendsCommitted += SavePlayerFriendList;
+
+        //the keybind capture modal rides above the Options modal (ZIndex 11 > 10). The tab requests a rebind
+        //for a command/slot; on commit we persist the override and repaint the tab underneath. Reset routes
+        //through here too, so mutate-then-persist-then-repaint lives in one keybind seam.
+        KeybindCapture = new KeybindCaptureControl
+        {
+            ZIndex = 11
+        };
+        OptionsModal.KeybindRebindRequested += KeybindCapture.Show;
+        KeybindCapture.Committed += (id, slot, chord) => ApplyKeybind(() => Keybinds.SetChord(id, slot, chord));
+        OptionsModal.KeybindResetRequested += id => ApplyKeybind(() => Keybinds.ResetToDefault(id));
 
         HotkeyHelp = new HotkeyHelpControl();
 
@@ -620,6 +633,7 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(ItemTooltip);
         Root.AddChild(PauseMenu);
         Root.AddChild(OptionsModal);
+        Root.AddChild(KeybindCapture);
         Root.AddChild(HotkeyHelp);
         Root.AddChild(GroupPanel);
         Root.AddChild(GroupBoxViewer);
@@ -666,6 +680,15 @@ public sealed partial class WorldScreen : IScreen
         var playerName = Game.Connection.AislingName;
         PlayerPortrait = LoadPortraitFile(playerName);
         StatusBook.SetProfileText(LoadProfileText());
+    }
+
+    //single keybind-persistence seam: mutate the registry, persist, then repaint the Options tab. Both the
+    //capture-commit and the per-command reset route through here so the mutate→save→refresh order lives once.
+    private void ApplyKeybind(Action mutate)
+    {
+        mutate();
+        Keybinds.Save();
+        OptionsModal.RefreshKeybinds();
     }
 
     /// <inheritdoc />

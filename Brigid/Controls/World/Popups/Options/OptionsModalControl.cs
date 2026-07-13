@@ -5,6 +5,7 @@ using Brigid.Controls.Generic;
 using Brigid.Data;
 using Brigid.Rendering;
 using Brigid.Systems;
+using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -84,6 +85,13 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     /// <summary>Raised when the Friends tab is committed (tab-left/close), so the host can save + mirror the list.</summary>
     public event Action? FriendsCommitted;
+
+    /// <summary>Raised when a Keybinds row's chord field is clicked, so the host can open the capture modal for
+    ///     that command/slot.</summary>
+    public event Action<CommandId, ChordSlot>? KeybindRebindRequested;
+
+    /// <summary>Raised when a Keybinds row's reset button is clicked, so the host can restore the default + persist.</summary>
+    public event Action<CommandId>? KeybindResetRequested;
 
     private static UserOptions Options => WorldState.UserOptions;
 
@@ -261,9 +269,14 @@ public sealed class OptionsModalControl : CenteredModalPanel
     private void BuildKeybindsPane(Rectangle pane)
     {
         KeybindsTab = new KeybindsTabControl(pane);
+        KeybindsTab.ChordActivated += (id, slot) => KeybindRebindRequested?.Invoke(id, slot);
+        KeybindsTab.ResetActivated += id => KeybindResetRequested?.Invoke(id);
         TabPanes[3] = KeybindsTab;
         AddChild(KeybindsTab);
     }
+
+    /// <summary>Repaints the Keybinds tab (call after the host commits a rebind or reset).</summary>
+    public void RefreshKeybinds() => KeybindsTab.Refresh();
 
     // ── tab selection ──
 

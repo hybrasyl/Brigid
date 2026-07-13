@@ -10,13 +10,14 @@ namespace Brigid.Controls.World.Popups.Options;
 
 /// <summary>
 ///     The Options modal's Keybinds tab: a scrollable, section-grouped list of every rebindable command with
-///     its current chord and a per-command reset. Wraps the shared
+///     its current chord(s) and a per-command reset. Wraps the shared
 ///     <see cref="VirtualizedListView{TItem,TRow}" /> (row pool + scroll bar + wheel), supplying a single
 ///     row type that renders either a section header or a command row.
 ///     <para>
-///         This slice (C2) renders the list and each command's current chord. The chord / reset buttons raise
-///         <see cref="ChordActivated" />/<see cref="ResetActivated" /> but the host leaves them unwired until
-///         C3 adds capture, conflict detection, reset, and persistence.
+///         A command row shows one chord field (single-chord commands) or two — Primary and Alternate — for
+///         commands whose default has a secondary (movement). A field click raises <see cref="ChordActivated" />
+///         with the slot; the reset button raises <see cref="ResetActivated" />. The host (Options modal) opens
+///         the capture modal / applies the reset and calls <see cref="Refresh" /> to repaint.
 ///     </para>
 /// </summary>
 internal sealed class KeybindsTabControl : UIPanel
@@ -29,10 +30,10 @@ internal sealed class KeybindsTabControl : UIPanel
 
     private readonly VirtualizedListView<Row, KeybindRowView> List;
 
-    /// <summary>Raised when a command's chord button is clicked (C3 arms chord capture).</summary>
-    public event Action<CommandId>? ChordActivated;
+    /// <summary>Raised when a command's chord field is clicked (the host arms chord capture for that slot).</summary>
+    public event Action<CommandId, ChordSlot>? ChordActivated;
 
-    /// <summary>Raised when a command's reset button is clicked (C3 resets the binding + persists).</summary>
+    /// <summary>Raised when a command's reset button is clicked (the host resets the binding + persists).</summary>
     public event Action<CommandId>? ResetActivated;
 
     public KeybindsTabControl(Rectangle bounds)
@@ -48,7 +49,7 @@ internal sealed class KeybindsTabControl : UIPanel
             (contentWidth, index) =>
             {
                 var row = new KeybindRowView(contentWidth) { Name = $"KeybindRow{index}" };
-                row.ChordClicked += id => ChordActivated?.Invoke(id);
+                row.ChordClicked += (id, slot) => ChordActivated?.Invoke(id, slot);
                 row.ResetClicked += id => ResetActivated?.Invoke(id);
 
                 return row;
@@ -100,7 +101,15 @@ internal sealed class KeybindsTabControl : UIPanel
         }
 
         var name = KeybindCatalog.Entry(item.Command)?.DisplayName ?? item.Command.ToString();
-        row.BindCommand(item.Command, name, KeybindCatalog.Format(Keybinds.Effective(item.Command)));
+        var binding = Keybinds.Effective(item.Command);
+        var primary = KeybindCatalog.Format(binding.Primary);
+
+        //a second field only for commands whose default carries a secondary; an empty override slot shows "—".
+        string? secondary = Keybinds.SupportsSecondary(item.Command)
+            ? binding.Secondary is { } alt ? KeybindCatalog.Format(alt) : "—"
+            : null;
+
+        row.BindCommand(item.Command, name, primary, secondary);
     }
 
     /// <summary>Repaints the visible rows, re-reading each command's current chord (call when the tab is shown).</summary>
@@ -108,25 +117,27 @@ internal sealed class KeybindsTabControl : UIPanel
 
     /// <summary>
     ///     A pooled row that renders either a section header (a single spanning label) or a command
-    ///     (name · chord button · reset button), toggled by <see cref="BindHeader" />/<see cref="BindCommand" />
-    ///     (or blanked by <see cref="BindEmpty" /> for an out-of-range slot).
+    ///     (name · primary chord · optional alternate chord · reset), toggled by
+    ///     <see cref="BindHeader" />/<see cref="BindCommand" /> (or blanked by <see cref="BindEmpty" /> for an
+    ///     out-of-range slot).
     /// </summary>
     private sealed class KeybindRowView : UIPanel
     {
         private const int LEFT_PAD = 6;
         private const int BUTTON_H = 16;
         private const int RESET_W = 24;
-        private const int CHORD_W = 150;
+        private const int CHORD_W = 92;
         private const int INNER_GAP = 6;
 
         private readonly UILabel HeaderLabel;
         private readonly UILabel NameLabel;
-        private readonly TextButton ChordButton;
+        private readonly TextButton PrimaryButton;
+        private readonly TextButton SecondaryButton;
         private readonly TextButton ResetButton;
 
         private CommandId Bound;
 
-        public event Action<CommandId>? ChordClicked;
+        public event Action<CommandId, ChordSlot>? ChordClicked;
         public event Action<CommandId>? ResetClicked;
 
         public KeybindRowView(int width)
@@ -136,8 +147,9 @@ internal sealed class KeybindsTabControl : UIPanel
 
             var buttonY = (ROW_H - BUTTON_H) / 2;
             var resetX = width - RESET_W;
-            var chordX = resetX - INNER_GAP - CHORD_W;
-            var nameW = chordX - INNER_GAP - LEFT_PAD;
+            var secondaryX = resetX - INNER_GAP - CHORD_W;
+            var primaryX = secondaryX - INNER_GAP - CHORD_W;
+            var nameW = primaryX - INNER_GAP - LEFT_PAD;
 
             HeaderLabel = new UILabel
             {
@@ -166,9 +178,13 @@ internal sealed class KeybindsTabControl : UIPanel
             };
             AddChild(NameLabel);
 
-            ChordButton = new TextButton(string.Empty, CHORD_W, BUTTON_H) { X = chordX, Y = buttonY };
-            ChordButton.Clicked += () => ChordClicked?.Invoke(Bound);
-            AddChild(ChordButton);
+            PrimaryButton = new TextButton(string.Empty, CHORD_W, BUTTON_H) { X = primaryX, Y = buttonY };
+            PrimaryButton.Clicked += () => ChordClicked?.Invoke(Bound, ChordSlot.Primary);
+            AddChild(PrimaryButton);
+
+            SecondaryButton = new TextButton(string.Empty, CHORD_W, BUTTON_H) { X = secondaryX, Y = buttonY };
+            SecondaryButton.Clicked += () => ChordClicked?.Invoke(Bound, ChordSlot.Secondary);
+            AddChild(SecondaryButton);
 
             ResetButton = new TextButton("↺", RESET_W, BUTTON_H) { X = resetX, Y = buttonY };
             ResetButton.Clicked += () => ResetClicked?.Invoke(Bound);
@@ -179,7 +195,8 @@ internal sealed class KeybindsTabControl : UIPanel
         {
             HeaderLabel.Visible = false;
             NameLabel.Visible = false;
-            ChordButton.Visible = false;
+            PrimaryButton.Visible = false;
+            SecondaryButton.Visible = false;
             ResetButton.Visible = false;
         }
 
@@ -188,19 +205,29 @@ internal sealed class KeybindsTabControl : UIPanel
             HeaderLabel.Text = header;
             HeaderLabel.Visible = true;
             NameLabel.Visible = false;
-            ChordButton.Visible = false;
+            PrimaryButton.Visible = false;
+            SecondaryButton.Visible = false;
             ResetButton.Visible = false;
         }
 
-        public void BindCommand(CommandId id, string name, string chord)
+        public void BindCommand(CommandId id, string name, string primary, string? secondary)
         {
             Bound = id;
             NameLabel.Text = name;
-            ChordButton.SetText(chord);
+            PrimaryButton.SetText(primary);
             HeaderLabel.Visible = false;
             NameLabel.Visible = true;
-            ChordButton.Visible = true;
+            PrimaryButton.Visible = true;
             ResetButton.Visible = true;
+
+            //secondary field shown only for two-chord commands; single-chord rows leave the slot empty.
+            if (secondary is null)
+                SecondaryButton.Visible = false;
+            else
+            {
+                SecondaryButton.SetText(secondary);
+                SecondaryButton.Visible = true;
+            }
         }
     }
 }

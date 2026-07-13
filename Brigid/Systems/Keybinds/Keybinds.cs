@@ -211,11 +211,31 @@ public static class Keybinds
     /// <summary>
     ///     True if binding <paramref name="chord" /> in <paramref name="context" /> would be swallowed by a
     ///     literal (non-resolver) handler that runs first, making the binding dead. The rebinding UI uses this
-    ///     to refuse such a chord. Currently only the WorldHud tab-switch keys are reserved (the slot/emote
-    ///     number-row handlers are a softer case left to the capture UI in C3).
+    ///     to refuse such a chord. Currently only the WorldHud tab-switch keys are reserved; the softer
+    ///     slot/emote number-row case is flagged by <see cref="UsesContestedNumberRow" /> instead.
     /// </summary>
     public static bool IsShadowed(KeybindContext context, KeyChord chord) =>
         context == KeybindContext.WorldHud && WorldHudShadowKeys.Contains(chord.Key);
+
+    //the number row is scanned by two literal handlers in OnRootKeyDown — the slot hotkeys (1-9/0/-/=, any
+    //modifier) and the emote hotkeys (Ctrl/Alt + number) — both of which dispatch before the movement and
+    //chat-scroll resolver checks. A command routed after them bound onto a number-row key is therefore
+    //overridden while a HUD panel is open. This is conditional (depends on HUD state and the command's dispatch
+    //position — an earlier-dispatched command like Shout=Shift+1 still works), so it warns rather than blocks.
+    private static readonly FrozenSet<Keys> WorldHudNumberRowKeys = new[]
+    {
+        Keys.D0, Keys.D1, Keys.D2, Keys.D3, Keys.D4, Keys.D5, Keys.D6, Keys.D7, Keys.D8, Keys.D9,
+        Keys.OemMinus, Keys.OemPlus
+    }.ToFrozenSet();
+
+    /// <summary>
+    ///     True if <paramref name="chord" /> uses a number-row key contested by the WorldHud slot/emote hotkeys
+    ///     (see <see cref="WorldHudNumberRowKeys" />). Unlike <see cref="IsShadowed" /> this is a soft signal:
+    ///     the collision only bites while a HUD panel is open and only for commands dispatched after those
+    ///     handlers, so the rebinder warns and still allows the bind rather than refusing it.
+    /// </summary>
+    public static bool UsesContestedNumberRow(KeybindContext context, KeyChord chord) =>
+        context == KeybindContext.WorldHud && WorldHudNumberRowKeys.Contains(chord.Key);
 
     //bare modifier keys — never a chord on their own; the rebinder ignores them and waits for a real key.
     private static readonly FrozenSet<Keys> ModifierKeys = new[]
@@ -299,6 +319,26 @@ public static class Keybinds
             mods |= KeyModifiers.Ctrl | KeyModifiers.Meta;
 
         return new KeyDownEvent { Key = chord.Key, Modifiers = mods };
+    }
+
+    /// <summary>True if <paramref name="id" />'s default binding has a secondary chord (so the rebinder shows a
+    ///     second field for it). Movement commands do; the single-chord world hotkeys don't.</summary>
+    public static bool SupportsSecondary(CommandId id) => Defaults[id].Binding.Secondary is not null;
+
+    /// <summary>
+    ///     Rebinds one slot of <paramref name="id" /> to <paramref name="chord" />, preserving the other slot.
+    ///     Unlike <see cref="SetBinding(CommandId,KeyChord)" /> (which drops the secondary), this edits a single
+    ///     field of a two-chord binding in place. Persist separately via <see cref="Save" />.
+    /// </summary>
+    public static void SetChord(CommandId id, ChordSlot slot, KeyChord chord)
+    {
+        using var scope = Gate.EnterScope();
+
+        var current = Overrides.TryGetValue(id, out var existing) ? existing : Defaults[id].Binding;
+
+        Overrides[id] = slot == ChordSlot.Primary
+            ? current with { Primary = chord }
+            : current with { Secondary = chord };
     }
 
     /// <summary>Sets (or replaces) a user override to a single-chord binding. Persist via <see cref="Save" />.</summary>
