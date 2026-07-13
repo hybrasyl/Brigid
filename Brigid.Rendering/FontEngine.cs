@@ -50,7 +50,8 @@ public sealed class FontEngine : ITextMeasurer
             Bold: "AnonymousPro-Bold.ttf",
             Italic: "AnonymousPro-Italic.ttf",
             BoldItalic: "AnonymousPro-BoldItalic.ttf"),
-        new("Iosevka Mono", "IosevkaCharonMono-Regular.ttf")
+        new("Iosevka Mono", "IosevkaCharonMono-Regular.ttf"),
+        new("Comic Shanns Mono", "ComicShannsMono-Regular.ttf")
     ];
 
     //optional fallback faces for codepoints the primaries lack (CJK, emoji), added to every face. Loaded if
