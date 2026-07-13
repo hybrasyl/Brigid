@@ -302,6 +302,7 @@ public sealed partial class WorldScreen : IScreen
         OptionsModal.KeybindRebindRequested += KeybindCapture.Show;
         KeybindCapture.Committed += (id, slot, chord) => ApplyKeybind(() => Keybinds.SetChord(id, slot, chord));
         OptionsModal.KeybindResetRequested += id => ApplyKeybind(() => Keybinds.ResetToDefault(id));
+        OptionsModal.KeybindResetAllRequested += () => ApplyKeybind(Keybinds.ResetAll);
 
         HotkeyHelp = new HotkeyHelpControl();
 

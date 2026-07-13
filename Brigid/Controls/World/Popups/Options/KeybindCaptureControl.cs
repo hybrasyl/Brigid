@@ -162,7 +162,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
         if (warnings.Count > 0)
         {
             StatusLabel.Text = string.Join(" · ", warnings);
-            StatusLabel.ForegroundColor = TextColors.Shout;
+            StatusLabel.ForegroundColor = TextColors.Warning;
         } else
         {
             StatusLabel.Text = "OK";

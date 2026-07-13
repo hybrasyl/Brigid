@@ -24,6 +24,9 @@ internal sealed class KeybindsTabControl : UIPanel
 {
     private const int ROW_H = 20;
     private const int ROW_RIGHT_INSET = 4;
+    private const int FOOTER_H = 26;
+    private const int RESET_ALL_W = 150;
+    private const int RESET_ALL_BUTTON_H = 18;
 
     //one display row: either a section header or a rebindable command.
     private readonly record struct Row(bool IsHeader, string Header, CommandId Command);
@@ -36,6 +39,9 @@ internal sealed class KeybindsTabControl : UIPanel
     /// <summary>Raised when a command's reset button is clicked (the host resets the binding + persists).</summary>
     public event Action<CommandId>? ResetActivated;
 
+    /// <summary>Raised when the footer "Reset All" button is clicked (the host restores every default + persists).</summary>
+    public event Action? ResetAllActivated;
+
     public KeybindsTabControl(Rectangle bounds)
     {
         X = bounds.X;
@@ -44,7 +50,7 @@ internal sealed class KeybindsTabControl : UIPanel
         Height = bounds.Height;
 
         List = new VirtualizedListView<Row, KeybindRowView>(
-            new Rectangle(0, 0, Width, Height),
+            new Rectangle(0, 0, Width, Height - FOOTER_H),
             ROW_H,
             (contentWidth, index) =>
             {
@@ -59,6 +65,14 @@ internal sealed class KeybindsTabControl : UIPanel
 
         AddChild(List);
         List.SetItems(BuildItems());
+
+        var resetAll = new TextButton("Reset All Keybinds", RESET_ALL_W, RESET_ALL_BUTTON_H)
+        {
+            X = 0,
+            Y = Height - FOOTER_H + (FOOTER_H - RESET_ALL_BUTTON_H) / 2
+        };
+        resetAll.Clicked += () => ResetAllActivated?.Invoke();
+        AddChild(resetAll);
     }
 
     private static List<Row> BuildItems()
@@ -102,14 +116,28 @@ internal sealed class KeybindsTabControl : UIPanel
 
         var name = KeybindCatalog.Entry(item.Command)?.DisplayName ?? item.Command.ToString();
         var binding = Keybinds.Effective(item.Command);
+        var context = Keybinds.Defaults[item.Command].Context;
         var primary = KeybindCatalog.Format(binding.Primary);
 
-        //a second field only for commands whose default carries a secondary; an empty override slot shows "—".
-        string? secondary = Keybinds.SupportsSecondary(item.Command)
-            ? binding.Secondary is { } alt ? KeybindCatalog.Format(alt) : "—"
-            : null;
+        //flag a slot whose chord collides with another command in the same context (only possible after a user
+        //rebind — defaults never collide). The capture modal warns at set-time; this marks it in the overview.
+        var primaryConflict = Keybinds.FindConflicts(item.Command, binding.Primary, context).Count > 0;
 
-        row.BindCommand(item.Command, name, primary, secondary);
+        //a second field only for commands whose default carries a secondary; an empty override slot shows "—".
+        string? secondary = null;
+        var secondaryConflict = false;
+
+        if (Keybinds.SupportsSecondary(item.Command))
+        {
+            if (binding.Secondary is { } alt)
+            {
+                secondary = KeybindCatalog.Format(alt);
+                secondaryConflict = Keybinds.FindConflicts(item.Command, alt, context).Count > 0;
+            } else
+                secondary = "—";
+        }
+
+        row.BindCommand(item.Command, name, primary, primaryConflict, secondary, secondaryConflict);
     }
 
     /// <summary>Repaints the visible rows, re-reading each command's current chord (call when the tab is shown).</summary>
@@ -210,11 +238,12 @@ internal sealed class KeybindsTabControl : UIPanel
             ResetButton.Visible = false;
         }
 
-        public void BindCommand(CommandId id, string name, string primary, string? secondary)
+        public void BindCommand(CommandId id, string name, string primary, bool primaryConflict, string? secondary, bool secondaryConflict)
         {
             Bound = id;
             NameLabel.Text = name;
             PrimaryButton.SetText(primary);
+            PrimaryButton.SetTextColor(primaryConflict ? TextColors.Warning : null);
             HeaderLabel.Visible = false;
             NameLabel.Visible = true;
             PrimaryButton.Visible = true;
@@ -226,6 +255,7 @@ internal sealed class KeybindsTabControl : UIPanel
             else
             {
                 SecondaryButton.SetText(secondary);
+                SecondaryButton.SetTextColor(secondaryConflict ? TextColors.Warning : null);
                 SecondaryButton.Visible = true;
             }
         }

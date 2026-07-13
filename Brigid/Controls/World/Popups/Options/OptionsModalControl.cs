@@ -93,6 +93,9 @@ public sealed class OptionsModalControl : CenteredModalPanel
     /// <summary>Raised when a Keybinds row's reset button is clicked, so the host can restore the default + persist.</summary>
     public event Action<CommandId>? KeybindResetRequested;
 
+    /// <summary>Raised when the Keybinds "Reset All" button is clicked, so the host can restore every default + persist.</summary>
+    public event Action? KeybindResetAllRequested;
+
     private static UserOptions Options => WorldState.UserOptions;
 
     public OptionsModalControl()
@@ -271,6 +274,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
         KeybindsTab = new KeybindsTabControl(pane);
         KeybindsTab.ChordActivated += (id, slot) => KeybindRebindRequested?.Invoke(id, slot);
         KeybindsTab.ResetActivated += id => KeybindResetRequested?.Invoke(id);
+        KeybindsTab.ResetAllActivated += () => KeybindResetAllRequested?.Invoke();
         TabPanes[3] = KeybindsTab;
         AddChild(KeybindsTab);
     }
