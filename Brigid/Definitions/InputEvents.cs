@@ -11,7 +11,12 @@ public enum KeyModifiers
     None  = 0,
     Shift = 1,
     Ctrl  = 2,
-    Alt   = 4
+    Alt   = 4,
+
+    //platform primary modifier: literal Ctrl on Windows/Linux, Cmd (SDL GUI) on macOS. Set alongside
+    //Ctrl on Windows/Linux, so a Meta-chord and a Ctrl-chord can collide there (keybind conflict
+    //detection flags this per context).
+    Meta  = 8
 }
 
 public enum MouseButton
@@ -48,6 +53,7 @@ public abstract class MouseEvent : InputEvent
     public bool Shift => (Modifiers & KeyModifiers.Shift) != 0;
     public bool Ctrl => (Modifiers & KeyModifiers.Ctrl) != 0;
     public bool Alt => (Modifiers & KeyModifiers.Alt) != 0;
+    public bool Meta => (Modifiers & KeyModifiers.Meta) != 0;
 }
 
 public sealed class MouseDownEvent : MouseEvent;
@@ -79,6 +85,7 @@ public abstract class KeyEvent : InputEvent
     public bool Shift => (Modifiers & KeyModifiers.Shift) != 0;
     public bool Ctrl => (Modifiers & KeyModifiers.Ctrl) != 0;
     public bool Alt => (Modifiers & KeyModifiers.Alt) != 0;
+    public bool Meta => (Modifiers & KeyModifiers.Meta) != 0;
 }
 
 public sealed class KeyDownEvent : KeyEvent;

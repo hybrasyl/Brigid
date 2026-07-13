@@ -423,6 +423,15 @@ public static class InputBuffer
         if ((sdlMods & (Sdl.KMOD_LALT | Sdl.KMOD_RALT)) != 0)
             mods |= KeyModifiers.Alt;
 
+        //Meta = the platform primary modifier. On macOS it is the Cmd/GUI key; everywhere else it folds
+        //onto literal Ctrl, so primary-modifier actions (clipboard/undo/select-all) bind to Meta once and
+        //resolve to Ctrl on Windows/Linux, Cmd on macOS. Ctrl still surfaces literally above for the
+        //readline Ctrl+A/Ctrl+E carve-out on every OS.
+        var metaMask = OperatingSystem.IsMacOS() ? Sdl.KMOD_LGUI | Sdl.KMOD_RGUI : Sdl.KMOD_LCTRL | Sdl.KMOD_RCTRL;
+
+        if ((sdlMods & metaMask) != 0)
+            mods |= KeyModifiers.Meta;
+
         return mods;
     }
 

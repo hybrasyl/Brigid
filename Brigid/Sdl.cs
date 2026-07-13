@@ -52,6 +52,8 @@ internal static partial class Sdl
     public const uint KMOD_RCTRL = 0x0080;
     public const uint KMOD_LALT = 0x0100;
     public const uint KMOD_RALT = 0x0200;
+    public const uint KMOD_LGUI = 0x0400;
+    public const uint KMOD_RGUI = 0x0800;
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate int EventWatchCallback(nint userdata, nint sdlEvent);
