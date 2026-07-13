@@ -506,6 +506,11 @@ public delegate void MusicVolumeChangedHandler(int volume);
 ///     The sound volume was changed.
 /// </summary>
 public delegate void SoundVolumeChangedHandler(int volume);
+
+/// <summary>
+///     The ambience volume was changed.
+/// </summary>
+public delegate void AmbienceVolumeChangedHandler(int volume);
 #endregion
 
 #region Controls/World/Popups/Profile Delegates

@@ -22,7 +22,7 @@ namespace Brigid.Controls.World.Popups.Options;
 public sealed class PauseMenuControl : UIPanel
 {
     private const int PANEL_WIDTH = 260;
-    private const int PANEL_HEIGHT = 210;
+    private const int PANEL_HEIGHT = 226;
 
     //vertical positions inside the panel
     private const int TITLE_Y = 18;
@@ -30,9 +30,11 @@ public sealed class PauseMenuControl : UIPanel
     private const int SOUND_TRACK_Y = 52;
     private const int MUSIC_LABEL_Y = 72;
     private const int MUSIC_TRACK_Y = 76;
-    private const int BUTTON_ROW_1_Y = 108;
-    private const int BUTTON_ROW_2_Y = 134;
-    private const int CLOSE_Y = 170;
+    private const int AMBIENCE_LABEL_Y = 96;
+    private const int AMBIENCE_TRACK_Y = 100;
+    private const int BUTTON_ROW_1_Y = 124;
+    private const int BUTTON_ROW_2_Y = 150;
+    private const int CLOSE_Y = 186;
 
     //button dimensions
     private const int BUTTON_WIDTH = 100;
@@ -52,6 +54,7 @@ public sealed class PauseMenuControl : UIPanel
 
     private readonly SliderControl MusicSlider;
     private readonly SliderControl SoundSlider;
+    private readonly SliderControl AmbienceSlider;
 
     //viewport the panel centers within; defaults to full screen until SetViewportBounds runs
     private Rectangle Viewport = new(0, 0, 640, 480);
@@ -130,6 +133,22 @@ public sealed class PauseMenuControl : UIPanel
         MusicSlider = new SliderControl(new Rectangle(TRACK_X, MUSIC_TRACK_Y, TRACK_WIDTH, TRACK_HEIGHT), thumbTexture);
         MusicSlider.ValueChanged += v => OnMusicVolumeChanged?.Invoke(v);
         AddChild(MusicSlider);
+
+        AddChild(
+            new UILabel
+            {
+                X = 24,
+                Y = AMBIENCE_LABEL_Y,
+                Width = 56,
+                Height = 16,
+                Text = "Ambience",
+                ForegroundColor = Color.White,
+                IsHitTestVisible = false
+            });
+
+        AmbienceSlider = new SliderControl(new Rectangle(TRACK_X, AMBIENCE_TRACK_Y, TRACK_WIDTH, TRACK_HEIGHT), thumbTexture);
+        AmbienceSlider.ValueChanged += v => OnAmbienceVolumeChanged?.Invoke(v);
+        AddChild(AmbienceSlider);
 
         //2×2 action grid — two buttons per row, centered horizontally
         var gridTotalWidth = BUTTON_WIDTH * 2 + BUTTON_GAP;
@@ -224,9 +243,13 @@ public sealed class PauseMenuControl : UIPanel
 
     public int GetSoundVolume() => SoundSlider.Value;
 
+    public int GetAmbienceVolume() => AmbienceSlider.Value;
+
     public void SetMusicVolume(int volume) => MusicSlider.SetValue(volume);
 
     public void SetSoundVolume(int volume) => SoundSlider.SetValue(volume);
+
+    public void SetAmbienceVolume(int volume) => AmbienceSlider.SetValue(volume);
 
     public void Show()
     {
@@ -248,6 +271,7 @@ public sealed class PauseMenuControl : UIPanel
         OnClose?.Invoke();
     }
 
+    public event AmbienceVolumeChangedHandler? OnAmbienceVolumeChanged;
     public event CloseHandler? OnClose;
     public event ExitHandler? OnExit;
     public event FriendsHandler? OnFriends;

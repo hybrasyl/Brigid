@@ -1055,9 +1055,17 @@ public sealed partial class WorldScreen
             ClientSettings.Save();
         };
 
+        //ambience is a persist-only placeholder — no audio path consumes it yet.
+        PauseMenu.OnAmbienceVolumeChanged += volume =>
+        {
+            ClientSettings.AmbienceVolume = volume;
+            ClientSettings.Save();
+        };
+
         //apply saved volume settings
         PauseMenu.SetSoundVolume(ClientSettings.SoundVolume);
         PauseMenu.SetMusicVolume(ClientSettings.MusicVolume);
+        PauseMenu.SetAmbienceVolume(ClientSettings.AmbienceVolume);
         Game.SoundSystem.SetSoundVolume(ClientSettings.SoundVolume);
         Game.SoundSystem.SetMusicVolume(ClientSettings.MusicVolume);
     }
