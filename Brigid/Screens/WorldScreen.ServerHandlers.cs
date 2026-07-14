@@ -40,7 +40,9 @@ public sealed partial class WorldScreen
             WorldState.PlayerName = args.Name;
             UpdateHuds(HudOps.SetPlayerName, args.Name);
             UpdateHuds(HudOps.SetServerName, Game.Connection.ServerName);
-            DataContext.LocalPlayerSettings.Initialize(args.Name);
+            var serverKey = ServerProfileKey.Resolve(GlobalSettings.LobbyHost, Game.Connection.ServerName);
+            var importLegacy = ClientSettings.LegacyCharacterImport == ClientSettings.MigrationImport;
+            DataContext.LocalPlayerSettings.Initialize(args.Name, serverKey, importLegacy);
             LoadPlayerFamilyList();
             LoadPlayerFriendList();
             LoadPlayerMacros();
@@ -814,7 +816,7 @@ public sealed partial class WorldScreen
             return;
 
         var profilePath = DataContext.LocalPlayerSettings.GetFilePath("profile.txt");
-        File.WriteAllText(profilePath, text);
+        DataDiagnostics.Try(() => File.WriteAllText(profilePath, text), "SaveProfileText");
     }
 
     private void HandleSelfProfile(SelfProfilePacket args)

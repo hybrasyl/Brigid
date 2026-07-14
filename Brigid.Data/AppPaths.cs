@@ -50,4 +50,29 @@ public static class AppPaths
 
     /// <summary><c>{AppRoot}/config.json</c> — the launcher configuration file.</summary>
     public static string ConfigFile => Path.Combine(AppRoot, "config.json");
+
+    /// <summary>
+    ///     <c>{AppRoot}/brigid.cfg</c> — global client settings (volume, font, option toggles), formerly written as
+    ///     <c>Darkages.cfg</c> inside the game-data folder. Client-wide, not per-server/character.
+    /// </summary>
+    public static string SettingsFile => Path.Combine(AppRoot, "brigid.cfg");
+
+    /// <summary>
+    ///     <c>{AppRoot}/profiles</c> — root of per-server, per-character config. Individual character config lives under
+    ///     <c>{ProfilesDir}/{serverKey}/{character}</c> (see <see cref="ProfileDir" />), keyed by server so the same
+    ///     character name on different servers no longer collides.
+    /// </summary>
+    public static string ProfilesDir => Path.Combine(AppRoot, "profiles");
+
+    /// <summary><c>{AppRoot}/screenshots</c> — captured screenshots (<c>lod*</c> on retail, <c>hyb*</c> otherwise).</summary>
+    public static string ScreenshotsDir => Path.Combine(AppRoot, "screenshots");
+
+    /// <summary><c>{AppRoot}/metafile</c> — cache of server-sent metafiles (checksum-validated, disposable).</summary>
+    public static string MetaFileDir => Path.Combine(AppRoot, "metafile");
+
+    /// <summary><c>{AppRoot}/maps</c> — cache of downloaded map files (disposable).</summary>
+    public static string MapsDir => Path.Combine(AppRoot, "maps");
+
+    /// <summary>The per-character config directory for a server profile: <c>{ProfilesDir}/{serverKey}/{character}</c>.</summary>
+    public static string ProfileDir(string serverKey, string character) => Path.Combine(ProfilesDir, serverKey, character);
 }

@@ -1,12 +1,16 @@
+using Brigid.Data;
+
 namespace Brigid.Systems;
 
 /// <summary>
-///     Reads and writes the client settings file (Darkages.cfg) in the original DarkAges format. File is a line-delimited
-///     key-value format: "Key : Value" or "Key: Value". Saved next to the executable.
+///     Reads and writes the global client settings file (brigid.cfg) in the original DarkAges line-delimited
+///     "Key : Value" format. Stored in the per-user app root (<see cref="AppPaths.SettingsFile" />); on first run,
+///     settings are imported from the legacy <c>Darkages.cfg</c> in the game-data folder when the new file is absent.
+///     Client-wide preferences only (volume, font, option toggles) — not per-server/character.
 /// </summary>
 public static class ClientSettings
 {
-    private const string FILE_NAME = "Darkages.cfg";
+    private const string LEGACY_FILE_NAME = "Darkages.cfg";
     public static bool UseGroupWindow { get; set; } = true;
     public static int ChattingMode { get; set; }
     public static bool DoGroundAnimation { get; set; } = true;
@@ -14,6 +18,12 @@ public static class ClientSettings
 
     //index into FontEngine's selectable UI faces; persisted in the legacy "EngFont" slot.
     public static int FontIndex { get; set; }
+
+    //one-time decision on importing legacy per-character config from the old in-game-folder location.
+    public const int MigrationUndecided = -1;
+    public const int MigrationSkip = 0;
+    public const int MigrationImport = 1;
+    public static int LegacyCharacterImport { get; set; } = MigrationUndecided;
     public static bool GroupOpen { get; set; }
     public static int MusicVolume { get; set; } = 5;
     public static bool RecordNpcChat { get; set; } = true;
@@ -24,19 +34,29 @@ public static class ClientSettings
     public static int Speed { get; set; } = 100;
     public static bool UseShiftKeyForAltPanels { get; set; } = true;
 
-    private static string FilePath => Path.Combine(GlobalSettings.DataPath, FILE_NAME);
+    private static string FilePath => AppPaths.SettingsFile;
+
+    //legacy in-game-folder location, read once on first run when the new file doesn't exist yet
+    private static string? LegacyFilePath =>
+        string.IsNullOrEmpty(GlobalSettings.DataPath) ? null : Path.Combine(GlobalSettings.DataPath, LEGACY_FILE_NAME);
 
     /// <summary>
-    ///     Loads settings from Darkages.cfg into static properties. Uses defaults if the file doesn't exist or is corrupt.
+    ///     Loads settings into static properties. Reads the per-user <c>brigid.cfg</c>; on first run (before it exists)
+    ///     falls back to the legacy <c>Darkages.cfg</c> and migrates it to the new location. Uses defaults if neither
+    ///     file exists or the file is corrupt.
     /// </summary>
     public static void Load()
     {
-        if (!File.Exists(FilePath))
+        var loadPath = File.Exists(FilePath) ? FilePath
+            : LegacyFilePath is { } legacy && File.Exists(legacy) ? legacy
+            : null;
+
+        if (loadPath is null)
             return;
 
         try
         {
-            foreach (var line in File.ReadLines(FilePath))
+            foreach (var line in File.ReadLines(loadPath))
             {
                 var colonIndex = line.IndexOf(':');
 
@@ -116,21 +136,33 @@ public static class ClientSettings
                             FontIndex = ef;
 
                         break;
+
+                    case "ImportCharacterData":
+                        if (int.TryParse(value, out var ci))
+                            LegacyCharacterImport = ci;
+
+                        break;
                 }
             }
         } catch
         {
             //corrupted file — use whatever defaults/partial state was already set
         }
+
+        //first-run migration: if we just read the legacy file, persist to the new per-user location
+        if (loadPath != FilePath)
+            Save();
     }
 
     /// <summary>
-    ///     Saves the current settings to Darkages.cfg in the original format.
+    ///     Saves the current settings to <c>brigid.cfg</c> (per-user app root) in the original format. Best-effort —
+    ///     never throws on a write failure.
     /// </summary>
-    public static void Save()
-    {
-        try
+    public static void Save() => DataDiagnostics.Try(
+        () =>
         {
+            Directory.CreateDirectory(AppPaths.AppRoot);
+
             using var writer = new StreamWriter(FilePath, false);
             writer.WriteLine("Version: 9728");
             writer.WriteLine("Port: 5");
@@ -139,6 +171,7 @@ public static class ClientSettings
             writer.WriteLine("Tel: 1");
             writer.WriteLine("HanFont: 0");
             writer.WriteLine($"EngFont: {FontIndex}");
+            writer.WriteLine($"ImportCharacterData: {LegacyCharacterImport}");
             writer.WriteLine("Tel1: \"Nexus\",\"1\"");
             writer.WriteLine("Tel2: \"Nexus\",\"2\"");
             writer.WriteLine("Tel3: \"Nexus\",\"3\"");
@@ -153,9 +186,5 @@ public static class ClientSettings
             writer.WriteLine($"UserClickMode : {(EnableProfileClick ? 0 : 1)}");
             writer.WriteLine($"MonsterSayRecordMode : {(RecordNpcChat ? 1 : 0)}");
             writer.WriteLine($"GroupObjectOption : {(UseGroupWindow ? 1 : 0)}");
-        } catch
-        {
-            //best effort — don't crash on save failure
-        }
-    }
+        }, "ClientSettings.Save");
 }
