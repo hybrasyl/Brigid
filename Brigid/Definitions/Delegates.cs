@@ -483,16 +483,6 @@ public delegate void PreviousHandler();
 public delegate void ExitHandler();
 
 /// <summary>
-///     The friends list was requested.
-/// </summary>
-public delegate void FriendsHandler();
-
-/// <summary>
-///     The macro list was requested.
-/// </summary>
-public delegate void MacroHandler();
-
-/// <summary>
 ///     The settings panel was requested.
 /// </summary>
 public delegate void SettingsHandler();
@@ -506,6 +496,11 @@ public delegate void MusicVolumeChangedHandler(int volume);
 ///     The sound volume was changed.
 /// </summary>
 public delegate void SoundVolumeChangedHandler(int volume);
+
+/// <summary>
+///     The ambience volume was changed.
+/// </summary>
+public delegate void AmbienceVolumeChangedHandler(int volume);
 #endregion
 
 #region Controls/World/Popups/Profile Delegates

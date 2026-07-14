@@ -17,6 +17,7 @@ using Brigid.Extensions;
 using Brigid.Models;
 using Brigid.Rendering.Models;
 using Brigid.Systems;
+using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Chaos.Geometry.Abstractions;
@@ -127,8 +128,6 @@ public sealed partial class WorldScreen : IScreen
     private OkPopupMessageControl ExchangeResultPopup = null!;
     private ItemAmountControl ItemAmount = null!;
 
-    private FriendsListControl FriendsList = null!;
-
     private ChaosGame Game = null!;
     private GoldAmountControl GoldDrop = null!;
     private GroupRecruitPanel GroupBoxViewer = null!;
@@ -144,7 +143,6 @@ public sealed partial class WorldScreen : IScreen
     private LargeWorldHudControl LargeHud = null!;
     private TileClickTracker LeftClickTracker;
     private readonly LightingSystem Lighting = new();
-    private MacrosListControl MacrosList = null!;
     private MailListControl MailList = null!;
     private MailReadControl MailRead = null!;
     private MailSendControl MailSend = null!;
@@ -175,9 +173,10 @@ public sealed partial class WorldScreen : IScreen
     private RasterizerState ScissorRasterizerState = null!;
 
     //true when the client explicitly requested its own profile — prevents unsolicited selfprofile packets from opening the panel
+    private OptionsModalControl OptionsModal = null!;
+    private KeybindCaptureControl KeybindCapture = null!;
     private bool SelfProfileRequested;
     private StatusBookTab SelfProfileRequestedTab = StatusBookTab.Equipment;
-    private SettingsControl SettingsDialog = null!;
     private SilhouetteRenderer SilhouetteRenderer = null!;
     private WorldHudControl SmallHud = null!;
     private SystemMessagePaneControl SystemMessagePane = null!;
@@ -270,12 +269,6 @@ public sealed partial class WorldScreen : IScreen
         PauseMenu.SetViewportBounds(WorldHud.ViewportBounds);
         WireOptionsDialog();
 
-        //sub-panels (Settings/Macros/Friends) slide out leftward from an anchor on the
-        //right side of the viewport
-        const int SUB_PANEL_ANCHOR_X_FROM_RIGHT = 170;
-        var optionsAnchorX = WorldHud.ViewportBounds.X + WorldHud.ViewportBounds.Width - SUB_PANEL_ANCHOR_X_FROM_RIGHT + 10;
-        var optionsAnchorY = WorldHud.ViewportBounds.Y;
-
         //initialize client-local settings into useroptions from persisted config
         var userOptions = WorldState.UserOptions;
         userOptions.SetValue(6, ClientSettings.UseGroupWindow);
@@ -285,70 +278,31 @@ public sealed partial class WorldScreen : IScreen
         userOptions.SetValue(11, ClientSettings.RecordNpcChat);
         userOptions.SetValue(12, ClientSettings.GroupOpen);
 
-        //route user-initiated toggles to server or local persistence
-        userOptions.SettingToggled += (index, value) =>
+        //route user-initiated toggles to server or local persistence (named so UnloadContent can detach it
+        //from the static WorldState.UserOptions — otherwise a handler leaks per world re-entry)
+        userOptions.SettingToggled += HandleSettingToggled;
+
+        //ZIndex 10 = the top modal tier (matches the exit/disconnect popups), so it renders above the HUD
+        //(-1). No SetViewportBounds call: it keeps the default full-window viewport and centers on the window
+        //rather than the play-area viewport.
+        OptionsModal = new OptionsModalControl
         {
-            if (UserOptions.IsServerSetting(index))
-            {
-                var option = (UserOption)(index + 1);
-                Game.Connection.SendOptionToggle(option);
-            } else
-            {
-                switch (index)
-                {
-                    case 6:
-                        ClientSettings.UseGroupWindow = value;
-
-                        break;
-                    case 8:
-                        ClientSettings.ScrollLevel = value ? 1 : 0;
-
-                        break;
-                    case 9:
-                        ClientSettings.UseShiftKeyForAltPanels = value;
-
-                        break;
-                    case 10:
-                        ClientSettings.EnableProfileClick = value;
-
-                        break;
-                    case 11:
-                        ClientSettings.RecordNpcChat = value;
-
-                        break;
-                    case 12:
-                        //optimistic local repaint — Hybrasyl's 0x2F handler doesn't push a profile back
-                        //unless the toggle actually leaves a group, and retail's response shape is unverified.
-                        //Legacy clients flip the indicator on click; we match that. Subsequent SelfProfile
-                        //updates (e.g., on next /stats) will reconcile if server state diverges.
-                        WorldHud.SetGroupOpen(value);
-                        StatusBook.SetGroupOpen(value);
-                        Game.Connection.ToggleGroup();
-
-                        return;
-                }
-
-                ClientSettings.Save();
-            }
+            ZIndex = 10
         };
+        OptionsModal.SettingsRequested += () => Game.Connection.SendOptionToggle(UserOption.Request);
+        OptionsModal.FriendsCommitted += SavePlayerFriendList;
 
-        SettingsDialog = new SettingsControl(userOptions)
+        //the keybind capture modal rides above the Options modal (ZIndex 11 > 10). The tab requests a rebind
+        //for a command/slot; on commit we persist the override and repaint the tab underneath. Reset routes
+        //through here too, so mutate-then-persist-then-repaint lives in one keybind seam.
+        KeybindCapture = new KeybindCaptureControl
         {
-            ZIndex = -3
+            ZIndex = 11
         };
-        SettingsDialog.SetSlideAnchor(optionsAnchorX, optionsAnchorY);
-
-        SettingsDialog.VisibilityChanged += visible =>
-        {
-            if (visible)
-                Game.Connection.SendOptionToggle(UserOption.Request);
-        };
-
-        MacrosList = new MacrosListControl
-        {
-            ZIndex = -3
-        };
-        MacrosList.SetSlideAnchor(optionsAnchorX, optionsAnchorY);
+        OptionsModal.KeybindRebindRequested += KeybindCapture.Show;
+        KeybindCapture.Committed += (id, slot, chord) => ApplyKeybind(() => Keybinds.SetChord(id, slot, chord));
+        OptionsModal.KeybindResetRequested += id => ApplyKeybind(() => Keybinds.ResetToDefault(id));
+        OptionsModal.KeybindResetAllRequested += () => ApplyKeybind(Keybinds.ResetAll);
 
         HotkeyHelp = new HotkeyHelpControl();
 
@@ -433,13 +387,6 @@ public sealed partial class WorldScreen : IScreen
             ZIndex = -2
         };
         WorldList.SetViewportBounds(WorldHud.ViewportBounds);
-
-        FriendsList = new FriendsListControl
-        {
-            ZIndex = -3
-        };
-        FriendsList.SetSlideAnchor(optionsAnchorX, optionsAnchorY);
-        FriendsList.OnOk += SavePlayerFriendList;
 
         Exchange = new ExchangeControl(WorldHud.ViewportBounds);
 
@@ -686,13 +633,12 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(NpcSession);
         Root.AddChild(ItemTooltip);
         Root.AddChild(PauseMenu);
-        Root.AddChild(SettingsDialog);
-        Root.AddChild(MacrosList);
+        Root.AddChild(OptionsModal);
+        Root.AddChild(KeybindCapture);
         Root.AddChild(HotkeyHelp);
         Root.AddChild(GroupPanel);
         Root.AddChild(GroupBoxViewer);
         Root.AddChild(WorldList);
-        Root.AddChild(FriendsList);
         Root.AddChild(Exchange);
         Root.AddChild(GoldDrop);
         Root.AddChild(ItemAmount);
@@ -737,9 +683,67 @@ public sealed partial class WorldScreen : IScreen
         StatusBook.SetProfileText(LoadProfileText());
     }
 
+    //single keybind-persistence seam: mutate the registry, persist, then repaint the Options tab. Both the
+    //capture-commit and the per-command reset route through here so the mutate→save→refresh order lives once.
+    private void ApplyKeybind(Action mutate)
+    {
+        mutate();
+        Keybinds.Save();
+        OptionsModal.RefreshKeybinds();
+    }
+
     /// <inheritdoc />
+    //user-initiated settings toggle: server settings route to the server, client settings persist locally.
+    private void HandleSettingToggled(int index, bool value)
+    {
+        if (UserOptions.IsServerSetting(index))
+        {
+            var option = (UserOption)(index + 1);
+            Game.Connection.SendOptionToggle(option);
+
+            return;
+        }
+
+        switch (index)
+        {
+            case 6:
+                ClientSettings.UseGroupWindow = value;
+
+                break;
+            case 8:
+                ClientSettings.ScrollLevel = value ? 1 : 0;
+
+                break;
+            case 9:
+                ClientSettings.UseShiftKeyForAltPanels = value;
+
+                break;
+            case 10:
+                ClientSettings.EnableProfileClick = value;
+
+                break;
+            case 11:
+                ClientSettings.RecordNpcChat = value;
+
+                break;
+            case 12:
+                //optimistic local repaint — Hybrasyl's 0x2F handler doesn't push a profile back unless the
+                //toggle actually leaves a group, and retail's response shape is unverified. Legacy clients flip
+                //the indicator on click; we match that. Subsequent SelfProfile updates (e.g., on next /stats)
+                //will reconcile if server state diverges.
+                WorldHud.SetGroupOpen(value);
+                StatusBook.SetGroupOpen(value);
+                Game.Connection.ToggleGroup();
+
+                return;
+        }
+
+        ClientSettings.Save();
+    }
+
     public void UnloadContent()
     {
+        WorldState.UserOptions.SettingToggled -= HandleSettingToggled;
         Game.Connection.OnUserId -= HandleUserId;
         Game.Connection.OnMapInfo -= HandleMapInfo;
         Game.Connection.OnMapData -= HandleMapData;

@@ -26,6 +26,10 @@ public static class ClientSettings
     public static int LegacyCharacterImport { get; set; } = MigrationUndecided;
     public static bool GroupOpen { get; set; }
     public static int MusicVolume { get; set; } = 5;
+
+    //placeholder for a future ambient-audio layer: persisted and surfaced on the pause menu, but nothing
+    //consumes it yet (no ambience audio path exists).
+    public static int AmbienceVolume { get; set; } = 5;
     public static bool RecordNpcChat { get; set; } = true;
     public static int ScrollLevel { get; set; }
 
@@ -80,6 +84,12 @@ public static class ClientSettings
                     case "Music Volume":
                         if (int.TryParse(value, out var mv))
                             MusicVolume = Math.Clamp(mv, 0, 10);
+
+                        break;
+
+                    case "Ambience Volume":
+                        if (int.TryParse(value, out var av))
+                            AmbienceVolume = Math.Clamp(av, 0, 10);
 
                         break;
 
@@ -180,6 +190,7 @@ public static class ClientSettings
             writer.WriteLine($"doGroundAnimation : {(DoGroundAnimation ? 1 : 0)}");
             writer.WriteLine($"Sound Volume : {SoundVolume}");
             writer.WriteLine($"Music Volume : {MusicVolume}");
+            writer.WriteLine($"Ambience Volume : {AmbienceVolume}");
             writer.WriteLine($"SkillSpellSelectByToggle : {(UseShiftKeyForAltPanels ? 0 : 1)}");
             writer.WriteLine($"GroupAnswer : {(GroupOpen ? 1 : 0)}");
             writer.WriteLine($"ScrollLevel : {ScrollLevel}");

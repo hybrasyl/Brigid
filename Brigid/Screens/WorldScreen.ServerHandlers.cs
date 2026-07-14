@@ -386,7 +386,7 @@ public sealed partial class WorldScreen
         var isOn = stateStr.StartsWithI("ON");
 
         //server settings: use the full formatted text as the display name (includes :on/:off)
-        SettingsDialog.SetSettingName(optionIndex, entry.TrimEnd());
+        OptionsModal.SetSettingName(optionIndex, entry.TrimEnd());
         WorldState.UserOptions.SetValue(optionIndex, isOn);
     }
 

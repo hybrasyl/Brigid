@@ -1,15 +1,18 @@
 #region
+using System.Collections.Frozen;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Hud.Panel.Slots;
 using Brigid.Controls.World.Popups;
+using Brigid.Controls.World.Popups.Options;
 using Brigid.Data;
 using Brigid.Data.Models;
 using Brigid.Extensions;
 using Brigid.Models;
 using Brigid.Systems;
+using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Chaos.Geometry.Abstractions.Definitions;
@@ -241,6 +244,22 @@ public sealed partial class WorldScreen
 
     //--- hotkeys ---
 
+    /// <summary>
+    ///     HUD tab hotkeys (bare letter → tab). The <b>authoritative</b> source for the tab-switch keys: the
+    ///     switch below reads it, and the keybind rebinder's reserved set (<c>Keybinds.ReservedWorldHudKeys</c>)
+    ///     mirrors it — the switch runs modifier-agnostically before the resolver checks, so it would shadow any
+    ///     command rebound onto one of these keys. A test cross-asserts the two stay in sync.
+    /// </summary>
+    public static readonly FrozenDictionary<Keys, HudTab> HudTabHotkeys = new Dictionary<Keys, HudTab>
+    {
+        [Keys.A] = HudTab.Inventory,
+        [Keys.S] = HudTab.Skills,
+        [Keys.D] = HudTab.Spells,
+        [Keys.F] = HudTab.Chat,
+        [Keys.G] = HudTab.Stats,
+        [Keys.H] = HudTab.Tools
+    }.ToFrozenDictionary();
+
     private static readonly Keys[] EmoteKeys =
     [
         Keys.D1,
@@ -277,19 +296,6 @@ public sealed partial class WorldScreen
 
     //base BodyAnimation value for Alt+<key> emotes (e.g. key 0 -> bodyanim 34)
     private const int ALT_EMOTE_BASE = 34;
-
-    /// <summary>
-    ///     Returns true when no mutually-exclusive options panel is currently visible. Used by the F3/F4/F10 shortcuts so
-    ///     pressing one hotkey cannot overlap another options popup.
-    /// </summary>
-    private static bool CanShowOptionsPanel(params UIElement[] others)
-    {
-        foreach (var other in others)
-            if (other.Visible)
-                return false;
-
-        return true;
-    }
 
     private bool HandleEmoteHotkey(KeyDownEvent e)
     {
@@ -390,7 +396,7 @@ public sealed partial class WorldScreen
             case HudTab.Chat:
             case HudTab.MessageHistory:
             {
-                var macroText = MacrosList.GetMacroValue(slot - 1);
+                var macroText = OptionsModal.GetMacroValue(slot - 1);
 
                 if (macroText.Length > 0)
                 {
@@ -517,13 +523,13 @@ public sealed partial class WorldScreen
     {
         var names = DataContext.LocalPlayerSettings.LoadFriendList();
 
-        FriendsList.SetFriends(names);
+        OptionsModal.SetFriends(names);
         WorldList.SetFriendNames(names);
     }
 
     private void SavePlayerFriendList()
     {
-        var names = FriendsList.GetFriendNames();
+        var names = OptionsModal.GetFriendNames();
         DataContext.LocalPlayerSettings.SaveFriendList(names);
         WorldList.SetFriendNames(names);
     }
@@ -531,7 +537,7 @@ public sealed partial class WorldScreen
     private void LoadPlayerMacros()
     {
         var macros = DataContext.LocalPlayerSettings.LoadMacros();
-        MacrosList.SetMacros(macros);
+        OptionsModal.SetMacros(macros);
     }
 
     private void SaveSkillChants()
@@ -601,7 +607,7 @@ public sealed partial class WorldScreen
         }
 
         //alt+enter — cycle window size
-        if ((e.Key == Keys.Enter) && e.Modifiers.HasFlag(KeyModifiers.Alt))
+        if (Keybinds.Matches(e, CommandId.World_CycleWindowSize))
         {
             Game.CycleWindowSize();
             e.Handled = true;
@@ -631,7 +637,7 @@ public sealed partial class WorldScreen
         }
 
         //enter — toggle chat focus
-        if (e.Key == Keys.Enter)
+        if (Keybinds.Matches(e, CommandId.World_ChatFocus))
         {
             if (!WorldHud.ChatInput.IsFocused)
                 WorldHud.ChatInput.Focus($"{WorldHud.PlayerName}: ", Color.White);
@@ -643,15 +649,13 @@ public sealed partial class WorldScreen
 
         //q/w/e/r toggle group — must be above the stack guard because these panels
         //use the control stack themselves and need to toggle while open
-        if (e.Key == Keys.Q)
+        if (Keybinds.Matches(e, CommandId.World_TogglePauseMenu))
         {
             ForceCloseOtherTogglePanels(Keys.Q);
 
             if (PauseMenu.Visible)
             {
-                SettingsDialog.Hide();
-                MacrosList.Hide();
-                FriendsList.Hide();
+                OptionsModal.Hide();
                 PauseMenu.Hide();
             } else
                 PauseMenu.Show();
@@ -661,7 +665,7 @@ public sealed partial class WorldScreen
             return;
         }
 
-        if (e.Key == Keys.W)
+        if (Keybinds.Matches(e, CommandId.World_ToggleBoard))
         {
             ForceCloseOtherTogglePanels(Keys.W);
 
@@ -683,7 +687,7 @@ public sealed partial class WorldScreen
             return;
         }
 
-        if (e.Key == Keys.E)
+        if (Keybinds.Matches(e, CommandId.World_ToggleWorldList))
         {
             ForceCloseOtherTogglePanels(Keys.E);
 
@@ -701,7 +705,7 @@ public sealed partial class WorldScreen
             return;
         }
 
-        if (e.Key == Keys.R)
+        if (Keybinds.Matches(e, CommandId.World_ToggleSocialStatus))
         {
             ForceCloseOtherTogglePanels(Keys.R);
             ToggleSocialStatusPicker();
@@ -729,7 +733,7 @@ public sealed partial class WorldScreen
         //while held. sits after the stack guard so dialogs/menus block it; sits inside
         //the root handler so any ui element above can mark e.handled first and suppress it.
         //rate-limited to SPACEBAR_INTERVAL_MS since os key-repeat rates vary wildly.
-        if (e.Key == Keys.Space)
+        if (Keybinds.Matches(e, CommandId.World_Assail))
         {
             var now = Environment.TickCount64;
 
@@ -745,7 +749,7 @@ public sealed partial class WorldScreen
             return;
         }
 
-        if ((e.Key == Keys.T) && TownMapControl.Visible)
+        if (Keybinds.Matches(e, CommandId.World_TownMap) && TownMapControl.Visible)
         {
             TownMapControl.Hide();
             e.Handled = true;
@@ -754,7 +758,7 @@ public sealed partial class WorldScreen
         }
 
         //shout hotkey (shift+1)
-        if (e is { Key: Keys.D1, Shift: true })
+        if (Keybinds.Matches(e, CommandId.World_Shout))
         {
             WorldHud.ChatInput.Focus($"{WorldHud.PlayerName}! ", Color.Yellow);
             e.Handled = true;
@@ -763,7 +767,7 @@ public sealed partial class WorldScreen
         }
 
         //whisper hotkey (shift+")
-        if (e is { Key: Keys.OemQuotes, Shift: true })
+        if (Keybinds.Matches(e, CommandId.World_Whisper))
         {
             WorldHud.ChatInput.FocusWhisper();
             e.Handled = true;
@@ -771,31 +775,18 @@ public sealed partial class WorldScreen
             return;
         }
 
-        //tab panel switching — blocked while dragging the orange bar
-        if (!WorldHud.IsOrangeBarDragging)
+        //tab panel switching — blocked while dragging the orange bar. Keyed off the authoritative HudTabHotkeys
+        //map (mirrored by Keybinds.ReservedWorldHudKeys); modifier-agnostic, Shift only picks the alt panel.
+        if (!WorldHud.IsOrangeBarDragging && HudTabHotkeys.TryGetValue(e.Key, out var hudTab))
         {
-            HudTab? tab = e.Key switch
-            {
-                Keys.A => HudTab.Inventory,
-                Keys.S => HudTab.Skills,
-                Keys.D => HudTab.Spells,
-                Keys.F => HudTab.Chat,
-                Keys.G => HudTab.Stats,
-                Keys.H => HudTab.Tools,
-                _      => null
-            };
+            WorldHud.HandleTabActivation(hudTab, e.Shift);
+            e.Handled = true;
 
-            if (tab is not null)
-            {
-                WorldHud.HandleTabActivation(tab.Value, e.Shift);
-                e.Handled = true;
-
-                return;
-            }
+            return;
         }
 
         //tab — toggle tab map overlay (suppressed by NoTabMap map flag)
-        if (e.Key == Keys.Tab)
+        if (Keybinds.Matches(e, CommandId.World_ToggleTabMap))
         {
             if (!CurrentMapFlags.HasFlag(MapFlags.NoTabMap))
                 TabMapVisible = !TabMapVisible;
@@ -808,7 +799,7 @@ public sealed partial class WorldScreen
         //pageup/pagedown — tab map zoom
         if (TabMapVisible)
         {
-            if (e.Key == Keys.PageUp)
+            if (Keybinds.Matches(e, CommandId.World_TabMapZoomIn))
             {
                 TabMapRenderer.ZoomIn();
                 e.Handled = true;
@@ -816,7 +807,7 @@ public sealed partial class WorldScreen
                 return;
             }
 
-            if (e.Key == Keys.PageDown)
+            if (Keybinds.Matches(e, CommandId.World_TabMapZoomOut))
             {
                 TabMapRenderer.ZoomOut();
                 e.Handled = true;
@@ -836,7 +827,7 @@ public sealed partial class WorldScreen
         }
 
         //f1 — help merchant (server-side)
-        if (e.Key == Keys.F1)
+        if (Keybinds.Matches(e, CommandId.World_HelpMerchant))
         {
             Game.Connection.ClickEntity(uint.MaxValue);
             e.Handled = true;
@@ -845,29 +836,25 @@ public sealed partial class WorldScreen
         }
 
         //f3 — macro menu
-        if (e.Key == Keys.F3)
+        if (Keybinds.Matches(e, CommandId.World_MacroMenu))
         {
-            if (CanShowOptionsPanel(SettingsDialog, FriendsList))
-                MacrosList.Show();
-
+            OptionsModal.Show(OptionsModalControl.OptionsTab.Macros);
             e.Handled = true;
 
             return;
         }
 
         //f4 — settings
-        if (e.Key == Keys.F4)
+        if (Keybinds.Matches(e, CommandId.World_Settings))
         {
-            if (CanShowOptionsPanel(MacrosList, FriendsList))
-                SettingsDialog.Show();
-
+            OptionsModal.Show(OptionsModalControl.OptionsTab.Settings);
             e.Handled = true;
 
             return;
         }
 
         //f5 — refresh
-        if (e.Key == Keys.F5)
+        if (Keybinds.Matches(e, CommandId.World_Refresh))
         {
             Game.Connection.RequestRefresh();
             e.Handled = true;
@@ -876,7 +863,7 @@ public sealed partial class WorldScreen
         }
 
         //f7 — board list
-        if (e.Key == Keys.F7)
+        if (Keybinds.Matches(e, CommandId.World_BoardList))
         {
             Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
             e.Handled = true;
@@ -884,10 +871,17 @@ public sealed partial class WorldScreen
             return;
         }
 
-        //f8 — unused (group panel moved to y key)
+        //f8 — keybind menu (mirrors f3 → macros)
+        if (Keybinds.Matches(e, CommandId.World_KeybindMenu))
+        {
+            OptionsModal.Show(OptionsModalControl.OptionsTab.Keybinds);
+            e.Handled = true;
+
+            return;
+        }
 
         //f9 — ignore list management (toggle)
-        if (e.Key == Keys.F9)
+        if (Keybinds.Matches(e, CommandId.World_IgnoreList))
         {
             if (WorldHud.ChatInput.Mode != ChatMode.None)
                 WorldHud.ChatInput.Unfocus();
@@ -900,18 +894,16 @@ public sealed partial class WorldScreen
         }
 
         //f10 — friends list
-        if (e.Key == Keys.F10)
+        if (Keybinds.Matches(e, CommandId.World_FriendsList))
         {
-            if (CanShowOptionsPanel(MacrosList, SettingsDialog))
-                FriendsList.Show();
-
+            OptionsModal.Show(OptionsModalControl.OptionsTab.Friends);
             e.Handled = true;
 
             return;
         }
 
         // — swap hud layout (small <-> large)
-        if (e is { Key: Keys.OemQuestion, Shift: false })
+        if (Keybinds.Matches(e, CommandId.World_SwapHudLayout))
         {
             SwapHudLayout();
             e.Handled = true;
@@ -920,7 +912,7 @@ public sealed partial class WorldScreen
         }
 
         //` — unequip weapon and shield
-        if (e.Key == Keys.OemTilde)
+        if (Keybinds.Matches(e, CommandId.World_UnequipWeaponShield))
         {
             if (WorldState.Equipment.GetSlot(EquipmentSlot.Weapon) is not null)
                 Game.Connection.Unequip(EquipmentSlot.Weapon);
@@ -934,7 +926,7 @@ public sealed partial class WorldScreen
         }
 
         //j — flash group member highlighting (1000ms, gated while pending or active)
-        if ((e.Key == Keys.J) && !GroupHighlightRequested && (GroupHighlightedIds.Count == 0))
+        if (Keybinds.Matches(e, CommandId.World_GroupHighlight) && !GroupHighlightRequested && (GroupHighlightedIds.Count == 0))
         {
             GroupHighlightRequested = true;
             Game.Connection.RequestSelfProfile();
@@ -944,7 +936,7 @@ public sealed partial class WorldScreen
         }
 
         //b — pick up item from under player, or from the tile in front
-        if (e.Key == Keys.B)
+        if (Keybinds.Matches(e, CommandId.World_PickupItem))
         {
             TryPickupItem();
             e.Handled = true;
@@ -953,7 +945,7 @@ public sealed partial class WorldScreen
         }
 
         //t — town map toggle
-        if (e.Key == Keys.T)
+        if (Keybinds.Matches(e, CommandId.World_TownMap))
         {
             if (TownMapControl.Visible)
                 TownMapControl.Hide();
@@ -971,7 +963,7 @@ public sealed partial class WorldScreen
         }
 
         //y — group panel (members tab)
-        if (e.Key == Keys.Y)
+        if (Keybinds.Matches(e, CommandId.World_GroupPanel))
         {
             Game.Connection.RequestSelfProfile();
             GroupPanel.ShowMembers();
@@ -989,9 +981,11 @@ public sealed partial class WorldScreen
             return;
 
         //shift+up/down scrolls the active chat-style panel (F = chat, shift+F = message history)
-        if (e.Shift && e.Key is Keys.Up or Keys.Down)
+        var scrollUp = Keybinds.Matches(e, CommandId.World_ChatScrollUp);
+
+        if (scrollUp || Keybinds.Matches(e, CommandId.World_ChatScrollDown))
         {
-            var scrollDelta = e.Key == Keys.Up ? 1 : -1;
+            var scrollDelta = scrollUp ? 1 : -1;
 
             if (WorldHud.ChatDisplay.Visible)
             {
@@ -1010,19 +1004,15 @@ public sealed partial class WorldScreen
             }
         }
 
-        //player movement — arrow keys and zxcv
-        Direction? direction = e.Key switch
-        {
-            Keys.Up    => Direction.Up,
-            Keys.Right => Direction.Right,
-            Keys.Down  => Direction.Down,
-            Keys.Left  => Direction.Left,
-            Keys.C     => Direction.Up,
-            Keys.V     => Direction.Right,
-            Keys.X     => Direction.Down,
-            Keys.Z     => Direction.Left,
-            _          => null
-        };
+        //player movement — arrow keys and zxcv, resolved from the registry (arrow = primary, zxcv = secondary).
+        //keydown-driven, not polled: Matches maps the keystroke to a direction and the turn/walk/queue logic
+        //below is unchanged. Exact-chord like the other WorldHud commands, so a modifier+key no longer walks.
+        Direction? direction =
+            Keybinds.Matches(e, CommandId.Move_Up) ? Direction.Up
+            : Keybinds.Matches(e, CommandId.Move_Right) ? Direction.Right
+            : Keybinds.Matches(e, CommandId.Move_Down) ? Direction.Down
+            : Keybinds.Matches(e, CommandId.Move_Left) ? Direction.Left
+            : null;
 
         if (direction.HasValue)
         {

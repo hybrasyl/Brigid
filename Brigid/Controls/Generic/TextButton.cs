@@ -27,6 +27,9 @@ public sealed class TextButton : UIPanel
     private bool Hovered;
     private bool Pressed;
 
+    //optional accent for the label (e.g. a conflict warning); null = the default white/disabled behavior.
+    private Color? TextColorOverride;
+
     public event ClickedHandler? Clicked;
 
     public TextButton(string text, int width, int height)
@@ -60,10 +63,19 @@ public sealed class TextButton : UIPanel
         RefreshVisual();
     }
 
+    public void SetText(string text) => Label.Text = text;
+
+    /// <summary>Tints the label (null restores the default white / disabled-grey behavior).</summary>
+    public void SetTextColor(Color? color)
+    {
+        TextColorOverride = color;
+        RefreshVisual();
+    }
+
     private void RefreshVisual()
     {
         BackgroundColor = Enabled ? Pressed ? PressFill : Hovered ? HoverFill : IdleFill : IdleFill;
-        Label.ForegroundColor = Enabled ? LegendColors.White : DisabledText;
+        Label.ForegroundColor = Enabled ? TextColorOverride ?? LegendColors.White : DisabledText;
         BorderColor = Enabled ? EdgeColor : DisabledEdge;
     }
 

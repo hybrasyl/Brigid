@@ -16,6 +16,10 @@ public static class TextColors
     public static Color Shout { get; private set; }
     public static Color Whisper { get; private set; }
 
+    /// <summary>Non-chat "heads up" accent (e.g. a keybind conflict / contested-key warning). Distinct alias so
+    ///     UI warnings don't borrow the <see cref="Shout" /> chat semantic.</summary>
+    public static Color Warning { get; private set; }
+
     public static void Initialize()
     {
         Default = LegendColors.Silver;
@@ -23,5 +27,6 @@ public static class TextColors
         Whisper = LegendColors.CornflowerBlue;
         GroupChat = LegendColors.Olive;
         GuildChat = LegendColors.Seafoam;
+        Warning = LegendColors.CanaryYellow;
     }
 }

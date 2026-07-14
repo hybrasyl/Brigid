@@ -14,15 +14,15 @@ using Microsoft.Xna.Framework.Input;
 namespace Brigid.Controls.World.Popups.Options;
 
 /// <summary>
-///     Center-screen menu opened with Escape. Contains sound/music sliders plus Friends / Macros / Settings /
-///     Exit Game / Close buttons laid out as a 2×2 action grid. Background is a DlgBack2.spf tile composited
-///     with the dlgframe.epf 8-piece border; action buttons are rendered as colored rects with text overlays.
-///     Clicking Friends / Macros / Settings closes the menu so the sub-panel can take over.
+///     Center-screen menu opened with Escape. Contains Sound / Music / Ambience sliders plus Settings / Exit
+///     Game / Close buttons. Background is a DlgBack2.spf tile composited with the dlgframe.epf 8-piece
+///     border; action buttons are rendered as colored rects with text overlays. Clicking Settings closes the
+///     menu and opens the Options modal (Friends/Macros now live as tabs there).
 /// </summary>
 public sealed class PauseMenuControl : UIPanel
 {
     private const int PANEL_WIDTH = 260;
-    private const int PANEL_HEIGHT = 210;
+    private const int PANEL_HEIGHT = 194;
 
     //vertical positions inside the panel
     private const int TITLE_Y = 18;
@@ -30,9 +30,10 @@ public sealed class PauseMenuControl : UIPanel
     private const int SOUND_TRACK_Y = 52;
     private const int MUSIC_LABEL_Y = 72;
     private const int MUSIC_TRACK_Y = 76;
-    private const int BUTTON_ROW_1_Y = 108;
-    private const int BUTTON_ROW_2_Y = 134;
-    private const int CLOSE_Y = 170;
+    private const int AMBIENCE_LABEL_Y = 96;
+    private const int AMBIENCE_TRACK_Y = 100;
+    private const int BUTTON_ROW_1_Y = 124;
+    private const int CLOSE_Y = 154;
 
     //button dimensions
     private const int BUTTON_WIDTH = 100;
@@ -52,14 +53,13 @@ public sealed class PauseMenuControl : UIPanel
 
     private readonly SliderControl MusicSlider;
     private readonly SliderControl SoundSlider;
+    private readonly SliderControl AmbienceSlider;
 
     //viewport the panel centers within; defaults to full screen until SetViewportBounds runs
     private Rectangle Viewport = new(0, 0, 640, 480);
 
     public UIButton CloseButton { get; }
     public UIButton ExitButton { get; }
-    public UIButton FriendsButton { get; }
-    public UIButton MacroButton { get; }
     public UIButton SettingsButton { get; }
 
     public PauseMenuControl()
@@ -131,40 +131,42 @@ public sealed class PauseMenuControl : UIPanel
         MusicSlider.ValueChanged += v => OnMusicVolumeChanged?.Invoke(v);
         AddChild(MusicSlider);
 
-        //2×2 action grid — two buttons per row, centered horizontally
+        AddChild(
+            new UILabel
+            {
+                X = 24,
+                Y = AMBIENCE_LABEL_Y,
+                Width = 56,
+                Height = 16,
+                Text = "Ambience",
+                ForegroundColor = Color.White,
+                IsHitTestVisible = false
+            });
+
+        AmbienceSlider = new SliderControl(new Rectangle(TRACK_X, AMBIENCE_TRACK_Y, TRACK_WIDTH, TRACK_HEIGHT), thumbTexture);
+        AmbienceSlider.ValueChanged += v => OnAmbienceVolumeChanged?.Invoke(v);
+        AddChild(AmbienceSlider);
+
+        //action row: Settings + Exit side by side, centered horizontally
         var gridTotalWidth = BUTTON_WIDTH * 2 + BUTTON_GAP;
         var leftX = (PANEL_WIDTH - gridTotalWidth) / 2;
         var rightX = leftX + BUTTON_WIDTH + BUTTON_GAP;
 
-        FriendsButton = CreateTextButton("Friends", leftX, BUTTON_ROW_1_Y, BUTTON_WIDTH);
-        FriendsButton.Clicked += () =>
-        {
-            Hide();
-            OnFriends?.Invoke();
-        };
-
-        MacroButton = CreateTextButton("Macros", rightX, BUTTON_ROW_1_Y, BUTTON_WIDTH);
-        MacroButton.Clicked += () =>
-        {
-            Hide();
-            OnMacro?.Invoke();
-        };
-
-        SettingsButton = CreateTextButton("Settings", leftX, BUTTON_ROW_2_Y, BUTTON_WIDTH);
+        SettingsButton = CreateTextButton("Settings", leftX, BUTTON_ROW_1_Y, BUTTON_WIDTH);
         SettingsButton.Clicked += () =>
         {
             Hide();
             OnSettings?.Invoke();
         };
 
-        ExitButton = CreateTextButton("Exit Game", rightX, BUTTON_ROW_2_Y, BUTTON_WIDTH);
+        ExitButton = CreateTextButton("Exit Game", rightX, BUTTON_ROW_1_Y, BUTTON_WIDTH);
         ExitButton.Clicked += () =>
         {
             Hide();
             OnExit?.Invoke();
         };
 
-        //close button — centered below the grid
+        //close button — centered below the action row
         CloseButton = CreateTextButton("Close", (PANEL_WIDTH - CLOSE_WIDTH) / 2, CLOSE_Y, CLOSE_WIDTH);
         CloseButton.Clicked += Hide;
     }
@@ -224,9 +226,13 @@ public sealed class PauseMenuControl : UIPanel
 
     public int GetSoundVolume() => SoundSlider.Value;
 
+    public int GetAmbienceVolume() => AmbienceSlider.Value;
+
     public void SetMusicVolume(int volume) => MusicSlider.SetValue(volume);
 
     public void SetSoundVolume(int volume) => SoundSlider.SetValue(volume);
+
+    public void SetAmbienceVolume(int volume) => AmbienceSlider.SetValue(volume);
 
     public void Show()
     {
@@ -248,10 +254,9 @@ public sealed class PauseMenuControl : UIPanel
         OnClose?.Invoke();
     }
 
+    public event AmbienceVolumeChangedHandler? OnAmbienceVolumeChanged;
     public event CloseHandler? OnClose;
     public event ExitHandler? OnExit;
-    public event FriendsHandler? OnFriends;
-    public event MacroHandler? OnMacro;
     public event MusicVolumeChangedHandler? OnMusicVolumeChanged;
     public event SettingsHandler? OnSettings;
     public event SoundVolumeChangedHandler? OnSoundVolumeChanged;

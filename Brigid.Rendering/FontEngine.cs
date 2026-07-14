@@ -38,6 +38,10 @@ public sealed class FontEngine : ITextMeasurer
 
     private const string FONTS_DIR = "Content/Fonts";
 
+    //representative glyphs spanning the real ink extent (tall caps/ascenders + deep descenders), measured once
+    //per face to center its ink in the layout band. Content-independent; only the vertical extent is used.
+    private const string VERTICAL_METRIC_PROBE = "AXhkbdfgjpqy";
+
     //selectable UI faces, cycled in order. The first is the default/required; later entries load only if present.
     //Bold/Italic/BoldItalic are optional style-variant files resolved via FontStyle; a missing variant falls back to
     //the regular file. IsMono marks the face FontStyle.Mono resolves to, independent of the active face.
@@ -50,7 +54,8 @@ public sealed class FontEngine : ITextMeasurer
             Bold: "AnonymousPro-Bold.ttf",
             Italic: "AnonymousPro-Italic.ttf",
             BoldItalic: "AnonymousPro-BoldItalic.ttf"),
-        new("Iosevka Mono", "IosevkaCharonMono-Regular.ttf")
+        new("Iosevka Mono", "IosevkaCharonMono-Regular.ttf"),
+        new("Comic Shanns Mono", "ComicShannsMono-Regular.ttf")
     ];
 
     //optional fallback faces for codepoints the primaries lack (CJK, emoji), added to every face. Loaded if
@@ -142,8 +147,19 @@ public sealed class FontEngine : ITextMeasurer
             face.SetVariant(FontStyle.Italic, TryLoadSystem(def.Italic));
             face.SetVariant(FontStyle.BoldItalic, TryLoadSystem(def.BoldItalic));
 
-            //center the line box in the 12px layout band: offset = (band - lineHeight) / 2 (negative, nudges up)
-            face.VerticalOffset = (int)MathF.Round((TextRenderer.CHAR_HEIGHT - face.GetFont(FontStyle.Regular, RENDER_SIZE).LineHeight) / 2f);
+            //center the actual glyph *ink* in the layout band, not the declared line box. FontStashSharp's
+            //LineHeight bakes in per-face internal leading that varies wildly (Comic Shanns reports a tall box
+            //with dead space below the glyphs), so box-centering makes such faces sit high with a gap beneath.
+            //Measuring real ink via TextBounds and centering that keeps every face on the same visual band.
+            var probeFont = face.GetFont(FontStyle.Regular, RENDER_SIZE);
+            var ink = probeFont.TextBounds(VERTICAL_METRIC_PROBE, Vector2.Zero);
+            var inkHeight = ink.Y2 - ink.Y;
+
+            //offset so the ink midpoint lands at the band midpoint; ink.Y is the ink top relative to the pen, so
+            //subtracting it cancels the face's ascent. Fall back to line-box centering if the probe has no ink.
+            face.VerticalOffset = inkHeight > 0f
+                ? (int)MathF.Round(((TextRenderer.CHAR_HEIGHT - inkHeight) / 2f) - ink.Y)
+                : (int)MathF.Round((TextRenderer.CHAR_HEIGHT - probeFont.LineHeight) / 2f);
 
             if (def.IsMono && (monoIndex < 0))
                 monoIndex = faces.Count;
