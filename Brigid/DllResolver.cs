@@ -46,23 +46,20 @@ internal static class DllResolver
     public static IntPtr ImportResolver(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
     {
         IntPtr handle;
-        NoticeDebugLog.Write($"DllResolver: resolving library: {libraryName} in {assembly.GetName()}: arch {Architecture}");
 
         var candidates = OperatingSystem.IsMacOS() ? MacLibraries :
             OperatingSystem.IsLinux() ? LinuxLibraries : WinLibraries;
         if (candidates.TryGetValue(libraryName, out var libs))
         {
             if (TryLoadLibrary(libs, out handle))
-            {
-                NoticeDebugLog.Write($"DllResolver: {libraryName} resolved successfully");
                 return handle;
-            }
         }
-        
-        // Fall back to library name resolution as a last chance attempt
-        NoticeDebugLog.Write(NativeLibrary.TryLoad(libraryName, out handle)
-            ? $"DllResolver: {libraryName} resolved successfully"
-            : $"DllResolver: {libraryName} not found!");
+
+        // Fall back to library name resolution as a last chance attempt. Only the failure is worth a
+        // line — a successful resolve is the norm, and the resident-module audit (LogLoadedSdlModules)
+        // covers the split-SDL2 diagnostic, so the per-resolution trace here was pure log spam.
+        if (!NativeLibrary.TryLoad(libraryName, out handle))
+            NoticeDebugLog.Write($"DllResolver: {libraryName} not found!");
         return handle;
     }
 
@@ -74,11 +71,7 @@ internal static class DllResolver
             foreach (var candidate in GetProbePaths(libraryName))
             {
                 if (NativeLibrary.TryLoad(candidate, out handle))
-                {
-                    NoticeDebugLog.Write($"DllResolver: loaded {candidate}");
                     return true;
-                }
-                NoticeDebugLog.Write($"DllResolver: tried {candidate}");
             }
         }
         return false;
