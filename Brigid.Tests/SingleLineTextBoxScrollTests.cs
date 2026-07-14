@@ -7,6 +7,8 @@ namespace Brigid.Tests;
 // Regression: a single-line textbox (e.g. the chat SAY input) used to reject any character that would render past
 // its visible pixel width, so pasting/typing a message longer than the box could show silently dropped the tail
 // (the "Go get it!" -> "Go get i" bug). Single-line boxes now scroll horizontally and accept up to MaxLength.
+// Shares the UITextBoxFocus collection so it doesn't run in parallel with other classes that steal static focus.
+[Collection("UITextBoxFocus")]
 public class SingleLineTextBoxScrollTests
 {
     private static UITextBox FocusedBox(int width, int maxLength)
