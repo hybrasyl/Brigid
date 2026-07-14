@@ -19,6 +19,11 @@ public sealed class OrangeBarControl : UIPanel
 
     //nudge the message lines up so they sit centered on the orange bar groove rather than low against its lower lip.
     private const int LINE_Y_NUDGE = 2;
+
+    //baked F11 live-nudge delta (2026-07-13 client log): shift the rendered lines +1px right, +2px down on top of the
+    //centering nudge so the text sits square on the orange bar groove.
+    private const int LINE_X_NUDGE = 1;
+    private const int LINE_DROP_NUDGE = 2;
     private readonly UILabel[] Lines;
     private readonly Texture2D? PaneBg;
 
@@ -51,7 +56,7 @@ public sealed class OrangeBarControl : UIPanel
             Lines[i] = new UILabel
             {
                 Name = $"OrangeLine{i}",
-                X = TextBounds.X - WrapBounds.X,
+                X = TextBounds.X - WrapBounds.X + LINE_X_NUDGE,
                 Width = TextBounds.Width,
                 Height = GLYPH_HEIGHT,
                 PaddingLeft = 0,
@@ -148,7 +153,7 @@ public sealed class OrangeBarControl : UIPanel
         }
 
         //textbounds.y is relative to the hud parent, wrapbounds.y is our own y — compute relative offset
-        var baseRelY = TextBounds.Y - WrapBounds.Y - LINE_Y_NUDGE;
+        var baseRelY = TextBounds.Y - WrapBounds.Y - LINE_Y_NUDGE + LINE_DROP_NUDGE;
         var slot = 0;
 
         for (var i = history.Count - 1; (i >= 0) && (slot <= ExpandedLines); i--)
