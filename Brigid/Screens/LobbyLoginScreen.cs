@@ -45,6 +45,7 @@ public sealed class LobbyLoginScreen : IScreen
     private bool PendingWorldSwitch;
     private bool PendingConfigSwitch;
     private OkPopupMessageControl LobbyLoginPopupMessage = null!;
+    private OkPopupMessageControl MigrationPrompt = null!;
     private IList<ServerEntry> ServerList = [];
     private ServerSelectControl ServerSelectControl = null!;
 
@@ -143,6 +144,15 @@ public sealed class LobbyLoginScreen : IScreen
         };
         LobbyLoginPopupMessage.OnOk += OnLobbyLoginPopupMessageOk;
 
+        //one-time first-run offer to import legacy per-character config (OK = import, Cancel = start fresh)
+        MigrationPrompt = new OkPopupMessageControl(showCancel: true)
+        {
+            ZIndex = 2,
+            Name = "MigrationPrompt"
+        };
+        MigrationPrompt.OnOk += OnMigrationImport;
+        MigrationPrompt.OnCancel += OnMigrationSkip;
+
         Root = new LobbyRootPanel
         {
             Name = "LobbyRoot",
@@ -156,11 +166,14 @@ public sealed class LobbyLoginScreen : IScreen
         Root.AddChild(CharCreateControl);
         Root.AddChild(PasswordChangeControl);
         Root.AddChild(LobbyLoginPopupMessage);
+        Root.AddChild(MigrationPrompt);
 
         //build ui atlas after all login controls are constructed
         UiRenderer.Instance?.BuildAtlas();
 
         WireRootInputHandlers();
+
+        MaybeShowMigrationPrompt();
 
         if (ReturningFromWorld)
         {
@@ -371,6 +384,45 @@ public sealed class LobbyLoginScreen : IScreen
     }
 
     private void OnLobbyLoginPopupMessageOk() => LobbyLoginPopupMessage.Hide();
+
+    //── one-time legacy character-data import offer ──
+
+    private void MaybeShowMigrationPrompt()
+    {
+        //ask only once, and only when there is actually legacy per-character config to import
+        if (ClientSettings.LegacyCharacterImport != ClientSettings.MigrationUndecided)
+            return;
+
+        if (!DataContext.LocalPlayerSettings.HasLegacyCharacterData())
+        {
+            //nothing to import — record the decision so we never re-scan or re-ask
+            SetMigrationDecision(ClientSettings.MigrationSkip);
+
+            return;
+        }
+
+        MigrationPrompt.Show(
+            "Import your existing Dark Ages character settings (macros, friends, family, spells)?\n\n"
+            + "OK = Import      Cancel = Start Fresh");
+    }
+
+    private void OnMigrationImport()
+    {
+        SetMigrationDecision(ClientSettings.MigrationImport);
+        MigrationPrompt.Hide();
+    }
+
+    private void OnMigrationSkip()
+    {
+        SetMigrationDecision(ClientSettings.MigrationSkip);
+        MigrationPrompt.Hide();
+    }
+
+    private static void SetMigrationDecision(int decision)
+    {
+        ClientSettings.LegacyCharacterImport = decision;
+        ClientSettings.Save();
+    }
 
     private void OnServerSelected(byte serverId)
     {

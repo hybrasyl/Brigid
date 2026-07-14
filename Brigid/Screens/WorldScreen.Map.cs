@@ -299,7 +299,7 @@ public sealed partial class WorldScreen
         int height,
         ushort serverCheckSum)
     {
-        var path = Path.Combine(DataContext.DataPath, "maps", $"lod{mapId}.map");
+        var path = Path.Combine(AppPaths.MapsDir, $"lod{mapId}.map");
 
         if (!File.Exists(path))
             return null;
@@ -343,9 +343,14 @@ public sealed partial class WorldScreen
 
     private void SaveMapFile(int mapId)
     {
-        var path = Path.Combine(DataContext.DataPath, "maps", $"lod{mapId}.map");
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        MapFile!.Save(path);
+        var path = Path.Combine(AppPaths.MapsDir, $"lod{mapId}.map");
+
+        DataDiagnostics.Try(
+            () =>
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                MapFile!.Save(path);
+            }, "SaveMapFile");
     }
 
     private void HandleLocationChanged(int x, int y)

@@ -116,7 +116,7 @@ public sealed class FontEngine : ITextMeasurer
         var settings = new FontSystemSettings
         {
             //match the premultiplied-alpha SpriteBatch pipeline the UI pass uses
-            PremultiplyAlpha = true
+            GlyphRenderResult = GlyphRenderResult.Premultiplied
         };
 
         //load CJK fallback bytes once, shared across every face's FontSystem

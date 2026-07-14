@@ -376,7 +376,7 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 
-# VS Code files
+# VS Code files — entirely local, not shared
 .vscode/
 *.code-workspace
 
@@ -412,3 +412,4 @@ runtimes/*
 
 # diagnostic dumps from Scripts/dump-prefab-images.{sh,ps1} and similar
 output/
+/.vscode

@@ -198,6 +198,7 @@ public sealed class ChatInputControl : UIPanel
         PrefixLabel.BackgroundColor = Color.White;
         UpdateLayout(prefix, Color.Black);
         TextBox.Text = string.Empty;
+        TextBox.ResetUndoHistory();
         TextBox.IsFocused = true;
         FocusChanged?.Invoke(true);
     }
@@ -209,6 +210,7 @@ public sealed class ChatInputControl : UIPanel
         TextBox.IsReadOnly = false;
         TextBox.IsFocused = false;
         TextBox.Text = string.Empty;
+        TextBox.ResetUndoHistory();
         TextBox.ForegroundColor = Color.White;
         UpdateLayout(string.Empty, Color.White);
 
@@ -225,6 +227,9 @@ public sealed class ChatInputControl : UIPanel
         TextBox.Text = text;
         TextBox.CursorPosition = cursorPosition;
         TextBox.ClearSelection();
+
+        //message-history swap replaced the contents wholesale — drop undo so Ctrl+Z can't resurrect a prior draft
+        TextBox.ResetUndoHistory();
     }
 
     private void RestoreFromPrompt()
@@ -381,6 +386,7 @@ public sealed class ChatInputControl : UIPanel
                     Mode = ChatMode.WhisperMessage;
                     UpdateLayout($"-> {targetName}: ", TextBox.ForegroundColor);
                     TextBox.Text = string.Empty;
+                    TextBox.ResetUndoHistory();
                 }
 
                 break;
@@ -428,6 +434,7 @@ public sealed class ChatInputControl : UIPanel
                 TextBox.IsReadOnly = false;
                 UpdateLayout("ID of people you wish to reject whisper >", TextBox.ForegroundColor);
                 TextBox.Text = string.Empty;
+                TextBox.ResetUndoHistory();
                 e.Handled = true;
 
                 break;
@@ -437,6 +444,7 @@ public sealed class ChatInputControl : UIPanel
                 TextBox.IsReadOnly = false;
                 UpdateLayout("ID of people you wish to cancel rejection of whisper >", TextBox.ForegroundColor);
                 TextBox.Text = string.Empty;
+                TextBox.ResetUndoHistory();
                 e.Handled = true;
 
                 break;
