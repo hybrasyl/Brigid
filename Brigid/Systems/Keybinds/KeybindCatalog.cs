@@ -26,6 +26,7 @@ public static class KeybindCatalog
     {
         Movement,
         Panels,
+        HudTabs,
         Chat,
         FunctionKeys,
         Actions,
@@ -40,6 +41,7 @@ public static class KeybindCatalog
     [
         KeybindSection.Movement,
         KeybindSection.Panels,
+        KeybindSection.HudTabs,
         KeybindSection.Chat,
         KeybindSection.Actions,
         KeybindSection.FunctionKeys,
@@ -62,6 +64,18 @@ public static class KeybindCatalog
         new(CommandId.World_TownMap, "Town Map", KeybindSection.Panels),
         new(CommandId.World_GroupPanel, "Group Panel", KeybindSection.Panels),
         new(CommandId.World_SwapHudLayout, "Swap HUD Layout", KeybindSection.Panels),
+
+        new(CommandId.World_TabInventory, "Inventory", KeybindSection.HudTabs),
+        new(CommandId.World_TabInventoryExpand, "Inventory (Expand)", KeybindSection.HudTabs),
+        new(CommandId.World_TabSkills, "Skills", KeybindSection.HudTabs),
+        new(CommandId.World_TabSkillsAlt, "Skills (Alt Panel)", KeybindSection.HudTabs),
+        new(CommandId.World_TabSpells, "Spells", KeybindSection.HudTabs),
+        new(CommandId.World_TabSpellsAlt, "Spells (Alt Panel)", KeybindSection.HudTabs),
+        new(CommandId.World_TabChat, "Chat Panel", KeybindSection.HudTabs),
+        new(CommandId.World_TabChatHistory, "Message History", KeybindSection.HudTabs),
+        new(CommandId.World_TabStats, "Stats", KeybindSection.HudTabs),
+        new(CommandId.World_TabStatsExtended, "Extended Stats", KeybindSection.HudTabs),
+        new(CommandId.World_TabTools, "Tools", KeybindSection.HudTabs),
 
         new(CommandId.World_ChatFocus, "Chat", KeybindSection.Chat),
         new(CommandId.World_Shout, "Shout", KeybindSection.Chat),
@@ -107,6 +121,7 @@ public static class KeybindCatalog
     {
         KeybindSection.Movement     => "Movement",
         KeybindSection.Panels       => "Panels & Windows",
+        KeybindSection.HudTabs      => "HUD Tabs",
         KeybindSection.Chat         => "Chat",
         KeybindSection.Actions      => "Actions",
         KeybindSection.FunctionKeys => "Function Keys",

@@ -63,12 +63,12 @@ public enum CommandId
     Read_SelectAll,
 
     // ── WorldHud (WorldScreen.OnRootKeyDown) ── discrete, single-chord player hotkeys. Contextual keys
-    // (Escape), shift-parameterized tab keys (A/S/D/F/G/H), the emote/slot key families, movement (B4), and
-    // the debug hotkeys stay literal in the handler — they don't fit the one-command-one-chord model, so
-    // they're not rebindable via this catalog. The distinction from the migrated Shift chords
-    // (Shout/Whisper/ChatScroll) is the role Shift plays: there it is part of the chord and one key+Shift maps
-    // to exactly one action; on the tab keys Shift instead selects an alternate panel through the same
-    // handler (bare and Shift both route to it), which the chord model can't express.
+    // (Escape), the emote/slot number-row families, and the debug hotkeys stay literal in the handler — they
+    // don't fit the one-command-one-chord model, so they're not rebindable via this catalog. The HUD tab
+    // panels (Inventory/Skills/Spells/Chat/Stats/Tools) ARE rebindable: each has a base command (bare key) and,
+    // where it has an alternate panel, a separate Shift-variant command. Both route to
+    // WorldHud.HandleTabActivation, which keeps the stateful alt-panel logic (UseShiftKeyForAltPanels /
+    // re-press-to-alt); base and alt are independent bindings.
 
     /// <summary>Alt+Enter — cycle window size.</summary>
     World_CycleWindowSize,
@@ -121,6 +121,20 @@ public enum CommandId
 
     /// <summary>Y — open the group panel (members tab).</summary>
     World_GroupPanel,
+
+    // HUD tab panels — the bare-key command switches to the tab; the *Alt / *Expand / *History / *Extended
+    // variant selects the tab's alternate panel (or expands, for Inventory). Tools has no alternate.
+    World_TabInventory,
+    World_TabInventoryExpand,
+    World_TabSkills,
+    World_TabSkillsAlt,
+    World_TabSpells,
+    World_TabSpellsAlt,
+    World_TabChat,
+    World_TabChatHistory,
+    World_TabStats,
+    World_TabStatsExtended,
+    World_TabTools,
 
     World_ChatScrollUp,
     World_ChatScrollDown,

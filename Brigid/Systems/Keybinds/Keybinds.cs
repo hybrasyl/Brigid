@@ -98,6 +98,22 @@ public static class Keybinds
         [CommandId.World_PickupItem]          = new(new KeyChord(Keys.B), KeybindContext.WorldHud),
         [CommandId.World_TownMap]             = new(new KeyChord(Keys.T), KeybindContext.WorldHud),
         [CommandId.World_GroupPanel]          = new(new KeyChord(Keys.Y), KeybindContext.WorldHud),
+        // HUD tab panels — bare key switches to the tab; the Shift-variant selects the alternate panel (or
+        // expands, for Inventory). Matches the old HudTabHotkeys switch's bare/Shift cases; extra modifiers no
+        // longer fall through (consistent with the WorldHud exact-chord tightening). Base and alt are
+        // independent bindings.
+        [CommandId.World_TabInventory]        = new(new KeyChord(Keys.A), KeybindContext.WorldHud),
+        [CommandId.World_TabInventoryExpand]     = new(new KeyChord(Keys.A, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabSkills]           = new(new KeyChord(Keys.S), KeybindContext.WorldHud),
+        [CommandId.World_TabSkillsAlt]        = new(new KeyChord(Keys.S, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabSpells]           = new(new KeyChord(Keys.D), KeybindContext.WorldHud),
+        [CommandId.World_TabSpellsAlt]        = new(new KeyChord(Keys.D, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabChat]             = new(new KeyChord(Keys.F), KeybindContext.WorldHud),
+        [CommandId.World_TabChatHistory]      = new(new KeyChord(Keys.F, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabStats]            = new(new KeyChord(Keys.G), KeybindContext.WorldHud),
+        [CommandId.World_TabStatsExtended]    = new(new KeyChord(Keys.G, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabTools]            = new(new KeyChord(Keys.H), KeybindContext.WorldHud),
+
         [CommandId.World_ChatScrollUp]        = new(new KeyChord(Keys.Up, ChordMods.Shift), KeybindContext.WorldHud),
         [CommandId.World_ChatScrollDown]      = new(new KeyChord(Keys.Down, ChordMods.Shift), KeybindContext.WorldHud),
 
@@ -235,28 +251,9 @@ public static class Keybinds
         return !meta && !ctrl;
     }
 
-    //keys handled by a modifier-agnostic literal switch in WorldScreen.OnRootKeyDown (the HUD tab switch,
-    //A/S/D/F/G/H) that fires regardless of modifiers and returns before most resolver checks — so a WorldHud
-    //command rebound onto one would be silently shadowed. The rebinder rejects these via IsShadowed. (This is
-    //deliberately conservative: a couple of commands whose Matches sits above the tab switch could technically
-    //use them, but blocking the whole set keeps the rule simple and can never produce a dead binding.)
-    private static readonly FrozenSet<Keys> WorldHudShadowKeys =
-        new[] { Keys.A, Keys.S, Keys.D, Keys.F, Keys.G, Keys.H }.ToFrozenSet();
-
-    /// <summary>
-    ///     Keys the WorldHud rebinder refuses (see <see cref="IsShadowed" />). A hand-maintained mirror of
-    ///     <c>WorldScreen.HudTabHotkeys</c> — a test cross-asserts the two so they can't silently drift.
-    /// </summary>
-    public static IReadOnlySet<Keys> ReservedWorldHudKeys => WorldHudShadowKeys;
-
-    /// <summary>
-    ///     True if binding <paramref name="chord" /> in <paramref name="context" /> would be swallowed by a
-    ///     literal (non-resolver) handler that runs first, making the binding dead. The rebinding UI uses this
-    ///     to refuse such a chord. Currently only the WorldHud tab-switch keys are reserved; the softer
-    ///     slot/emote number-row case is flagged by <see cref="UsesContestedNumberRow" /> instead.
-    /// </summary>
-    public static bool IsShadowed(KeybindContext context, KeyChord chord) =>
-        context == KeybindContext.WorldHud && WorldHudShadowKeys.Contains(chord.Key);
+    //the HUD tab-switch keys (A/S/D/F/G/H) used to be reserved here (they were a modifier-agnostic literal
+    //switch that ran before the resolver and would shadow any rebind). They are now resolver-driven WorldHud
+    //commands (World_Tab*), so the reserve and IsShadowed are gone — those keys rebind like any other.
 
     //the number row is scanned by two literal handlers in OnRootKeyDown — the slot hotkeys (1-9/0/-/=, any
     //modifier) and the emote hotkeys (Ctrl/Alt + number) — both of which dispatch before the movement and
@@ -271,9 +268,10 @@ public static class Keybinds
 
     /// <summary>
     ///     True if <paramref name="chord" /> uses a number-row key contested by the WorldHud slot/emote hotkeys
-    ///     (see <see cref="WorldHudNumberRowKeys" />). Unlike <see cref="IsShadowed" /> this is a soft signal:
-    ///     the collision only bites while a HUD panel is open and only for commands dispatched after those
-    ///     handlers, so the rebinder warns and still allows the bind rather than refusing it.
+    ///     (see <see cref="WorldHudNumberRowKeys" />). A soft signal: the collision only bites while a HUD panel
+    ///     is open and only for commands dispatched after those handlers, so the rebinder warns and still allows
+    ///     the bind rather than refusing it. (The slot/emote number-row handlers are the remaining literal
+    ///     dispatch ahead of the resolver; migrating them is a documented follow-up.)
     /// </summary>
     public static bool UsesContestedNumberRow(KeybindContext context, KeyChord chord) =>
         context == KeybindContext.WorldHud && WorldHudNumberRowKeys.Contains(chord.Key);

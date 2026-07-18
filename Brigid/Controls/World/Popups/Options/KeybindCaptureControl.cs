@@ -135,17 +135,6 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
 
         var context = Keybinds.Defaults[Command].Context;
 
-        //reserved keys (the HUD tab-switch letters) are swallowed by a literal handler before the resolver runs,
-        //so a binding onto one would be dead — block Set outright.
-        if (Keybinds.IsShadowed(context, chord))
-        {
-            StatusLabel.Text = "Reserved by HUD tab keys — pick another";
-            StatusLabel.ForegroundColor = LegendColors.Red;
-            SetButton.SetEnabled(false);
-
-            return;
-        }
-
         //soft warnings — the bind is allowed but flagged, so a green "OK" never hides a live collision:
         //  · a conflict (another command fires on the same keystroke), or
         //  · a number-row key the slot/emote hotkeys contest while a HUD panel is open.
@@ -174,9 +163,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
 
     private void ApplyCapture()
     {
-        //re-validate the reserved guard at commit time; Set is disabled for reserved/uncaptured, but a direct
-        //call must never push a dead binding.
-        if (Captured is { } chord && !Keybinds.IsShadowed(Keybinds.Defaults[Command].Context, chord))
+        if (Captured is { } chord)
             Committed?.Invoke(Command, Slot, chord);
 
         Hide();

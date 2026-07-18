@@ -428,27 +428,26 @@ public sealed class KeybindsTests
     }
 
     [Fact]
-    public void WorldHud_Defaults_AvoidReservedLiteralKeys()
+    public void WorldHud_TabKeys_ResolveBaseAndAltPanel()
     {
-        //A/S/D/F/G/H (HUD tab switch) is handled by a modifier-agnostic literal switch in OnRootKeyDown that
-        //runs before the F-key/letter resolver checks, so a WorldHud command bound to one of those letters
-        //would be silently shadowed. The migration keeps the catalog clear of them; this fails if a future
-        //command lands on one. Z/X/C/V are NOT reserved: B4 made the movement switch resolver-driven, so those
-        //letters are now owned by Move_* rather than a literal handler. Arrow/number-row keys aren't reserved
-        //either — their movement/slot/emote handlers sit after the resolver checks that use them and Shift
-        //disambiguates (Shout=Shift+1, ChatScroll=Shift+Arrow).
-        var reserved = new HashSet<Keys> { Keys.A, Keys.S, Keys.D, Keys.F, Keys.G, Keys.H };
+        Keybinds.ResetAll();
 
-        foreach (var (_, def) in Keybinds.Defaults)
-        {
-            if (def.Context != KeybindContext.WorldHud)
-                continue;
+        //the HUD tab keys (A/S/D/F/G/H) used to be swallowed by a literal switch and were unbindable; they are
+        //now resolver-driven: bare letter -> the tab, Shift+letter -> the tab's alternate panel.
+        Assert.Equal(CommandId.World_TabInventory, Keybinds.Resolve(WinKey(Keys.A), WorldCtx));
+        Assert.Equal(CommandId.World_TabInventoryExpand, Keybinds.Resolve(WinKey(Keys.A, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabSkills, Keybinds.Resolve(WinKey(Keys.S), WorldCtx));
+        Assert.Equal(CommandId.World_TabSkillsAlt, Keybinds.Resolve(WinKey(Keys.S, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabSpells, Keybinds.Resolve(WinKey(Keys.D), WorldCtx));
+        Assert.Equal(CommandId.World_TabSpellsAlt, Keybinds.Resolve(WinKey(Keys.D, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabChat, Keybinds.Resolve(WinKey(Keys.F), WorldCtx));
+        Assert.Equal(CommandId.World_TabChatHistory, Keybinds.Resolve(WinKey(Keys.F, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabStats, Keybinds.Resolve(WinKey(Keys.G), WorldCtx));
+        Assert.Equal(CommandId.World_TabStatsExtended, Keybinds.Resolve(WinKey(Keys.G, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabTools, Keybinds.Resolve(WinKey(Keys.H), WorldCtx));
 
-            Assert.DoesNotContain(def.Binding.Primary.Key, reserved);
-
-            if (def.Binding.Secondary is { } secondary)
-                Assert.DoesNotContain(secondary.Key, reserved);
-        }
+        //Tools has no alternate panel, so Shift+H is unbound (not a dead literal reservation any more).
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.H, shift: true), WorldCtx));
     }
 
     [Fact]
@@ -513,29 +512,7 @@ public sealed class KeybindsTests
             Assert.Contains(CommandId.Editor_Copy, conflicts);
     }
 
-    [Fact]
-    public void IsShadowed_ReservesWorldHudTabKeys_Only()
-    {
-        //A/S/D/F/G/H are eaten by the literal HUD tab switch before the resolver runs — unbindable in WorldHud.
-        Assert.True(Keybinds.IsShadowed(WorldCtx, new KeyChord(Keys.A)));
-        Assert.True(Keybinds.IsShadowed(WorldCtx, new KeyChord(Keys.H, ChordMods.Shift)));
-
-        //a normal WorldHud key is fine, and the reservation doesn't leak into other contexts.
-        Assert.False(Keybinds.IsShadowed(WorldCtx, new KeyChord(Keys.Q)));
-        Assert.False(Keybinds.IsShadowed(KeybindContext.TextEditing, new KeyChord(Keys.A)));
-    }
-
     private const KeybindContext WorldCtx = KeybindContext.WorldHud;
-
-    [Fact]
-    public void ReservedWorldHudKeys_MirrorTheHudTabSwitch()
-    {
-        //IsShadowed's reserved set is a hand-maintained mirror of WorldScreen's literal tab switch; if a tab
-        //key is added/moved/removed there, this fails so the two can't silently drift.
-        Assert.Equal(
-            Brigid.Screens.WorldScreen.HudTabHotkeys.Keys.OrderBy(k => k),
-            Keybinds.ReservedWorldHudKeys.OrderBy(k => k));
-    }
 
     [Fact]
     public void ChordFromEvent_NormalisesPrimaryModifier_AndIgnoresBareModifiers()

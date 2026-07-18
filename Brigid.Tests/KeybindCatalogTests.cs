@@ -65,6 +65,27 @@ public sealed class KeybindCatalogTests
     }
 
     [Fact]
+    public void TabCommands_DispatchEveryHudTabCatalogCommand()
+    {
+        //WorldScreen.TabCommands is a fourth list (beside the enum, Defaults, and the catalog) that the enum↔
+        //Defaults↔catalog guards don't cover: it decides which World_Tab* commands are actually *dispatched*.
+        //Assert it references exactly the HudTabs catalog rows — no command left undispatched (a dead binding),
+        //no orphan — and that each row targets a distinct HudTab.
+        var dispatchedList = Brigid.Screens.WorldScreen.TabCommands
+            .SelectMany(t => t.Alt is { } alt ? new[] { t.Base, alt } : [t.Base])
+            .ToList();
+        var dispatched = dispatchedList.ToHashSet();
+        var catalogHudTabs = Entries.Where(e => e.Section == KeybindSection.HudTabs).Select(e => e.Id).ToHashSet();
+
+        Assert.True(dispatched.SetEquals(catalogHudTabs),
+            "WorldScreen.TabCommands and the HudTabs catalog rows must reference exactly the same commands.");
+        Assert.Equal(dispatchedList.Count, dispatched.Count); //no command dispatched twice
+
+        var tabs = Brigid.Screens.WorldScreen.TabCommands.Select(t => t.Tab).ToList();
+        Assert.Equal(tabs.Count, tabs.Distinct().Count()); //each row targets a distinct HudTab
+    }
+
+    [Fact]
     public void EveryEntry_HasANonEmptyLabel()
     {
         foreach (var entry in Entries)
