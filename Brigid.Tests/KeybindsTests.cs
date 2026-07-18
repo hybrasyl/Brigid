@@ -33,7 +33,7 @@ public sealed class KeybindsTests
     }
 
     //simulates a macOS key event: Cmd sets Meta only, physical Ctrl sets Ctrl only — they are distinct keys.
-    private static KeyDownEvent MacKey(Keys key, bool cmd = false, bool ctrl = false, bool shift = false)
+    private static KeyDownEvent MacKey(Keys key, bool cmd = false, bool ctrl = false, bool shift = false, bool alt = false)
     {
         var mods = KeyModifiers.None;
 
@@ -46,6 +46,9 @@ public sealed class KeybindsTests
         if (shift)
             mods |= KeyModifiers.Shift;
 
+        if (alt)
+            mods |= KeyModifiers.Alt;
+
         return new KeyDownEvent { Key = key, Modifiers = mods };
     }
 
@@ -55,7 +58,7 @@ public sealed class KeybindsTests
     [InlineData(Keys.V, false, CommandId.Editor_Paste)]
     [InlineData(Keys.Z, false, CommandId.Editor_Undo)]
     [InlineData(Keys.Z, true, CommandId.Editor_Redo)]
-    [InlineData(Keys.A, true, CommandId.Editor_SelectAll)]
+    [InlineData(Keys.A, false, CommandId.Editor_SelectAll)]
     public void Windows_EditorChords_ResolveToCurrentDefaults(Keys key, bool shift, CommandId expected)
     {
         Keybinds.ResetAll();
@@ -64,21 +67,25 @@ public sealed class KeybindsTests
     }
 
     [Fact]
-    public void Windows_CtrlA_IsLineStart_NotSelectAll()
+    public void Windows_CtrlA_IsSelectAll()
     {
         Keybinds.ResetAll();
 
-        //the readline carve-out: bare Ctrl+A must stay line-start; Ctrl+Shift+A is select-all.
-        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
-        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(WinKey(Keys.A, ctrl: true, shift: true), KeybindContext.TextEditing));
+        //average-user convention: bare Ctrl+A is select-all. Ctrl+Shift+A is no longer bound (was select-all).
+        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.A, ctrl: true, shift: true), KeybindContext.TextEditing));
     }
 
     [Fact]
-    public void Windows_CtrlE_IsLineEnd()
+    public void Windows_LineStartEnd_AreAltArrows_NotCtrlAE()
     {
         Keybinds.ResetAll();
 
-        Assert.Equal(CommandId.Editor_LineEnd, Keybinds.Resolve(WinKey(Keys.E, ctrl: true), KeybindContext.TextEditing));
+        //readline line-start/end kept as remappable commands but defaulted onto Alt+Left/Right so Ctrl+A is free
+        //for select-all. The old Ctrl+A/Ctrl+E readline chords no longer resolve to line-start/end.
+        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(WinKey(Keys.Left, alt: true), KeybindContext.TextEditing));
+        Assert.Equal(CommandId.Editor_LineEnd, Keybinds.Resolve(WinKey(Keys.Right, alt: true), KeybindContext.TextEditing));
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.E, ctrl: true), KeybindContext.TextEditing));
     }
 
     [Fact]
@@ -114,29 +121,31 @@ public sealed class KeybindsTests
     {
         Keybinds.ResetAll();
 
-        //Ctrl+C in a read-only view resolves to the ReadView copy, not the editor copy.
+        //Ctrl+C resolves to the ReadView copy in a read-only view and the editor copy in an editor — the same
+        //physical chord, disambiguated by context.
         Assert.Equal(CommandId.Read_Copy, Keybinds.Resolve(WinKey(Keys.C, ctrl: true), KeybindContext.ReadView));
+        Assert.Equal(CommandId.Editor_Copy, Keybinds.Resolve(WinKey(Keys.C, ctrl: true), KeybindContext.TextEditing));
 
-        //plain Ctrl+A is select-all in a read-only view (no line-start binding there), but line-start in the
-        //editor — the same physical chord, disambiguated by context.
+        //Ctrl+A is select-all in both contexts (consistent average-user convention), routed per context.
         Assert.Equal(CommandId.Read_SelectAll, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.ReadView));
-        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
+        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
 
         //editor-only commands (cut/paste/undo) have no ReadView binding.
         Assert.Null(Keybinds.Resolve(WinKey(Keys.X, ctrl: true), KeybindContext.ReadView));
     }
 
     [Fact]
-    public void MacOS_Cmd_DrivesPrimaryActions_CtrlStaysLiteral()
+    public void MacOS_Cmd_DrivesPrimaryActions_PhysicalCtrlUnbound()
     {
         Keybinds.ResetAll();
 
-        //Cmd+C/A copy & select-all; physical Ctrl+A is still line-start (native macOS behavior).
+        //Cmd+C copy, Cmd+A select-all; line-start/end are Alt+Left/Right cross-OS.
         Assert.Equal(CommandId.Editor_Copy, Keybinds.Resolve(MacKey(Keys.C, cmd: true), KeybindContext.TextEditing));
-        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(MacKey(Keys.A, cmd: true, shift: true), KeybindContext.TextEditing));
-        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(MacKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
+        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(MacKey(Keys.A, cmd: true), KeybindContext.TextEditing));
+        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(MacKey(Keys.Left, alt: true), KeybindContext.TextEditing));
 
-        //physical Ctrl+C on macOS is NOT copy (copy is Cmd+C).
+        //physical Ctrl+A on macOS is NOT bound (select-all is Cmd+A); physical Ctrl+C is NOT copy (copy is Cmd+C).
+        Assert.Null(Keybinds.Resolve(MacKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
         Assert.Null(Keybinds.Resolve(MacKey(Keys.C, ctrl: true), KeybindContext.TextEditing));
     }
 

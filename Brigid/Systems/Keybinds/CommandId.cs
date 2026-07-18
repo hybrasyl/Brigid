@@ -49,10 +49,13 @@ public enum CommandId
     Editor_Redo,
     Editor_SelectAll,
 
-    /// <summary>Readline line-start — literal Ctrl+A on every OS (native macOS text-field behavior).</summary>
+    /// <summary>
+    ///     Line-start. Defaults to Alt+Left (Home also does line-start literally, for everyone). Kept as a
+    ///     remappable command so power users can rebind it to classic readline Ctrl+A if they want.
+    /// </summary>
     Editor_LineStart,
 
-    /// <summary>Readline line-end — literal Ctrl+E on every OS.</summary>
+    /// <summary>Line-end. Defaults to Alt+Right (End also does line-end literally). Remappable (see Editor_LineStart).</summary>
     Editor_LineEnd,
 
     // ── ReadView (UILabel, read-only) ──

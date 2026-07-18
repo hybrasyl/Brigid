@@ -13,9 +13,9 @@ namespace Brigid.Systems.Keybinds;
 ///         <item><see cref="Meta" /> is the platform primary modifier — Ctrl on Windows/Linux, Cmd on
 ///         macOS. Bind primary-modifier actions (clipboard, undo, select-all) to <see cref="Meta" /> and
 ///         they resolve per-OS for free.</item>
-///         <item><see cref="Ctrl" /> is <b>literal</b> Ctrl on every OS — used only for the readline
-///         carve-out (Ctrl+A line-start / Ctrl+E line-end) which cannot fold into <see cref="Meta" />
-///         because macOS Cmd+A already means select-all.</item>
+///         <item><see cref="Ctrl" /> is <b>literal</b> Ctrl on every OS — for chords that must stay on
+///         physical Ctrl even on macOS (e.g. the redo secondary Ctrl+Y) rather than folding into
+///         <see cref="Meta" />.</item>
 ///     </list>
 ///     A chord uses at most one primary modifier (<see cref="Meta" /> or <see cref="Ctrl" />), never both.
 /// </summary>

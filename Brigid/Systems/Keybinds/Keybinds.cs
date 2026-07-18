@@ -16,8 +16,10 @@ namespace Brigid.Systems.Keybinds;
 ///     is a poll-time variant reserved for a future fluid-movement model (no consumer yet).
 ///     <para>
 ///         Defaults live in code (<see cref="Defaults" />); <see cref="Load" /> merges overrides-only from
-///         <c>keybinds.json</c>. The WorldHud and editor hotkeys resolve through <see cref="Matches" /> (Phases
-///         B3/B4); the rebinding UI (Track C) will edit overrides via <see cref="SetBinding" />.
+///         <c>keybinds.json</c>. WorldHud hotkeys resolve through per-command <see cref="Matches" /> (interleaved
+///         with literal control flow in <c>WorldScreen.OnRootKeyDown</c>); the editor/read commands resolve
+///         through <see cref="Resolve" /> (a closed, mutually-exclusive family dispatched in one switch). The
+///         rebinding UI (Track C) edits overrides via <see cref="SetBinding" />.
 ///     </para>
 /// </summary>
 public static class Keybinds
@@ -49,17 +51,20 @@ public static class Keybinds
         //literal Ctrl+Y (secondary). Both must resolve to redo for parity with the live editor handler.
         [CommandId.Editor_Redo]      = new(new KeyChord(Keys.Z, ChordMods.Meta | ChordMods.Shift), new KeyChord(Keys.Y, ChordMods.Ctrl), KeybindContext.TextEditing),
 
-        //select-all in the editor is Meta+Shift+A: on Windows that is the current Ctrl+Shift+A; Meta+A is
-        //deliberately avoided in this context because literal Ctrl+A is line-start (below), and folding
-        //select-all onto Meta+A would collide with it on Windows.
-        [CommandId.Editor_SelectAll] = new(new KeyChord(Keys.A, ChordMods.Meta | ChordMods.Shift), KeybindContext.TextEditing),
+        //select-all is Meta+A: on Windows that is Ctrl+A, the universal Select-All convention. Line-start is no
+        //longer bound to Ctrl+A (see below), so there is nothing to collide with — we favour the average user's
+        //expectation over the readline carve-out this used to preserve.
+        [CommandId.Editor_SelectAll] = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.TextEditing),
 
-        //readline carve-out: literal Ctrl on every OS (also native macOS text-field behavior).
-        [CommandId.Editor_LineStart] = new(new KeyChord(Keys.A, ChordMods.Ctrl), KeybindContext.TextEditing),
-        [CommandId.Editor_LineEnd]   = new(new KeyChord(Keys.E, ChordMods.Ctrl), KeybindContext.TextEditing),
+        //readline line-start/end kept as remappable commands, but defaulted OFF Ctrl+A/Ctrl+E onto Alt+Left/Right
+        //so Ctrl+A is free for select-all above. Alt is unread by the literal text handlers, so these are
+        //collision-free with the Ctrl/Ctrl+Shift+arrow word nav and word-selection. Home/End still do line
+        //start/end for everyone; power users who want emacs bindings can rebind these back to Ctrl+A/Ctrl+E.
+        [CommandId.Editor_LineStart] = new(new KeyChord(Keys.Left, ChordMods.Alt), KeybindContext.TextEditing),
+        [CommandId.Editor_LineEnd]   = new(new KeyChord(Keys.Right, ChordMods.Alt), KeybindContext.TextEditing),
 
-        // ── ReadView (UILabel, read-only) ── no line-start binding here, so Ctrl+A is free for select-all
-        // (matches the live UILabel handler: select-all on plain Ctrl+A, → Cmd+A on macOS).
+        // ── ReadView (UILabel, read-only) ── select-all is Meta+A (Ctrl+A), matching the editor for average-user
+        // consistency. NOTE: this deliberately changes the old live UILabel handler, which was Ctrl+Shift+A.
         [CommandId.Read_Copy]        = new(new KeyChord(Keys.C, ChordMods.Meta), KeybindContext.ReadView),
         [CommandId.Read_SelectAll]   = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.ReadView),
 

@@ -6,33 +6,62 @@ using static Brigid.Systems.Keybinds.KeybindCatalog;
 namespace Brigid.Tests;
 
 /// <summary>
-///     Track C support: the rebind catalog must stay in lock-step with the resolver's WorldHud defaults
-///     (no command silently missing from the UI, no orphan entry), and chord formatting must read the way
-///     the user pressed it.
+///     Track C support: the rebind catalog must stay in lock-step with the resolver's exposed defaults — every
+///     WorldHud command plus the TextEditing (editor) commands, but NOT the ReadView commands, which are
+///     consumption-only (routed for macOS + conventional defaults, not independently rebindable). No command
+///     silently missing from the UI, no orphan entry; and chord formatting must read the way the user pressed it.
 /// </summary>
 public sealed class KeybindCatalogTests
 {
-    private static HashSet<CommandId> WorldHudDefaults() =>
-        Keybinds.Defaults.Where(kv => kv.Value.Context == KeybindContext.WorldHud)
+    //the rebindable surface: WorldHud (world hotkeys + movement) and TextEditing (the editor family). ReadView
+    //(Read_Copy/Read_SelectAll) is deliberately excluded — it is consumed but not exposed as its own rows.
+    private static HashSet<CommandId> ExposedDefaults() =>
+        Keybinds.Defaults.Where(kv => kv.Value.Context is KeybindContext.WorldHud or KeybindContext.TextEditing)
                 .Select(kv => kv.Key)
                 .ToHashSet();
 
+    //commands consumed by the resolver but deliberately NOT surfaced in the rebinder. A new command must land
+    //here or in the catalog — EveryDefault_IsExposedOrIntentionallyUnexposed fails otherwise, so the choice is
+    //never silent. ReadView copy/select-all mirror the editor conventions and follow the editor's chords.
+    private static readonly HashSet<CommandId> IntentionallyUnexposed =
+    [
+        CommandId.Read_Copy,
+        CommandId.Read_SelectAll
+    ];
+
     [Fact]
-    public void Catalog_CoversEveryWorldHudCommand()
+    public void EveryDefault_IsExposedOrIntentionallyUnexposed()
     {
-        //every rebindable WorldHud command has exactly one catalog entry, and every entry is a real WorldHud
-        //command — the guard that a new B3/B4 command can't be dropped from the rebinder (or listed twice).
-        var worldHud = WorldHudDefaults();
+        //forces every resolver command to be a deliberate decision: either a rebinder row or an explicit
+        //opt-out. Prevents a new ReadView/Modal command from silently shipping un-rebindable with no signal.
+        var catalog = Entries.Select(e => e.Id).ToHashSet();
+
+        foreach (var id in Keybinds.Defaults.Keys)
+            Assert.True(catalog.Contains(id) || IntentionallyUnexposed.Contains(id),
+                $"{id} is neither in the rebind catalog nor the IntentionallyUnexposed allowlist — decide which.");
+
+        //the allowlist can't overlap the catalog (a command is exposed xor hidden, never both).
+        foreach (var id in IntentionallyUnexposed)
+            Assert.DoesNotContain(id, catalog);
+    }
+
+    [Fact]
+    public void Catalog_CoversEveryExposedCommand()
+    {
+        //every rebindable command has exactly one catalog entry, and every entry is a real exposed command — the
+        //guard that a new command can't be dropped from the rebinder (or listed twice), and that ReadView stays
+        //out of the catalog.
+        var exposed = ExposedDefaults();
         var catalog = Entries.Select(e => e.Id).ToList();
 
-        foreach (var id in worldHud)
+        foreach (var id in exposed)
             Assert.Contains(id, catalog);
 
         foreach (var id in catalog)
-            Assert.Contains(id, worldHud);
+            Assert.Contains(id, exposed);
 
         Assert.Equal(catalog.Count, catalog.Distinct().Count());
-        Assert.Equal(worldHud.Count, catalog.Count);
+        Assert.Equal(exposed.Count, catalog.Count);
     }
 
     [Fact]
