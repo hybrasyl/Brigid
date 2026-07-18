@@ -149,6 +149,86 @@ public sealed class KeybindsTests
         Assert.Null(Keybinds.Resolve(MacKey(Keys.C, ctrl: true), KeybindContext.TextEditing));
     }
 
+    //runs body with the macOS default-value overlay active, restoring the flag + overrides afterwards. The seam
+    //(Keybinds.MacDefaultsActive) lets a non-mac host exercise the overlay the same way MacKey simulates events.
+    private static void WithMacDefaults(Action body)
+    {
+        Keybinds.ResetAll();
+        var previous = Keybinds.MacDefaultsActive;
+        Keybinds.MacDefaultsActive = true;
+
+        try
+        {
+            body();
+        } finally
+        {
+            Keybinds.MacDefaultsActive = previous;
+            Keybinds.ResetAll();
+        }
+    }
+
+    [Fact]
+    public void MacDefaults_AddCmdArrowLineNav_AsSecondary()
+    {
+        WithMacDefaults(() =>
+        {
+            //the mac overlay adds Cmd+Left/Right as a SECONDARY on top of the cross-OS Alt+Left/Right primary.
+            var lineStart = Keybinds.EffectiveDefault(CommandId.Editor_LineStart);
+            Assert.Equal(new KeyChord(Keys.Left, ChordMods.Alt), lineStart.Primary);
+            Assert.Equal(new KeyChord(Keys.Left, ChordMods.Meta), lineStart.Secondary);
+            Assert.True(Keybinds.SupportsSecondary(CommandId.Editor_LineStart));
+
+            //both chords resolve on macOS: the portable Alt+Left and the platform-native Cmd+Left.
+            Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(MacKey(Keys.Left, alt: true), KeybindContext.TextEditing));
+            Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(MacKey(Keys.Left, cmd: true), KeybindContext.TextEditing));
+            Assert.Equal(CommandId.Editor_LineEnd, Keybinds.Resolve(MacKey(Keys.Right, cmd: true), KeybindContext.TextEditing));
+        });
+    }
+
+    [Fact]
+    public void MacDefaults_DoNotLeakToNonMac()
+    {
+        Keybinds.ResetAll();
+        var previous = Keybinds.MacDefaultsActive;
+        Keybinds.MacDefaultsActive = false;
+
+        try
+        {
+            //without the overlay, line-nav is single-chord Alt+arrows and Cmd+Left carries no secondary meaning.
+            Assert.Null(Keybinds.EffectiveDefault(CommandId.Editor_LineStart).Secondary);
+            Assert.False(Keybinds.SupportsSecondary(CommandId.Editor_LineStart));
+            Assert.Equal(new KeyChord(Keys.Left, ChordMods.Alt), Keybinds.EffectiveDefault(CommandId.Editor_LineStart).Primary);
+        } finally
+        {
+            Keybinds.MacDefaultsActive = previous;
+        }
+    }
+
+    [Fact]
+    public void MacDefaults_LineNav_KeepTheBasePrimary()
+    {
+        //the line-nav overlay is purely additive: it must keep the cross-OS Alt+arrow primary and only add the
+        //Cmd+arrow secondary. Guards against a base-primary change silently leaving the mac table stale. (A
+        //future non-additive mac default — e.g. Cmd+, for settings — would legitimately not be listed here.)
+        WithMacDefaults(() =>
+        {
+            foreach (var id in new[] { CommandId.Editor_LineStart, CommandId.Editor_LineEnd })
+                Assert.Equal(Keybinds.Defaults[id].Binding.Primary, Keybinds.EffectiveDefault(id).Primary);
+        });
+    }
+
+    [Fact]
+    public void MacDefaults_OverrideStillWins()
+    {
+        WithMacDefaults(() =>
+        {
+            //a user override supersedes the per-OS default, same as on any platform.
+            Keybinds.SetBinding(CommandId.Editor_LineStart, new KeyChord(Keys.Home));
+            Assert.Equal(new KeyChord(Keys.Home), Keybinds.Effective(CommandId.Editor_LineStart).Primary);
+            Assert.Null(Keybinds.Resolve(MacKey(Keys.Left, cmd: true), KeybindContext.TextEditing));
+        });
+    }
+
     [Fact]
     public void Override_TakesPrecedenceOverDefault()
     {
@@ -497,6 +577,24 @@ public sealed class KeybindsTests
         }
     }
 
+    [Fact]
+    public void NoTwoDefaults_CollideWithinAContext_UnderMacOverlay()
+    {
+        //same invariant as above but against the OS-merged mac table (the Cmd+Left/Right line-nav secondaries):
+        //every effective-default chord must still resolve back to its own command, and none must collide.
+        WithMacDefaults(() =>
+        {
+            foreach (var (id, def) in Keybinds.Defaults)
+            {
+                var binding = Keybinds.EffectiveDefault(id);
+                Assert.Equal(id, Keybinds.Resolve(MacEventFor(binding.Primary), def.Context));
+
+                if (binding.Secondary is { } secondary)
+                    Assert.Equal(id, Keybinds.Resolve(MacEventFor(secondary), def.Context));
+            }
+        });
+    }
+
     //builds the Windows-style event a chord would produce (Ctrl and Meta share the physical key, so a Meta
     //or literal-Ctrl chord sets both bits).
     private static KeyDownEvent WinEventFor(KeyChord chord)
@@ -505,6 +603,26 @@ public sealed class KeybindsTests
 
         if (chord.HasMeta || chord.HasCtrl)
             mods |= KeyModifiers.Ctrl | KeyModifiers.Meta;
+
+        if (chord.HasShift)
+            mods |= KeyModifiers.Shift;
+
+        if (chord.HasAlt)
+            mods |= KeyModifiers.Alt;
+
+        return new KeyDownEvent { Key = chord.Key, Modifiers = mods };
+    }
+
+    //builds the macOS-style event a chord would produce: Cmd (Meta) and physical Ctrl are distinct keys.
+    private static KeyDownEvent MacEventFor(KeyChord chord)
+    {
+        var mods = KeyModifiers.None;
+
+        if (chord.HasMeta)
+            mods |= KeyModifiers.Meta;
+
+        if (chord.HasCtrl)
+            mods |= KeyModifiers.Ctrl;
 
         if (chord.HasShift)
             mods |= KeyModifiers.Shift;

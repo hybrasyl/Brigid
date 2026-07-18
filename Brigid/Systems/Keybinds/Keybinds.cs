@@ -110,12 +110,47 @@ public static class Keybinds
         [CommandId.Move_Left]  = new(new KeyChord(Keys.Left), new KeyChord(Keys.Z), KeybindContext.WorldHud)
     }.ToFrozenDictionary();
 
+    /// <summary>
+    ///     Per-OS default-value overlay: commands whose out-of-box binding differs on macOS beyond the
+    ///     <see cref="ChordMods.Meta" /> resolution the base table already handles for free. Applied over
+    ///     <see cref="Defaults" /> only when macOS defaults are active (see <see cref="MacDefaultsActive" />).
+    ///     The context never diverges by OS, so it is read from <see cref="Defaults" />, not here.
+    ///     <para>
+    ///         Seeded only with line-nav today; this is also the home for future non-additive mac defaults the
+    ///         plan mentions (e.g. Cmd+, for settings, Fn-key ergonomics) which would <i>replace</i> a primary
+    ///         rather than add a secondary. Entries store the full binding so either shape is expressible.
+    ///     </para>
+    /// </summary>
+    private static readonly FrozenDictionary<CommandId, KeyBinding> MacDefaults = new Dictionary<CommandId, KeyBinding>
+    {
+        //mac-native line nav: Cmd+Left/Right, added as a SECONDARY on top of the cross-OS Alt+Left/Right primary
+        //so macOS users get both the portable chord and the platform-native one. The primary MUST stay equal to
+        //the base default's (MacDefaults_LineNav_KeepTheBasePrimary guards this) — this entry is purely additive.
+        [CommandId.Editor_LineStart] = new(new KeyChord(Keys.Left, ChordMods.Alt), new KeyChord(Keys.Left, ChordMods.Meta)),
+        [CommandId.Editor_LineEnd]   = new(new KeyChord(Keys.Right, ChordMods.Alt), new KeyChord(Keys.Right, ChordMods.Meta))
+    }.ToFrozenDictionary();
+
+    //test seam: whether the macOS default-value overlay applies. Defaults to the real OS; tests flip it to
+    //exercise the overlay on a non-mac host, mirroring how WinKey/MacKey simulate per-OS events in the resolver.
+    //NOTE: KeybindCatalog.Format's Cmd/Ctrl rendering keys off the real OS, not this seam — equal in production
+    //(both derive from the OS), so display and value stay consistent; only a test flipping this on a non-mac host
+    //would see them diverge.
+    internal static bool MacDefaultsActive = OperatingSystem.IsMacOS();
+
+    /// <summary>
+    ///     The out-of-box binding for <paramref name="id" /> on the active platform: the macOS overlay value when
+    ///     one exists and macOS defaults are active, else the cross-OS <see cref="Defaults" /> value. The single
+    ///     accessor every default read goes through, so per-OS values flow to resolve/display/reset uniformly.
+    /// </summary>
+    public static KeyBinding EffectiveDefault(CommandId id) =>
+        MacDefaultsActive && MacDefaults.TryGetValue(id, out var mac) ? mac : Defaults[id].Binding;
+
     /// <summary>The binding currently bound to <paramref name="id" /> (override if set, else default).</summary>
     public static KeyBinding Effective(CommandId id)
     {
         using var scope = Gate.EnterScope();
 
-        return Overrides.TryGetValue(id, out var binding) ? binding : Defaults[id].Binding;
+        return Overrides.TryGetValue(id, out var binding) ? binding : EffectiveDefault(id);
     }
 
     /// <summary>True if <paramref name="e" /> hits either chord of the binding for <paramref name="id" />.</summary>
@@ -328,8 +363,9 @@ public static class Keybinds
     }
 
     /// <summary>True if <paramref name="id" />'s default binding has a secondary chord (so the rebinder shows a
-    ///     second field for it). Movement commands do; the single-chord world hotkeys don't.</summary>
-    public static bool SupportsSecondary(CommandId id) => Defaults[id].Binding.Secondary is not null;
+    ///     second field for it). Movement commands do; the single-chord world hotkeys don't. Reads the per-OS
+    ///     default, so a command can gain a secondary on one platform (e.g. line-nav's Cmd+Left/Right on macOS).</summary>
+    public static bool SupportsSecondary(CommandId id) => EffectiveDefault(id).Secondary is not null;
 
     /// <summary>
     ///     Rebinds one slot of <paramref name="id" /> to <paramref name="chord" />, preserving the other slot.
@@ -340,7 +376,7 @@ public static class Keybinds
     {
         using var scope = Gate.EnterScope();
 
-        var current = Overrides.TryGetValue(id, out var existing) ? existing : Defaults[id].Binding;
+        var current = Overrides.TryGetValue(id, out var existing) ? existing : EffectiveDefault(id);
 
         Overrides[id] = slot == ChordSlot.Primary
             ? current with { Primary = chord }
