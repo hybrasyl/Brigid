@@ -1026,7 +1026,7 @@ public class UITextBox : UIElement
         CursorPosition = Text.Length;
 
         //selecting all ends the current typing/delete run so a following edit is its own undo unit
-        //(mouse-based selection is already covered by OnMouseDown; this guards the Ctrl+Shift+A path)
+        //(mouse-based selection is already covered by OnMouseDown; this guards the Select All command path)
         LastEditKind = EditKind.Other;
     }
 

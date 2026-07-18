@@ -103,7 +103,7 @@ public static class Keybinds
         // longer fall through (consistent with the WorldHud exact-chord tightening). Base and alt are
         // independent bindings.
         [CommandId.World_TabInventory]        = new(new KeyChord(Keys.A), KeybindContext.WorldHud),
-        [CommandId.World_TabInventoryExpand]     = new(new KeyChord(Keys.A, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabInventoryExpand]  = new(new KeyChord(Keys.A, ChordMods.Shift), KeybindContext.WorldHud),
         [CommandId.World_TabSkills]           = new(new KeyChord(Keys.S), KeybindContext.WorldHud),
         [CommandId.World_TabSkillsAlt]        = new(new KeyChord(Keys.S, ChordMods.Shift), KeybindContext.WorldHud),
         [CommandId.World_TabSpells]           = new(new KeyChord(Keys.D), KeybindContext.WorldHud),

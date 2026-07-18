@@ -167,7 +167,7 @@ public sealed class ArticleReadControl : PrefabPanel
         }
 
         //this panel is the top control, so keyboard events stop here instead of descending to the
-        //selectable body label. forward them so Ctrl+C / Ctrl+Shift+A / caret navigation reach it.
+        //selectable body label. forward them so copy / select-all / caret navigation reach it.
         BodyLabel.OnKeyDown(e);
     }
 }
