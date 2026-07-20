@@ -422,10 +422,10 @@ public sealed partial class WorldScreen
     {
         foreach (var slotControl in panel.Slots)
             if (slotControl is AbilitySlotControl ability)
-                ability.OnRightClick += s => OpenChantEdit(panel, s);
+                ability.OnRightClick += s => OpenCastablePopup(panel, s);
     }
 
-    private void OpenChantEdit(PanelBase source, byte slot)
+    private void OpenCastablePopup(PanelBase source, byte slot)
     {
         var control = source.GetSlotControl(slot) as AbilitySlotControl;
 
@@ -448,7 +448,7 @@ public sealed partial class WorldScreen
         } else
             return;
 
-        ChantEdit.Show(
+        CastablePopup.Show(
             slot,
             control.AbilityName,
             control.AbilityLevel ?? string.Empty,

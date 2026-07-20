@@ -105,7 +105,7 @@ public sealed partial class WorldScreen : IScreen
     private BoardListControl BoardList = null!;
     private OkPopupMessageControl BoardResponsePopup = null!;
     private Camera Camera = null!;
-    private ChantEditControl ChantEdit = null!;
+    private CastablePopupControl CastablePopup = null!;
     private ushort CurrentMapCheckSum;
     private MapFlags CurrentMapFlags;
     private short CurrentMapId;
@@ -587,11 +587,13 @@ public sealed partial class WorldScreen : IScreen
         };
         OtherProfile.OnGroupInviteRequested += name => Game.Connection.SendGroupInvite(ClientGroupSwitch.TryInvite, name);
 
-        ChantEdit = new ChantEditControl
+        //no SetViewportBounds: like the Options modal it centers on the window, matching where the legacy chant
+        //popup put itself (CenterOnScreen).
+        CastablePopup = new CastablePopupControl
         {
             ZIndex = 2
         };
-        ChantEdit.OnChantSet += HandleChantSet;
+        CastablePopup.OnChantSet += HandleChantSet;
 
         WorldMap = new WorldMap(Game.Connection)
         {
@@ -660,7 +662,7 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(TextPopup);
         Root.AddChild(MarkdownNotice);
         Root.AddChild(Notepad);
-        Root.AddChild(ChantEdit);
+        Root.AddChild(CastablePopup);
         Root.AddChild(WorldMap);
         Root.AddChild(SocialStatusPicker);
         Root.AddChild(AislingContext);

@@ -62,6 +62,16 @@ public sealed class SpellBook
     }
 
     /// <summary>
+    ///     Returns the cooldown remaining for a 1-based slot, in milliseconds (0 = ready).
+    /// </summary>
+    public float GetCooldownRemainingMs(byte slot)
+    {
+        var index = slot - 1;
+
+        return index is < 0 or >= MAX_SLOTS ? 0 : CooldownRemaining[index];
+    }
+
+    /// <summary>
     ///     Returns the data for a 1-based slot number. Returns default if slot is out of range.
     /// </summary>
     public ref readonly SpellSlotData GetSlot(byte slot)
