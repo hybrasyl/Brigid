@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Data.Models;
 using Brigid.Systems;
 using Microsoft.Xna.Framework;
@@ -17,9 +18,9 @@ namespace Brigid.Controls.World.Popups;
 ///     identically to the status-book detail popup. A castable with no metadata (server-only, or a class with no
 ///     meta file) still renders the live-state section.
 ///     <para>
-///         Rows below the stat strip are stacked at bind time and skipped when empty, and the description is a
-///         plain wrapped label rather than a scroll view — castable descriptions run to a sentence or two, so a
-///         scrollbar would only ever frame empty space.
+///         Rows below the stat strip are stacked at bind time and skipped when empty, and the description takes
+///         whatever height is left. It is rendered verbatim and scrolls: the prose itself is short, but Hybrasyl
+///         appends its own "Required Items:"/"Required Gold:" block, which runs the whole string to ten lines.
 ///     </para>
 /// </summary>
 internal sealed class CastableDetailsPane : UIPanel
@@ -31,9 +32,6 @@ internal sealed class CastableDetailsPane : UIPanel
     private const int HEADER_ROWS = 3;
     private const int STAT_COUNT = 5;
 
-    //descriptions are a sentence or two; three wrapped lines covers them without reserving dead space.
-    private const int DESCRIPTION_LINES = 3;
-
     private static readonly string[] StatNames = ["Str", "Int", "Wis", "Con", "Dex"];
 
     private readonly UIImage Icon;
@@ -44,7 +42,7 @@ internal sealed class CastableDetailsPane : UIPanel
     private readonly UILabel PreReq1;
     private readonly UILabel PreReq2;
     private readonly UILabel SpellState;
-    private readonly UILabel Description;
+    private readonly SelectableTextView Description;
 
     private byte BoundSlot;
     private bool BoundIsSpell;
@@ -98,20 +96,7 @@ internal sealed class CastableDetailsPane : UIPanel
         FlowedRows = [PreReq1, PreReq2, SpellState];
         StatsBottom = statY + ROW_H + ROW_GAP;
 
-        Description = new UILabel
-        {
-            X = 0,
-            Y = StatsBottom,
-            Width = pane.Width,
-            Height = ROW_H * DESCRIPTION_LINES,
-            PaddingLeft = 0,
-            PaddingRight = 2,
-            PaddingTop = 0,
-            WordWrap = true,
-            ForegroundColor = TextColors.Default,
-            IsSelectable = true
-        };
-
+        Description = new SelectableTextView(new Rectangle(0, StatsBottom, pane.Width, pane.Height - StatsBottom));
         AddChild(Description);
     }
 
@@ -143,8 +128,9 @@ internal sealed class CastableDetailsPane : UIPanel
             return;
         }
 
+        var top = y + ROW_GAP * 2;
         Description.Visible = true;
-        Description.Y = y + ROW_GAP * 2;
+        Description.SetBounds(new Rectangle(0, top, Width, Math.Max(0, Height - top)));
     }
 
     private UILabel AddRow(int x, int y, int width)
@@ -209,8 +195,7 @@ internal sealed class CastableDetailsPane : UIPanel
                 label.Text = string.Empty;
 
             HasDescription = true;
-            Description.Text = "No metadata available for this ability.";
-            Description.ForegroundColor = DialogPalette.DisabledText;
+            Description.SetText("No metadata available for this ability.", DialogPalette.DisabledText);
             Reflow();
 
             return;
@@ -244,10 +229,7 @@ internal sealed class CastableDetailsPane : UIPanel
         HasDescription = !string.IsNullOrWhiteSpace(entry.Description);
 
         if (HasDescription)
-        {
-            Description.Text = entry.Description;
-            Description.ForegroundColor = TextColors.Default;
-        }
+            Description.SetText(entry.Description, TextColors.Default);
 
         Reflow();
     }
@@ -260,7 +242,7 @@ internal sealed class CastableDetailsPane : UIPanel
     ///     the top control, so keyboard events stop there instead of descending — the same forwarding the board
     ///     read panels do for their body label.
     /// </summary>
-    public void ForwardKey(KeyDownEvent e) => Description.OnKeyDown(e);
+    public void ForwardKey(KeyDownEvent e) => Description.ForwardKey(e);
 
     /// <summary>
     ///     The cooldown line is a ticking value, so it is re-read every frame the tab is on screen rather than
