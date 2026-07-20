@@ -120,7 +120,7 @@ Rename `.zip` to `.datf`.
 
 ### 5. Install and test
 
-1. Drop the `.datf` into the Dark Ages data folder (where the legacy `*.dat` archives live).
+1. Drop the `.datf` into the per-user assets folder — `%LOCALAPPDATA%\erisco\Brigid\assets` on Windows, `~/.config/erisco/Brigid/assets` on macOS/Linux. This is deliberately *not* the Dark Ages data folder where the legacy `*.dat` archives live.
 2. Start the client.
 3. Check stderr for `[asset-pack]` warnings at startup. No warnings = pack registered.
 4. Load a map that contains your target tile IDs. Floor PNGs render in place of legacy floor tiles for those IDs; same for walls.
