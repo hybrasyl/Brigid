@@ -3,7 +3,6 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Panel;
-using Brigid.Controls.World.Popups.Boards;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Extensions;
 using Brigid.Systems;
@@ -427,23 +426,6 @@ public sealed partial class WorldScreen
 
     private void WireBoardsModal()
     {
-        //tab click -> ask the server for that family. Board 0 is the player's mailbox (0x3B: "Target mailbox
-        //(always 0 for player mail)"), so Mail is a direct request rather than a trip through the board list.
-        BoardsModal.TabRequested += isMail =>
-        {
-            if (!isMail)
-            {
-                Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
-
-                return;
-            }
-
-            Game.Connection.SendBoardInteraction(
-                BoardRequestType.ViewBoard,
-                BoardsModalControl.MAIL_BOARD_ID,
-                startPostId: short.MaxValue);
-        };
-
         BoardsModal.BoardSelected += boardId =>
         {
             Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, boardId, startPostId: short.MaxValue);

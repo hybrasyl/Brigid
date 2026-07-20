@@ -2,7 +2,6 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
-using Brigid.Controls.Scrolling;
 using Brigid.Data.Models;
 using Brigid.Systems;
 using Microsoft.Xna.Framework;
@@ -14,9 +13,14 @@ namespace Brigid.Controls.World.Popups;
 /// <summary>
 ///     The <see cref="CastablePopupControl" /> Details tab: icon + name/level header, the SClass metadata
 ///     requirement rows (level/ability/master, the five stats, up to two prerequisites), a live slot-state line,
-///     and the scrollable description. Every requirement is coloured through <see cref="AbilityRequirements" />, so
-///     it reads identically to the status-book detail popup. A castable with no metadata (server-only, or a class
-///     with no meta file) still renders the live-state section.
+///     and the description. Every requirement is coloured through <see cref="AbilityRequirements" />, so it reads
+///     identically to the status-book detail popup. A castable with no metadata (server-only, or a class with no
+///     meta file) still renders the live-state section.
+///     <para>
+///         Rows below the stat strip are stacked at bind time and skipped when empty, and the description is a
+///         plain wrapped label rather than a scroll view — castable descriptions run to a sentence or two, so a
+///         scrollbar would only ever frame empty space.
+///     </para>
 /// </summary>
 internal sealed class CastableDetailsPane : UIPanel
 {
@@ -26,6 +30,9 @@ internal sealed class CastableDetailsPane : UIPanel
     private const int ICON_TO_TEXT = 8;
     private const int HEADER_ROWS = 3;
     private const int STAT_COUNT = 5;
+
+    //descriptions are a sentence or two; three wrapped lines covers them without reserving dead space.
+    private const int DESCRIPTION_LINES = 3;
 
     private static readonly string[] StatNames = ["Str", "Int", "Wis", "Con", "Dex"];
 
@@ -37,10 +44,17 @@ internal sealed class CastableDetailsPane : UIPanel
     private readonly UILabel PreReq1;
     private readonly UILabel PreReq2;
     private readonly UILabel SpellState;
-    private readonly SelectableTextView Description;
+    private readonly UILabel Description;
 
     private byte BoundSlot;
     private bool BoundIsSpell;
+    private bool HasDescription;
+
+    //bottom of the fixed header block (icon + its rows, then the stat strip) — where the flowed rows start.
+    private readonly int StatsBottom;
+
+    //the rows Reflow stacks, in display order; any that is empty for this castable takes no space.
+    private readonly UILabel[] FlowedRows;
 
     public CastableDetailsPane(Rectangle pane)
     {
@@ -75,14 +89,62 @@ internal sealed class CastableDetailsPane : UIPanel
         for (var i = 0; i < STAT_COUNT; i++)
             Stats[i] = AddRow(i * statW, statY, statW);
 
-        PreReq1 = AddRow(0, statY + ROW_H + ROW_GAP, pane.Width);
-        PreReq2 = AddRow(0, statY + 2 * ROW_H + ROW_GAP, pane.Width);
-        SpellState = AddRow(0, statY + 3 * ROW_H + ROW_GAP, pane.Width);
+        //Y is assigned by Reflow at bind time: a castable with one prerequisite, or a skill (no spell row),
+        //should not leave a gap where the row it doesn't have would have been.
+        PreReq1 = AddRow(0, 0, pane.Width);
+        PreReq2 = AddRow(0, 0, pane.Width);
+        SpellState = AddRow(0, 0, pane.Width);
 
-        var descTop = statY + 4 * ROW_H + ROW_GAP * 3;
+        FlowedRows = [PreReq1, PreReq2, SpellState];
+        StatsBottom = statY + ROW_H + ROW_GAP;
 
-        Description = new SelectableTextView(new Rectangle(0, descTop, pane.Width, pane.Height - descTop));
+        Description = new UILabel
+        {
+            X = 0,
+            Y = StatsBottom,
+            Width = pane.Width,
+            Height = ROW_H * DESCRIPTION_LINES,
+            PaddingLeft = 0,
+            PaddingRight = 2,
+            PaddingTop = 0,
+            WordWrap = true,
+            ForegroundColor = TextColors.Default,
+            IsSelectable = true
+        };
+
         AddChild(Description);
+    }
+
+    /// <summary>
+    ///     Stacks the optional rows under the stat strip, skipping any that are empty, then puts the description
+    ///     under them — hidden outright when there is nothing to describe, so the tab never reserves a band of
+    ///     empty space for text that isn't there.
+    /// </summary>
+    private void Reflow()
+    {
+        var y = StatsBottom;
+
+        foreach (var row in FlowedRows)
+        {
+            var used = !string.IsNullOrEmpty(row.Text);
+            row.Visible = used;
+
+            if (!used)
+                continue;
+
+            row.Y = y;
+            y += ROW_H;
+        }
+
+        if (!HasDescription)
+        {
+            Description.Visible = false;
+
+            return;
+        }
+
+        Description.Visible = true;
+        Description.Y = y + ROW_GAP * 2;
     }
 
     private UILabel AddRow(int x, int y, int width)
@@ -146,7 +208,10 @@ internal sealed class CastableDetailsPane : UIPanel
             foreach (var label in Stats)
                 label.Text = string.Empty;
 
-            Description.SetText("No metadata available for this ability.", DialogPalette.DisabledText);
+            HasDescription = true;
+            Description.Text = "No metadata available for this ability.";
+            Description.ForegroundColor = DialogPalette.DisabledText;
+            Reflow();
 
             return;
         }
@@ -176,7 +241,15 @@ internal sealed class CastableDetailsPane : UIPanel
         BindPreReq(PreReq1, entry.PreReq1Name, entry.PreReq1Level);
         BindPreReq(PreReq2, entry.PreReq2Name, entry.PreReq2Level);
 
-        Description.SetText(entry.Description, TextColors.Default);
+        HasDescription = !string.IsNullOrWhiteSpace(entry.Description);
+
+        if (HasDescription)
+        {
+            Description.Text = entry.Description;
+            Description.ForegroundColor = TextColors.Default;
+        }
+
+        Reflow();
     }
 
     /// <summary>Drops the icon reference when the popup closes, mirroring the legacy popup's Hide.</summary>
@@ -187,7 +260,7 @@ internal sealed class CastableDetailsPane : UIPanel
     ///     the top control, so keyboard events stop there instead of descending — the same forwarding the board
     ///     read panels do for their body label.
     /// </summary>
-    public void ForwardKey(KeyDownEvent e) => Description.ForwardKey(e);
+    public void ForwardKey(KeyDownEvent e) => Description.OnKeyDown(e);
 
     /// <summary>
     ///     The cooldown line is a ticking value, so it is re-read every frame the tab is on screen rather than

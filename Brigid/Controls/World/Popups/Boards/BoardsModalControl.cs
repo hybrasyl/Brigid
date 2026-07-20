@@ -14,17 +14,15 @@ namespace Brigid.Controls.World.Popups.Boards;
 ///     The bulletin-board and mail modal: one from-scratch <see cref="CenteredModalPanel" /> replacing the seven
 ///     slide-in prefab panels (<c>_nbdlist</c>, <c>_narlist</c>, <c>_nmaill</c>, <c>_narti</c>, <c>_nmailr</c>,
 ///     <c>_nartin</c>, <c>_nmails</c>) and the cross-panel hide/show dance that wired them together.
-///     <list type="bullet">
-///         <item>A <b>Boards</b>/<b>Mail</b> tab row selects which family is in view. Because the server owns that
-///         choice, a tab click raises <see cref="TabRequested" /> for the host to turn into the matching request;
-///         the tab only becomes selected when the reply arrives.</item>
-///         <item>Within a tab, an internal <see cref="BoardView" /> stack swaps between the board index, the post
-///         list, the read view and the compose view. The bottom action bar's buttons change per view (and per
-///         mode) through <c>SetBottomBarActions</c>.</item>
-///     </list>
-///     The modal is a passive view: every action raises an event, and the host (WorldScreen) sends the packet and
-///     calls back in with the reply. Scroll-back paging, keyboard row navigation, body select/copy, and the
-///     compose undo reset are all preserved from the panels this replaces.
+///     An internal <see cref="BoardView" /> stack swaps between the board index, the post list, the read view and
+///     the compose view, and the bottom action bar's buttons change per view through <c>SetBottomBarActions</c>.
+///     The mailbox is just another board (id 0) reached from the index, so it needs no separate surface — only a
+///     mode flag, for the Reply action and the compose recipient field.
+///     <para>
+///         The modal is a passive view: every action raises an event, and the host (WorldScreen) sends the packet
+///         and calls back in with the reply. Scroll-back paging, keyboard row navigation, body select/copy, and the
+///         compose undo reset are all preserved from the panels this replaces.
+///     </para>
 /// </summary>
 public sealed class BoardsModalControl : CenteredModalPanel
 {
@@ -37,24 +35,10 @@ public sealed class BoardsModalControl : CenteredModalPanel
         Compose
     }
 
-    /// <summary>The mailbox's board id. Fixed by the protocol: board 0 is always the player's own mail.</summary>
-    public const ushort MAIL_BOARD_ID = 0;
-
     private const int PANEL_W = 520;
-    private const int PANEL_H = 340;
-
-    private const int TAB_W = 76;
-    private const int TAB_H = 20;
-    private const int TAB_GAP = 4;
-    private const int TAB_TO_PANE = 6;
-    private const int BOARDS_TAB = 0;
-    private const int MAIL_TAB = 1;
+    private const int PANEL_H = 320;
 
     private const int ACTION_W = 56;
-
-    private static readonly string[] TabTitles = ["Boards", "Mail"];
-
-    private readonly TabStrip Tabs;
 
     private readonly BoardIndexPane IndexPane;
     private readonly PostListPane ListPane;
@@ -108,12 +92,6 @@ public sealed class BoardsModalControl : CenteredModalPanel
     /// <summary>Raised when Up is used from the post list without a board index to fall back to.</summary>
     public event UpHandler? SessionEndRequested;
 
-    /// <summary>
-    ///     Raised when a tab is clicked. The host issues the matching request, and the tab's selected state follows
-    ///     the reply rather than the click.
-    /// </summary>
-    public event BoardTabHandler? TabRequested;
-
     // ── state the host reads back ──
 
     /// <summary>The board the current view belongs to — the target for every action the host turns into a packet.</summary>
@@ -134,10 +112,7 @@ public sealed class BoardsModalControl : CenteredModalPanel
     {
         Name = "BoardsModal";
 
-        var content = ContentBounds;
-        var pane = new Rectangle(content.X, content.Y + TAB_H + TAB_TO_PANE, content.Width, content.Height - TAB_H - TAB_TO_PANE);
-
-        Tabs = BuildTabRow(content);
+        var pane = ContentBounds;
 
         IndexPane = new BoardIndexPane(pane);
 
@@ -181,25 +156,6 @@ public sealed class BoardsModalControl : CenteredModalPanel
 
         SetView(BoardView.Index);
     }
-
-    private TabStrip BuildTabRow(Rectangle content)
-    {
-        var strip = new TabStrip(TabTitles, TAB_W, TAB_H, TAB_GAP)
-        {
-            X = content.X,
-            Y = content.Y
-        };
-
-        //the server decides what's on screen, so a tab click is a request, not a local swap — the strip's
-        //selection is left alone until the reply lands in ShowPostList/ShowBoardIndex.
-        strip.TabClicked += index => TabRequested?.Invoke(index == MAIL_TAB);
-
-        AddChild(strip);
-
-        return strip;
-    }
-
-    private void SetActiveTab(bool isMail) => Tabs.SetSelected(isMail ? MAIL_TAB : BOARDS_TAB);
 
     // ── views ──
 
@@ -279,7 +235,6 @@ public sealed class BoardsModalControl : CenteredModalPanel
     {
         IsMail = false;
         IndexBoards = boards;
-        SetActiveTab(false);
         IndexPane.SetBoards(boards);
         SetView(BoardView.Index);
         Show();
@@ -301,7 +256,6 @@ public sealed class BoardsModalControl : CenteredModalPanel
 
         ListTitle = isMail ? "Mail" : boardName ?? "Board";
 
-        SetActiveTab(isMail);
         ListPane.SetPosts(boardId, posts, isMail, ListTitle);
         SetView(BoardView.List);
         Show();
@@ -330,7 +284,6 @@ public sealed class BoardsModalControl : CenteredModalPanel
     {
         IsMail = isMail;
         ActiveBoardId = boardId;
-        SetActiveTab(isMail);
 
         ReadPane.SetPost(
             postId,
@@ -441,7 +394,6 @@ public sealed class BoardsModalControl : CenteredModalPanel
                 if (OpenedFromIndex && (IndexBoards.Count > 0))
                 {
                     IsMail = false;
-                    SetActiveTab(false);
                     IndexPane.SetBoards(IndexBoards);
                     SetView(BoardView.Index);
                 } else
@@ -473,7 +425,6 @@ public sealed class BoardsModalControl : CenteredModalPanel
         if (OpenedFromIndex && (IndexBoards.Count > 0))
         {
             IsMail = false;
-            SetActiveTab(false);
             IndexPane.SetBoards(IndexBoards);
             SetView(BoardView.Index);
         } else

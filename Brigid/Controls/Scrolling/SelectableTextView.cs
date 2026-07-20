@@ -51,6 +51,25 @@ public sealed class SelectableTextView : UIPanel
         AddChild(Scroll);
     }
 
+    /// <summary>
+    ///     Repositions and resizes the view, propagating the new size to the scroll host and the wrapped label.
+    ///     For a host whose rows above this one collapse when empty, so the text block takes whatever is left.
+    /// </summary>
+    public void SetBounds(Rectangle bounds)
+    {
+        X = bounds.X;
+        Y = bounds.Y;
+        Width = bounds.Width;
+        Height = bounds.Height;
+
+        Scroll.Width = bounds.Width;
+        Scroll.Height = bounds.Height;
+        Label.Width = Scroll.ContentWidth;
+        Label.Height = Scroll.ContentHeight;
+
+        Scroll.Sync();
+    }
+
     /// <summary>Replaces the text, re-derives the scroll metrics, and returns to the top.</summary>
     public void SetText(string text, Color? color = null)
     {

@@ -410,8 +410,6 @@ public delegate void StepPostHandler(short currentPostId, bool forward);
 /// </summary>
 public delegate void SubmitPostHandler(string? recipient, string subject, string body);
 
-/// <summary>A board/mail tab was clicked. <paramref name="isMail" /> selects which family to request.</summary>
-public delegate void BoardTabHandler(bool isMail);
 
 #endregion
 
