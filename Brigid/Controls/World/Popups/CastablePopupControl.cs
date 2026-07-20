@@ -18,13 +18,13 @@ namespace Brigid.Controls.World.Popups;
 ///         <item><b>Lines</b> — the chant-line editor that replaces the <c>lssbook</c> prefab popup. One text box per
 ///         cast line (skills always have one); Save (or Enter) raises <see cref="OnChantSet" />, which the host
 ///         persists exactly as before. Escape / Close discards.</item>
-///         <item><b>Details</b> — the ability's requirements and description from the class's SClass metadata
-///         (<see cref="WorldState.AbilityMetadata" />), colour-coded against the player's live stats, plus live
-///         slot state — see <see cref="CastableDetailsPane" />.</item>
+///         <item><b>Details</b> — what is worth knowing about an ability you have already learned: live cooldown,
+///         cast-line count, and the description from the class's SClass metadata
+///         (<see cref="WorldState.AbilityMetadata" />) — see <see cref="CastableDetailsPane" />.</item>
 ///     </list>
 ///     The panel is one fixed size for both tabs, so switching never resizes it: six chant rows on Lines (nine is
 ///     the ceiling — Dark Ages' cap, and Hybrasyl uses at most four; past six it scrolls), and on Details the
-///     metadata rows plus a description window that scrolls through the ten lines Hybrasyl pads it out to. That
+///     header rows plus a description window that scrolls through the ten lines Hybrasyl pads it out to. That
 ///     also drops the legacy popup's per-line-count height juggling and its tiled <c>MidImage</c> strip.
 /// </summary>
 public sealed class CastablePopupControl : CenteredModalPanel
@@ -241,7 +241,13 @@ public sealed class CastablePopupControl : CenteredModalPanel
         LineScrollBar.Visible = LineCount > VISIBLE_LINES;
         LayoutLines();
 
-        Details.Bind(name, level, icon, isSpell);
+        Details.Bind(
+            slot,
+            name,
+            level,
+            icon,
+            isSpell,
+            LineCount);
         SelectTab(CastableTab.Lines);
         base.Show();
     }

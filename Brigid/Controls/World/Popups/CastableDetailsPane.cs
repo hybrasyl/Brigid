@@ -4,7 +4,7 @@ using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
 using Brigid.Data.Models;
-using Brigid.Systems;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -12,14 +12,13 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Brigid.Controls.World.Popups;
 
 /// <summary>
-///     The <see cref="CastablePopupControl" /> Details tab: icon + name/level header, the SClass metadata
-///     requirement rows (level/ability/master, the five stats, up to two prerequisites), and the description.
-///     Every requirement is coloured through <see cref="AbilityRequirements" />, so it reads identically to the
-///     status-book detail popup.
+///     The <see cref="CastablePopupControl" /> Details tab: icon, name and level, the live cooldown, the cast-line
+///     count, and the ability's description from the class's SClass metadata.
 ///     <para>
-///         Rows below the stat strip are stacked at bind time and skipped when empty, and the description takes
-///         whatever height is left. It is rendered verbatim and scrolls: the prose itself is short, but Hybrasyl
-///         appends its own "Required Items:"/"Required Gold:" block, which runs the whole string to ten lines.
+///         This is deliberately not the status-book detail popup. Right-click only reaches an ability the player has
+///         already learned, so the requirement grid that popup exists to show — level/ability/master, the five stats,
+///         prerequisites — is settled by definition and only crowds out what is still worth knowing mid-fight. The
+///         requirement view still lives on the status book for abilities you don't have yet.
 ///     </para>
 /// </summary>
 internal sealed class CastableDetailsPane : UIPanel
@@ -28,26 +27,17 @@ internal sealed class CastableDetailsPane : UIPanel
     private const int ROW_H = 14;
     private const int ROW_GAP = 2;
     private const int ICON_TO_TEXT = 8;
-    private const int HEADER_ROWS = 2;
-    private const int STAT_COUNT = 5;
-
-    private static readonly string[] StatNames = ["Str", "Int", "Wis", "Con", "Dex"];
+    private const int HEADER_ROWS = 3;
 
     private readonly UIImage Icon;
     private readonly UILabel Header;
-    private readonly UILabel Requirement;
-    private readonly UILabel[] Stats = new UILabel[STAT_COUNT];
-    private readonly UILabel PreReq1;
-    private readonly UILabel PreReq2;
+    private readonly UILabel Cooldown;
+    private readonly UILabel CastLines;
+    private readonly UILabel DescriptionHeader;
     private readonly SelectableTextView Description;
 
-    private bool HasDescription;
-
-    //bottom of the fixed header block (icon + its rows, then the stat strip) — where the flowed rows start.
-    private readonly int StatsBottom;
-
-    //the rows Reflow stacks, in display order; any that is empty for this castable takes no space.
-    private readonly UILabel[] FlowedRows;
+    private byte BoundSlot;
+    private bool BoundIsSpell;
 
     public CastableDetailsPane(Rectangle pane)
     {
@@ -70,60 +60,22 @@ internal sealed class CastableDetailsPane : UIPanel
         var textW = pane.Width - textX;
 
         Header = AddRow(textX, 0, textW);
-        Requirement = AddRow(textX, ROW_H, textW);
+        Cooldown = AddRow(textX, ROW_H, textW);
+        CastLines = AddRow(textX, 2 * ROW_H, textW);
 
-        //clear both the icon and the three header rows beside it, whichever is taller.
-        var statY = Math.Max(ICON_SIZE, HEADER_ROWS * ROW_H) + ROW_GAP;
+        //clear both the icon and the header rows beside it, whichever is taller.
+        var descriptionY = Math.Max(ICON_SIZE, HEADER_ROWS * ROW_H) + ROW_GAP * 2;
 
-        //one label per stat so each carries its own met/unmet colour.
-        var statW = pane.Width / STAT_COUNT;
+        DescriptionHeader = AddRow(0, descriptionY, pane.Width);
+        DescriptionHeader.Text = "Description:";
+        DescriptionHeader.ForegroundColor = DialogPalette.DisabledText;
 
-        for (var i = 0; i < STAT_COUNT; i++)
-            Stats[i] = AddRow(i * statW, statY, statW);
+        var bodyY = descriptionY + ROW_H;
 
-        //Y is assigned by Reflow at bind time: a castable with one prerequisite should not leave a gap where the
-        //second would have been.
-        PreReq1 = AddRow(0, 0, pane.Width);
-        PreReq2 = AddRow(0, 0, pane.Width);
-
-        FlowedRows = [PreReq1, PreReq2];
-        StatsBottom = statY + ROW_H + ROW_GAP;
-
-        Description = new SelectableTextView(new Rectangle(0, StatsBottom, pane.Width, pane.Height - StatsBottom));
+        //the description takes every remaining pixel and scrolls: the prose is a sentence or two, but Hybrasyl
+        //appends its own "Required Items:"/"Required Gold:" block, which runs the whole string to ten lines.
+        Description = new SelectableTextView(new Rectangle(0, bodyY, pane.Width, pane.Height - bodyY));
         AddChild(Description);
-    }
-
-    /// <summary>
-    ///     Stacks the optional rows under the stat strip, skipping any that are empty, then puts the description
-    ///     under them — hidden outright when there is nothing to describe, so the tab never reserves a band of
-    ///     empty space for text that isn't there.
-    /// </summary>
-    private void Reflow()
-    {
-        var y = StatsBottom;
-
-        foreach (var row in FlowedRows)
-        {
-            var used = !string.IsNullOrEmpty(row.Text);
-            row.Visible = used;
-
-            if (!used)
-                continue;
-
-            row.Y = y;
-            y += ROW_H;
-        }
-
-        if (!HasDescription)
-        {
-            Description.Visible = false;
-
-            return;
-        }
-
-        var top = y + ROW_GAP * 2;
-        Description.Visible = true;
-        Description.SetBounds(new Rectangle(0, top, Width, Math.Max(0, Height - top)));
     }
 
     private UILabel AddRow(int x, int y, int width)
@@ -147,78 +99,68 @@ internal sealed class CastableDetailsPane : UIPanel
         return label;
     }
 
-    /// <summary>Populates the tab for a castable. Safe to call whether or not metadata exists for it.</summary>
+    /// <summary>
+    ///     Populates the tab for a castable slot. Safe to call whether or not metadata exists for it —
+    ///     <paramref name="lineCount" /> and the cooldown come from live slot state, so the tab is still useful for a
+    ///     server-only castable the client's SClass table has never heard of.
+    /// </summary>
     public void Bind(
+        byte slot,
         string name,
         string level,
         Texture2D? icon,
-        bool isSpell)
+        bool isSpell,
+        int lineCount)
     {
+        BoundSlot = slot;
+        BoundIsSpell = isSpell;
+
+        //the slot's own texture, not the metadata icon: for an already-learned ability the metadata icon's
+        //learnable/locked duotone never applies, and this way the popup shows exactly the icon that was clicked.
+        Icon.Texture = icon;
+        Icon.TextureOffset = Vector2.Zero;
+
+        Header.Text = string.IsNullOrEmpty(level) ? name : $"{name}  (Lev {level})";
+        CastLines.Text = $"Castlines: {lineCount}";
+        RefreshCooldown();
+
         AbilityMetadataEntry? entry = null;
         WorldState.AbilityMetadata?.TryGet(name, isSpell, out entry);
 
-        //the metadata icon carries the learnable/locked duotone treatment; without metadata, fall back to the
-        //slot's own texture (always present — right-click is gated on it).
-        if (entry is not null)
-        {
-            var resolved = AbilityRequirements.ResolveIcon(entry);
-            Icon.Texture = resolved.Texture;
-            Icon.TextureOffset = new Vector2(resolved.OffsetX, resolved.OffsetY);
-        } else
-        {
-            Icon.Texture = icon;
-            Icon.TextureOffset = Vector2.Zero;
-        }
-
-        Header.Text = string.IsNullOrEmpty(level) ? name : $"{name}  (Lev {level})";
-
-        if (entry is null)
-        {
-            Requirement.Text = string.Empty;
-            PreReq1.Text = string.Empty;
-            PreReq2.Text = string.Empty;
-
-            foreach (var label in Stats)
-                label.Text = string.Empty;
-
-            HasDescription = true;
+        if (string.IsNullOrWhiteSpace(entry?.Description))
             Description.SetText("No metadata available for this ability.", DialogPalette.DisabledText);
-            Reflow();
+        else
+            Description.SetText(entry.Description, TextColors.Default);
+    }
+
+    /// <summary>
+    ///     The cooldown line is a ticking value, so it is polled rather than pushed — the books deliberately fire no
+    ///     event for cooldown changes and every other consumer polls them the same way.
+    /// </summary>
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+
+        if (Visible)
+            RefreshCooldown();
+    }
+
+    private void RefreshCooldown()
+    {
+        var remainingMs = BoundIsSpell
+            ? WorldState.SpellBook.GetCooldownRemainingMs(BoundSlot)
+            : WorldState.SkillBook.GetCooldownRemainingMs(BoundSlot);
+
+        if (remainingMs <= 0)
+        {
+            Cooldown.Text = "Cooldown: ready";
+            Cooldown.ForegroundColor = LegendColors.White;
 
             return;
         }
 
-        var attrs = WorldState.Attributes.Current;
-
-        if (entry.RequiresMaster)
-        {
-            Requirement.Text = "Requires: master";
-            Requirement.ForegroundColor = AbilityRequirements.RequirementColor(WorldState.IsMaster);
-        } else if (entry.AbilityLevel > 0)
-        {
-            Requirement.Text = $"Requires: ability {entry.AbilityLevel}";
-            Requirement.ForegroundColor = AbilityRequirements.RequirementColor(entry.AbilityLevel, attrs?.Ability);
-        } else
-        {
-            Requirement.Text = $"Requires: level {entry.Level}";
-            Requirement.ForegroundColor = AbilityRequirements.RequirementColor(entry.Level, attrs?.Level);
-        }
-
-        BindStat(0, entry.Str, attrs?.Str);
-        BindStat(1, entry.Int, attrs?.Int);
-        BindStat(2, entry.Wis, attrs?.Wis);
-        BindStat(3, entry.Con, attrs?.Con);
-        BindStat(4, entry.Dex, attrs?.Dex);
-
-        BindPreReq(PreReq1, entry.PreReq1Name, entry.PreReq1Level);
-        BindPreReq(PreReq2, entry.PreReq2Name, entry.PreReq2Level);
-
-        HasDescription = !string.IsNullOrWhiteSpace(entry.Description);
-
-        if (HasDescription)
-            Description.SetText(entry.Description, TextColors.Default);
-
-        Reflow();
+        Cooldown.Text = $"Cooldown: {remainingMs / 1000f:0.0}s";
+        Cooldown.ForegroundColor = LegendColors.Scarlet;
     }
 
     /// <summary>Drops the icon reference when the popup closes, mirroring the legacy popup's Hide.</summary>
@@ -230,25 +172,4 @@ internal sealed class CastableDetailsPane : UIPanel
     ///     read panels do for their body label.
     /// </summary>
     public void ForwardKey(KeyDownEvent e) => Description.ForwardKey(e);
-
-    private void BindStat(int index, byte required, int? current)
-    {
-        var label = Stats[index];
-        label.Text = $"{StatNames[index]} {required}";
-        label.ForegroundColor = AbilityRequirements.RequirementColor(required, current);
-    }
-
-    private static void BindPreReq(UILabel label, string? name, byte level)
-    {
-        if (name is null)
-        {
-            label.Text = string.Empty;
-
-            return;
-        }
-
-        label.Text = $"Requires: {AbilityRequirements.FormatPreReq(name, level)}";
-        label.ForegroundColor = AbilityRequirements.RequirementColor(AbilityRequirements.HasPreRequisite(name, level));
-    }
-
 }
