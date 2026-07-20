@@ -64,25 +64,6 @@ public sealed class AbilityMetadataEntryControl : PrefabPanel
         }
     }
 
-    private static IconTexture ResolveIcon(AbilityMetadataEntry entry, AbilityIconState state)
-    {
-        var renderer = UiRenderer.Instance!;
-        var baseIcon = entry.IsSpell ? renderer.GetSpellIcon(entry.IconSprite) : renderer.GetSkillIcon(entry.IconSprite);
-
-        if (state == AbilityIconState.Known)
-            return baseIcon;
-
-        //duotone treatment: convert to luminance then multiply by tint. Stronger and more uniformly identifiable
-        //than 50/50 blend on colorful modern icons — shape/detail preserved, hue fully replaced by tint.
-        var tint = state == AbilityIconState.Learnable ? LegendColors.CornflowerBlue : LegendColors.DimGray;
-        var prefix = entry.IsSpell ? "spell" : "skill";
-        var tintedKey = $"{state}:{prefix}:{entry.IconSprite}";
-        var tintedTexture = renderer.GetDuotoneTintedTexture(tintedKey, baseIcon.Texture, tint);
-
-        //preserve the modern/legacy offset from the base icon
-        return new IconTexture(tintedTexture, baseIcon.OffsetX, baseIcon.OffsetY);
-    }
-
     public void SetEntry(AbilityMetadataEntry entry, AbilityIconState iconState)
     {
         Entry = entry;
@@ -99,7 +80,7 @@ public sealed class AbilityMetadataEntryControl : PrefabPanel
             LevelLabel.ForegroundColor = LegendColors.White;
         }
 
-        var resolved = ResolveIcon(entry, iconState);
+        var resolved = AbilityRequirements.ResolveIcon(entry, iconState);
 
         if (resolved != CachedIcon)
         {

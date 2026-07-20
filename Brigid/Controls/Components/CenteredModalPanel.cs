@@ -41,8 +41,8 @@ public abstract class CenteredModalPanel : UIPanel
 
     private readonly UILabel TitleLabel;
 
-    //running right edge for the next bottom-bar button; buttons stack right-to-left from Close.
-    private int NextButtonRight;
+    //bottom-bar buttons in creation order (Close first), so RelayoutBottomBar can re-pack them.
+    private readonly List<TextButton> BottomBarButtons = [];
 
     //the viewport the panel centers within; defaults to the full virtual screen until SetViewportBounds runs.
     private Rectangle Viewport = new(0, 0, ChaosGame.VIRTUAL_WIDTH, ChaosGame.VIRTUAL_HEIGHT);
@@ -85,7 +85,6 @@ public abstract class CenteredModalPanel : UIPanel
         };
         AddChild(TitleLabel);
 
-        NextButtonRight = width - PADDING;
         CloseButton = AddBottomBarButton("Close", CLOSE_W, Hide);
     }
 
@@ -95,16 +94,32 @@ public abstract class CenteredModalPanel : UIPanel
     /// </summary>
     protected TextButton AddBottomBarButton(string text, int width, ClickedHandler onClick)
     {
-        var button = new TextButton(text, width, BUTTON_H)
-        {
-            X = NextButtonRight - width,
-            Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2
-        };
+        var button = new TextButton(text, width, BUTTON_H) { Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2 };
         button.Clicked += onClick;
+        BottomBarButtons.Add(button);
         AddChild(button);
-        NextButtonRight = button.X - BUTTON_GAP;
+        RelayoutBottomBar();
 
         return button;
+    }
+
+    /// <summary>
+    ///     Re-packs the <b>visible</b> bottom-bar buttons right-to-left in creation order (Close rightmost).
+    ///     Subclasses whose action set varies per view toggle <c>Visible</c> on their buttons and call this, so
+    ///     the bar never shows a gap where a hidden button used to sit.
+    /// </summary>
+    protected void RelayoutBottomBar()
+    {
+        var right = Width - PADDING;
+
+        foreach (var button in BottomBarButtons)
+        {
+            if (!button.Visible)
+                continue;
+
+            button.X = right - button.Width;
+            right = button.X - BUTTON_GAP;
+        }
     }
 
     protected void SetTitle(string title) => TitleLabel.Text = title;

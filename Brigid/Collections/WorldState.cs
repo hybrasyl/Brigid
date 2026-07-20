@@ -28,6 +28,11 @@ public static class WorldState
     private static int SortVersion;
     private static int LastSortedVersion = -1;
 
+    //"{s|k}:{ability name}" -> metadata entry, rebuilt whenever SetAbilityMetadata runs. Skills and spells share
+    //the dictionary but not the key space — a class can legitimately have a skill and a spell of the same name.
+    private static readonly Dictionary<string, AbilityMetadataEntry> AbilityMetadataByName
+        = new(StringComparer.OrdinalIgnoreCase);
+
     //cached chant data — loaded once per login, invalidated on save
     private static List<SkillChantEntry>? CachedSkillChants;
     private static List<SpellChantEntry>? CachedSpellChants;
@@ -132,6 +137,44 @@ public static class WorldState
     ///     Authoritative online players list state.
     /// </summary>
     public static WorldList WorldList { get; } = new();
+
+    /// <summary>
+    ///     Per-ability metadata for the player's class, parsed from the client's SClass meta file. Set once when the
+    ///     self-profile packet reveals the class; null until then (and for a class with no meta file).
+    /// </summary>
+    public static AbilityMetadata? AbilityMetadata { get; private set; }
+
+    /// <summary>
+    ///     Publishes the class's ability metadata and rebuilds the by-name lookup backing
+    ///     <see cref="TryGetAbilityMetadata" />.
+    /// </summary>
+    public static void SetAbilityMetadata(AbilityMetadata? metadata)
+    {
+        AbilityMetadata = metadata;
+        AbilityMetadataByName.Clear();
+
+        if (metadata is null)
+            return;
+
+        foreach (var entry in metadata.Skills)
+            AbilityMetadataByName[AbilityKey(entry.Name, false)] = entry;
+
+        foreach (var entry in metadata.Spells)
+            AbilityMetadataByName[AbilityKey(entry.Name, true)] = entry;
+    }
+
+    private static string AbilityKey(string name, bool isSpell) => isSpell ? $"s:{name}" : $"k:{name}";
+
+    /// <summary>
+    ///     Looks up an ability's metadata by its display name (case-insensitive). False when the class has no meta
+    ///     file, or the ability is server-only and absent from it.
+    /// </summary>
+    public static bool TryGetAbilityMetadata(string? name, bool isSpell, out AbilityMetadataEntry? entry)
+    {
+        entry = null;
+
+        return !string.IsNullOrEmpty(name) && AbilityMetadataByName.TryGetValue(AbilityKey(name, isSpell), out entry);
+    }
 
     /// <summary>
     ///     Adds or updates an aisling entity from a DisplayAisling packet.

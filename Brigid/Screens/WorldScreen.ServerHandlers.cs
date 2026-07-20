@@ -853,6 +853,10 @@ public sealed partial class WorldScreen
         //ability metadata (skills/spells from sclass file)
         var abilityMetadata = DataContext.MetaFiles.GetAbilityMetadata(args.Class);
 
+        //published to WorldState as well, so the castable popup can look an ability up by name without going
+        //through the status book's page controls.
+        WorldState.SetAbilityMetadata(abilityMetadata);
+
         if (abilityMetadata is not null)
             StatusBook.SetAbilityMetadata(abilityMetadata);
         else
