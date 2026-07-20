@@ -21,20 +21,25 @@ namespace Brigid.Controls.World.Popups;
 ///         (<see cref="WorldState.AbilityMetadata" />), colour-coded against the player's live stats, plus live
 ///         slot state — see <see cref="CastableDetailsPane" />.</item>
 ///     </list>
-///     The panel is a fixed size — big enough for ten chant lines — so switching tabs never resizes it. That
-///     deliberately drops the legacy popup's per-line-count height juggling and its tiled <c>MidImage</c> strip.
+///     The panel is a fixed size — the height nine chant lines need, which the Details tab also fits inside — so
+///     switching tabs never resizes it. That deliberately drops the legacy popup's per-line-count height juggling
+///     and its tiled <c>MidImage</c> strip.
 /// </summary>
 public sealed class CastablePopupControl : CenteredModalPanel
 {
     private const int PANEL_W = 320;
-    private const int PANEL_H = 300;
+
+    //sized to the Lines tab's worst case (MAX_LINES boxes); the Details tab fits well inside it.
+    private const int PANEL_H = 272;
 
     private const int TAB_W = 72;
     private const int TAB_H = 20;
     private const int TAB_GAP = 4;
     private const int TAB_TO_PANE = 6;
 
-    private const int MAX_LINES = 10;
+    //Dark Ages tops out at nine chant lines and Hybrasyl at four. The wire field (0x17 AddSpell "lines") is a
+    //byte, so Show clamps rather than trusting it — a server sending more just loses the extra rows.
+    private const int MAX_LINES = 9;
     private const int LINE_H = 20;
     private const int LINE_STRIDE = 22;
     private const int CHANT_MAX_LENGTH = 32;
