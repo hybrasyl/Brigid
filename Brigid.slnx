@@ -11,4 +11,5 @@
     <Project Path="Brigid.Rendering/Brigid.Rendering.csproj" />
     <Project Path="Brigid/Brigid.csproj" />
     <Project Path="Brigid.Tests/Brigid.Tests.csproj" />
+    <Project Path="Tools/Brigid.UiPrimitivesReport/Brigid.UiPrimitivesReport.csproj" />
 </Solution>

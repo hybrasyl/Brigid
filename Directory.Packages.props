@@ -5,6 +5,8 @@
     <PackageVersion Include="Chaos.Geometry" Version="1.11.0-preview-0007-g1c0297d942" />
     <PackageVersion Include="Chaos.Pathfinding" Version="1.11.0-preview-0007-g1c0297d942" />
     <PackageVersion Include="DALib" Version="1.0.0-beta1" />
+    <!-- Dev-tool only (Tools/Brigid.UiPrimitivesReport): Roslyn syntax parsing for the authored-UI report. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <PackageVersion Include="FontStashSharp.MonoGame" Version="1.5.6" />
     <PackageVersion Include="Markdig" Version="1.3.2" />
     <PackageVersion Include="Microsoft.Extensions.Caching.Memory" Version="10.0.5" />
