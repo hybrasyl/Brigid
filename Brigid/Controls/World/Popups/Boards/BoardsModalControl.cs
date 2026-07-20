@@ -14,8 +14,8 @@ namespace Brigid.Controls.World.Popups.Boards;
 ///     <c>_nartin</c>, <c>_nmails</c>) and the cross-panel hide/show dance that wired them together.
 ///     <list type="bullet">
 ///         <item>A <b>Boards</b>/<b>Mail</b> tab row selects which family is in view. Because the server owns that
-///         choice, a tab click raises <see cref="BoardsRequested" />/<see cref="MailRequested" /> for the host to
-///         turn into the matching request; the tab only becomes selected when the reply arrives.</item>
+///         choice, a tab click raises <see cref="TabRequested" /> for the host to turn into the matching request;
+///         the tab only becomes selected when the reply arrives.</item>
 ///         <item>Within a tab, an internal <see cref="BoardView" /> stack swaps between the board index, the post
 ///         list, the read view and the compose view. The bottom action bar's buttons change per view (and per
 ///         mode) through <c>SetBottomBarActions</c>.</item>
@@ -127,6 +127,13 @@ public sealed class BoardsModalControl : CenteredModalPanel
 
     /// <summary>Whether the post list is on screen and showing <paramref name="boardId" />'s posts.</summary>
     public bool IsListing(ushort boardId) => Visible && (View == BoardView.List) && (ListPane.BoardId == boardId);
+
+    /// <summary>
+    ///     The mailbox's board id, once the server has shown it at least once. The protocol has no "open my mail"
+    ///     request — the mailbox is an entry in the board list — so the Mail tab can only jump straight there after
+    ///     it has been seen; until then the host falls back to requesting the board list.
+    /// </summary>
+    public ushort? KnownMailBoardId { get; private set; }
 
     public BoardsModalControl()
         : base("Boards", PANEL_W, PANEL_H)
@@ -295,6 +302,9 @@ public sealed class BoardsModalControl : CenteredModalPanel
         IsMail = isMail;
         ActiveBoardId = boardId;
         AllowHighlight = allowHighlight && !isMail;
+
+        if (isMail)
+            KnownMailBoardId = boardId;
         ListTitle = isMail ? "Mail" : boardName;
 
         SetActiveTab(isMail);

@@ -670,12 +670,8 @@ public sealed partial class WorldScreen
             ForceCloseOtherTogglePanels(Keys.W);
 
             if (IsAnyBoardPanelVisible())
-            {
-                if (BoardList.Visible)
-                    BoardList.SlideClose();
-                else
-                    WorldState.Board.CloseSession();
-            } else
+                WorldState.Board.CloseSession();
+            else
             {
                 WorldHud.BulletinButton?.IsSelected = true;
 

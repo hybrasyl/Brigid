@@ -15,7 +15,7 @@ namespace Brigid.Controls.World.Popups.Options;
 
 /// <summary>
 ///     The tabbed Options modal (Settings | Macros | Friends | Keybinds), built on
-///     <see cref="CenteredModalPanel" /> with a <see cref="SelectableTab" /> column. The first three tabs
+///     <see cref="CenteredModalPanel" /> with a <see cref="TabStrip" /> column. The first three tabs
 ///     re-home the legacy prefab panels (SettingsControl/MacrosListControl/FriendsListControl) onto one
 ///     primitive modal; the Keybinds tab (<see cref="KeybindsTabControl" />) is the new rebinder.
 ///     <list type="bullet">

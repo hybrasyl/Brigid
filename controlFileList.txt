@@ -213,24 +213,24 @@ _nmoney.txt
     _nbtn.epf/.spf       — OK/Cancel button frames
 
 _nmaill.txt
-  Class:    MailListControl : PrefabPanel
-  File:     Controls/World/Popups/MailListControl.cs
+  Class:    (retired) — replaced by BoardsModalControl's PostListPane
+  File:     Controls/World/Popups/Boards/PostListPane.cs (primitive, no prefab)
   Purpose:  Mail inbox list — scrollable rows (date/author/subject), View/New/Reply/Delete/Up/Quit
   Images referenced by controls:
     _nmaill.epf/.spf     — Anchor background
     _nbtn.epf/.spf       — Action button frames
 
 _nmailr.txt
-  Class:    MailReadControl : PrefabPanel
-  File:     Controls/World/Popups/MailReadControl.cs
+  Class:    (retired) — replaced by BoardsModalControl's PostReadPane
+  File:     Controls/World/Popups/Boards/PostReadPane.cs (primitive, no prefab)
   Purpose:  Mail read view — word-wrapped body, author/title/date, Prev/Next/Reply/Delete/Up/Quit
   Images referenced by controls:
     _nmailr.epf/.spf     — Anchor background
     _nbtn.epf/.spf       — Action button frames
 
 _nmails.txt
-  Class:    MailSendControl : PrefabPanel
-  File:     Controls/World/Popups/MailSendControl.cs
+  Class:    (retired) — replaced by BoardsModalControl's PostComposePane
+  File:     Controls/World/Popups/Boards/PostComposePane.cs (primitive, no prefab)
   Purpose:  Mail compose — recipient/subject fields, multi-line body, Send/Cancel
   Images referenced by controls:
     _nmails.epf/.spf     — Anchor background
@@ -286,13 +286,13 @@ lnpcd.txt
     _nbtn.epf/.spf       — Navigation button frames
 
 lssbook.txt
-  Class:    ChantEditControl : PrefabPanel
-  File:     Controls/World/Popups/ChantEditControl.cs
+  Class:    (retired) — replaced by CastablePopupControl's Lines tab
+  File:     Controls/World/Popups/CastablePopupControl.cs (primitive, no prefab)
   Purpose:  Chant/ability edit dialog — multi-line text, OK/Cancel
   Images referenced by controls:
     lssbook.epf/.spf     — Anchor background (likely in Cious archive)
-  Also manually loads:
-    butt001.epf          — Custom OK/Cancel buttons (GetEpfImages, palette 0)
+  Also manually loaded:
+    butt001.epf          — Custom OK/Cancel buttons (retired with the panel)
 
 _nhotkem.txt
   Class:    HotkeyHelpControl : PrefabPanel
@@ -435,7 +435,7 @@ dlgframe.epf
   Palette:    gui 0
 
 butt001.epf
-  Loaded by:  OkPopupMessageControl.cs:91-128, ChantEditControl.cs:148  (GetEpfImages)
+  Loaded by:  OkPopupMessageControl.cs:91-128  (GetEpfImages)
   Purpose:    Standard button spritesheet — OK/Cancel/Yes/No in normal+pressed states
   Palette:    gui 0
 

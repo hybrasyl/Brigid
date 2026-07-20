@@ -165,11 +165,11 @@ Brigid/
 
 ### UI Control System
 
-**Component Primitives (`Controls/Components/`):** UIElement, UIPanel, UIButton, UITextBox, UIImage, UILabel, UIProgressBar, TextElement, PrefabPanel.
+**Component Primitives (`Controls/Components/`):** UIElement, UIPanel, UIButton, UITextBox, UIImage, UILabel, UIProgressBar, TextElement, PrefabPanel (prefab-art panels), CenteredModalPanel (base for from-scratch modals: DialogPalette frame, title band, per-view bottom action bar via `SetBottomBarActions`, Escape-dismiss, control-stack push), InputSlotPane (draws slot chrome behind a form's text fields).
 
 **Login Flow (`Controls/LobbyLogin/`):** LobbyLoginControl, LoginControl, ServerSelectControl, CharacterCreationControl, LoginNoticeControl, PasswordChangeControl, LogoImage.
 
-**Generic Controls (`Controls/Generic/`):** OkPopupMessageControl, TextPopupControl, MarkdownView (near-fullscreen markdown notice for `SystemMessageType.MarkdownNotice` = 0x20, a Hybrasyl/USDA extension: title bar with close/maximize, scrollbar, Escape dismisses, non-modal; debug-test via F11 overlay + Ctrl+M), ScrollBarControl, SliderControl, DebugOverlay.
+**Generic Controls (`Controls/Generic/`):** OkPopupMessageControl, TextPopupControl, MarkdownView (near-fullscreen markdown notice for `SystemMessageType.MarkdownNotice` = 0x20, a Hybrasyl/USDA extension: title bar with close/maximize, scrollbar, Escape dismisses, non-modal; debug-test via F11 overlay + Ctrl+M), ScrollBarControl, SliderControl, DebugOverlay. Asset-free primitives shared by the from-scratch modals: DialogPalette (the one colour source), TextButton, SelectableTab, TabStrip (row/column of tabs; clicked and selected are separate so a server-authoritative surface can defer selection to the reply), CheckBox.
 
 **World HUD (`Controls/World/Hud/`):** IWorldHud interface, WorldHudControl (classic compact HUD), LargeWorldHudControl (expanded HUD), OrangeBarControl, ChatInputControl, EffectBarControl/EffectSlotControl, MailButton (unread-mail pulse indicator driven by `PlayerAttributes.HasUnreadMail`).
 
@@ -179,7 +179,7 @@ Brigid/
 
 **Options (`Popups/Options/`):** MainOptionsControl, MacrosListControl, SettingsControl, FriendsListControl.
 
-**Popups (`Popups/`):** AislingContextMenu, GoldAmountControl, ItemAmountControl, ChantEditControl, GroupRecruitPanel, GroupTab/GroupTabControl, HotkeyHelpControl, ItemTooltipControl, NotepadControl, SocialStatusControl, TownMapControl. Subdirectories: `Boards/` (BoardListControl, ArticleListControl/ArticleReadControl/ArticleSendControl, MailListControl/MailReadControl/MailSendControl), `Dialog/` (NpcSessionControl, FramedDialogPanelBase, DialogAlphaGradient, BankShopPanel, DialogTextEntryPanel, DialogProtectedTextEntryPanel, MenuTextEntryPanel, DialogOptionPanel, MenuListPanel), `Exchange/` (ExchangeControl/ExchangeItemControl), `WorldList/` (WorldListControl/WorldListEntryControl).
+**Popups (`Popups/`):** AislingContextMenu, GoldAmountControl, ItemAmountControl, CastablePopupControl (+CastableDetailsPane), GroupRecruitPanel, GroupTab/GroupTabControl, HotkeyHelpControl, ItemTooltipControl, NotepadControl, SocialStatusControl, TownMapControl. Subdirectories: `Boards/` (BoardsModalControl + BoardIndexPane/PostListPane/PostReadPane/PostComposePane), `Dialog/` (NpcSessionControl, FramedDialogPanelBase, DialogAlphaGradient, BankShopPanel, DialogTextEntryPanel, DialogProtectedTextEntryPanel, MenuTextEntryPanel, DialogOptionPanel, MenuListPanel), `Exchange/` (ExchangeControl/ExchangeItemControl), `WorldList/` (WorldListControl/WorldListEntryControl).
 
 **Viewport Overlays (`ViewPort/`):** ChatBubble, HealthBar, LoadingBar/MapLoadingBar, WorldMap/WorldMapNode, ChantText, GroupBox, SystemMessagePaneControl, PersistentMessageControl.
 
