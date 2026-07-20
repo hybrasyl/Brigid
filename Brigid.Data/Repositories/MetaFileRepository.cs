@@ -24,9 +24,10 @@ public sealed class MetaFileRepository
         Share = FileShare.ReadWrite
     };
 
-    //reads the server-pushed metafile cache written by ChaosGame; must match its write location (AppPaths.MetaFileDir),
-    //which was relocated out of the read-only game folder to %LOCALAPPDATA%.
-    private readonly string MetaFileDirectory = AppPaths.MetaFileDir;
+    //reads the server-pushed metafile cache written by ChaosGame; must match its write location
+    //(AppPaths.MetaFileDir), which lives under %LOCALAPPDATA% and is scoped per server. Resolved per access, not
+    //captured, because this repository is constructed before the connection target is known.
+    private static string MetaFileDirectory => AppPaths.MetaFileDir;
     private FrozenDictionary<int, ushort>? ItemIndex;
     private NpcIllustrationMetadata? NpcIllustrationMetadataCache;
 

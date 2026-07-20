@@ -67,8 +67,27 @@ public static class AppPaths
     /// <summary><c>{AppRoot}/screenshots</c> — captured screenshots (<c>lod*</c> on retail, <c>hyb*</c> otherwise).</summary>
     public static string ScreenshotsDir => Path.Combine(AppRoot, "screenshots");
 
-    /// <summary><c>{AppRoot}/metafile</c> — cache of server-sent metafiles (checksum-validated, disposable).</summary>
-    public static string MetaFileDir => Path.Combine(AppRoot, "metafile");
+    /// <summary>
+    ///     Key scoping the server-pushed caches, set once the connection target is known via
+    ///     <see cref="SetServerScope" />. Defaults to a neutral bucket so a path read before that never lands at the
+    ///     cache root.
+    /// </summary>
+    private static string ServerScope = "default";
+
+    /// <summary>
+    ///     Scopes the server-pushed caches to the server being connected to. Metafiles are server-specific content
+    ///     shipped under identical filenames — retail and Hybrasyl both send <c>SClass1</c>, <c>ItemInfo0</c>, … with
+    ///     different contents — so a shared cache lets one server's catalog answer for another's until the next
+    ///     checksum sync overwrites it. Routed through <see cref="ServerProfileKey" />, the single home for
+    ///     "which server is this".
+    /// </summary>
+    public static void SetServerScope(string? host, string? serverName = null)
+        => ServerScope = ServerProfileKey.Resolve(host, serverName);
+
+    /// <summary>
+    ///     <c>{AppRoot}/metafile/{serverKey}</c> — cache of server-sent metafiles (checksum-validated, disposable).
+    /// </summary>
+    public static string MetaFileDir => Path.Combine(AppRoot, "metafile", ServerScope);
 
     /// <summary><c>{AppRoot}/maps</c> — cache of downloaded map files (disposable).</summary>
     public static string MapsDir => Path.Combine(AppRoot, "maps");
