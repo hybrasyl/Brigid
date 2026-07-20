@@ -23,8 +23,7 @@ internal sealed class PostReadPane : UIPanel
     private readonly UILabel AuthorLabel;
     private readonly UILabel DateLabel;
     private readonly UILabel SubjectLabel;
-    private readonly ScrollView BodyScroll;
-    private readonly UILabel BodyLabel;
+    private readonly SelectableTextView Body;
 
     /// <summary>The post being read — the cursor for the modal's Prev/Next/Delete/Reply actions.</summary>
     public short CurrentPostId { get; private set; }
@@ -51,31 +50,8 @@ internal sealed class PostReadPane : UIPanel
 
         var bodyTop = HEADER_H + HEADER_GAP;
 
-        BodyScroll = new ScrollView
-        {
-            X = 0,
-            Y = bodyTop,
-            Width = pane.Width,
-            Height = pane.Height - bodyTop
-        };
-
-        BodyLabel = new UILabel
-        {
-            X = 0,
-            Y = 0,
-            Width = BodyScroll.ContentWidth,
-            Height = BodyScroll.ContentHeight,
-            PaddingLeft = 0,
-            PaddingRight = 2,
-            PaddingTop = 0,
-            WordWrap = true,
-            ForegroundColor = TextColors.Default,
-            IsSelectable = true
-        };
-
-        BodyScroll.AddChild(BodyLabel);
-        AddChild(BodyScroll);
-        BodyScroll.SetSource(new LabelScrollSource(BodyLabel));
+        Body = new SelectableTextView(new Rectangle(0, bodyTop, pane.Width, pane.Height - bodyTop));
+        AddChild(Body);
     }
 
     private UILabel AddHeader(int x, int width, Color color)
@@ -118,14 +94,12 @@ internal sealed class PostReadPane : UIPanel
         DateLabel.Text = $"{month}/{day}";
         SubjectLabel.Text = subject;
 
-        BodyLabel.Text = message;
-        BodyScroll.Sync();
-        BodyScroll.ScrollToStart();
+        Body.SetText(message);
     }
 
     /// <summary>
     ///     Routes a key to the selectable body so Ctrl+C / select-all / caret navigation work. The modal is the top
     ///     control, so keyboard events stop there instead of descending to the label.
     /// </summary>
-    public void ForwardKey(KeyDownEvent e) => BodyLabel.OnKeyDown(e);
+    public void ForwardKey(KeyDownEvent e) => Body.ForwardKey(e);
 }

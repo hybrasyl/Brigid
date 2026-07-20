@@ -78,8 +78,8 @@ internal sealed class BoardIndexPane : UIPanel
     /// <summary>Populates the pane and selects the first board (matching the legacy panel).</summary>
     public void SetBoards(List<(ushort BoardId, string Name)> boards)
     {
-        Boards = boards;
-        ListView.SetItems(boards);
+        Boards = [..boards];
+        ListView.SetItems(Boards);
         ListView.SetSelectedIndex(boards.Count > 0 ? 0 : -1);
         SelectionChanged?.Invoke();
     }
@@ -94,21 +94,7 @@ internal sealed class BoardIndexPane : UIPanel
     }
 
     /// <summary>Moves the selection by <paramref name="delta" /> rows, keeping it on screen.</summary>
-    public void MoveSelection(int delta)
-    {
-        if (Boards.Count == 0)
-            return;
-
-        var current = ListView.SelectedIndex;
-
-        var next = current < 0
-            ? delta > 0 ? 0 : Boards.Count - 1
-            : Math.Clamp(current + delta, 0, Boards.Count - 1);
-
-        ListView.SetSelectedIndex(next);
-        ListView.EnsureVisible(next);
-        SelectionChanged?.Invoke();
-    }
+    public void MoveSelection(int delta) => ListView.MoveSelection(delta);
 
     /// <summary>Rows visible at once — the paging step for PageUp/PageDown.</summary>
     public int VisibleRows => ListView.VisibleRows;

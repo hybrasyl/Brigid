@@ -10,11 +10,13 @@ namespace Brigid.Controls.World.Popups.Boards;
 
 /// <summary>
 ///     The compose view — the single pane replacing both <c>ArticleSendControl</c> (<c>_nartin</c>) and
-///     <c>MailSendControl</c> (<c>_nmails</c>). A recipient box (mail only), a subject box, and a multi-line body
-///     with its own scrollbar. The legacy panels overlaid their bar on a black strip baked into the art at a
-///     hardcoded (483, 65, 214); here the bar is laid out from the pane rect like any other control.
+///     <c>MailSendControl</c> (<c>_nmails</c>). A party row (the mail recipient, or the author on a board post),
+///     a subject row, and a multi-line body with its own scrollbar. The legacy panels overlaid their bar on a
+///     black strip baked into the art at a hardcoded (483, 65, 214); here the bar is laid out from the pane rect
+///     like any other control, and the field boxes are painted by an <see cref="InputSlotPane" /> the fields live
+///     in rather than by background art.
 /// </summary>
-internal sealed class PostComposePane : InputSlotPane
+internal sealed class PostComposePane : UIPanel
 {
     private const int FIELD_H = 20;
     private const int FIELD_GAP = 6;
@@ -23,16 +25,20 @@ internal sealed class PostComposePane : InputSlotPane
     private const int SUBJECT_MAX_LENGTH = 60;
     private const int BODY_MAX_LENGTH = 10000;
 
-    private readonly UILabel RecipientLabel;
-    private readonly UITextBox RecipientBox;
+    //hosts every text field, so the slot chrome is painted behind each of them.
+    private readonly InputSlotPane Fields;
+
+    private readonly UILabel PartyLabel;
+    private readonly UITextBox PartyBox;
     private readonly UITextBox SubjectBox;
     private readonly UITextBox BodyBox;
     private readonly ScrollBarControl BodyScrollBar;
 
-    /// <summary>True when composing mail (recipient row shown) rather than a bulletin-board post.</summary>
+    /// <summary>True when composing mail (the party row is an editable recipient) rather than a board post.</summary>
     public bool IsMail { get; private set; }
 
-    public string Recipient => RecipientBox.Text;
+    /// <summary>The mail recipient. Empty for a board post, whose party row is the read-only author display.</summary>
+    public string Recipient => IsMail ? PartyBox.Text : string.Empty;
     public string Subject => SubjectBox.Text;
     public string Body => BodyBox.Text;
 
@@ -43,10 +49,19 @@ internal sealed class PostComposePane : InputSlotPane
         Width = pane.Width;
         Height = pane.Height;
 
-        RecipientLabel = AddFieldLabel("To", 0);
+        Fields = new InputSlotPane
+        {
+            X = 0,
+            Y = 0,
+            Width = pane.Width,
+            Height = pane.Height
+        };
+        AddChild(Fields);
 
-        RecipientBox = AddField(
-            "Recipient",
+        PartyLabel = AddFieldLabel("To", 0);
+
+        PartyBox = AddField(
+            "Party",
             LABEL_W,
             0,
             pane.Width - LABEL_W,
@@ -83,7 +98,7 @@ internal sealed class PostComposePane : InputSlotPane
             IsTabStop = true
         };
 
-        AddChild(BodyBox);
+        Fields.AddChild(BodyBox);
 
         BodyScrollBar = new ScrollBarControl
         {
@@ -113,7 +128,7 @@ internal sealed class PostComposePane : InputSlotPane
             IsHitTestVisible = false
         };
 
-        AddChild(label);
+        Fields.AddChild(label);
 
         return label;
     }
@@ -138,7 +153,7 @@ internal sealed class PostComposePane : InputSlotPane
             IsTabStop = true
         };
 
-        AddChild(box);
+        Fields.AddChild(box);
 
         return box;
     }
@@ -155,21 +170,22 @@ internal sealed class PostComposePane : InputSlotPane
     }
 
     /// <summary>
-    ///     Resets the pane for a fresh compose. <paramref name="recipient" /> pre-fills and locks the To field for a
-    ///     mail reply; board posts hide the row entirely.
+    ///     Resets the pane for a fresh compose. The first row is the mail recipient — editable for a new mail,
+    ///     locked when <paramref name="party" /> pre-fills a reply — or, for a board post, the read-only author
+    ///     display the legacy compose panel showed.
     /// </summary>
-    public void Reset(bool isMail, string? recipient)
+    public void Reset(bool isMail, string? party)
     {
         IsMail = isMail;
 
-        var isReply = isMail && !string.IsNullOrEmpty(recipient);
+        //editable only for a new mail: a reply's recipient is fixed, and a board post's row is the author.
+        var editable = isMail && string.IsNullOrEmpty(party);
 
-        RecipientLabel.Visible = isMail;
-        RecipientBox.Visible = isMail;
-        RecipientBox.Text = recipient ?? string.Empty;
-        RecipientBox.IsReadOnly = isReply;
-        RecipientBox.ForegroundColor = isReply ? TextColors.Default : LegendColors.White;
-        RecipientBox.IsTabStop = isMail && !isReply;
+        PartyLabel.Text = isMail ? "To" : "By";
+        PartyBox.Text = party ?? string.Empty;
+        PartyBox.IsReadOnly = !editable;
+        PartyBox.ForegroundColor = editable ? LegendColors.White : TextColors.Default;
+        PartyBox.IsTabStop = editable;
 
         SubjectBox.Text = string.Empty;
 
@@ -178,26 +194,25 @@ internal sealed class PostComposePane : InputSlotPane
         BodyBox.CursorPosition = 0;
 
         //this pane is a reused singleton — drop undo so Ctrl+Z can't resurrect a prior message's contents
-        RecipientBox.ResetUndoHistory();
+        PartyBox.ResetUndoHistory();
         SubjectBox.ResetUndoHistory();
         BodyBox.ResetUndoHistory();
 
         ClearFocus();
 
-        //a reply already knows its recipient, so start on the subject.
-        if (isMail && !isReply)
-            RecipientBox.IsFocused = true;
+        if (editable)
+            PartyBox.IsFocused = true;
         else
             SubjectBox.IsFocused = true;
     }
 
     /// <summary>Whether the post can be sent — mail needs a recipient, a board post needs nothing.</summary>
-    public bool CanSend => !IsMail || !string.IsNullOrWhiteSpace(RecipientBox.Text);
+    public bool CanSend => !IsMail || !string.IsNullOrWhiteSpace(PartyBox.Text);
 
     /// <summary>Drops focus from every field (the modal calls this when the view is left).</summary>
     public void ClearFocus()
     {
-        RecipientBox.IsFocused = false;
+        PartyBox.IsFocused = false;
         SubjectBox.IsFocused = false;
         BodyBox.IsFocused = false;
     }
@@ -208,9 +223,9 @@ internal sealed class PostComposePane : InputSlotPane
     /// </summary>
     public bool HandleEnter()
     {
-        if (RecipientBox is { IsFocused: true, Visible: true })
+        if (PartyBox.IsFocused)
         {
-            RecipientBox.IsFocused = false;
+            PartyBox.IsFocused = false;
             SubjectBox.IsFocused = true;
 
             return true;

@@ -170,6 +170,27 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
         Dirty = true;
     }
 
+    /// <summary>
+    ///     Keyboard row navigation: moves the selection by <paramref name="delta" /> rows (from either end when
+    ///     nothing is selected), keeps it on screen, and raises <see cref="SelectionChanged" />. Unlike
+    ///     <see cref="SetSelectedIndex" /> — which is a silent programmatic set — this is a user action, so it
+    ///     notifies. Driving the selection to the last row scrolls to the bottom, which re-arms
+    ///     <see cref="ReachedEnd" />, so arrow keys and the wheel share one paging trigger.
+    /// </summary>
+    public void MoveSelection(int delta)
+    {
+        if (Items.Count == 0)
+            return;
+
+        var next = SelectedIndex < 0
+            ? delta > 0 ? 0 : Items.Count - 1
+            : Math.Clamp(SelectedIndex + delta, 0, Items.Count - 1);
+
+        SetSelectedIndex(next);
+        EnsureVisible(next);
+        SelectionChanged?.Invoke(next);
+    }
+
     /// <summary>Scrolls to an absolute item offset (used e.g. to centre the local player in the world list).</summary>
     public void ScrollTo(int offset) => Model.ScrollTo(offset);
 

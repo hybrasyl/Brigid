@@ -1,5 +1,4 @@
 #region
-using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Models;
@@ -43,13 +42,14 @@ public sealed class BoardsModalControl : CenteredModalPanel
     private const int TAB_H = 20;
     private const int TAB_GAP = 4;
     private const int TAB_TO_PANE = 6;
-    private const int TAB_COUNT = 2;
+    private const int BOARDS_TAB = 0;
+    private const int MAIL_TAB = 1;
 
     private const int ACTION_W = 56;
 
     private static readonly string[] TabTitles = ["Boards", "Mail"];
 
-    private readonly SelectableTab[] Tabs = new SelectableTab[TAB_COUNT];
+    private readonly TabStrip Tabs;
 
     private readonly BoardIndexPane IndexPane;
     private readonly PostListPane ListPane;
@@ -69,6 +69,20 @@ public sealed class BoardsModalControl : CenteredModalPanel
     private BoardView View = BoardView.Index;
     private bool AllowHighlight;
 
+    //the family and board the current view belongs to. Held here rather than read off the post list, because the
+    //server can push a post (or the mailbox) with no list ever having been shown.
+    private bool IsMail;
+    private ushort ActiveBoardId;
+
+    //the post list's title, so stepping back up from read/compose restores it instead of leaving the post's
+    //subject in the title band.
+    private string ListTitle = string.Empty;
+
+    //the board index as last shown, and whether the session reached the post list through it — memoized so Up
+    //can step back without reaching into WorldState.
+    private List<(ushort BoardId, string Name)> IndexBoards = [];
+    private bool OpenedFromIndex;
+
     // ── events (the host turns each into a packet) ──
 
     public event ViewBoardHandler? BoardSelected;
@@ -78,33 +92,41 @@ public sealed class BoardsModalControl : CenteredModalPanel
     public event DeletePostHandler? DeleteRequested;
     public event HighlightPostHandler? HighlightRequested;
     public event LoadMorePostsHandler? LoadMoreRequested;
-    public event PrevHandler? PrevRequested;
-    public event NextHandler? NextRequested;
-    public event ArticleSendHandler? PostSubmitted;
-    public event MailSendHandler? MailSubmitted;
+    /// <summary>
+    ///     Raised to step to the neighbouring post while reading. Parameters: the post currently shown (the
+    ///     cursor), and true for the next (older) post / false for the previous (newer) one.
+    /// </summary>
+    public event Action<short, bool>? StepRequested;
+
+    /// <summary>
+    ///     Raised when a composed post is submitted. <c>recipient</c> is null for a bulletin-board post and the
+    ///     addressee for mail — one event, because there is one compose view.
+    /// </summary>
+    public event Action<string?, string, string>? SubmitRequested;
 
     /// <summary>Raised when Up is used from the post list without a board index to fall back to.</summary>
     public event UpHandler? SessionEndRequested;
 
-    /// <summary>Raised when the Boards tab is clicked — the host requests the board list.</summary>
-    public event Action? BoardsRequested;
-
-    /// <summary>Raised when the Mail tab is clicked — the host requests the mailbox.</summary>
-    public event Action? MailRequested;
+    /// <summary>
+    ///     Raised when a tab is clicked; the parameter is true for Mail. The host issues the matching request, and
+    ///     the tab's selected state follows the reply rather than the click.
+    /// </summary>
+    public event Action<bool>? TabRequested;
 
     // ── state the host reads back ──
 
-    /// <summary>The board currently listed or read.</summary>
-    public ushort BoardId => View == BoardView.Read ? ReadBoardId : ListPane.BoardId;
+    /// <summary>The board the current view belongs to — the target for every action the host turns into a packet.</summary>
+    public ushort BoardId => ActiveBoardId;
 
-    /// <summary>Whether a scroll-paging request is in flight, so a reply routes to append rather than replace.</summary>
-    public bool IsPaging => ListPane.IsPaging;
+    /// <summary>
+    ///     Whether a scroll-back page for <paramref name="boardId" /> is in flight, so the host routes that board's
+    ///     reply to <see cref="AppendPosts" /> rather than replacing the list. Qualified by board: a request pending
+    ///     on one board must never claim another's reply.
+    /// </summary>
+    public bool IsPagingFor(ushort boardId) => ListPane.IsPagingFor(boardId);
 
     /// <summary>Whether the post list is on screen and showing <paramref name="boardId" />'s posts.</summary>
     public bool IsListing(ushort boardId) => Visible && (View == BoardView.List) && (ListPane.BoardId == boardId);
-
-    /// <summary>The board the read view is showing; set by the host alongside <see cref="ShowPost" />.</summary>
-    public ushort ReadBoardId { get; set; }
 
     public BoardsModalControl()
         : base("Boards", PANEL_W, PANEL_H)
@@ -114,21 +136,16 @@ public sealed class BoardsModalControl : CenteredModalPanel
         var content = ContentBounds;
         var pane = new Rectangle(content.X, content.Y + TAB_H + TAB_TO_PANE, content.Width, content.Height - TAB_H - TAB_TO_PANE);
 
-        BuildTabRow(content);
-
-        //created in the order they should read on the bar, right-to-left after Close.
-        UpButton = AddBottomBarButton("Up", ACTION_W, GoUp);
-        SendButton = AddBottomBarButton("Send", ACTION_W, Submit);
-        NextButton = AddBottomBarButton("Next", ACTION_W, () => NextRequested?.Invoke());
-        PrevButton = AddBottomBarButton("Prev", ACTION_W, () => PrevRequested?.Invoke());
-        HighlightButton = AddBottomBarButton("Hilight", ACTION_W, RaiseHighlight);
-        DeleteButton = AddBottomBarButton("Delete", ACTION_W, RaiseDelete);
-        ReplyButton = AddBottomBarButton("Reply", ACTION_W, RaiseReply);
-        NewButton = AddBottomBarButton("New", ACTION_W, () => NewRequested?.Invoke());
-        ViewButton = AddBottomBarButton("View", ACTION_W, ActivateSelection);
+        Tabs = BuildTabRow(content);
 
         IndexPane = new BoardIndexPane(pane);
-        IndexPane.BoardActivated += id => BoardSelected?.Invoke(id);
+
+        IndexPane.BoardActivated += id =>
+        {
+            OpenedFromIndex = true;
+            BoardSelected?.Invoke(id);
+        };
+
         IndexPane.SelectionChanged += RefreshActions;
         AddChild(IndexPane);
 
@@ -144,46 +161,49 @@ public sealed class BoardsModalControl : CenteredModalPanel
         ComposePane = new PostComposePane(pane);
         AddChild(ComposePane);
 
+        //after the panes, since Prev/Next read the read pane's cursor. Created in the order they should read on
+        //the bar, which packs right-to-left after Close.
+        UpButton = AddBottomBarButton("Up", ACTION_W, GoUp);
+        SendButton = AddBottomBarButton("Send", ACTION_W, Submit);
+        NextButton = AddBottomBarButton("Next", ACTION_W, () => StepRequested?.Invoke(ReadPane.CurrentPostId, true));
+        PrevButton = AddBottomBarButton("Prev", ACTION_W, () => StepRequested?.Invoke(ReadPane.CurrentPostId, false));
+        HighlightButton = AddBottomBarButton("Hilight", ACTION_W, RaiseHighlight);
+        DeleteButton = AddBottomBarButton("Delete", ACTION_W, RaiseDelete);
+        ReplyButton = AddBottomBarButton("Reply", ACTION_W, RaiseReply);
+        NewButton = AddBottomBarButton("New", ACTION_W, () => NewRequested?.Invoke());
+        ViewButton = AddBottomBarButton("View", ACTION_W, ActivateSelection);
+
         SetView(BoardView.Index);
     }
 
-    private void BuildTabRow(Rectangle content)
+    private TabStrip BuildTabRow(Rectangle content)
     {
-        for (var i = 0; i < TAB_COUNT; i++)
+        var strip = new TabStrip(TabTitles, TAB_W, TAB_H, TAB_GAP)
         {
-            var isMailTab = i == 1;
+            X = content.X,
+            Y = content.Y
+        };
 
-            var tab = new SelectableTab(TabTitles[i], TAB_W, TAB_H)
-            {
-                X = content.X + i * (TAB_W + TAB_GAP),
-                Y = content.Y
-            };
+        //the server decides what's on screen, so a tab click is a request, not a local swap — the strip's
+        //selection is left alone until the reply lands in ShowPostList/ShowBoardIndex.
+        strip.TabClicked += index => TabRequested?.Invoke(index == MAIL_TAB);
 
-            //the server decides what's on screen, so a tab click is a request, not a local swap. The selected
-            //state follows the reply (SetPosts/SetBoards), not the click.
-            tab.Clicked += () =>
-            {
-                if (isMailTab)
-                    MailRequested?.Invoke();
-                else
-                    BoardsRequested?.Invoke();
-            };
+        AddChild(strip);
 
-            Tabs[i] = tab;
-            AddChild(tab);
-        }
+        return strip;
     }
 
-    private void SetActiveTab(bool isMail)
-    {
-        Tabs[0].IsSelected = !isMail;
-        Tabs[1].IsSelected = isMail;
-    }
+    private void SetActiveTab(bool isMail) => Tabs.SetSelected(isMail ? MAIL_TAB : BOARDS_TAB);
 
     // ── views ──
 
     private void SetView(BoardView view)
     {
+        //a page request only makes sense while its list is on screen; leaving strands the reply, so drop the flag
+        //rather than let it divert the next fresh open into the append branch.
+        if ((View == BoardView.List) && (view != BoardView.List))
+            ListPane.CancelPaging();
+
         View = view;
 
         IndexPane.Visible = view == BoardView.Index;
@@ -213,8 +233,9 @@ public sealed class BoardsModalControl : CenteredModalPanel
             case BoardView.List:
             {
                 var hasSelection = ListPane.HasSelection;
+                SetTitle(ListTitle);
 
-                if (ListPane.IsMail)
+                if (IsMail)
                     SetBottomBarActions(ViewButton, NewButton, ReplyButton, DeleteButton, UpButton);
                 else if (AllowHighlight)
                     SetBottomBarActions(ViewButton, NewButton, DeleteButton, HighlightButton, UpButton);
@@ -230,12 +251,16 @@ public sealed class BoardsModalControl : CenteredModalPanel
             }
 
             case BoardView.Read:
-                if (ListPane.IsMail)
+                if (IsMail)
                     SetBottomBarActions(PrevButton, NextButton, NewButton, ReplyButton, DeleteButton, UpButton);
                 else
                     SetBottomBarActions(PrevButton, NextButton, NewButton, DeleteButton, UpButton);
 
                 PrevButton.SetEnabled(ReadPane.EnablePrev);
+
+                //the read view always has a post to act on, whatever the list's selection happened to be.
+                ReplyButton.SetEnabled(true);
+                DeleteButton.SetEnabled(true);
 
                 break;
 
@@ -251,6 +276,8 @@ public sealed class BoardsModalControl : CenteredModalPanel
     /// <summary>Shows the board index (the reply to a board-list request).</summary>
     public void ShowBoardIndex(List<(ushort BoardId, string Name)> boards)
     {
+        IsMail = false;
+        IndexBoards = boards;
         SetActiveTab(false);
         IndexPane.SetBoards(boards);
         SetView(BoardView.Index);
@@ -265,10 +292,13 @@ public sealed class BoardsModalControl : CenteredModalPanel
         bool isMail,
         bool allowHighlight)
     {
+        IsMail = isMail;
+        ActiveBoardId = boardId;
         AllowHighlight = allowHighlight && !isMail;
+        ListTitle = isMail ? "Mail" : boardName;
+
         SetActiveTab(isMail);
         ListPane.SetPosts(boardId, posts, isMail, boardName);
-        SetTitle(isMail ? "Mail" : boardName);
         SetView(BoardView.List);
         Show();
     }
@@ -279,8 +309,13 @@ public sealed class BoardsModalControl : CenteredModalPanel
     /// <summary>Clears the in-flight paging flag without appending (a reply that arrived after the user left).</summary>
     public void CancelPaging() => ListPane.CancelPaging();
 
-    /// <summary>Shows a single post.</summary>
+    /// <summary>
+    ///     Shows a single post. The family and board come from the caller, not from whatever the post list last
+    ///     held — the server can push a post with no list ever having been shown.
+    /// </summary>
     public void ShowPost(
+        ushort boardId,
+        bool isMail,
         short postId,
         string author,
         int month,
@@ -289,6 +324,10 @@ public sealed class BoardsModalControl : CenteredModalPanel
         string message,
         bool enablePrev)
     {
+        IsMail = isMail;
+        ActiveBoardId = boardId;
+        SetActiveTab(isMail);
+
         ReadPane.SetPost(
             postId,
             author,
@@ -303,13 +342,24 @@ public sealed class BoardsModalControl : CenteredModalPanel
         Show();
     }
 
-    /// <summary>Opens the compose view. <paramref name="recipient" /> pre-fills a mail reply.</summary>
-    public void ShowCompose(string? recipient = null)
+    /// <summary>
+    ///     Opens the compose view against the board currently in view. <paramref name="party" /> is the recipient
+    ///     for a mail reply, or the author to display on a board post.
+    /// </summary>
+    public void ShowCompose(string? party = null)
     {
-        ComposePane.Reset(ListPane.IsMail, recipient);
-        SetTitle(ListPane.IsMail ? "New Mail" : "New Post");
+        ComposePane.Reset(IsMail, party);
+        SetTitle(IsMail ? "New Mail" : "New Post");
         SetView(BoardView.Compose);
         Show();
+    }
+
+    /// <summary>Clears any in-flight paging when the modal closes, so the flag can't outlive the visible list.</summary>
+    public override void Hide()
+    {
+        ListPane.CancelPaging();
+        ComposePane.ClearFocus();
+        base.Hide();
     }
 
     /// <summary>Removes a post from the list after the server confirms a delete.</summary>
@@ -360,10 +410,7 @@ public sealed class BoardsModalControl : CenteredModalPanel
         if (!ComposePane.CanSend)
             return;
 
-        if (ComposePane.IsMail)
-            MailSubmitted?.Invoke(ComposePane.Recipient, ComposePane.Subject, ComposePane.Body);
-        else
-            PostSubmitted?.Invoke(ComposePane.Subject, ComposePane.Body);
+        SubmitRequested?.Invoke(IsMail ? ComposePane.Recipient : null, ComposePane.Subject, ComposePane.Body);
     }
 
     /// <summary>
@@ -381,15 +428,11 @@ public sealed class BoardsModalControl : CenteredModalPanel
                 break;
 
             case BoardView.List:
-                if (WorldState.Board.WasOpenedFromBoardList && WorldState.Board.AvailableBoards is { Count: > 0 })
+                if (OpenedFromIndex && (IndexBoards.Count > 0))
                 {
-                    IndexPane.SetBoards(
-                        WorldState.Board
-                                  .AvailableBoards
-                                  .Select(b => (b.BoardId, b.Name))
-                                  .ToList());
-
+                    IsMail = false;
                     SetActiveTab(false);
+                    IndexPane.SetBoards(IndexBoards);
                     SetView(BoardView.Index);
                 } else
                     SessionEndRequested?.Invoke();
@@ -430,9 +473,10 @@ public sealed class BoardsModalControl : CenteredModalPanel
                     return;
                 }
 
-                //give the selectable body its clipboard/caret keys before the base swallows the rest.
-                base.OnKeyDown(e);
+                //the body gets its clipboard/caret keys first; the base then swallows whatever is left so world
+                //hotkeys can't fire underneath.
                 ReadPane.ForwardKey(e);
+                base.OnKeyDown(e);
 
                 return;
 
@@ -500,7 +544,10 @@ public sealed class BoardsModalControl : CenteredModalPanel
                 break;
 
             case Keys.Delete:
-                delete?.Invoke();
+                if (delete is null)
+                    return false;
+
+                delete();
 
                 break;
 

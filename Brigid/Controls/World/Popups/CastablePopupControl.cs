@@ -50,7 +50,7 @@ public sealed class CastablePopupControl : CenteredModalPanel
 
     private static readonly string[] TabTitles = ["Lines", "Details"];
 
-    private readonly SelectableTab[] Tabs = new SelectableTab[TAB_COUNT];
+    private readonly TabStrip Tabs;
     private readonly UIPanel[] TabPanes = new UIPanel[TAB_COUNT];
 
     private readonly UITextBox[] TextInputs = new UITextBox[MAX_LINES];
@@ -74,7 +74,7 @@ public sealed class CastablePopupControl : CenteredModalPanel
         var content = ContentBounds;
         var pane = new Rectangle(content.X, content.Y + TAB_H + TAB_TO_PANE, content.Width, content.Height - TAB_H - TAB_TO_PANE);
 
-        BuildTabRow(content);
+        Tabs = BuildTabRow(content);
         SaveButton = AddBottomBarButton("Save", SAVE_W, Confirm);
 
         BuildLinesPane(pane);
@@ -83,22 +83,18 @@ public sealed class CastablePopupControl : CenteredModalPanel
         SelectTab(CastableTab.Lines);
     }
 
-    private void BuildTabRow(Rectangle content)
+    private TabStrip BuildTabRow(Rectangle content)
     {
-        for (var i = 0; i < Tabs.Length; i++)
+        var strip = new TabStrip(TabTitles, TAB_W, TAB_H, TAB_GAP)
         {
-            var index = i;
+            X = content.X,
+            Y = content.Y
+        };
 
-            var tab = new SelectableTab(TabTitles[i], TAB_W, TAB_H)
-            {
-                X = content.X + i * (TAB_W + TAB_GAP),
-                Y = content.Y
-            };
+        strip.TabClicked += index => SelectTab((CastableTab)index);
+        AddChild(strip);
 
-            tab.Clicked += () => SelectTab((CastableTab)index);
-            Tabs[i] = tab;
-            AddChild(tab);
-        }
+        return strip;
     }
 
     private void BuildLinesPane(Rectangle pane)
@@ -150,12 +146,10 @@ public sealed class CastablePopupControl : CenteredModalPanel
     private void SelectTab(CastableTab tab)
     {
         Active = tab;
+        Tabs.SetSelected((int)tab);
 
         for (var i = 0; i < TAB_COUNT; i++)
-        {
-            Tabs[i].IsSelected = i == (int)tab;
             TabPanes[i].Visible = i == (int)tab;
-        }
 
         //Save only means something on the Lines tab.
         SetBottomBarActions(tab == CastableTab.Lines ? [SaveButton] : []);

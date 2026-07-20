@@ -58,7 +58,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     private static readonly string[] TabTitles = ["Settings", "Macros", "Friends", "Keybinds"];
 
-    private readonly SelectableTab[] Tabs = new SelectableTab[4];
+    private readonly TabStrip Tabs;
     private readonly UIPanel[] TabPanes = new UIPanel[4];
 
     private readonly CheckBox[] SettingChecks = new CheckBox[UserOptions.SETTING_COUNT];
@@ -105,7 +105,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
         PaneX = content.X + TAB_W + PANE_GAP;
         var paneRect = new Rectangle(PaneX, content.Y, content.Right - PaneX, content.Height);
 
-        BuildTabColumn(content);
+        Tabs = BuildTabColumn(content);
         BuildSettingsPane(paneRect);
         BuildMacrosPane(paneRect);
         BuildFriendsPane(paneRect);
@@ -116,22 +116,23 @@ public sealed class OptionsModalControl : CenteredModalPanel
         SelectTabInternal(OptionsTab.Settings);
     }
 
-    private void BuildTabColumn(Rectangle content)
+    private TabStrip BuildTabColumn(Rectangle content)
     {
-        for (var i = 0; i < Tabs.Length; i++)
+        var strip = new TabStrip(
+            TabTitles,
+            TAB_W,
+            TAB_H,
+            TAB_GAP,
+            TabOrientation.Vertical)
         {
-            var index = i;
+            X = content.X,
+            Y = content.Y
+        };
 
-            var tab = new SelectableTab(TabTitles[i], TAB_W, TAB_H)
-            {
-                X = content.X,
-                Y = content.Y + i * (TAB_H + TAB_GAP)
-            };
+        strip.TabClicked += index => SelectTab((OptionsTab)index);
+        AddChild(strip);
 
-            tab.Clicked += () => SelectTab((OptionsTab)index);
-            Tabs[i] = tab;
-            AddChild(tab);
-        }
+        return strip;
     }
 
     private void BuildSettingsPane(Rectangle pane)
@@ -296,12 +297,10 @@ public sealed class OptionsModalControl : CenteredModalPanel
     private void SelectTabInternal(OptionsTab tab)
     {
         Active = tab;
+        Tabs.SetSelected((int)tab);
 
-        for (var i = 0; i < Tabs.Length; i++)
-        {
-            Tabs[i].IsSelected = i == (int)tab;
+        for (var i = 0; i < TabPanes.Length; i++)
             TabPanes[i].Visible = i == (int)tab;
-        }
 
         if (tab == OptionsTab.Settings)
             SettingsRequested?.Invoke();

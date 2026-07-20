@@ -5,7 +5,6 @@ using Brigid.Controls.Scrolling;
 using Brigid.Models;
 using Brigid.Networking;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 #endregion
 
 namespace Brigid.Controls.World.Popups.Boards;
@@ -44,9 +43,6 @@ internal sealed class PostListPane : UIPanel
 
     /// <summary>True when this is the player's mailbox rather than a public bulletin board.</summary>
     public bool IsMail { get; private set; }
-
-    /// <summary>Whether a scroll-paging request is in flight, so the host can route a reply to append vs replace.</summary>
-    public bool IsPaging => LoadingMore;
 
     /// <summary>Whether a row is selected — gates the modal's View/Reply/Delete/Hilight actions.</summary>
     public bool HasSelection => TrySelected(out _);
@@ -117,7 +113,7 @@ internal sealed class PostListPane : UIPanel
         return (index >= 0) && (index < Entries.Count);
     }
 
-    private static void BindRow(PostRowView row, VirtualRow<MailEntry> slot)
+    private void BindRow(PostRowView row, VirtualRow<MailEntry> slot)
     {
         if (slot.Kind != VirtualRowKind.Item)
         {
@@ -126,7 +122,9 @@ internal sealed class PostListPane : UIPanel
             return;
         }
 
-        row.Bind(slot.Item, slot.Selected);
+        //the yellow highlight is a bulletin-board affordance (GM "Hilight"); the legacy mail list ignored the flag
+        //even though the server sets it, so mail rows stay plain.
+        row.Bind(slot.Item, slot.Selected, !IsMail);
     }
 
     /// <summary>Replaces the list with a board's first page.</summary>
@@ -134,7 +132,8 @@ internal sealed class PostListPane : UIPanel
     {
         BoardId = boardId;
         IsMail = isMail;
-        Entries = entries;
+        //copy: the pane mutates this list (append/remove), and the caller's may be ViewModel-owned.
+        Entries = [..entries];
         HeaderLabel.Text = header;
 
         //a full first page means the server may have older posts behind it.
@@ -174,6 +173,13 @@ internal sealed class PostListPane : UIPanel
 
     /// <summary>Clears the in-flight paging flag without appending (a reply that arrived after the user left).</summary>
     public void CancelPaging() => LoadingMore = false;
+
+    /// <summary>
+    ///     Whether a page request for <paramref name="boardId" /> is in flight. Qualified by board so an in-flight
+    ///     request on one board can never claim another board's reply — the legacy panels got this from having a
+    ///     separate flag per family.
+    /// </summary>
+    public bool IsPagingFor(ushort boardId) => LoadingMore && (BoardId == boardId);
 
     private void MaybeRequestOlder()
     {
@@ -225,24 +231,7 @@ internal sealed class PostListPane : UIPanel
     }
 
     /// <summary>Moves the selection by <paramref name="delta" /> rows, keeping it on screen.</summary>
-    public void MoveSelection(int delta)
-    {
-        if (Entries.Count == 0)
-            return;
-
-        var current = ListView.SelectedIndex;
-
-        var next = current < 0
-            ? delta > 0 ? 0 : Entries.Count - 1
-            : Math.Clamp(current + delta, 0, Entries.Count - 1);
-
-        ListView.SetSelectedIndex(next);
-
-        //driving the selection to the last row scrolls to the bottom, which re-arms paging through ReachedEnd —
-        //so keyboard navigation and the wheel share one trigger.
-        ListView.EnsureVisible(next);
-        SelectionChanged?.Invoke();
-    }
+    public void MoveSelection(int delta) => ListView.MoveSelection(delta);
 
     /// <summary>
     ///     One post row: id, author, date and subject as separate labels at fixed pixel columns. Highlighted posts
@@ -310,7 +299,7 @@ internal sealed class PostListPane : UIPanel
             BackgroundColor = null;
         }
 
-        public void Bind(MailEntry entry, bool selected)
+        public void Bind(MailEntry entry, bool selected, bool allowHighlight)
         {
             IdLabel.Text = entry.PostId.ToString();
             AuthorLabel.Text = entry.Author;
@@ -319,7 +308,7 @@ internal sealed class PostListPane : UIPanel
 
             var color = selected
                 ? DialogPalette.SelectedText
-                : entry.IsHighlighted
+                : allowHighlight && entry.IsHighlighted
                     ? Color.Yellow
                     : TextColors.Default;
 

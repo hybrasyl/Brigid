@@ -37,8 +37,7 @@ internal sealed class CastableDetailsPane : UIPanel
     private readonly UILabel PreReq1;
     private readonly UILabel PreReq2;
     private readonly UILabel SpellState;
-    private readonly ScrollView DescriptionScroll;
-    private readonly UILabel Description;
+    private readonly SelectableTextView Description;
 
     private byte BoundSlot;
     private bool BoundIsSpell;
@@ -82,31 +81,8 @@ internal sealed class CastableDetailsPane : UIPanel
 
         var descTop = statY + 4 * ROW_H + ROW_GAP * 3;
 
-        DescriptionScroll = new ScrollView
-        {
-            X = 0,
-            Y = descTop,
-            Width = pane.Width,
-            Height = pane.Height - descTop
-        };
-
-        Description = new UILabel
-        {
-            X = 0,
-            Y = 0,
-            Width = DescriptionScroll.ContentWidth,
-            Height = DescriptionScroll.ContentHeight,
-            PaddingLeft = 0,
-            PaddingRight = 2,
-            PaddingTop = 0,
-            WordWrap = true,
-            ForegroundColor = TextColors.Default,
-            IsSelectable = true
-        };
-
-        DescriptionScroll.AddChild(Description);
-        DescriptionScroll.SetSource(new LabelScrollSource(Description));
-        AddChild(DescriptionScroll);
+        Description = new SelectableTextView(new Rectangle(0, descTop, pane.Width, pane.Height - descTop));
+        AddChild(Description);
     }
 
     private UILabel AddRow(int x, int y, int width)
@@ -170,7 +146,7 @@ internal sealed class CastableDetailsPane : UIPanel
             foreach (var label in Stats)
                 label.Text = string.Empty;
 
-            SetDescription("No metadata available for this ability.", DialogPalette.DisabledText);
+            Description.SetText("No metadata available for this ability.", DialogPalette.DisabledText);
 
             return;
         }
@@ -200,7 +176,7 @@ internal sealed class CastableDetailsPane : UIPanel
         BindPreReq(PreReq1, entry.PreReq1Name, entry.PreReq1Level);
         BindPreReq(PreReq2, entry.PreReq2Name, entry.PreReq2Level);
 
-        SetDescription(entry.Description, TextColors.Default);
+        Description.SetText(entry.Description, TextColors.Default);
     }
 
     /// <summary>Drops the icon reference when the popup closes, mirroring the legacy popup's Hide.</summary>
@@ -211,7 +187,7 @@ internal sealed class CastableDetailsPane : UIPanel
     ///     the top control, so keyboard events stop there instead of descending — the same forwarding the board
     ///     read panels do for their body label.
     /// </summary>
-    public void ForwardKey(KeyDownEvent e) => Description.OnKeyDown(e);
+    public void ForwardKey(KeyDownEvent e) => Description.ForwardKey(e);
 
     /// <summary>
     ///     The cooldown line is a ticking value, so it is re-read every frame the tab is on screen rather than
@@ -232,14 +208,6 @@ internal sealed class CastableDetailsPane : UIPanel
             : WorldState.SkillBook.GetCooldownRemainingMs(BoundSlot);
 
         Live.Text = $"Slot {BoundSlot} — {(remainingMs > 0 ? $"cooldown {remainingMs / 1000f:0.0}s" : "ready")}";
-    }
-
-    private void SetDescription(string text, Color color)
-    {
-        Description.Text = text;
-        Description.ForegroundColor = color;
-        DescriptionScroll.Sync();
-        DescriptionScroll.ScrollToStart();
     }
 
     private void BindStat(int index, byte required, int? current)
