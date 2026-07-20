@@ -139,24 +139,6 @@ public abstract class CenteredModalPanel : UIPanel
 
     protected void SetTitle(string title) => TitleLabel.Text = title;
 
-    /// <summary>
-    ///     Re-heights the panel and re-centers it, keeping the bottom action bar pinned to the new bottom. For a
-    ///     modal whose views have genuinely different vertical needs, so it doesn't have to size every view to the
-    ///     tallest one. Width is fixed at construction — only the height varies.
-    /// </summary>
-    protected void SetPanelHeight(int height)
-    {
-        if (Height == height)
-            return;
-
-        Height = height;
-
-        foreach (var button in BottomBarButtons)
-            button.Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2;
-
-        CenterInViewport();
-    }
-
     /// <summary>Re-centers the panel within an arbitrary viewport rect (typically the HUD's play area).</summary>
     public void SetViewportBounds(Rectangle viewport)
     {

@@ -22,19 +22,17 @@ namespace Brigid.Controls.World.Popups;
 ///         (<see cref="WorldState.AbilityMetadata" />), colour-coded against the player's live stats, plus live
 ///         slot state — see <see cref="CastableDetailsPane" />.</item>
 ///     </list>
-///     Each tab sets its own panel height, because their vertical needs genuinely differ: Lines shows six chant
-///     rows and scrolls past that (nine is the ceiling — Dark Ages' cap, and Hybrasyl uses at most four), while
-///     Details needs room for a description Hybrasyl pads out to ten lines. That is still not the legacy popup's
-///     per-line-count juggling: the height depends on the view, not on how many lines the castable happens to
-///     have, so opening the same tab always looks the same.
+///     The panel is one fixed size for both tabs, so switching never resizes it: six chant rows on Lines (nine is
+///     the ceiling — Dark Ages' cap, and Hybrasyl uses at most four; past six it scrolls), and on Details the
+///     metadata rows plus a description window that scrolls through the ten lines Hybrasyl pads it out to. That
+///     also drops the legacy popup's per-line-count height juggling and its tiled <c>MidImage</c> strip.
 /// </summary>
 public sealed class CastablePopupControl : CenteredModalPanel
 {
     private const int PANEL_W = 320;
 
-    //one height per tab: enough for VISIBLE_LINES chant rows, and enough for a readable description.
-    private const int LINES_PANEL_H = 209;
-    private const int DETAILS_PANEL_H = 264;
+    //sized to hold VISIBLE_LINES chant rows and, on the other tab, the metadata rows plus a description window.
+    private const int PANEL_H = 220;
 
     private const int TAB_W = 72;
     private const int TAB_H = 20;
@@ -83,23 +81,18 @@ public sealed class CastablePopupControl : CenteredModalPanel
     public event ChantSetHandler? OnChantSet;
 
     public CastablePopupControl()
-        : base("Castable", PANEL_W, DETAILS_PANEL_H)
+        : base("Castable", PANEL_W, PANEL_H)
     {
         Name = "CastablePopup";
 
         var content = ContentBounds;
-
-        //each pane is built at its own tab's height; SelectTab re-heights the panel to match.
-        var paneTop = content.Y + TAB_H + TAB_TO_PANE;
-        var paneWidth = content.Width;
-        var linesPane = new Rectangle(content.X, paneTop, paneWidth, LINES_PANEL_H - BOTTOM_H - paneTop);
-        var detailsPane = new Rectangle(content.X, paneTop, paneWidth, DETAILS_PANEL_H - BOTTOM_H - paneTop);
+        var pane = new Rectangle(content.X, content.Y + TAB_H + TAB_TO_PANE, content.Width, content.Height - TAB_H - TAB_TO_PANE);
 
         Tabs = BuildTabRow(content);
         SaveButton = AddBottomBarButton("Save", SAVE_W, Confirm);
 
-        BuildLinesPane(linesPane);
-        Details = BuildDetailsPane(detailsPane);
+        BuildLinesPane(pane);
+        Details = BuildDetailsPane(pane);
 
         SelectTab(CastableTab.Lines);
     }
@@ -206,7 +199,6 @@ public sealed class CastablePopupControl : CenteredModalPanel
     {
         Active = tab;
         Tabs.SetSelected((int)tab);
-        SetPanelHeight(tab == CastableTab.Lines ? LINES_PANEL_H : DETAILS_PANEL_H);
 
         for (var i = 0; i < TAB_COUNT; i++)
             TabPanes[i].Visible = i == (int)tab;
@@ -249,7 +241,7 @@ public sealed class CastablePopupControl : CenteredModalPanel
         LineScrollBar.Visible = LineCount > VISIBLE_LINES;
         LayoutLines();
 
-        Details.Bind(slot, name, level, icon, isSpell);
+        Details.Bind(name, level, icon, isSpell);
         SelectTab(CastableTab.Lines);
         base.Show();
     }

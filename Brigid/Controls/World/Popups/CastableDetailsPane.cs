@@ -13,10 +13,9 @@ namespace Brigid.Controls.World.Popups;
 
 /// <summary>
 ///     The <see cref="CastablePopupControl" /> Details tab: icon + name/level header, the SClass metadata
-///     requirement rows (level/ability/master, the five stats, up to two prerequisites), a live slot-state line,
-///     and the description. Every requirement is coloured through <see cref="AbilityRequirements" />, so it reads
-///     identically to the status-book detail popup. A castable with no metadata (server-only, or a class with no
-///     meta file) still renders the live-state section.
+///     requirement rows (level/ability/master, the five stats, up to two prerequisites), and the description.
+///     Every requirement is coloured through <see cref="AbilityRequirements" />, so it reads identically to the
+///     status-book detail popup.
 ///     <para>
 ///         Rows below the stat strip are stacked at bind time and skipped when empty, and the description takes
 ///         whatever height is left. It is rendered verbatim and scrolls: the prose itself is short, but Hybrasyl
@@ -29,7 +28,7 @@ internal sealed class CastableDetailsPane : UIPanel
     private const int ROW_H = 14;
     private const int ROW_GAP = 2;
     private const int ICON_TO_TEXT = 8;
-    private const int HEADER_ROWS = 3;
+    private const int HEADER_ROWS = 2;
     private const int STAT_COUNT = 5;
 
     private static readonly string[] StatNames = ["Str", "Int", "Wis", "Con", "Dex"];
@@ -37,15 +36,11 @@ internal sealed class CastableDetailsPane : UIPanel
     private readonly UIImage Icon;
     private readonly UILabel Header;
     private readonly UILabel Requirement;
-    private readonly UILabel Live;
     private readonly UILabel[] Stats = new UILabel[STAT_COUNT];
     private readonly UILabel PreReq1;
     private readonly UILabel PreReq2;
-    private readonly UILabel SpellState;
     private readonly SelectableTextView Description;
 
-    private byte BoundSlot;
-    private bool BoundIsSpell;
     private bool HasDescription;
 
     //bottom of the fixed header block (icon + its rows, then the stat strip) — where the flowed rows start.
@@ -76,7 +71,6 @@ internal sealed class CastableDetailsPane : UIPanel
 
         Header = AddRow(textX, 0, textW);
         Requirement = AddRow(textX, ROW_H, textW);
-        Live = AddRow(textX, 2 * ROW_H, textW);
 
         //clear both the icon and the three header rows beside it, whichever is taller.
         var statY = Math.Max(ICON_SIZE, HEADER_ROWS * ROW_H) + ROW_GAP;
@@ -87,13 +81,12 @@ internal sealed class CastableDetailsPane : UIPanel
         for (var i = 0; i < STAT_COUNT; i++)
             Stats[i] = AddRow(i * statW, statY, statW);
 
-        //Y is assigned by Reflow at bind time: a castable with one prerequisite, or a skill (no spell row),
-        //should not leave a gap where the row it doesn't have would have been.
+        //Y is assigned by Reflow at bind time: a castable with one prerequisite should not leave a gap where the
+        //second would have been.
         PreReq1 = AddRow(0, 0, pane.Width);
         PreReq2 = AddRow(0, 0, pane.Width);
-        SpellState = AddRow(0, 0, pane.Width);
 
-        FlowedRows = [PreReq1, PreReq2, SpellState];
+        FlowedRows = [PreReq1, PreReq2];
         StatsBottom = statY + ROW_H + ROW_GAP;
 
         Description = new SelectableTextView(new Rectangle(0, StatsBottom, pane.Width, pane.Height - StatsBottom));
@@ -154,17 +147,13 @@ internal sealed class CastableDetailsPane : UIPanel
         return label;
     }
 
-    /// <summary>Populates the tab for a castable slot. Safe to call whether or not metadata exists for it.</summary>
+    /// <summary>Populates the tab for a castable. Safe to call whether or not metadata exists for it.</summary>
     public void Bind(
-        byte slot,
         string name,
         string level,
         Texture2D? icon,
         bool isSpell)
     {
-        BoundSlot = slot;
-        BoundIsSpell = isSpell;
-
         AbilityMetadataEntry? entry = null;
         WorldState.AbilityMetadata?.TryGet(name, isSpell, out entry);
 
@@ -182,8 +171,6 @@ internal sealed class CastableDetailsPane : UIPanel
         }
 
         Header.Text = string.IsNullOrEmpty(level) ? name : $"{name}  (Lev {level})";
-        SpellState.Text = isSpell ? FormatSpellState(slot) : string.Empty;
-        RefreshLiveState();
 
         if (entry is null)
         {
@@ -244,27 +231,6 @@ internal sealed class CastableDetailsPane : UIPanel
     /// </summary>
     public void ForwardKey(KeyDownEvent e) => Description.ForwardKey(e);
 
-    /// <summary>
-    ///     The cooldown line is a ticking value, so it is re-read every frame the tab is on screen rather than
-    ///     frozen at bind time.
-    /// </summary>
-    public override void Update(GameTime gameTime)
-    {
-        base.Update(gameTime);
-
-        if (Visible)
-            RefreshLiveState();
-    }
-
-    private void RefreshLiveState()
-    {
-        var remainingMs = BoundIsSpell
-            ? WorldState.SpellBook.GetCooldownRemainingMs(BoundSlot)
-            : WorldState.SkillBook.GetCooldownRemainingMs(BoundSlot);
-
-        Live.Text = $"Slot {BoundSlot} — {(remainingMs > 0 ? $"cooldown {remainingMs / 1000f:0.0}s" : "ready")}";
-    }
-
     private void BindStat(int index, byte required, int? current)
     {
         var label = Stats[index];
@@ -285,15 +251,4 @@ internal sealed class CastableDetailsPane : UIPanel
         label.ForegroundColor = AbilityRequirements.RequirementColor(AbilityRequirements.HasPreRequisite(name, level));
     }
 
-    private static string FormatSpellState(byte slot)
-    {
-        ref readonly var data = ref WorldState.SpellBook.GetSlot(slot);
-
-        if (!data.IsOccupied)
-            return string.Empty;
-
-        var text = $"{data.SpellType} — {data.CastLines} cast line{(data.CastLines == 1 ? string.Empty : "s")}";
-
-        return string.IsNullOrEmpty(data.Prompt) ? text : $"{text} — \"{data.Prompt}\"";
-    }
 }
