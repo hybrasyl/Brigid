@@ -212,6 +212,38 @@ _nmoney.txt
     _nmoney.epf/.spf     — Anchor background
     _nbtn.epf/.spf       — OK/Cancel button frames
 
+_nbdlist.txt
+  Class:    (retired) — replaced by BoardsModalControl's BoardIndexPane
+  File:     Controls/World/Popups/Boards/BoardIndexPane.cs (primitive, no prefab)
+  Purpose:  Board selection list — scrollable board names, View/Quit
+  Images referenced by controls:
+    _nbdlist.epf/.spf    — Anchor background
+    _nbtn.epf/.spf       — Action button frames
+
+_narlist.txt
+  Class:    (retired) — replaced by BoardsModalControl's PostListPane
+  File:     Controls/World/Popups/Boards/PostListPane.cs (primitive, no prefab)
+  Purpose:  Bulletin board post list — scrollable rows (id/author/date/subject), View/New/Delete/Hilight/Up/Close
+  Images referenced by controls:
+    _narlist.epf/.spf    — Anchor background
+    _nbtn.epf/.spf       — Action button frames
+
+_narti.txt
+  Class:    (retired) — replaced by BoardsModalControl's PostReadPane
+  File:     Controls/World/Popups/Boards/PostReadPane.cs (primitive, no prefab)
+  Purpose:  Bulletin board post read view — word-wrapped body, author/title/date, Prev/Next/New/Delete/Up/Close
+  Images referenced by controls:
+    _narti.epf/.spf      — Anchor background
+    _nbtn.epf/.spf       — Action button frames
+
+_nartin.txt
+  Class:    (retired) — replaced by BoardsModalControl's PostComposePane
+  File:     Controls/World/Popups/Boards/PostComposePane.cs (primitive, no prefab)
+  Purpose:  Bulletin board compose — subject field, multi-line body, Send/Cancel
+  Images referenced by controls:
+    _nartin.epf/.spf     — Anchor background
+    _nbtn.epf/.spf       — Send/Cancel button frames
+
 _nmaill.txt
   Class:    (retired) — replaced by BoardsModalControl's PostListPane
   File:     Controls/World/Popups/Boards/PostListPane.cs (primitive, no prefab)
@@ -606,11 +638,12 @@ msg.tbl
 # SECTION 5: SUMMARY — QUICK REFERENCE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Control .txt files:        34 total
+# Control .txt files:        38 total (8 retired — see the (retired) markers in Section 2)
 #   Login flow:              _nstart, _nlogin, _nsvr, _ncreate, _nagree, _npw
 #   Main HUD:                _nbk_s, _nstatus
 #   Self-profile tabs:       _nui, _nui_eq, _nui_sk, _nui_dr, _nui_ev, _nui_al, _nui_fm
-#   Popups/dialogs:          _nexch, _nmoney, _nmaill, _nmailr, _nmails, _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, lssbook, _nhotkem, _nhotkey
+#   Popups/dialogs:          _nexch, _nmoney, _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, _nhotkem, _nhotkey
+#   Retired (primitive now): _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook
 #   Options/settings:        _noptdlg, _nmacro, _nsett, _nfriend
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm

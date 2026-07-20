@@ -145,6 +145,7 @@ Brigid/
 ├── Screens/                  — IScreen, ScreenManager, LobbyLoginScreen, WorldScreen (7 partial files)
 ├── Rendering/                — EntityOverlayManager, WorldDebugRenderer
 ├── Controls/                 — Full UI control hierarchy (see UI Control System below)
+│   └── Scrolling/            — ScrollModel, IScrollSource, ScrollView, ScrollBarBinder, VirtualizedListView, SelectableTextView, LabelScrollSource, TextBoxScrollSync
 ├── Definitions/              — Delegates, Enums, DoorTable, InputEvents, TextColors
 ├── Extensions/               — DirectionExtensions, RectangleExtensions, UIElementExtensions
 └── Utilities/                — Clipboard, DialogFrame, SlideAnimator
@@ -177,7 +178,7 @@ Brigid/
 
 **Self Profile (`Popups/Profile/`):** SelfProfileTabControl with Equipment/Legend/AbilityMetadata/Events/Family/Blank tabs, SelfProfileTextEditorControl, AbilityMetadataDetailsControl/AbilityMetadataEntryControl, EventMetadataDetailsControl/EventMetadataEntryControl, LegendMarkControl. **Other Profile:** OtherProfileTabControl (Equipment via _nui_eqa + Legend tabs), OtherProfileEquipmentTab. (Legend tab reuses `SelfProfileLegendTab`.)
 
-**Options (`Popups/Options/`):** MainOptionsControl, MacrosListControl, SettingsControl, FriendsListControl.
+**Options (`Popups/Options/`):** OptionsModalControl (tabbed Settings|Macros|Friends|Keybinds modal), KeybindsTabControl, KeybindCaptureControl, PauseMenuControl.
 
 **Popups (`Popups/`):** AislingContextMenu, GoldAmountControl, ItemAmountControl, CastablePopupControl (+CastableDetailsPane), GroupRecruitPanel, GroupTab/GroupTabControl, HotkeyHelpControl, ItemTooltipControl, NotepadControl, SocialStatusControl, TownMapControl. Subdirectories: `Boards/` (BoardsModalControl + BoardIndexPane/PostListPane/PostReadPane/PostComposePane), `Dialog/` (NpcSessionControl, FramedDialogPanelBase, DialogAlphaGradient, BankShopPanel, DialogTextEntryPanel, DialogProtectedTextEntryPanel, MenuTextEntryPanel, DialogOptionPanel, MenuListPanel), `Exchange/` (ExchangeControl/ExchangeItemControl), `WorldList/` (WorldListControl/WorldListEntryControl).
 
@@ -235,7 +236,7 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - **Adding a handler:** write `private void HandleXxx(IServerPacket p)` in `ConnectionManager` (cast to the concrete `Server.XxxPacket` from `DALib.Networking.Packets.Server`), register it in `IndexHandlers()` as `PacketHandlers[(byte)ServerOpcode.Xxx] = HandleXxx`, then raise an event on the manager for `WorldScreen` to subscribe to.
 
 ### UI Patterns
-- All UI panels derive from `PrefabPanel` (for prefab-based layouts) or `UIPanel` (for manual layouts)
+- UI panels derive from `PrefabPanel` (legacy prefab-art layouts), `CenteredModalPanel` (from-scratch/asset-free modals -- the direction new panels go), or `UIPanel` (manual layouts)
 - `PrefabPanel` provides `CreateButton`/`CreateImage`/`CreateLabel`/`CreateTextBox`/`CreateProgressBar` to selectively create controls from prefab data. Panels explicitly create only the controls they need (no auto-populate).
 - Popup panels use `Show()`/`Hide()` for visibility and are children of the WorldScreen Root panel
 - HUD has two implementations behind `IWorldHud`: `WorldHudControl` (classic compact) and `LargeWorldHudControl` (expanded)

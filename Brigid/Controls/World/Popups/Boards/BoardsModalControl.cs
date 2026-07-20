@@ -1,7 +1,9 @@
 #region
+using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Models;
+using Brigid.Systems.Keybinds;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -34,6 +36,9 @@ public sealed class BoardsModalControl : CenteredModalPanel
         Read,
         Compose
     }
+
+    /// <summary>The mailbox's board id. Fixed by the protocol: board 0 is always the player's own mail.</summary>
+    public const ushort MAIL_BOARD_ID = 0;
 
     private const int PANEL_W = 520;
     private const int PANEL_H = 340;
@@ -82,13 +87,12 @@ public sealed class BoardsModalControl : CenteredModalPanel
     //can step back without reaching into WorldState.
     private List<(ushort BoardId, string Name)> IndexBoards = [];
     private bool OpenedFromIndex;
+    private bool PendingIndexOpen;
 
     // ── events (the host turns each into a packet) ──
 
     public event ViewBoardHandler? BoardSelected;
     public event ViewPostHandler? PostSelected;
-    public event NewPostHandler? NewRequested;
-    public event ReplyPostHandler? ReplyRequested;
     public event DeletePostHandler? DeleteRequested;
     public event HighlightPostHandler? HighlightRequested;
     public event LoadMorePostsHandler? LoadMoreRequested;
@@ -128,12 +132,8 @@ public sealed class BoardsModalControl : CenteredModalPanel
     /// <summary>Whether the post list is on screen and showing <paramref name="boardId" />'s posts.</summary>
     public bool IsListing(ushort boardId) => Visible && (View == BoardView.List) && (ListPane.BoardId == boardId);
 
-    /// <summary>
-    ///     The mailbox's board id, once the server has shown it at least once. The protocol has no "open my mail"
-    ///     request — the mailbox is an entry in the board list — so the Mail tab can only jump straight there after
-    ///     it has been seen; until then the host falls back to requesting the board list.
-    /// </summary>
-    public ushort? KnownMailBoardId { get; private set; }
+    /// <summary>Whether the modal is idling on the board index — nothing a late reply could interrupt.</summary>
+    public bool IsOnBoardIndex => View == BoardView.Index;
 
     public BoardsModalControl()
         : base("Boards", PANEL_W, PANEL_H)
@@ -147,9 +147,11 @@ public sealed class BoardsModalControl : CenteredModalPanel
 
         IndexPane = new BoardIndexPane(pane);
 
+        //armed here, consumed by the matching ShowPostList reply — so a board the server pushes later doesn't
+        //inherit "you got here from the index" and offer Up back into a stale one.
         IndexPane.BoardActivated += id =>
         {
-            OpenedFromIndex = true;
+            PendingIndexOpen = true;
             BoardSelected?.Invoke(id);
         };
 
@@ -176,8 +178,11 @@ public sealed class BoardsModalControl : CenteredModalPanel
         PrevButton = AddBottomBarButton("Prev", ACTION_W, () => StepRequested?.Invoke(ReadPane.CurrentPostId, false));
         HighlightButton = AddBottomBarButton("Hilight", ACTION_W, RaiseHighlight);
         DeleteButton = AddBottomBarButton("Delete", ACTION_W, RaiseDelete);
-        ReplyButton = AddBottomBarButton("Reply", ACTION_W, RaiseReply);
-        NewButton = AddBottomBarButton("New", ACTION_W, () => NewRequested?.Invoke());
+        ReplyButton = AddBottomBarButton("Reply", ACTION_W, () => ShowCompose(CurrentAuthor));
+
+        //composing is a pure view transition, so it stays here: only the modal knows whether the party row should
+        //be an editable recipient (new mail) or the read-only author display (a board post).
+        NewButton = AddBottomBarButton("New", ACTION_W, () => ShowCompose(IsMail ? null : WorldState.PlayerName));
         ViewButton = AddBottomBarButton("View", ACTION_W, ActivateSelection);
 
         SetView(BoardView.Index);
@@ -294,21 +299,21 @@ public sealed class BoardsModalControl : CenteredModalPanel
     /// <summary>Shows a board's (or the mailbox's) first page of posts.</summary>
     public void ShowPostList(
         ushort boardId,
-        string boardName,
+        string? boardName,
         List<MailEntry> posts,
         bool isMail,
         bool allowHighlight)
     {
         IsMail = isMail;
         ActiveBoardId = boardId;
+        OpenedFromIndex = PendingIndexOpen;
+        PendingIndexOpen = false;
         AllowHighlight = allowHighlight && !isMail;
 
-        if (isMail)
-            KnownMailBoardId = boardId;
-        ListTitle = isMail ? "Mail" : boardName;
+        ListTitle = isMail ? "Mail" : boardName ?? "Board";
 
         SetActiveTab(isMail);
-        ListPane.SetPosts(boardId, posts, isMail, boardName);
+        ListPane.SetPosts(boardId, posts, isMail, ListTitle);
         SetView(BoardView.List);
         Show();
     }
@@ -369,11 +374,25 @@ public sealed class BoardsModalControl : CenteredModalPanel
     {
         ListPane.CancelPaging();
         ComposePane.ClearFocus();
+
+        //closing the modal ends the board session, which is where the legacy board-list flag was cleared —
+        //otherwise a later signpost-pushed board would still offer Up back into a stale index.
+        OpenedFromIndex = false;
+        PendingIndexOpen = false;
         base.Hide();
     }
 
-    /// <summary>Removes a post from the list after the server confirms a delete.</summary>
-    public void RemovePost(short postId) => ListPane.RemoveEntry(postId);
+    /// <summary>
+    ///     Removes a post from the list after the server confirms a delete. A delete confirmed while reading that
+    ///     post steps back to the list, so the modal is never left showing a post that no longer exists.
+    /// </summary>
+    public void RemovePost(short postId)
+    {
+        ListPane.RemoveEntry(postId);
+
+        if ((View == BoardView.Read) && (ReadPane.CurrentPostId == postId))
+            ReturnToList();
+    }
 
     /// <summary>Flips a post's highlighted flag after the server confirms.</summary>
     public void ToggleHighlight(short postId) => ListPane.ToggleHighlight(postId);
@@ -403,12 +422,6 @@ public sealed class BoardsModalControl : CenteredModalPanel
             DeleteRequested?.Invoke(postId);
     }
 
-    private void RaiseReply()
-    {
-        if (TargetPostId is { } postId)
-            ReplyRequested?.Invoke(postId);
-    }
-
     private void RaiseHighlight()
     {
         if (ListPane.SelectedPostId is { } postId)
@@ -433,7 +446,7 @@ public sealed class BoardsModalControl : CenteredModalPanel
         {
             case BoardView.Read:
             case BoardView.Compose:
-                SetView(BoardView.List);
+                ReturnToList();
 
                 break;
 
@@ -456,10 +469,44 @@ public sealed class BoardsModalControl : CenteredModalPanel
         }
     }
 
+    /// <summary>
+    ///     Steps back to the post list — but only when the list is actually showing this board. A post pushed by
+    ///     the server for a different board (signpost, mail notification) leaves the list holding someone else's
+    ///     rows, and showing those under the active board's id would target every action at the wrong board.
+    /// </summary>
+    private void ReturnToList()
+    {
+        if (ListPane.BoardId == ActiveBoardId)
+        {
+            SetView(BoardView.List);
+
+            return;
+        }
+
+        if (OpenedFromIndex && (IndexBoards.Count > 0))
+        {
+            IsMail = false;
+            SetActiveTab(false);
+            IndexPane.SetBoards(IndexBoards);
+            SetView(BoardView.Index);
+        } else
+            SessionEndRequested?.Invoke();
+    }
+
     // ── input ──
 
     public override void OnKeyDown(KeyDownEvent e)
     {
+        //the modal swallows every key it doesn't use, so the world hotkey can't reach the screen — honour the
+        //board toggle here so W still closes the board UI the way it always has.
+        if (Keybinds.Matches(e, CommandId.World_ToggleBoard))
+        {
+            Hide();
+            e.Handled = true;
+
+            return;
+        }
+
         switch (View)
         {
             case BoardView.Index:

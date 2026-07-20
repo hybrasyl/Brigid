@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
+using Brigid.Controls.World.Popups.Boards;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Extensions;
@@ -395,7 +396,16 @@ public sealed partial class WorldScreen
         }
     }
 
-    private void HideAllBoardControls() => BoardsModal.Hide();
+    private void HideAllBoardControls()
+    {
+        BoardsModal.Hide();
+
+        //a confirm popup can outlive the session that armed it (closing the board UI while it is up). Drop the
+        //pending actions so an OK afterwards can't send a delete against a closed session.
+        PendingDeleteAction = null;
+        PendingBoardSuccessAction = null;
+        DeleteConfirm.Hide();
+    }
 
     /// <summary>
     ///     UIPanel subclass that delegates root-level input events back to WorldScreen.
@@ -418,25 +428,28 @@ public sealed partial class WorldScreen
 
     private void WireBoardsModal()
     {
-        //tab click -> ask the server for that family. The protocol has no "open my mail" request — the mailbox is
-        //an entry in the board list — so Mail can only jump straight there once its board id has been seen.
+        //tab click -> ask the server for that family. Board 0 is the player's mailbox (0x3B: "Target mailbox
+        //(always 0 for player mail)"), so Mail is a direct request rather than a trip through the board list.
         BoardsModal.TabRequested += isMail =>
         {
-            if (isMail && (BoardsModal.KnownMailBoardId is { } mailBoardId))
+            if (!isMail)
             {
-                WorldState.Board.IsBoardListPending = true;
-                Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, mailBoardId, startPostId: short.MaxValue);
+                Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
 
                 return;
             }
 
-            Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
+            WorldState.Board.IsBoardListPending = true;
+
+            Game.Connection.SendBoardInteraction(
+                BoardRequestType.ViewBoard,
+                BoardsModalControl.MAIL_BOARD_ID,
+                startPostId: short.MaxValue);
         };
 
         BoardsModal.BoardSelected += boardId =>
         {
             WorldState.Board.IsBoardListPending = true;
-            WorldState.Board.WasOpenedFromBoardList = true;
             Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, boardId, startPostId: short.MaxValue);
         };
 
@@ -459,9 +472,6 @@ public sealed partial class WorldScreen
                 target,
                 controls: forward ? BoardControls.NextPage : BoardControls.PreviousPage);
         };
-
-        BoardsModal.NewRequested += () => BoardsModal.ShowCompose(WorldHud.PlayerName);
-        BoardsModal.ReplyRequested += _ => BoardsModal.ShowCompose(BoardsModal.CurrentAuthor);
 
         BoardsModal.DeleteRequested += postId =>
         {

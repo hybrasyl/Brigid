@@ -620,7 +620,7 @@ public sealed partial class WorldScreen
         //reply to a scroll-paging request: the modal tracks whether this board asked for a page. append only while
         //that board's list is still open; if the user left before the reply arrived, fall through and treat it as a
         //fresh open rather than dropping it.
-        if (BoardsModal.IsPagingFor(board.BoardId) && BoardsModal.IsListing(board.BoardId))
+        if (BoardsModal.IsListing(board.BoardId) && BoardsModal.IsPagingFor(board.BoardId))
         {
             BoardsModal.AppendPosts(posts);
 
@@ -629,6 +629,12 @@ public sealed partial class WorldScreen
 
         BoardsModal.CancelPaging();
 
+        //a page requested from a list the user has since left arrives with nothing to append to. Replacing the
+        //list would yank them out of a half-written post, so only take over a modal that is closed or idling on
+        //the board index; otherwise drop the straggler.
+        if (BoardsModal.Visible && !BoardsModal.IsOnBoardIndex && !BoardsModal.IsListing(board.BoardId))
+            return;
+
         //fresh open (or server-pushed board, e.g. signpost click): replace the list. ensure the session is open first —
         //the server can send board data directly without going through the board list.
         if (!board.IsSessionOpen)
@@ -636,21 +642,10 @@ public sealed partial class WorldScreen
 
         BoardsModal.ShowPostList(
             board.BoardId,
-            BoardName(board.BoardId),
+            board.GetBoardName(board.BoardId),
             posts,
             !board.IsPublicBoard,
             IsGameMaster);
-    }
-
-    //the board list is the only place a board's name is carried; the post-list reply has just the id.
-    private static string BoardName(ushort boardId)
-    {
-        if (WorldState.Board.AvailableBoards is { } boards)
-            foreach (var entry in boards)
-                if (entry.BoardId == boardId)
-                    return entry.Name;
-
-        return "Board";
     }
 
     private void HandleBoardPostViewed()

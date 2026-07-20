@@ -369,19 +369,9 @@ public delegate void ClosedHandler();
 public delegate void DeletePostHandler(short postId);
 
 /// <summary>
-///     A new post was requested.
-/// </summary>
-public delegate void NewPostHandler();
-
-/// <summary>
 ///     Navigate to the next item.
 /// </summary>
 public delegate void NextHandler();
-
-/// <summary>
-///     Navigate to the previous item.
-/// </summary>
-public delegate void PrevHandler();
 
 /// <summary>
 ///     Navigate up one level.
@@ -408,30 +398,6 @@ public delegate void ViewPostHandler(short postId);
 /// </summary>
 public delegate void ViewBoardHandler(ushort boardId);
 
-/// <summary>
-///     An article was sent (subject + body).
-/// </summary>
-public delegate void ArticleSendHandler(string subject, string body);
-
-/// <summary>
-///     A new mail was requested.
-/// </summary>
-public delegate void NewMailHandler();
-
-/// <summary>
-///     A reply to a post was requested.
-/// </summary>
-public delegate void ReplyPostHandler(short postId);
-
-/// <summary>
-///     A quit action was triggered.
-/// </summary>
-public delegate void QuitHandler();
-
-/// <summary>
-///     A mail was sent (recipient, subject, body).
-/// </summary>
-public delegate void MailSendHandler(string recipient, string subject, string body);
 #endregion
 
 #region Controls/World/Popups/Dialog Delegates

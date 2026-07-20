@@ -425,12 +425,16 @@ public sealed partial class WorldScreen : IScreen
         {
             ZIndex = 10
         };
+        //above the modal tier (10): both popups are centered inside the boards modal's footprint, so at a lower
+        //ZIndex they would draw under it and every click would be claimed by the modal behind them.
         DeleteConfirm = new OkPopupMessageControl(true)
         {
+            ZIndex = 11,
             Name = "DeleteConfirm"
         };
         BoardResponsePopup = new OkPopupMessageControl
         {
+            ZIndex = 11,
             Name = "BoardResponsePopup"
         };
 
