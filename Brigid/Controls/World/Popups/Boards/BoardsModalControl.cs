@@ -96,26 +96,23 @@ public sealed class BoardsModalControl : CenteredModalPanel
     public event DeletePostHandler? DeleteRequested;
     public event HighlightPostHandler? HighlightRequested;
     public event LoadMorePostsHandler? LoadMoreRequested;
-    /// <summary>
-    ///     Raised to step to the neighbouring post while reading. Parameters: the post currently shown (the
-    ///     cursor), and true for the next (older) post / false for the previous (newer) one.
-    /// </summary>
-    public event Action<short, bool>? StepRequested;
+    /// <summary>Raised to step to the neighbouring post while reading.</summary>
+    public event StepPostHandler? StepRequested;
 
     /// <summary>
-    ///     Raised when a composed post is submitted. <c>recipient</c> is null for a bulletin-board post and the
+    ///     Raised when a composed post is submitted. The recipient is null for a bulletin-board post and the
     ///     addressee for mail — one event, because there is one compose view.
     /// </summary>
-    public event Action<string?, string, string>? SubmitRequested;
+    public event SubmitPostHandler? SubmitRequested;
 
     /// <summary>Raised when Up is used from the post list without a board index to fall back to.</summary>
     public event UpHandler? SessionEndRequested;
 
     /// <summary>
-    ///     Raised when a tab is clicked; the parameter is true for Mail. The host issues the matching request, and
-    ///     the tab's selected state follows the reply rather than the click.
+    ///     Raised when a tab is clicked. The host issues the matching request, and the tab's selected state follows
+    ///     the reply rather than the click.
     /// </summary>
-    public event Action<bool>? TabRequested;
+    public event BoardTabHandler? TabRequested;
 
     // ── state the host reads back ──
 
@@ -130,10 +127,7 @@ public sealed class BoardsModalControl : CenteredModalPanel
     public bool IsPagingFor(ushort boardId) => ListPane.IsPagingFor(boardId);
 
     /// <summary>Whether the post list is on screen and showing <paramref name="boardId" />'s posts.</summary>
-    public bool IsListing(ushort boardId) => Visible && (View == BoardView.List) && (ListPane.BoardId == boardId);
-
-    /// <summary>Whether the modal is idling on the board index — nothing a late reply could interrupt.</summary>
-    public bool IsOnBoardIndex => View == BoardView.Index;
+    public bool IsListing(ushort boardId) => Visible && (View == BoardView.List) && ListPane.IsShowing(boardId);
 
     public BoardsModalControl()
         : base("Boards", PANEL_W, PANEL_H)
@@ -211,11 +205,6 @@ public sealed class BoardsModalControl : CenteredModalPanel
 
     private void SetView(BoardView view)
     {
-        //a page request only makes sense while its list is on screen; leaving strands the reply, so drop the flag
-        //rather than let it divert the next fresh open into the append branch.
-        if ((View == BoardView.List) && (view != BoardView.List))
-            ListPane.CancelPaging();
-
         View = view;
 
         IndexPane.Visible = view == BoardView.Index;
@@ -369,10 +358,8 @@ public sealed class BoardsModalControl : CenteredModalPanel
         Show();
     }
 
-    /// <summary>Clears any in-flight paging when the modal closes, so the flag can't outlive the visible list.</summary>
     public override void Hide()
     {
-        ListPane.CancelPaging();
         ComposePane.ClearFocus();
 
         //closing the modal ends the board session, which is where the legacy board-list flag was cleared —
@@ -476,7 +463,7 @@ public sealed class BoardsModalControl : CenteredModalPanel
     /// </summary>
     private void ReturnToList()
     {
-        if (ListPane.BoardId == ActiveBoardId)
+        if (ListPane.IsShowing(ActiveBoardId))
         {
             SetView(BoardView.List);
 

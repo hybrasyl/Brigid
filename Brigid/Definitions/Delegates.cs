@@ -398,6 +398,21 @@ public delegate void ViewPostHandler(short postId);
 /// </summary>
 public delegate void ViewBoardHandler(ushort boardId);
 
+/// <summary>
+///     A step to the neighbouring post while reading. <paramref name="currentPostId" /> is the cursor;
+///     <paramref name="forward" /> is true for the next (older) post, false for the previous (newer) one.
+/// </summary>
+public delegate void StepPostHandler(short currentPostId, bool forward);
+
+/// <summary>
+///     A composed post was submitted. <paramref name="recipient" /> is null for a bulletin-board post and the
+///     addressee for mail.
+/// </summary>
+public delegate void SubmitPostHandler(string? recipient, string subject, string body);
+
+/// <summary>A board/mail tab was clicked. <paramref name="isMail" /> selects which family to request.</summary>
+public delegate void BoardTabHandler(bool isMail);
+
 #endregion
 
 #region Controls/World/Popups/Dialog Delegates

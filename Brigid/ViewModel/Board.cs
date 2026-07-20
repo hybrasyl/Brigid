@@ -34,11 +34,6 @@ public sealed class Board
     public bool EnablePrevButton { get; private set; }
 
     /// <summary>
-    ///     Whether the session is waiting for a ViewBoard response. Used to gate unsolicited type 2/4 packets.
-    /// </summary>
-    public bool IsBoardListPending { get; set; }
-
-    /// <summary>
     ///     Whether the current board is a public bulletin board (vs personal mail).
     /// </summary>
     public bool IsPublicBoard { get; private set; }
@@ -76,7 +71,6 @@ public sealed class Board
             return;
 
         IsSessionOpen = false;
-        IsBoardListPending = false;
         Clear();
         SessionClosed?.Invoke();
     }
@@ -105,7 +99,6 @@ public sealed class Board
     public void OpenSession()
     {
         IsSessionOpen = true;
-        IsBoardListPending = false;
     }
 
     /// <summary>

@@ -41,6 +41,12 @@ internal sealed class PostListPane : UIPanel
     /// <summary>The board this list is showing. Mail is just the board whose id the server hands back.</summary>
     public ushort BoardId { get; private set; }
 
+    //board 0 is the mailbox, so a default-valued BoardId is indistinguishable from a real one — track the bind.
+    private bool Bound;
+
+    /// <summary>Whether this pane has been bound to <paramref name="boardId" />'s posts at least once.</summary>
+    public bool IsShowing(ushort boardId) => Bound && (BoardId == boardId);
+
     /// <summary>True when this is the player's mailbox rather than a public bulletin board.</summary>
     public bool IsMail { get; private set; }
 
@@ -131,6 +137,7 @@ internal sealed class PostListPane : UIPanel
     public void SetPosts(ushort boardId, List<MailEntry> entries, bool isMail, string header)
     {
         BoardId = boardId;
+        Bound = true;
         IsMail = isMail;
         //copy: the pane mutates this list (append/remove), and the caller's may be ViewModel-owned.
         Entries = [..entries];
@@ -179,7 +186,7 @@ internal sealed class PostListPane : UIPanel
     ///     request on one board can never claim another board's reply — the legacy panels got this from having a
     ///     separate flag per family.
     /// </summary>
-    public bool IsPagingFor(ushort boardId) => LoadingMore && (BoardId == boardId);
+    public bool IsPagingFor(ushort boardId) => LoadingMore && Bound && (BoardId == boardId);
 
     private void MaybeRequestOlder()
     {

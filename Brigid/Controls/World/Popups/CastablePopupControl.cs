@@ -245,8 +245,11 @@ public sealed class CastablePopupControl : CenteredModalPanel
             return;
         }
 
-        //Details: give the selectable description its clipboard/caret keys before the base swallows the rest.
+        //Details: the description gets its clipboard/caret keys first, then the base swallows whatever is left.
+        //Escape is the base's (it closes), so it must not reach a pane that is about to be hidden.
+        if (e.Key != Keys.Escape)
+            Details.ForwardKey(e);
+
         base.OnKeyDown(e);
-        Details.ForwardKey(e);
     }
 }

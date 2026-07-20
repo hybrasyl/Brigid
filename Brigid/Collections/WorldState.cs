@@ -758,8 +758,6 @@ public static class WorldState
                     break;
 
                 case BoardIndexPacket index:
-                    Board.IsBoardListPending = false;
-
                     var isPublic = index.ResponseType == BoardResponseType.PublicBoard;
 
                     var entries = index.Messages

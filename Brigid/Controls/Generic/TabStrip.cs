@@ -35,8 +35,6 @@ public sealed class TabStrip : UIPanel
     /// <summary>The selected tab index, or -1 when none is.</summary>
     public int SelectedIndex { get; private set; } = -1;
 
-    public int Count => Tabs.Length;
-
     /// <param name="titles">Tab labels, in order. Also fixes the tab count.</param>
     /// <param name="tabWidth">Width of one tab.</param>
     /// <param name="tabHeight">Height of one tab.</param>
@@ -82,10 +80,4 @@ public sealed class TabStrip : UIPanel
             Tabs[i].IsSelected = i == SelectedIndex;
     }
 
-    /// <summary>Retitles a tab (e.g. a count badge).</summary>
-    public void SetText(int index, string text)
-    {
-        if ((index >= 0) && (index < Tabs.Length))
-            Tabs[index].SetText(text);
-    }
 }

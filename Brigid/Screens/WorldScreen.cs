@@ -549,10 +549,11 @@ public sealed partial class WorldScreen : IScreen
         OtherProfile.OnGroupInviteRequested += name => Game.Connection.SendGroupInvite(ClientGroupSwitch.TryInvite, name);
 
         //no SetViewportBounds: like the Options modal it centers on the window, matching where the legacy chant
-        //popup put itself (CenterOnScreen).
+        //popup put itself (CenterOnScreen). ZIndex 12 keeps it above the modal tier (10) and the confirm popups
+        //(11) — it is opened by right-clicking a HUD slot, which stays reachable while a modal is up.
         CastablePopup = new CastablePopupControl
         {
-            ZIndex = 2
+            ZIndex = 12
         };
         CastablePopup.OnChantSet += HandleChantSet;
 

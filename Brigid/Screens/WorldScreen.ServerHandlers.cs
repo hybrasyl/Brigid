@@ -51,9 +51,11 @@ public sealed partial class WorldScreen
             StatusBook.SetProfileText(LoadProfileText());
 
             //the class — and so the SClass ability metadata behind the castable popup's Details tab — is only
-            //revealed by a self-profile reply. Ask for one unsolicited: SelfProfileRequested stays false, so the
-            //handler populates state without opening the status book.
-            Game.Connection.RequestSelfProfile();
+            //revealed by a self-profile reply. Ask for one unsolicited (SelfProfileRequested stays false, so the
+            //handler populates state without opening the status book), but only until we have it: this runs on
+            //every map change, and a self-profile reply rebuilds group and paperdoll state as a side effect.
+            if (WorldState.AbilityMetadata is null)
+                Game.Connection.RequestSelfProfile();
         }
 
         //check for idle animation ("04") frames on this aisling's body
@@ -620,20 +622,19 @@ public sealed partial class WorldScreen
         //reply to a scroll-paging request: the modal tracks whether this board asked for a page. append only while
         //that board's list is still open; if the user left before the reply arrived, fall through and treat it as a
         //fresh open rather than dropping it.
-        if (BoardsModal.IsListing(board.BoardId) && BoardsModal.IsPagingFor(board.BoardId))
+        //a scroll-back page we asked for: append it while its list is still on screen, and otherwise drop it —
+        //the user has moved on, and replacing the view would yank them out of a post or re-open a closed modal.
+        //Everything else is a fresh open (a tab click, a board picked from the index, the refresh after sending,
+        //or a board the server pushed unasked) and takes over the modal.
+        if (BoardsModal.IsPagingFor(board.BoardId))
         {
-            BoardsModal.AppendPosts(posts);
+            if (BoardsModal.IsListing(board.BoardId))
+                BoardsModal.AppendPosts(posts);
+            else
+                BoardsModal.CancelPaging();
 
             return;
         }
-
-        BoardsModal.CancelPaging();
-
-        //a page requested from a list the user has since left arrives with nothing to append to. Replacing the
-        //list would yank them out of a half-written post, so only take over a modal that is closed or idling on
-        //the board index; otherwise drop the straggler.
-        if (BoardsModal.Visible && !BoardsModal.IsOnBoardIndex && !BoardsModal.IsListing(board.BoardId))
-            return;
 
         //fresh open (or server-pushed board, e.g. signpost click): replace the list. ensure the session is open first —
         //the server can send board data directly without going through the board list.

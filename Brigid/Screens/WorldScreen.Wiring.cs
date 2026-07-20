@@ -2,8 +2,8 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
-using Brigid.Controls.World.Popups.Boards;
 using Brigid.Controls.World.Hud.Panel;
+using Brigid.Controls.World.Popups.Boards;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Extensions;
 using Brigid.Systems;
@@ -370,9 +370,8 @@ public sealed partial class WorldScreen
     private bool IsAnyBoardPanelVisible() => BoardsModal.Visible;
 
     /// <summary>
-    ///     Closes all Q/W/E/R toggle panels except the one identified by <paramref name="except" />.
-    ///     Slide panels animate out concurrently with the new panel sliding in. Button deselection
-    ///     is handled by the OnClose/SessionClosed events that fire when slide-out completes.
+    ///     Closes all Q/W/E/R toggle panels except the one identified by <paramref name="except" />. Button
+    ///     deselection is handled by the OnClose/SessionClosed events the close raises.
     /// </summary>
     private void ForceCloseOtherTogglePanels(Keys except)
     {
@@ -439,8 +438,6 @@ public sealed partial class WorldScreen
                 return;
             }
 
-            WorldState.Board.IsBoardListPending = true;
-
             Game.Connection.SendBoardInteraction(
                 BoardRequestType.ViewBoard,
                 BoardsModalControl.MAIL_BOARD_ID,
@@ -449,7 +446,6 @@ public sealed partial class WorldScreen
 
         BoardsModal.BoardSelected += boardId =>
         {
-            WorldState.Board.IsBoardListPending = true;
             Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, boardId, startPostId: short.MaxValue);
         };
 
@@ -507,7 +503,6 @@ public sealed partial class WorldScreen
                 message: body);
 
             //re-request the post list — compose stays visible until the server responds
-            WorldState.Board.IsBoardListPending = true;
             Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, boardId, startPostId: short.MaxValue);
         };
 

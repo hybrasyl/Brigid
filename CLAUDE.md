@@ -148,7 +148,7 @@ Brigid/
 │   └── Scrolling/            — ScrollModel, IScrollSource, ScrollView, ScrollBarBinder, VirtualizedListView, SelectableTextView, LabelScrollSource, TextBoxScrollSync
 ├── Definitions/              — Delegates, Enums, DoorTable, InputEvents, TextColors
 ├── Extensions/               — DirectionExtensions, RectangleExtensions, UIElementExtensions
-└── Utilities/                — Clipboard, DialogFrame, SlideAnimator
+└── Utilities/                — Clipboard, DialogFrame
 ```
 
 ### Screen System

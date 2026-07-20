@@ -1,10 +1,10 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
-using Brigid.Systems;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
 using Brigid.Data.Models;
+using Brigid.Systems;
 using Brigid.ViewModel;
 using Chaos.Extensions.Common;
 using Microsoft.Xna.Framework;
