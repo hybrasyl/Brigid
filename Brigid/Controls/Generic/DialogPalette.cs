@@ -30,6 +30,9 @@ internal static class DialogPalette
     public static readonly Color TabIdleBorder = new(80, 70, 44);
     public static readonly Color TabSelectedBorder = new(210, 176, 96);
 
+    //ability requirements the player does not meet
+    public static readonly Color RequirementUnmet = LegendColors.Scarlet;
+
     //TextButton states
     public static readonly Color ButtonIdleFill = new(30, 32, 42);
     public static readonly Color ButtonHoverFill = new(52, 54, 66);

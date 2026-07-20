@@ -1,28 +1,28 @@
 #region
 using Brigid.Collections;
+using Brigid.Controls.Generic;
 using Brigid.Data.Models;
 using Brigid.ViewModel;
 using Chaos.Extensions.Common;
 using Microsoft.Xna.Framework;
 #endregion
 
-namespace Brigid.Controls.World.Popups.Profile;
+namespace Brigid.Systems;
 
 /// <summary>
 ///     Shared read-only evaluation of an <see cref="AbilityMetadataEntry" /> against the player's live state —
-///     requirement colouring, prerequisite lookup, and the duotone icon treatment. Extracted so the status-book
-///     detail popup (<see cref="AbilityMetadataDetailsControl" />) and the castable popup's Details tab agree on
-///     what "met" means and render an ability identically.
+///     requirement colouring, prerequisite lookup, and the duotone icon treatment. One implementation so every
+///     surface that renders an ability (the status-book grid and detail popup, the castable popup's Details tab)
+///     agrees on what "met" means and tints an icon identically.
 /// </summary>
 internal static class AbilityRequirements
 {
-    public static readonly Color UnmetColor = LegendColors.Scarlet;
-
     /// <summary>White when the player's <paramref name="current" /> value meets <paramref name="required" />, else scarlet.</summary>
-    public static Color RequirementColor(int required, int? current) => current >= required ? LegendColors.White : UnmetColor;
+    public static Color RequirementColor(int required, int? current)
+        => current >= required ? LegendColors.White : DialogPalette.RequirementUnmet;
 
     /// <summary>White when the requirement is met, else scarlet.</summary>
-    public static Color RequirementColor(bool met) => met ? LegendColors.White : UnmetColor;
+    public static Color RequirementColor(bool met) => met ? LegendColors.White : DialogPalette.RequirementUnmet;
 
     /// <summary>"{name} {level}", or empty when there is no prerequisite.</summary>
     public static string FormatPreReq(string? name, byte level) => name is null ? string.Empty : $"{name} {level}";

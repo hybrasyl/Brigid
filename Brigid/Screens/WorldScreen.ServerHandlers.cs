@@ -49,6 +49,11 @@ public sealed partial class WorldScreen
             WorldState.ReloadChants();
             PlayerPortrait = LoadPortraitFile(args.Name);
             StatusBook.SetProfileText(LoadProfileText());
+
+            //the class — and so the SClass ability metadata behind the castable popup's Details tab — is only
+            //revealed by a self-profile reply. Ask for one unsolicited: SelfProfileRequested stays false, so the
+            //handler populates state without opening the status book.
+            Game.Connection.RequestSelfProfile();
         }
 
         //check for idle animation ("04") frames on this aisling's body
@@ -855,7 +860,7 @@ public sealed partial class WorldScreen
 
         //published to WorldState as well, so the castable popup can look an ability up by name without going
         //through the status book's page controls.
-        WorldState.SetAbilityMetadata(abilityMetadata);
+        WorldState.AbilityMetadata = abilityMetadata;
 
         if (abilityMetadata is not null)
             StatusBook.SetAbilityMetadata(abilityMetadata);

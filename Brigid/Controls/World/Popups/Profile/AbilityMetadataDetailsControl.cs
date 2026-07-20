@@ -1,9 +1,11 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Data.Models;
 using Brigid.Extensions;
 using Brigid.Rendering;
+using Brigid.Systems;
 using Brigid.ViewModel;
 using Chaos.Extensions.Common;
 using Microsoft.Xna.Framework;
@@ -93,7 +95,7 @@ public sealed class AbilityMetadataDetailsControl : PrefabPanel
             if (entry.RequiresMaster)
             {
                 LevelLabel.Text = "master";
-                LevelLabel.ForegroundColor = WorldState.IsMaster ? LegendColors.White : AbilityRequirements.UnmetColor;
+                LevelLabel.ForegroundColor = WorldState.IsMaster ? LegendColors.White : DialogPalette.RequirementUnmet;
             } else if (entry.AbilityLevel > 0)
             {
                 LevelLabel.Text = $"ability {entry.AbilityLevel}";

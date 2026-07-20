@@ -11,7 +11,7 @@ namespace Brigid.Controls.Components;
 ///     children, so the fillable areas read as solid boxes. The legacy prefabs baked these into their background
 ///     art; the from-scratch modals draw them.
 /// </summary>
-public class InputSlotPane : UIPanel
+public sealed class InputSlotPane : UIPanel
 {
     private static readonly Color SlotFill = new(0, 0, 0, 205);
     private static readonly Color SlotBorder = DialogPalette.Divider;
