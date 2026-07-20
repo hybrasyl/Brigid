@@ -98,6 +98,11 @@ public sealed class NpcSessionControl : PrefabPanel
     private bool LastHasNext;
     private bool LastHasPrevious;
 
+    //set when the pending response is a bank "withdraw items" selection. Retail sends no reply for an empty bank
+    //(unlike Hybrasyl, which sends an empty ShowItems the QA path handles), so on timeout this drives a soft notice
+    //on the still-open option menu instead of the confusing stale-nav restore. Cleared whenever the latch resets.
+    private bool PendingBankWithdraw;
+
     //menu args echoed back for menuwithargs
     public string? MenuArgs { get; private set; }
 
@@ -265,8 +270,11 @@ public sealed class NpcSessionControl : PrefabPanel
         //wire sub-panel events — forward to container events. advancing responses pass through the pacing latch.
         DialogOption.OnOptionSelected += index =>
         {
-            if (BeginResponse())
-                OnOptionSelected?.Invoke(index);
+            if (!BeginResponse())
+                return;
+
+            PendingBankWithdraw = IsWithdrawItemsOption(index);
+            OnOptionSelected?.Invoke(index);
         };
 
         DialogOption.OnClose += () =>
@@ -613,7 +621,11 @@ public sealed class NpcSessionControl : PrefabPanel
     }
 
     //cleared whenever a new dialog/menu packet arrives or the session closes — the outstanding response resolved
-    private void ResetDialogLock() => ResponsePending = false;
+    private void ResetDialogLock()
+    {
+        ResponsePending = false;
+        PendingBankWithdraw = false;
+    }
 
     private void TickResponsePending(float elapsedMs)
     {
@@ -628,10 +640,41 @@ public sealed class NpcSessionControl : PrefabPanel
         //server never answered (dropped packet) — release the latch so the user can retry instead of being stuck
         ResponsePending = false;
 
+        //retail's empty-bank withdraw is the specific no-response case: surface a soft, non-modal notice attached to
+        //the still-open option menu (auto-fades) rather than the confusing stale-nav restore below. Re-enable the
+        //menu's own Close/Top so the user isn't left with dead greyed buttons, but do NOT run SetNavigationButtons —
+        //that flips in stale Next/Prev over an options menu, which is exactly the behaviour we're replacing.
+        if (PendingBankWithdraw)
+        {
+            PendingBankWithdraw = false;
+            DialogOption.ShowNotice("If you see this: server lag, or no items in the bank. Try again.");
+
+            if (CloseButton is not null)
+                CloseButton.Enabled = true;
+
+            if (TopButton is not null)
+                TopButton.Enabled = true;
+
+            return;
+        }
+
         //don't resurrect the legacy nav buttons over a from-scratch panel that suppresses the chrome (e.g. the bank) —
         //re-showing them would float stale Next/Prev/Close over it, and a stale enabled Next could fire a bogus response
         if (!ChromeSuppressed)
             SetNavigationButtons(LastHasNext, LastHasPrevious);
+    }
+
+    //retail's empty-bank withdraw returns no packet at all (Hybrasyl instead sends an empty ShowItems the QA path
+    //handles). Flag the withdraw-items selection by option text so the pacing-latch timeout can surface a soft notice
+    //rather than a silent dead-end. Heuristic and retail-oriented; Hybrasyl answers before the timeout, so on QA this
+    //never fires. Matches "withdraw" + "item" to exclude "Withdraw gold" and other options.
+    private bool IsWithdrawItemsOption(int index)
+    {
+        var text = DialogOption.GetOptionText(index);
+
+        return (text is not null)
+               && text.Contains("withdraw", StringComparison.OrdinalIgnoreCase)
+               && text.Contains("item", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

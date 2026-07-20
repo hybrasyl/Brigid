@@ -414,9 +414,22 @@ public sealed partial class WorldScreen
         if (menu is null)
             return;
 
+        //an empty ShowItems list (e.g. withdrawing from an empty bank) shows a blank BankShopPanel and reads as a
+        //dead no-op (retail behaviour). Surface it as a popup instead of showing the empty pane. A missing/non-
+        //ItemListMenu body counts as empty too, covering the malformed case BankShopPanel would otherwise skip.
+        if (((MenuType)(byte)menu.MenuType == MenuType.ShowItems) && (MerchantItemCount(menu) == 0))
+        {
+            NpcSession.HideAll();
+            EmptyMerchantPopup.Show("You have no items to withdraw.");
+
+            return;
+        }
+
         NpcSession.ShowMenu(menu);
         RenderNpcSessionPortrait();
     }
+
+    private static int MerchantItemCount(NpcMenuPacket pkt) => pkt.Menu is ItemListMenu list ? list.Items.Count : 0;
 
     private void RenderNpcSessionPortrait()
     {
