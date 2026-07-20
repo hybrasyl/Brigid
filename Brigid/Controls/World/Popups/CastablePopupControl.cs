@@ -2,6 +2,7 @@
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Systems;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -21,16 +22,17 @@ namespace Brigid.Controls.World.Popups;
 ///         (<see cref="WorldState.AbilityMetadata" />), colour-coded against the player's live stats, plus live
 ///         slot state — see <see cref="CastableDetailsPane" />.</item>
 ///     </list>
-///     The panel is a fixed size — the height nine chant lines need, which the Details tab also fits inside — so
-///     switching tabs never resizes it. That deliberately drops the legacy popup's per-line-count height juggling
-///     and its tiled <c>MidImage</c> strip.
+///     The panel is a fixed size — six chant rows tall, which the Details tab also fits inside — so switching tabs
+///     never resizes it. A spell with more lines than that scrolls; nine is the ceiling (Dark Ages' cap, and
+///     Hybrasyl uses at most four). That deliberately drops the legacy popup's per-line-count height juggling and
+///     its tiled <c>MidImage</c> strip.
 /// </summary>
 public sealed class CastablePopupControl : CenteredModalPanel
 {
     private const int PANEL_W = 320;
 
-    //sized to the Lines tab's worst case (MAX_LINES boxes); the Details tab fits well inside it.
-    private const int PANEL_H = 272;
+    //sized to VISIBLE_LINES rows; the Details tab fits well inside it.
+    private const int PANEL_H = 209;
 
     private const int TAB_W = 72;
     private const int TAB_H = 20;
@@ -40,9 +42,13 @@ public sealed class CastablePopupControl : CenteredModalPanel
     //Dark Ages tops out at nine chant lines and Hybrasyl at four. The wire field (0x17 AddSpell "lines") is a
     //byte, so Show clamps rather than trusting it — a server sending more just loses the extra rows.
     private const int MAX_LINES = 9;
+
+    //rows on screen at once; a longer chant scrolls rather than making the popup taller for every castable.
+    private const int VISIBLE_LINES = 6;
     private const int LINE_H = 20;
     private const int LINE_STRIDE = 22;
     private const int CHANT_MAX_LENGTH = 32;
+    private const int LINE_TO_BAR = 2;
     private const int SAVE_W = 52;
 
     private enum CastableTab
@@ -59,6 +65,9 @@ public sealed class CastablePopupControl : CenteredModalPanel
     private readonly UIPanel[] TabPanes = new UIPanel[TAB_COUNT];
 
     private readonly UITextBox[] TextInputs = new UITextBox[MAX_LINES];
+    private ScrollBarControl LineScrollBar = null!;
+    private ScrollModel LineScroll = null!;
+    private ScrollBarBinder LineBarBinder = null!;
     private readonly TextButton SaveButton;
     private readonly CastableDetailsPane Details;
 
@@ -112,6 +121,17 @@ public sealed class CastablePopupControl : CenteredModalPanel
             Height = pane.Height
         };
 
+        //the bar sits beside the boxes and is driven by the shared scroll model; it hides when every line fits.
+        LineScrollBar = new ScrollBarControl
+        {
+            Name = "ChantScrollBar",
+            X = pane.Width - ScrollBarControl.DEFAULT_WIDTH,
+            Y = 0,
+            Height = VISIBLE_LINES * LINE_STRIDE
+        };
+
+        var boxWidth = pane.Width - ScrollBarControl.DEFAULT_WIDTH - LINE_TO_BAR;
+
         for (var i = 0; i < MAX_LINES; i++)
         {
             TextInputs[i] = new UITextBox
@@ -119,7 +139,7 @@ public sealed class CastablePopupControl : CenteredModalPanel
                 Name = $"ChantLine{i}",
                 X = 0,
                 Y = i * LINE_STRIDE,
-                Width = pane.Width,
+                Width = boxWidth,
                 Height = LINE_H,
                 MaxLength = CHANT_MAX_LENGTH,
                 Visible = false,
@@ -133,8 +153,35 @@ public sealed class CastablePopupControl : CenteredModalPanel
             content.AddChild(TextInputs[i]);
         }
 
+        content.AddChild(LineScrollBar);
+
+        LineScroll = new ScrollModel();
+        LineBarBinder = new ScrollBarBinder(LineScroll, LineScrollBar);
+        LineScroll.Changed += _ => LayoutLines();
+
         TabPanes[(int)CastableTab.Lines] = content;
         AddChild(content);
+    }
+
+    /// <summary>
+    ///     Positions the chant boxes for the current scroll offset, showing the <see cref="VISIBLE_LINES" /> rows in
+    ///     the window and hiding the rest. Hidden boxes drop out of the tab-stop walk and the slot chrome, so a
+    ///     scrolled-away line can neither be focused nor painted.
+    /// </summary>
+    private void LayoutLines()
+    {
+        var offset = LineScroll.Offset;
+
+        for (var i = 0; i < MAX_LINES; i++)
+        {
+            var row = i - offset;
+            var onScreen = (i < LineCount) && (row >= 0) && (row < VISIBLE_LINES);
+
+            TextInputs[i].Visible = onScreen;
+
+            if (onScreen)
+                TextInputs[i].Y = row * LINE_STRIDE;
+        }
     }
 
     private CastableDetailsPane BuildDetailsPane(Rectangle pane)
@@ -187,10 +234,12 @@ public sealed class CastablePopupControl : CenteredModalPanel
         SetTitle(name);
 
         for (var i = 0; i < MAX_LINES; i++)
-        {
             TextInputs[i].Text = i < Math.Min(LineCount, chants.Length) ? chants[i] : string.Empty;
-            TextInputs[i].Visible = i < LineCount;
-        }
+
+        LineScroll.SetMetrics(LineCount, VISIBLE_LINES);
+        LineScroll.ScrollToStart();
+        LineScrollBar.Visible = LineCount > VISIBLE_LINES;
+        LayoutLines();
 
         Details.Bind(slot, name, level, icon, isSpell);
         SelectTab(CastableTab.Lines);
@@ -230,6 +279,18 @@ public sealed class CastablePopupControl : CenteredModalPanel
     {
         foreach (var box in TextInputs)
             box.IsFocused = false;
+    }
+
+    /// <summary>
+    ///     Routes the wheel to the chant lines. The base absorbs scroll so it can't reach the world, so the Lines
+    ///     tab has to claim it here.
+    /// </summary>
+    public override void OnMouseScroll(MouseScrollEvent e)
+    {
+        if ((Active == CastableTab.Lines) && (LineCount > VISIBLE_LINES))
+            LineScroll.WheelBy(e.Delta);
+
+        e.Handled = true;
     }
 
     public override void OnKeyDown(KeyDownEvent e)
