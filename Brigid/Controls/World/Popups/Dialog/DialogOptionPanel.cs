@@ -38,6 +38,14 @@ public sealed class DialogOptionPanel : FramedDialogPanelBase
 
     private readonly List<OptionLabel> OptionLabels = [];
 
+    //non-modal timeout notice (retail's empty-bank withdraw returns no packet at all). Drawn attached to the top
+    //of this panel and gated by its Visibility, so it disappears automatically when the bank renders and hides the
+    //menu. Auto-fades after NOTICE_DURATION_S and clears on the next action (option click, key, hide, re-show).
+    private const float NOTICE_DURATION_S = 5f;
+    private const float NOTICE_FADE_S = 1f;
+    private string? NoticeText;
+    private float NoticeElapsedS;
+
     //3-slice stripe pieces
     private Texture2D? StripeLeft;
     private Texture2D? StripeLeftOn;
@@ -69,6 +77,19 @@ public sealed class DialogOptionPanel : FramedDialogPanelBase
         OptionLabels.Clear();
     }
 
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+
+        if (NoticeText is null)
+            return;
+
+        NoticeElapsedS += (float)gameTime.ElapsedGameTime.TotalSeconds;
+
+        if (NoticeElapsedS >= NOTICE_DURATION_S)
+            NoticeText = null;
+    }
+
     public override void Draw(SpriteBatch spriteBatch)
     {
         if (!Visible)
@@ -78,6 +99,43 @@ public sealed class DialogOptionPanel : FramedDialogPanelBase
 
         //frame + children drawn by base
         base.Draw(spriteBatch);
+
+        DrawNotice(spriteBatch);
+    }
+
+    //draws the timeout notice as a bordered, wrapped-text box attached just above this panel's top edge. The box is
+    //draw-only (no child element / hit target), so it stays non-modal and can't intercept input.
+    private void DrawNotice(SpriteBatch spriteBatch)
+    {
+        if (NoticeText is null)
+            return;
+
+        //hold full opacity, then fade over the final NOTICE_FADE_S so it eases out instead of blinking off
+        var remaining = NOTICE_DURATION_S - NoticeElapsedS;
+        var alpha = remaining >= NOTICE_FADE_S ? 1f : Math.Clamp(remaining / NOTICE_FADE_S, 0f, 1f);
+
+        const int pad = 6;
+        const int gap = 4;
+
+        var wrapWidth = Math.Max(Width - 2 * pad, 120);
+        var lines = TextRenderer.WrapText(NoticeText, wrapWidth);
+        var boxHeight = lines.Count * TextRenderer.CHAR_HEIGHT + 2 * pad;
+        var boxX = ScreenX;
+        var boxY = Math.Max(2, ScreenY - boxHeight - gap);
+
+        DrawBorderedRect(
+            spriteBatch,
+            new Rectangle(boxX, boxY, Width, boxHeight),
+            new Color(24, 20, 16) * alpha,
+            new Color(198, 160, 74) * alpha);
+
+        var textY = boxY + pad;
+
+        foreach (var line in lines)
+        {
+            TextRenderer.DrawText(spriteBatch, new Vector2(boxX + pad, textY), line, LegendColors.White * alpha);
+            textY += TextRenderer.CHAR_HEIGHT;
+        }
     }
 
     private void EnsureStripeTextures()
@@ -109,9 +167,23 @@ public sealed class DialogOptionPanel : FramedDialogPanelBase
         return OptionLabels[index].PursuitId;
     }
 
+    /// <summary>The display text of the option at <paramref name="index" />, or null when out of range.</summary>
+    public string? GetOptionText(int index) =>
+        (index >= 0) && (index < OptionLabels.Count) ? OptionLabels[index].Text : null;
+
+    /// <summary>Shows a soft, non-modal notice attached to the top of the menu; auto-fades and clears on next action.</summary>
+    public void ShowNotice(string text)
+    {
+        NoticeText = text;
+        NoticeElapsedS = 0f;
+    }
+
+    public void ClearNotice() => NoticeText = null;
+
     public override void Hide()
     {
         ClearOptionLabels();
+        ClearNotice();
         base.Hide();
     }
 
@@ -122,6 +194,7 @@ public sealed class DialogOptionPanel : FramedDialogPanelBase
     public void ShowOptions(IReadOnlyList<(string Text, ushort Pursuit)> options)
     {
         ClearOptionLabels();
+        ClearNotice();
         EnsureStripeTextures();
 
         //dynamic width from longest option text
@@ -174,7 +247,11 @@ public sealed class DialogOptionPanel : FramedDialogPanelBase
                 Height = ROW_HEIGHT
             };
 
-            label.Clicked += () => OnOptionSelected?.Invoke(index);
+            label.Clicked += () =>
+            {
+                ClearNotice();
+                OnOptionSelected?.Invoke(index);
+            };
             OptionLabels.Add(label);
             AddChild(label);
         }
@@ -191,6 +268,8 @@ public sealed class DialogOptionPanel : FramedDialogPanelBase
 
     public override void OnKeyDown(KeyDownEvent e)
     {
+        ClearNotice();
+
         if (e.Key == Keys.Escape)
         {
             Hide();

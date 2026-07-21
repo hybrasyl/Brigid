@@ -1,5 +1,4 @@
 #region
-using System.Collections.Frozen;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
@@ -245,20 +244,20 @@ public sealed partial class WorldScreen
     //--- hotkeys ---
 
     /// <summary>
-    ///     HUD tab hotkeys (bare letter → tab). The <b>authoritative</b> source for the tab-switch keys: the
-    ///     switch below reads it, and the keybind rebinder's reserved set (<c>Keybinds.ReservedWorldHudKeys</c>)
-    ///     mirrors it — the switch runs modifier-agnostically before the resolver checks, so it would shadow any
-    ///     command rebound onto one of these keys. A test cross-asserts the two stay in sync.
+    ///     HUD tab-switch commands, resolver-driven so the keys are rebindable. Each tab has a base command
+    ///     (switches to the tab) and, where it has an alternate panel, a Shift-variant command (or null for
+    ///     Tools). Both route to <see cref="WorldHudControl.HandleTabActivation" />, which keeps the stateful
+    ///     alt-panel logic; the <c>shift</c> argument is simply "this was the alternate-panel command".
     /// </summary>
-    public static readonly FrozenDictionary<Keys, HudTab> HudTabHotkeys = new Dictionary<Keys, HudTab>
-    {
-        [Keys.A] = HudTab.Inventory,
-        [Keys.S] = HudTab.Skills,
-        [Keys.D] = HudTab.Spells,
-        [Keys.F] = HudTab.Chat,
-        [Keys.G] = HudTab.Stats,
-        [Keys.H] = HudTab.Tools
-    }.ToFrozenDictionary();
+    internal static readonly (CommandId Base, CommandId? Alt, HudTab Tab)[] TabCommands =
+    [
+        (CommandId.World_TabInventory, CommandId.World_TabInventoryExpand, HudTab.Inventory),
+        (CommandId.World_TabSkills, CommandId.World_TabSkillsAlt, HudTab.Skills),
+        (CommandId.World_TabSpells, CommandId.World_TabSpellsAlt, HudTab.Spells),
+        (CommandId.World_TabChat, CommandId.World_TabChatHistory, HudTab.Chat),
+        (CommandId.World_TabStats, CommandId.World_TabStatsExtended, HudTab.Stats),
+        (CommandId.World_TabTools, null, HudTab.Tools)
+    ];
 
     private static readonly Keys[] EmoteKeys =
     [
@@ -775,14 +774,29 @@ public sealed partial class WorldScreen
             return;
         }
 
-        //tab panel switching — blocked while dragging the orange bar. Keyed off the authoritative HudTabHotkeys
-        //map (mirrored by Keybinds.ReservedWorldHudKeys); modifier-agnostic, Shift only picks the alt panel.
-        if (!WorldHud.IsOrangeBarDragging && HudTabHotkeys.TryGetValue(e.Key, out var hudTab))
+        //tab panel switching — blocked while dragging the orange bar. Resolver-driven (rebindable): the base
+        //command switches to the tab, the alt-variant command selects its alternate panel; both go through
+        //HandleTabActivation, which keeps the stateful UseShiftKeyForAltPanels / re-press-to-alt logic.
+        if (!WorldHud.IsOrangeBarDragging)
         {
-            WorldHud.HandleTabActivation(hudTab, e.Shift);
-            e.Handled = true;
+            foreach (var (baseCmd, altCmd, tab) in TabCommands)
+            {
+                if (Keybinds.Matches(e, baseCmd))
+                {
+                    WorldHud.HandleTabActivation(tab, shift: false);
+                    e.Handled = true;
 
-            return;
+                    return;
+                }
+
+                if (altCmd is { } alt && Keybinds.Matches(e, alt))
+                {
+                    WorldHud.HandleTabActivation(tab, shift: true);
+                    e.Handled = true;
+
+                    return;
+                }
+            }
         }
 
         //tab — toggle tab map overlay (suppressed by NoTabMap map flag)

@@ -1,4 +1,5 @@
 #region
+using Brigid.Systems.Keybinds;
 using Brigid.Utilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -650,6 +651,11 @@ public class UILabel : UIElement
 
         ClampPositions();
 
+        //copy / select-all resolve through the keybind registry (ReadView context) so they honour rebindings and
+        //the per-OS primary modifier. Caret nav below stays literal.
+        if (TryHandleReadCommand(e))
+            return;
+
         var shift = e.Shift;
         var ctrl = e.Ctrl;
         var isWrapped = TextElement.WrappedLines is not null;
@@ -736,19 +742,30 @@ public class UILabel : UIElement
                 e.Handled = true;
 
                 break;
+        }
+    }
 
-            case Keys.A when ctrl && shift && (PlainText.Length > 0):
+    //resolves the read-only view commands (copy, select-all) through the keybind registry. Returns true when a
+    //command was handled; false otherwise (including a failed guard) so OnKeyDown falls through to caret nav.
+    private bool TryHandleReadCommand(KeyDownEvent e)
+    {
+        switch (Keybinds.Resolve(e, KeybindContext.ReadView))
+        {
+            case CommandId.Read_SelectAll when PlainText.Length > 0:
                 SelectionAnchor = 0;
                 CursorPosition = PlainText.Length;
                 e.Handled = true;
 
-                break;
+                return true;
 
-            case Keys.C when ctrl && HasSelection:
+            case CommandId.Read_Copy when HasSelection:
                 Clipboard.SetText(StripColorCodes(PlainText[SelectionStart..Math.Min(SelectionEnd, PlainText.Length)]));
                 e.Handled = true;
 
-                break;
+                return true;
+
+            default:
+                return false;
         }
     }
 }

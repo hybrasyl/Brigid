@@ -33,7 +33,7 @@ public sealed class KeybindsTests
     }
 
     //simulates a macOS key event: Cmd sets Meta only, physical Ctrl sets Ctrl only — they are distinct keys.
-    private static KeyDownEvent MacKey(Keys key, bool cmd = false, bool ctrl = false, bool shift = false)
+    private static KeyDownEvent MacKey(Keys key, bool cmd = false, bool ctrl = false, bool shift = false, bool alt = false)
     {
         var mods = KeyModifiers.None;
 
@@ -46,6 +46,9 @@ public sealed class KeybindsTests
         if (shift)
             mods |= KeyModifiers.Shift;
 
+        if (alt)
+            mods |= KeyModifiers.Alt;
+
         return new KeyDownEvent { Key = key, Modifiers = mods };
     }
 
@@ -55,7 +58,7 @@ public sealed class KeybindsTests
     [InlineData(Keys.V, false, CommandId.Editor_Paste)]
     [InlineData(Keys.Z, false, CommandId.Editor_Undo)]
     [InlineData(Keys.Z, true, CommandId.Editor_Redo)]
-    [InlineData(Keys.A, true, CommandId.Editor_SelectAll)]
+    [InlineData(Keys.A, false, CommandId.Editor_SelectAll)]
     public void Windows_EditorChords_ResolveToCurrentDefaults(Keys key, bool shift, CommandId expected)
     {
         Keybinds.ResetAll();
@@ -64,21 +67,25 @@ public sealed class KeybindsTests
     }
 
     [Fact]
-    public void Windows_CtrlA_IsLineStart_NotSelectAll()
+    public void Windows_CtrlA_IsSelectAll()
     {
         Keybinds.ResetAll();
 
-        //the readline carve-out: bare Ctrl+A must stay line-start; Ctrl+Shift+A is select-all.
-        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
-        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(WinKey(Keys.A, ctrl: true, shift: true), KeybindContext.TextEditing));
+        //average-user convention: bare Ctrl+A is select-all. Ctrl+Shift+A is no longer bound (was select-all).
+        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.A, ctrl: true, shift: true), KeybindContext.TextEditing));
     }
 
     [Fact]
-    public void Windows_CtrlE_IsLineEnd()
+    public void Windows_LineStartEnd_AreAltArrows_NotCtrlAE()
     {
         Keybinds.ResetAll();
 
-        Assert.Equal(CommandId.Editor_LineEnd, Keybinds.Resolve(WinKey(Keys.E, ctrl: true), KeybindContext.TextEditing));
+        //readline line-start/end kept as remappable commands but defaulted onto Alt+Left/Right so Ctrl+A is free
+        //for select-all. The old Ctrl+A/Ctrl+E readline chords no longer resolve to line-start/end.
+        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(WinKey(Keys.Left, alt: true), KeybindContext.TextEditing));
+        Assert.Equal(CommandId.Editor_LineEnd, Keybinds.Resolve(WinKey(Keys.Right, alt: true), KeybindContext.TextEditing));
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.E, ctrl: true), KeybindContext.TextEditing));
     }
 
     [Fact]
@@ -114,30 +121,112 @@ public sealed class KeybindsTests
     {
         Keybinds.ResetAll();
 
-        //Ctrl+C in a read-only view resolves to the ReadView copy, not the editor copy.
+        //Ctrl+C resolves to the ReadView copy in a read-only view and the editor copy in an editor — the same
+        //physical chord, disambiguated by context.
         Assert.Equal(CommandId.Read_Copy, Keybinds.Resolve(WinKey(Keys.C, ctrl: true), KeybindContext.ReadView));
+        Assert.Equal(CommandId.Editor_Copy, Keybinds.Resolve(WinKey(Keys.C, ctrl: true), KeybindContext.TextEditing));
 
-        //plain Ctrl+A is select-all in a read-only view (no line-start binding there), but line-start in the
-        //editor — the same physical chord, disambiguated by context.
+        //Ctrl+A is select-all in both contexts (consistent average-user convention), routed per context.
         Assert.Equal(CommandId.Read_SelectAll, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.ReadView));
-        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
+        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(WinKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
 
         //editor-only commands (cut/paste/undo) have no ReadView binding.
         Assert.Null(Keybinds.Resolve(WinKey(Keys.X, ctrl: true), KeybindContext.ReadView));
     }
 
     [Fact]
-    public void MacOS_Cmd_DrivesPrimaryActions_CtrlStaysLiteral()
+    public void MacOS_Cmd_DrivesPrimaryActions_PhysicalCtrlUnbound()
     {
         Keybinds.ResetAll();
 
-        //Cmd+C/A copy & select-all; physical Ctrl+A is still line-start (native macOS behavior).
+        //Cmd+C copy, Cmd+A select-all; line-start/end are Alt+Left/Right cross-OS.
         Assert.Equal(CommandId.Editor_Copy, Keybinds.Resolve(MacKey(Keys.C, cmd: true), KeybindContext.TextEditing));
-        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(MacKey(Keys.A, cmd: true, shift: true), KeybindContext.TextEditing));
-        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(MacKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
+        Assert.Equal(CommandId.Editor_SelectAll, Keybinds.Resolve(MacKey(Keys.A, cmd: true), KeybindContext.TextEditing));
+        Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(MacKey(Keys.Left, alt: true), KeybindContext.TextEditing));
 
-        //physical Ctrl+C on macOS is NOT copy (copy is Cmd+C).
+        //physical Ctrl+A on macOS is NOT bound (select-all is Cmd+A); physical Ctrl+C is NOT copy (copy is Cmd+C).
+        Assert.Null(Keybinds.Resolve(MacKey(Keys.A, ctrl: true), KeybindContext.TextEditing));
         Assert.Null(Keybinds.Resolve(MacKey(Keys.C, ctrl: true), KeybindContext.TextEditing));
+    }
+
+    //runs body with the macOS default-value overlay active, restoring the flag + overrides afterwards. The seam
+    //(Keybinds.MacDefaultsActive) lets a non-mac host exercise the overlay the same way MacKey simulates events.
+    private static void WithMacDefaults(Action body)
+    {
+        Keybinds.ResetAll();
+        var previous = Keybinds.MacDefaultsActive;
+        Keybinds.MacDefaultsActive = true;
+
+        try
+        {
+            body();
+        } finally
+        {
+            Keybinds.MacDefaultsActive = previous;
+            Keybinds.ResetAll();
+        }
+    }
+
+    [Fact]
+    public void MacDefaults_AddCmdArrowLineNav_AsSecondary()
+    {
+        WithMacDefaults(() =>
+        {
+            //the mac overlay adds Cmd+Left/Right as a SECONDARY on top of the cross-OS Alt+Left/Right primary.
+            var lineStart = Keybinds.EffectiveDefault(CommandId.Editor_LineStart);
+            Assert.Equal(new KeyChord(Keys.Left, ChordMods.Alt), lineStart.Primary);
+            Assert.Equal(new KeyChord(Keys.Left, ChordMods.Meta), lineStart.Secondary);
+            Assert.True(Keybinds.SupportsSecondary(CommandId.Editor_LineStart));
+
+            //both chords resolve on macOS: the portable Alt+Left and the platform-native Cmd+Left.
+            Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(MacKey(Keys.Left, alt: true), KeybindContext.TextEditing));
+            Assert.Equal(CommandId.Editor_LineStart, Keybinds.Resolve(MacKey(Keys.Left, cmd: true), KeybindContext.TextEditing));
+            Assert.Equal(CommandId.Editor_LineEnd, Keybinds.Resolve(MacKey(Keys.Right, cmd: true), KeybindContext.TextEditing));
+        });
+    }
+
+    [Fact]
+    public void MacDefaults_DoNotLeakToNonMac()
+    {
+        Keybinds.ResetAll();
+        var previous = Keybinds.MacDefaultsActive;
+        Keybinds.MacDefaultsActive = false;
+
+        try
+        {
+            //without the overlay, line-nav is single-chord Alt+arrows and Cmd+Left carries no secondary meaning.
+            Assert.Null(Keybinds.EffectiveDefault(CommandId.Editor_LineStart).Secondary);
+            Assert.False(Keybinds.SupportsSecondary(CommandId.Editor_LineStart));
+            Assert.Equal(new KeyChord(Keys.Left, ChordMods.Alt), Keybinds.EffectiveDefault(CommandId.Editor_LineStart).Primary);
+        } finally
+        {
+            Keybinds.MacDefaultsActive = previous;
+        }
+    }
+
+    [Fact]
+    public void MacDefaults_LineNav_KeepTheBasePrimary()
+    {
+        //the line-nav overlay is purely additive: it must keep the cross-OS Alt+arrow primary and only add the
+        //Cmd+arrow secondary. Guards against a base-primary change silently leaving the mac table stale. (A
+        //future non-additive mac default — e.g. Cmd+, for settings — would legitimately not be listed here.)
+        WithMacDefaults(() =>
+        {
+            foreach (var id in new[] { CommandId.Editor_LineStart, CommandId.Editor_LineEnd })
+                Assert.Equal(Keybinds.Defaults[id].Binding.Primary, Keybinds.EffectiveDefault(id).Primary);
+        });
+    }
+
+    [Fact]
+    public void MacDefaults_OverrideStillWins()
+    {
+        WithMacDefaults(() =>
+        {
+            //a user override supersedes the per-OS default, same as on any platform.
+            Keybinds.SetBinding(CommandId.Editor_LineStart, new KeyChord(Keys.Home));
+            Assert.Equal(new KeyChord(Keys.Home), Keybinds.Effective(CommandId.Editor_LineStart).Primary);
+            Assert.Null(Keybinds.Resolve(MacKey(Keys.Left, cmd: true), KeybindContext.TextEditing));
+        });
     }
 
     [Fact]
@@ -339,27 +428,26 @@ public sealed class KeybindsTests
     }
 
     [Fact]
-    public void WorldHud_Defaults_AvoidReservedLiteralKeys()
+    public void WorldHud_TabKeys_ResolveBaseAndAltPanel()
     {
-        //A/S/D/F/G/H (HUD tab switch) is handled by a modifier-agnostic literal switch in OnRootKeyDown that
-        //runs before the F-key/letter resolver checks, so a WorldHud command bound to one of those letters
-        //would be silently shadowed. The migration keeps the catalog clear of them; this fails if a future
-        //command lands on one. Z/X/C/V are NOT reserved: B4 made the movement switch resolver-driven, so those
-        //letters are now owned by Move_* rather than a literal handler. Arrow/number-row keys aren't reserved
-        //either — their movement/slot/emote handlers sit after the resolver checks that use them and Shift
-        //disambiguates (Shout=Shift+1, ChatScroll=Shift+Arrow).
-        var reserved = new HashSet<Keys> { Keys.A, Keys.S, Keys.D, Keys.F, Keys.G, Keys.H };
+        Keybinds.ResetAll();
 
-        foreach (var (_, def) in Keybinds.Defaults)
-        {
-            if (def.Context != KeybindContext.WorldHud)
-                continue;
+        //the HUD tab keys (A/S/D/F/G/H) used to be swallowed by a literal switch and were unbindable; they are
+        //now resolver-driven: bare letter -> the tab, Shift+letter -> the tab's alternate panel.
+        Assert.Equal(CommandId.World_TabInventory, Keybinds.Resolve(WinKey(Keys.A), WorldCtx));
+        Assert.Equal(CommandId.World_TabInventoryExpand, Keybinds.Resolve(WinKey(Keys.A, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabSkills, Keybinds.Resolve(WinKey(Keys.S), WorldCtx));
+        Assert.Equal(CommandId.World_TabSkillsAlt, Keybinds.Resolve(WinKey(Keys.S, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabSpells, Keybinds.Resolve(WinKey(Keys.D), WorldCtx));
+        Assert.Equal(CommandId.World_TabSpellsAlt, Keybinds.Resolve(WinKey(Keys.D, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabChat, Keybinds.Resolve(WinKey(Keys.F), WorldCtx));
+        Assert.Equal(CommandId.World_TabChatHistory, Keybinds.Resolve(WinKey(Keys.F, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabStats, Keybinds.Resolve(WinKey(Keys.G), WorldCtx));
+        Assert.Equal(CommandId.World_TabStatsExtended, Keybinds.Resolve(WinKey(Keys.G, shift: true), WorldCtx));
+        Assert.Equal(CommandId.World_TabTools, Keybinds.Resolve(WinKey(Keys.H), WorldCtx));
 
-            Assert.DoesNotContain(def.Binding.Primary.Key, reserved);
-
-            if (def.Binding.Secondary is { } secondary)
-                Assert.DoesNotContain(secondary.Key, reserved);
-        }
+        //Tools has no alternate panel, so Shift+H is unbound (not a dead literal reservation any more).
+        Assert.Null(Keybinds.Resolve(WinKey(Keys.H, shift: true), WorldCtx));
     }
 
     [Fact]
@@ -424,29 +512,7 @@ public sealed class KeybindsTests
             Assert.Contains(CommandId.Editor_Copy, conflicts);
     }
 
-    [Fact]
-    public void IsShadowed_ReservesWorldHudTabKeys_Only()
-    {
-        //A/S/D/F/G/H are eaten by the literal HUD tab switch before the resolver runs — unbindable in WorldHud.
-        Assert.True(Keybinds.IsShadowed(WorldCtx, new KeyChord(Keys.A)));
-        Assert.True(Keybinds.IsShadowed(WorldCtx, new KeyChord(Keys.H, ChordMods.Shift)));
-
-        //a normal WorldHud key is fine, and the reservation doesn't leak into other contexts.
-        Assert.False(Keybinds.IsShadowed(WorldCtx, new KeyChord(Keys.Q)));
-        Assert.False(Keybinds.IsShadowed(KeybindContext.TextEditing, new KeyChord(Keys.A)));
-    }
-
     private const KeybindContext WorldCtx = KeybindContext.WorldHud;
-
-    [Fact]
-    public void ReservedWorldHudKeys_MirrorTheHudTabSwitch()
-    {
-        //IsShadowed's reserved set is a hand-maintained mirror of WorldScreen's literal tab switch; if a tab
-        //key is added/moved/removed there, this fails so the two can't silently drift.
-        Assert.Equal(
-            Brigid.Screens.WorldScreen.HudTabHotkeys.Keys.OrderBy(k => k),
-            Keybinds.ReservedWorldHudKeys.OrderBy(k => k));
-    }
 
     [Fact]
     public void ChordFromEvent_NormalisesPrimaryModifier_AndIgnoresBareModifiers()
@@ -488,6 +554,24 @@ public sealed class KeybindsTests
         }
     }
 
+    [Fact]
+    public void NoTwoDefaults_CollideWithinAContext_UnderMacOverlay()
+    {
+        //same invariant as above but against the OS-merged mac table (the Cmd+Left/Right line-nav secondaries):
+        //every effective-default chord must still resolve back to its own command, and none must collide.
+        WithMacDefaults(() =>
+        {
+            foreach (var (id, def) in Keybinds.Defaults)
+            {
+                var binding = Keybinds.EffectiveDefault(id);
+                Assert.Equal(id, Keybinds.Resolve(MacEventFor(binding.Primary), def.Context));
+
+                if (binding.Secondary is { } secondary)
+                    Assert.Equal(id, Keybinds.Resolve(MacEventFor(secondary), def.Context));
+            }
+        });
+    }
+
     //builds the Windows-style event a chord would produce (Ctrl and Meta share the physical key, so a Meta
     //or literal-Ctrl chord sets both bits).
     private static KeyDownEvent WinEventFor(KeyChord chord)
@@ -496,6 +580,26 @@ public sealed class KeybindsTests
 
         if (chord.HasMeta || chord.HasCtrl)
             mods |= KeyModifiers.Ctrl | KeyModifiers.Meta;
+
+        if (chord.HasShift)
+            mods |= KeyModifiers.Shift;
+
+        if (chord.HasAlt)
+            mods |= KeyModifiers.Alt;
+
+        return new KeyDownEvent { Key = chord.Key, Modifiers = mods };
+    }
+
+    //builds the macOS-style event a chord would produce: Cmd (Meta) and physical Ctrl are distinct keys.
+    private static KeyDownEvent MacEventFor(KeyChord chord)
+    {
+        var mods = KeyModifiers.None;
+
+        if (chord.HasMeta)
+            mods |= KeyModifiers.Meta;
+
+        if (chord.HasCtrl)
+            mods |= KeyModifiers.Ctrl;
 
         if (chord.HasShift)
             mods |= KeyModifiers.Shift;

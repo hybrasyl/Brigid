@@ -11,10 +11,11 @@ namespace Brigid.Systems.Keybinds;
 ///     formatting. This is purely presentational — the resolver (<see cref="Keybinds" />) neither knows nor
 ///     needs any of it, so display concerns stay out of the dispatch core.
 ///     <para>
-///         Only the <see cref="KeybindContext.WorldHud" /> commands (world hotkeys + movement) are listed for
-///         now; the editor/read chords join once B2 makes them user-consumed. A test asserts the catalog and
-///         the resolver's WorldHud defaults stay in one-to-one sync, so a new command can't be silently
-///         omitted from the rebinder.
+///         Lists the <see cref="KeybindContext.WorldHud" /> commands (world hotkeys + movement) and the
+///         <see cref="KeybindContext.TextEditing" /> editor commands. The <see cref="KeybindContext.ReadView" />
+///         commands are deliberately NOT listed — they are consumed but not independently rebindable. A test
+///         asserts the catalog and the resolver's exposed defaults (WorldHud ∪ TextEditing) stay in one-to-one
+///         sync, so a new command can't be silently omitted from the rebinder.
 ///     </para>
 /// </summary>
 public static class KeybindCatalog
@@ -25,9 +26,11 @@ public static class KeybindCatalog
     {
         Movement,
         Panels,
+        HudTabs,
         Chat,
         FunctionKeys,
-        Actions
+        Actions,
+        TextEditing
     }
 
     /// <summary>One row in the rebind list: the command, its label, and the section it renders under.</summary>
@@ -38,9 +41,11 @@ public static class KeybindCatalog
     [
         KeybindSection.Movement,
         KeybindSection.Panels,
+        KeybindSection.HudTabs,
         KeybindSection.Chat,
         KeybindSection.Actions,
-        KeybindSection.FunctionKeys
+        KeybindSection.FunctionKeys,
+        KeybindSection.TextEditing
     ];
 
     /// <summary>Every rebindable command in display order, grouped by section (see <see cref="SectionOrder" />).</summary>
@@ -59,6 +64,18 @@ public static class KeybindCatalog
         new(CommandId.World_TownMap, "Town Map", KeybindSection.Panels),
         new(CommandId.World_GroupPanel, "Group Panel", KeybindSection.Panels),
         new(CommandId.World_SwapHudLayout, "Swap HUD Layout", KeybindSection.Panels),
+
+        new(CommandId.World_TabInventory, "Inventory", KeybindSection.HudTabs),
+        new(CommandId.World_TabInventoryExpand, "Inventory (Expand)", KeybindSection.HudTabs),
+        new(CommandId.World_TabSkills, "Skills", KeybindSection.HudTabs),
+        new(CommandId.World_TabSkillsAlt, "Skills (Alt Panel)", KeybindSection.HudTabs),
+        new(CommandId.World_TabSpells, "Spells", KeybindSection.HudTabs),
+        new(CommandId.World_TabSpellsAlt, "Spells (Alt Panel)", KeybindSection.HudTabs),
+        new(CommandId.World_TabChat, "Chat Panel", KeybindSection.HudTabs),
+        new(CommandId.World_TabChatHistory, "Message History", KeybindSection.HudTabs),
+        new(CommandId.World_TabStats, "Stats", KeybindSection.HudTabs),
+        new(CommandId.World_TabStatsExtended, "Extended Stats", KeybindSection.HudTabs),
+        new(CommandId.World_TabTools, "Tools", KeybindSection.HudTabs),
 
         new(CommandId.World_ChatFocus, "Chat", KeybindSection.Chat),
         new(CommandId.World_Shout, "Shout", KeybindSection.Chat),
@@ -81,7 +98,16 @@ public static class KeybindCatalog
         new(CommandId.World_BoardList, "Board List", KeybindSection.FunctionKeys),
         new(CommandId.World_KeybindMenu, "Keybinds", KeybindSection.FunctionKeys),
         new(CommandId.World_IgnoreList, "Ignore List", KeybindSection.FunctionKeys),
-        new(CommandId.World_FriendsList, "Friends List", KeybindSection.FunctionKeys)
+        new(CommandId.World_FriendsList, "Friends List", KeybindSection.FunctionKeys),
+
+        new(CommandId.Editor_SelectAll, "Select All", KeybindSection.TextEditing),
+        new(CommandId.Editor_Copy, "Copy", KeybindSection.TextEditing),
+        new(CommandId.Editor_Cut, "Cut", KeybindSection.TextEditing),
+        new(CommandId.Editor_Paste, "Paste", KeybindSection.TextEditing),
+        new(CommandId.Editor_Undo, "Undo", KeybindSection.TextEditing),
+        new(CommandId.Editor_Redo, "Redo", KeybindSection.TextEditing),
+        new(CommandId.Editor_LineStart, "Line Start", KeybindSection.TextEditing),
+        new(CommandId.Editor_LineEnd, "Line End", KeybindSection.TextEditing)
     ];
 
     private static readonly FrozenDictionary<CommandId, KeybindEntry> ById =
@@ -95,9 +121,11 @@ public static class KeybindCatalog
     {
         KeybindSection.Movement     => "Movement",
         KeybindSection.Panels       => "Panels & Windows",
+        KeybindSection.HudTabs      => "HUD Tabs",
         KeybindSection.Chat         => "Chat",
         KeybindSection.Actions      => "Actions",
         KeybindSection.FunctionKeys => "Function Keys",
+        KeybindSection.TextEditing  => "Text Editing",
         _                           => section.ToString()
     };
 

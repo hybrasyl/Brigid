@@ -1,4 +1,5 @@
 #region
+using Brigid.Systems.Keybinds;
 using Brigid.Utilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -1025,7 +1026,7 @@ public class UITextBox : UIElement
         CursorPosition = Text.Length;
 
         //selecting all ends the current typing/delete run so a following edit is its own undo unit
-        //(mouse-based selection is already covered by OnMouseDown; this guards the Ctrl+Shift+A path)
+        //(mouse-based selection is already covered by OnMouseDown; this guards the Select All command path)
         LastEditKind = EditKind.Other;
     }
 
@@ -1161,6 +1162,17 @@ public class UITextBox : UIElement
         if (!IsFocused || !Enabled)
             return;
 
+        //clipboard / undo-redo / select-all / line start-end resolve through the keybind registry so they honour
+        //rebindings and the per-OS primary modifier (Ctrl on Windows/Linux, Cmd on macOS). Pure caret nav and
+        //text mutation below stay literal — they are not rebindable commands.
+        if (TryHandleEditorCommand(e))
+        {
+            if (IsMultiLine)
+                EnsureCursorVisible();
+
+            return;
+        }
+
         var shift = e.Shift;
         var ctrl = e.Ctrl;
 
@@ -1253,67 +1265,6 @@ public class UITextBox : UIElement
 
                 break;
 
-            //── selection / clipboard ──
-            case Keys.A when ctrl && shift && IsSelectable:
-                SelectAll();
-                e.Handled = true;
-
-                break;
-
-            //readline-style caret movement: ctrl+a line start, ctrl+e line end
-            case Keys.A when ctrl:
-                MoveToLineStart(false);
-                e.Handled = true;
-
-                break;
-
-            case Keys.E when ctrl:
-                MoveToLineEnd(false);
-                e.Handled = true;
-
-                break;
-
-            case Keys.C when ctrl && HasSelection:
-            {
-                var clipboardText = IsMasked ? new string('*', SelectionLength) : StripColorCodes(SelectedText);
-                Clipboard.SetText(clipboardText);
-                e.Handled = true;
-
-                break;
-            }
-
-            case Keys.X when ctrl && HasSelection && !IsReadOnly:
-            {
-                var clipboardText = IsMasked ? new string('*', SelectionLength) : StripColorCodes(SelectedText);
-                Clipboard.SetText(clipboardText);
-                RecordUndo(EditKind.Cut);
-                DeleteSelection();
-                ResetCursor();
-                e.Handled = true;
-
-                break;
-            }
-
-            case Keys.V when ctrl && !IsReadOnly:
-                HandlePaste();
-                e.Handled = true;
-
-                break;
-
-            //── undo / redo (single level) ──
-            case Keys.Z when ctrl && !shift && !IsReadOnly:
-                Undo();
-                e.Handled = true;
-
-                break;
-
-            case Keys.Z when ctrl && shift && !IsReadOnly:
-            case Keys.Y when ctrl && !IsReadOnly:
-                Redo();
-                e.Handled = true;
-
-                break;
-
             //── editing ──
             case Keys.Delete when ctrl && !IsReadOnly:
                 if (HasSelection || (CursorPosition < Text.Length))
@@ -1395,6 +1346,76 @@ public class UITextBox : UIElement
 
         if (IsMultiLine)
             EnsureCursorVisible();
+    }
+
+    //resolves the focused-textbox editor commands through the keybind registry. Returns true when a command was
+    //handled; false when nothing resolved OR a resolved command's guard failed (e.g. Copy with no selection), so
+    //OnKeyDown falls through to the literal nav switch whose default: still swallows the key while focused —
+    //matching the pre-migration behaviour.
+    private bool TryHandleEditorCommand(KeyDownEvent e)
+    {
+        switch (Keybinds.Resolve(e, KeybindContext.TextEditing))
+        {
+            case CommandId.Editor_SelectAll when IsSelectable:
+                SelectAll();
+                e.Handled = true;
+
+                return true;
+
+            case CommandId.Editor_LineStart:
+                MoveToLineStart(false);
+                e.Handled = true;
+
+                return true;
+
+            case CommandId.Editor_LineEnd:
+                MoveToLineEnd(false);
+                e.Handled = true;
+
+                return true;
+
+            case CommandId.Editor_Copy when HasSelection:
+            {
+                var clipboardText = IsMasked ? new string('*', SelectionLength) : StripColorCodes(SelectedText);
+                Clipboard.SetText(clipboardText);
+                e.Handled = true;
+
+                return true;
+            }
+
+            case CommandId.Editor_Cut when HasSelection && !IsReadOnly:
+            {
+                var clipboardText = IsMasked ? new string('*', SelectionLength) : StripColorCodes(SelectedText);
+                Clipboard.SetText(clipboardText);
+                RecordUndo(EditKind.Cut);
+                DeleteSelection();
+                ResetCursor();
+                e.Handled = true;
+
+                return true;
+            }
+
+            case CommandId.Editor_Paste when !IsReadOnly:
+                HandlePaste();
+                e.Handled = true;
+
+                return true;
+
+            case CommandId.Editor_Undo when !IsReadOnly:
+                Undo();
+                e.Handled = true;
+
+                return true;
+
+            case CommandId.Editor_Redo when !IsReadOnly:
+                Redo();
+                e.Handled = true;
+
+                return true;
+
+            default:
+                return false;
+        }
     }
 
     public override void OnTextInput(TextInputEvent e)
