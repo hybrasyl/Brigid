@@ -44,26 +44,6 @@ public static class TextRenderer
         => FontEngine.Instance.DrawLine(spriteBatch, text, position, color, clip: null, style: style);
 
     /// <summary>
-    ///     Draws a single line of text with a dual diagonal drop shadow. The shadow is drawn at (-1,+1) and (+1,+1)
-    ///     relative to the main text, matching the original Dark Ages client name-tag rendering.
-    /// </summary>
-    public static void DrawShadowedText(
-        SpriteBatch spriteBatch,
-        Vector2 position,
-        string text,
-        Color textColor,
-        Color shadowColor,
-        bool colorCodesEnabled = true)
-    {
-        if (string.IsNullOrEmpty(text))
-            return;
-
-        DrawText(spriteBatch, position + new Vector2(2, 1), text, shadowColor, colorCodesEnabled);
-        DrawText(spriteBatch, position + new Vector2(0, 1), text, shadowColor, colorCodesEnabled);
-        DrawText(spriteBatch, position + new Vector2(1, 0), text, textColor, colorCodesEnabled);
-    }
-
-    /// <summary>
     ///     Draws text with per-glyph clipping against a clip rectangle. Only called when text partially intersects the
     ///     clip bounds — the common fully-inside case bypasses this.
     /// </summary>

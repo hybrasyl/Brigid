@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Extensions;
 using Microsoft.Xna.Framework;
 #endregion
 
@@ -12,6 +13,11 @@ namespace Brigid.Controls.World.ViewPort;
 public sealed class SystemMessagePaneControl : UIPanel
 {
     private const int MAX_LINES = 3;
+    private const ShadowStyle LINE_SHADOW = ShadowStyle.BottomRight;
+
+    //labels and the pane are sized to hold the shadow's trailing row, otherwise ClipRect shaves it off
+    private static readonly int ShadowMarginY = LINE_SHADOW.ShadowMargin.Y;
+
     private const float DISPLAY_DURATION_MS = 2500f;
     private const float FADE_DURATION_MS = 1000f;
     private const float TOTAL_DURATION_MS = DISPLAY_DURATION_MS + FADE_DURATION_MS;
@@ -25,7 +31,7 @@ public sealed class SystemMessagePaneControl : UIPanel
     {
         Name = "SystemMessagePane";
         Width = TextRenderer.CHAR_WIDTH * 48;
-        Height = MAX_LINES * TextRenderer.CHAR_HEIGHT;
+        Height = MAX_LINES * TextRenderer.CHAR_HEIGHT + ShadowMarginY;
         SetViewportBounds(viewportBounds);
         IsHitTestVisible = false;
 
@@ -35,13 +41,13 @@ public sealed class SystemMessagePaneControl : UIPanel
             {
                 Name = $"SysMsg{i}",
                 Width = Width,
-                Height = TextRenderer.CHAR_HEIGHT,
+                Height = TextRenderer.CHAR_HEIGHT + ShadowMarginY,
                 PaddingLeft = 0,
                 PaddingRight = 0,
                 PaddingTop = 0,
                 PaddingBottom = 0,
                 ColorCodesEnabled = true,
-                ShadowStyle = ShadowStyle.BottomRight,
+                ShadowStyle = LINE_SHADOW,
                 Visible = false
             };
 
@@ -88,7 +94,8 @@ public sealed class SystemMessagePaneControl : UIPanel
 
     private void RepositionLabels()
     {
-        var startY = Height - Count * TextRenderer.CHAR_HEIGHT;
+        //bottom-aligned on the 12px line grid; the shadow row lives in the pane's trailing margin, not the grid
+        var startY = Height - ShadowMarginY - Count * TextRenderer.CHAR_HEIGHT;
 
         for (var i = 0; i < MAX_LINES; i++)
             if (i < Count)
