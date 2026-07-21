@@ -134,6 +134,13 @@ public static class WorldState
     public static WorldList WorldList { get; } = new();
 
     /// <summary>
+    ///     Per-ability metadata for the player's class, parsed from the client's SClass meta file (the class is only
+    ///     revealed by the self-profile packet, so this stays null until the first one arrives). Look an ability up by
+    ///     name with <see cref="Data.Models.AbilityMetadata.TryGet" />.
+    /// </summary>
+    public static AbilityMetadata? AbilityMetadata { get; set; }
+
+    /// <summary>
     ///     Adds or updates an aisling entity from a DisplayAisling packet.
     /// </summary>
     public static void AddOrUpdateAisling(DisplayUserPacket args)
@@ -310,6 +317,9 @@ public static class WorldState
         Exchange.Close();
         WorldList.Clear();
         UserOptions.ClearServerSettings();
+
+        //character-scoped: a re-login as a different class must not resolve ability names against the old SClass table.
+        AbilityMetadata = null;
     }
 
     /// <summary>
@@ -749,8 +759,6 @@ public static class WorldState
                     break;
 
                 case BoardIndexPacket index:
-                    Board.IsBoardListPending = false;
-
                     var isPublic = index.ResponseType == BoardResponseType.PublicBoard;
 
                     var entries = index.Messages

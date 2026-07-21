@@ -41,8 +41,8 @@ public abstract class CenteredModalPanel : UIPanel
 
     private readonly UILabel TitleLabel;
 
-    //running right edge for the next bottom-bar button; buttons stack right-to-left from Close.
-    private int NextButtonRight;
+    //bottom-bar buttons in creation order (Close first), so RelayoutBottomBar can re-pack them.
+    private readonly List<TextButton> BottomBarButtons = [];
 
     //the viewport the panel centers within; defaults to the full virtual screen until SetViewportBounds runs.
     private Rectangle Viewport = new(0, 0, ChaosGame.VIRTUAL_WIDTH, ChaosGame.VIRTUAL_HEIGHT);
@@ -85,7 +85,6 @@ public abstract class CenteredModalPanel : UIPanel
         };
         AddChild(TitleLabel);
 
-        NextButtonRight = width - PADDING;
         CloseButton = AddBottomBarButton("Close", CLOSE_W, Hide);
     }
 
@@ -95,16 +94,47 @@ public abstract class CenteredModalPanel : UIPanel
     /// </summary>
     protected TextButton AddBottomBarButton(string text, int width, ClickedHandler onClick)
     {
-        var button = new TextButton(text, width, BUTTON_H)
-        {
-            X = NextButtonRight - width,
-            Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2
-        };
+        var button = new TextButton(text, width, BUTTON_H) { Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2 };
         button.Clicked += onClick;
+        BottomBarButtons.Add(button);
         AddChild(button);
-        NextButtonRight = button.X - BUTTON_GAP;
+        RelayoutBottomBar();
 
         return button;
+    }
+
+    /// <summary>
+    ///     Declares which optional actions the bar shows right now: every button in <paramref name="visible" /> is
+    ///     shown, every other subclass-added button is hidden, and the bar is re-packed. Close is always kept.
+    ///     Subclasses whose action set varies per view call this on each view change, so the bar can never end up
+    ///     with a hole where a hidden button used to sit.
+    /// </summary>
+    protected void SetBottomBarActions(params TextButton[] visible)
+    {
+        foreach (var button in BottomBarButtons)
+            if (!ReferenceEquals(button, CloseButton))
+                button.Visible = Array.IndexOf(visible, button) >= 0;
+
+        RelayoutBottomBar();
+    }
+
+    /// <summary>
+    ///     Re-packs the <b>visible</b> bottom-bar buttons right-to-left in creation order (Close rightmost). Called
+    ///     for you by <see cref="SetBottomBarActions" /> and <see cref="AddBottomBarButton" />; call it directly
+    ///     only after changing a button's <c>Width</c>.
+    /// </summary>
+    protected void RelayoutBottomBar()
+    {
+        var right = Width - PADDING;
+
+        foreach (var button in BottomBarButtons)
+        {
+            if (!button.Visible)
+                continue;
+
+            button.X = right - button.Width;
+            right = button.X - BUTTON_GAP;
+        }
     }
 
     protected void SetTitle(string title) => TitleLabel.Text = title;

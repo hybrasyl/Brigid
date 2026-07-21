@@ -34,11 +34,6 @@ public sealed class Board
     public bool EnablePrevButton { get; private set; }
 
     /// <summary>
-    ///     Whether the session is waiting for a ViewBoard response. Used to gate unsolicited type 2/4 packets.
-    /// </summary>
-    public bool IsBoardListPending { get; set; }
-
-    /// <summary>
     ///     Whether the current board is a public bulletin board (vs personal mail).
     /// </summary>
     public bool IsPublicBoard { get; private set; }
@@ -47,11 +42,6 @@ public sealed class Board
     ///     Whether a board session is currently open (any board panel visible).
     /// </summary>
     public bool IsSessionOpen { get; private set; }
-
-    /// <summary>
-    ///     Whether the session was opened from the board list (affects Up behavior on post list).
-    /// </summary>
-    public bool WasOpenedFromBoardList { get; set; }
 
     /// <summary>
     ///     The posts from the most recent board response only. On a scroll-paging fetch this holds just the newly
@@ -81,10 +71,24 @@ public sealed class Board
             return;
 
         IsSessionOpen = false;
-        IsBoardListPending = false;
-        WasOpenedFromBoardList = false;
         Clear();
         SessionClosed?.Invoke();
+    }
+
+    /// <summary>
+    ///     The display name for a board id, from the board list. Null when the board was pushed by the server
+    ///     without a preceding list (a signpost click), which carries only the id.
+    /// </summary>
+    public string? GetBoardName(ushort boardId)
+    {
+        if (AvailableBoards is null)
+            return null;
+
+        foreach (var entry in AvailableBoards)
+            if (entry.BoardId == boardId)
+                return entry.Name;
+
+        return null;
     }
 
     public void HandleResponse(string message, bool success) => ResponseReceived?.Invoke(message, success);
@@ -95,8 +99,6 @@ public sealed class Board
     public void OpenSession()
     {
         IsSessionOpen = true;
-        IsBoardListPending = false;
-        WasOpenedFromBoardList = false;
     }
 
     /// <summary>

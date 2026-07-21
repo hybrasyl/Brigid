@@ -310,15 +310,9 @@ public sealed partial class WorldScreen
     #endregion
 
     #region Board/Mail Wiring
-    private void WireMailControls()
+    private void WireBoardControls()
     {
-        WireBoardListControl();
-        WireArticleListControl();
-        WireMailListControl();
-        WireArticleReadControl();
-        WireMailReadControl();
-        WireArticleSendControl();
-        WireMailSendControl();
+        WireBoardsModal();
 
         DeleteConfirm.OnOk += () =>
         {
@@ -372,19 +366,11 @@ public sealed partial class WorldScreen
         SocialStatusPicker.Show();
     }
 
-    private bool IsAnyBoardPanelVisible() =>
-        BoardList.Visible
-        || ArticleList.Visible
-        || ArticleRead.Visible
-        || ArticleSend.Visible
-        || MailList.Visible
-        || MailRead.Visible
-        || MailSend.Visible;
+    private bool IsAnyBoardPanelVisible() => BoardsModal.Visible;
 
     /// <summary>
-    ///     Closes all Q/W/E/R toggle panels except the one identified by <paramref name="except" />.
-    ///     Slide panels animate out concurrently with the new panel sliding in. Button deselection
-    ///     is handled by the OnClose/SessionClosed events that fire when slide-out completes.
+    ///     Closes all Q/W/E/R toggle panels except the one identified by <paramref name="except" />. Button
+    ///     deselection is handled by the OnClose/SessionClosed events the close raises.
     /// </summary>
     private void ForceCloseOtherTogglePanels(Keys except)
     {
@@ -395,12 +381,7 @@ public sealed partial class WorldScreen
         }
 
         if ((except != Keys.W) && IsAnyBoardPanelVisible())
-        {
-            if (BoardList.Visible)
-                BoardList.SlideClose();
-            else
-                WorldState.Board.CloseSession();
-        }
+            WorldState.Board.CloseSession();
 
         if ((except != Keys.E) && WorldList.Visible)
             WorldList.Close();
@@ -415,13 +396,13 @@ public sealed partial class WorldScreen
 
     private void HideAllBoardControls()
     {
-        BoardList.Hide();
-        ArticleList.Hide();
-        ArticleRead.Hide();
-        ArticleSend.Hide();
-        MailList.Hide();
-        MailRead.Hide();
-        MailSend.Hide();
+        BoardsModal.Hide();
+
+        //a confirm popup can outlive the session that armed it (closing the board UI while it is up). Drop the
+        //pending actions so an OK afterwards can't send a delete against a closed session.
+        PendingDeleteAction = null;
+        PendingBoardSuccessAction = null;
+        DeleteConfirm.Hide();
     }
 
     /// <summary>
@@ -443,294 +424,74 @@ public sealed partial class WorldScreen
         public override void OnDragDrop(DragDropEvent e) => Screen.OnRootDragDrop(e);
     }
 
-    private void WireBoardListControl()
+    private void WireBoardsModal()
     {
-        BoardList.OnViewBoard += boardId =>
+        BoardsModal.BoardSelected += boardId =>
         {
-            WorldState.Board.IsBoardListPending = true;
-            WorldState.Board.WasOpenedFromBoardList = true;
             Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, boardId, startPostId: short.MaxValue);
         };
 
-        BoardList.OnClose += () => WorldState.Board.CloseSession();
-    }
+        BoardsModal.PostSelected += postId => Game.Connection.SendBoardInteraction(
+            BoardRequestType.ViewPost,
+            BoardsModal.BoardId,
+            postId,
+            controls: BoardControls.RequestPost);
 
-    private void WireArticleListControl()
-    {
-        ArticleList.OnViewPost += postId =>
+        BoardsModal.StepRequested += (currentPostId, forward) =>
         {
+            //post ids run newest-first, so "next" walks down and "prev" walks up.
+            var target = forward
+                ? (short)Math.Max(currentPostId - 1, 1)
+                : (short)Math.Min(currentPostId + 1, short.MaxValue);
+
             Game.Connection.SendBoardInteraction(
                 BoardRequestType.ViewPost,
-                ArticleList.BoardId,
-                postId,
-                controls: BoardControls.RequestPost);
+                BoardsModal.BoardId,
+                target,
+                controls: forward ? BoardControls.NextPage : BoardControls.PreviousPage);
         };
 
-        ArticleList.OnNewPost += () =>
+        BoardsModal.DeleteRequested += postId =>
         {
-            ArticleList.Hide();
-            ArticleSend.BoardId = ArticleList.BoardId;
-            ArticleSend.ShowCompose(WorldHud.PlayerName);
-        };
+            var boardId = BoardsModal.BoardId;
 
-        ArticleList.OnDeletePost += postId =>
-        {
             PendingDeleteAction = () =>
             {
-                PendingBoardSuccessAction = () => ArticleList.RemoveEntry(postId);
-                Game.Connection.SendBoardInteraction(BoardRequestType.Delete, ArticleList.BoardId, postId);
+                PendingBoardSuccessAction = () => BoardsModal.RemovePost(postId);
+                Game.Connection.SendBoardInteraction(BoardRequestType.Delete, boardId, postId);
             };
 
             DeleteConfirm.Show("Delete this post?");
         };
 
-        ArticleList.OnHighlight += postId =>
+        BoardsModal.HighlightRequested += postId =>
         {
-            PendingBoardSuccessAction = () => ArticleList.ToggleHighlight(postId);
-            Game.Connection.SendBoardInteraction(BoardRequestType.Highlight, ArticleList.BoardId, postId);
+            PendingBoardSuccessAction = () => BoardsModal.ToggleHighlight(postId);
+            Game.Connection.SendBoardInteraction(BoardRequestType.Highlight, BoardsModal.BoardId, postId);
         };
 
-        ArticleList.OnLoadMorePosts += lastPostId =>
-            Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, ArticleList.BoardId, startPostId: lastPostId);
+        BoardsModal.LoadMoreRequested += lastPostId
+            => Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, BoardsModal.BoardId, startPostId: lastPostId);
 
-        ArticleList.OnUp += () =>
+        BoardsModal.SubmitRequested += (recipient, subject, body) =>
         {
-            ArticleList.Hide();
-
-            if (WorldState.Board.WasOpenedFromBoardList && WorldState.Board.AvailableBoards is { Count: > 0 })
-                BoardList.ShowBoards(
-                    WorldState.Board
-                              .AvailableBoards
-                              .Select(b => (b.BoardId, b.Name))
-                              .ToList(),
-                    false);
-            else
-                WorldState.Board.CloseSession();
-        };
-
-        ArticleList.OnClose += () => WorldState.Board.CloseSession();
-    }
-
-    private void WireMailListControl()
-    {
-        MailList.OnViewPost += postId =>
-        {
-            Game.Connection.SendBoardInteraction(
-                BoardRequestType.ViewPost,
-                MailList.BoardId,
-                postId,
-                controls: BoardControls.RequestPost);
-        };
-
-        MailList.OnNewMail += () =>
-        {
-            MailList.Hide();
-            MailSend.BoardId = MailList.BoardId;
-            MailSend.ShowCompose();
-        };
-
-        MailList.OnDeletePost += postId =>
-        {
-            PendingDeleteAction = () =>
-            {
-                PendingBoardSuccessAction = () => MailList.RemoveEntry(postId);
-                Game.Connection.SendBoardInteraction(BoardRequestType.Delete, MailList.BoardId, postId);
-            };
-
-            DeleteConfirm.Show("Delete this post?");
-        };
-
-        MailList.OnReplyPost += _ =>
-        {
-            MailSend.BoardId = MailList.BoardId;
-            MailList.Hide();
-            MailSend.ShowCompose(MailList.CurrentAuthor);
-        };
-
-        MailList.OnLoadMorePosts += lastPostId =>
-            Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, MailList.BoardId, startPostId: lastPostId);
-
-        MailList.OnUp += () =>
-        {
-            MailList.Hide();
-
-            if (WorldState.Board.WasOpenedFromBoardList && WorldState.Board.AvailableBoards is { Count: > 0 })
-                BoardList.ShowBoards(
-                    WorldState.Board
-                              .AvailableBoards
-                              .Select(b => (b.BoardId, b.Name))
-                              .ToList(),
-                    false);
-            else
-                WorldState.Board.CloseSession();
-        };
-
-        MailList.OnClose += () => WorldState.Board.CloseSession();
-    }
-
-    private void WireArticleReadControl()
-    {
-        ArticleRead.OnUp += () =>
-        {
-            ArticleRead.Hide();
-            ArticleList.Show();
-        };
-
-        ArticleRead.OnClose += () => WorldState.Board.CloseSession();
-
-        ArticleRead.OnPrev += () =>
-        {
-            var prevId = (short)Math.Min(ArticleRead.CurrentPostId + 1, short.MaxValue);
+            var boardId = BoardsModal.BoardId;
 
             Game.Connection.SendBoardInteraction(
-                BoardRequestType.ViewPost,
-                ArticleRead.BoardId,
-                prevId,
-                controls: BoardControls.PreviousPage);
-        };
-
-        ArticleRead.OnNext += () =>
-        {
-            var nextId = (short)Math.Max(ArticleRead.CurrentPostId - 1, 1);
-
-            Game.Connection.SendBoardInteraction(
-                BoardRequestType.ViewPost,
-                ArticleRead.BoardId,
-                nextId,
-                controls: BoardControls.NextPage);
-        };
-
-        ArticleRead.OnDeletePost += postId =>
-        {
-            PendingDeleteAction = () =>
-            {
-                PendingBoardSuccessAction = () =>
-                {
-                    ArticleList.RemoveEntry(postId);
-                    ArticleRead.Hide();
-                    ArticleList.Show();
-                };
-                Game.Connection.SendBoardInteraction(BoardRequestType.Delete, ArticleRead.BoardId, postId);
-            };
-
-            DeleteConfirm.Show("Delete this post?");
-        };
-
-        ArticleRead.OnNewPost += () =>
-        {
-            ArticleRead.Hide();
-            ArticleSend.BoardId = ArticleRead.BoardId;
-            ArticleSend.ShowCompose(WorldHud.PlayerName);
-        };
-    }
-
-    private void WireMailReadControl()
-    {
-        MailRead.OnUp += () =>
-        {
-            MailRead.Hide();
-            MailList.Show();
-        };
-
-        MailRead.OnQuit += () => WorldState.Board.CloseSession();
-
-        MailRead.OnPrev += () =>
-        {
-            var prevId = (short)Math.Min(MailRead.CurrentPostId + 1, short.MaxValue);
-
-            Game.Connection.SendBoardInteraction(
-                BoardRequestType.ViewPost,
-                MailRead.BoardId,
-                prevId,
-                controls: BoardControls.PreviousPage);
-        };
-
-        MailRead.OnNext += () =>
-        {
-            var nextId = (short)Math.Max(MailRead.CurrentPostId - 1, 1);
-
-            Game.Connection.SendBoardInteraction(
-                BoardRequestType.ViewPost,
-                MailRead.BoardId,
-                nextId,
-                controls: BoardControls.NextPage);
-        };
-
-        MailRead.OnReplyPost += _ =>
-        {
-            MailRead.Hide();
-            MailSend.BoardId = MailRead.BoardId;
-            MailSend.ShowCompose(MailRead.CurrentAuthor);
-        };
-
-        MailRead.OnDeletePost += postId =>
-        {
-            PendingDeleteAction = () =>
-            {
-                PendingBoardSuccessAction = () =>
-                {
-                    MailList.RemoveEntry(postId);
-                    MailRead.Hide();
-                    MailList.Show();
-                };
-                Game.Connection.SendBoardInteraction(BoardRequestType.Delete, MailRead.BoardId, postId);
-            };
-
-            DeleteConfirm.Show("Delete this post?");
-        };
-
-        MailRead.OnNewMail += () =>
-        {
-            MailRead.Hide();
-            MailSend.BoardId = MailRead.BoardId;
-            MailSend.ShowCompose();
-        };
-    }
-
-    private void WireArticleSendControl()
-    {
-        ArticleSend.OnSend += (subject, body) =>
-        {
-            Game.Connection.SendBoardInteraction(
-                BoardRequestType.NewPost,
-                ArticleSend.BoardId,
-                subject: subject,
-                message: body);
-
-            //re-request post list — compose stays visible until server responds
-            WorldState.Board.IsBoardListPending = true;
-            Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, ArticleSend.BoardId, startPostId: short.MaxValue);
-        };
-
-        ArticleSend.OnCancel += () =>
-        {
-            ArticleSend.Hide();
-            ArticleList.Show();
-        };
-    }
-
-    private void WireMailSendControl()
-    {
-        MailSend.OnSend += (recipient, subject, body) =>
-        {
-            Game.Connection.SendBoardInteraction(
-                BoardRequestType.SendMail,
-                MailSend.BoardId,
+                recipient is null ? BoardRequestType.NewPost : BoardRequestType.SendMail,
+                boardId,
                 to: recipient,
                 subject: subject,
                 message: body);
 
-            //re-request post list — compose stays visible until server responds
-            WorldState.Board.IsBoardListPending = true;
-            Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, MailSend.BoardId, startPostId: short.MaxValue);
+            //re-request the post list — compose stays visible until the server responds
+            Game.Connection.SendBoardInteraction(BoardRequestType.ViewBoard, boardId, startPostId: short.MaxValue);
         };
 
-        MailSend.OnCancel += () =>
-        {
-            MailSend.Hide();
-            MailList.Show();
-        };
+        BoardsModal.SessionEndRequested += () => WorldState.Board.CloseSession();
+        BoardsModal.OnClose += () => WorldState.Board.CloseSession();
     }
+
     #endregion
 
     #region HUD Panel Wiring
@@ -957,13 +718,6 @@ public sealed partial class WorldScreen
         SystemMessagePane.SetViewportBounds(viewport);
         PauseMenu.SetViewportBounds(viewport);
         WorldList.SetViewportBounds(viewport);
-        BoardList.SetViewportBounds(viewport);
-        ArticleList.SetViewportBounds(viewport);
-        ArticleRead.SetViewportBounds(viewport);
-        ArticleSend.SetViewportBounds(viewport);
-        MailList.SetViewportBounds(viewport);
-        MailRead.SetViewportBounds(viewport);
-        MailSend.SetViewportBounds(viewport);
         MarkdownNotice.SetViewportBounds(viewport);
 
         FollowPlayerCamera();

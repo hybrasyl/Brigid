@@ -212,25 +212,57 @@ _nmoney.txt
     _nmoney.epf/.spf     — Anchor background
     _nbtn.epf/.spf       — OK/Cancel button frames
 
+_nbdlist.txt
+  Class:    (retired) — replaced by BoardsModalControl's BoardIndexPane
+  File:     Controls/World/Popups/Boards/BoardIndexPane.cs (primitive, no prefab)
+  Purpose:  Board selection list — scrollable board names, View/Quit
+  Images referenced by controls:
+    _nbdlist.epf/.spf    — Anchor background
+    _nbtn.epf/.spf       — Action button frames
+
+_narlist.txt
+  Class:    (retired) — replaced by BoardsModalControl's PostListPane
+  File:     Controls/World/Popups/Boards/PostListPane.cs (primitive, no prefab)
+  Purpose:  Bulletin board post list — scrollable rows (id/author/date/subject), View/New/Delete/Hilight/Up/Close
+  Images referenced by controls:
+    _narlist.epf/.spf    — Anchor background
+    _nbtn.epf/.spf       — Action button frames
+
+_narti.txt
+  Class:    (retired) — replaced by BoardsModalControl's PostReadPane
+  File:     Controls/World/Popups/Boards/PostReadPane.cs (primitive, no prefab)
+  Purpose:  Bulletin board post read view — word-wrapped body, author/title/date, Prev/Next/New/Delete/Up/Close
+  Images referenced by controls:
+    _narti.epf/.spf      — Anchor background
+    _nbtn.epf/.spf       — Action button frames
+
+_nartin.txt
+  Class:    (retired) — replaced by BoardsModalControl's PostComposePane
+  File:     Controls/World/Popups/Boards/PostComposePane.cs (primitive, no prefab)
+  Purpose:  Bulletin board compose — subject field, multi-line body, Send/Cancel
+  Images referenced by controls:
+    _nartin.epf/.spf     — Anchor background
+    _nbtn.epf/.spf       — Send/Cancel button frames
+
 _nmaill.txt
-  Class:    MailListControl : PrefabPanel
-  File:     Controls/World/Popups/MailListControl.cs
+  Class:    (retired) — replaced by BoardsModalControl's PostListPane
+  File:     Controls/World/Popups/Boards/PostListPane.cs (primitive, no prefab)
   Purpose:  Mail inbox list — scrollable rows (date/author/subject), View/New/Reply/Delete/Up/Quit
   Images referenced by controls:
     _nmaill.epf/.spf     — Anchor background
     _nbtn.epf/.spf       — Action button frames
 
 _nmailr.txt
-  Class:    MailReadControl : PrefabPanel
-  File:     Controls/World/Popups/MailReadControl.cs
+  Class:    (retired) — replaced by BoardsModalControl's PostReadPane
+  File:     Controls/World/Popups/Boards/PostReadPane.cs (primitive, no prefab)
   Purpose:  Mail read view — word-wrapped body, author/title/date, Prev/Next/Reply/Delete/Up/Quit
   Images referenced by controls:
     _nmailr.epf/.spf     — Anchor background
     _nbtn.epf/.spf       — Action button frames
 
 _nmails.txt
-  Class:    MailSendControl : PrefabPanel
-  File:     Controls/World/Popups/MailSendControl.cs
+  Class:    (retired) — replaced by BoardsModalControl's PostComposePane
+  File:     Controls/World/Popups/Boards/PostComposePane.cs (primitive, no prefab)
   Purpose:  Mail compose — recipient/subject fields, multi-line body, Send/Cancel
   Images referenced by controls:
     _nmails.epf/.spf     — Anchor background
@@ -286,13 +318,13 @@ lnpcd.txt
     _nbtn.epf/.spf       — Navigation button frames
 
 lssbook.txt
-  Class:    ChantEditControl : PrefabPanel
-  File:     Controls/World/Popups/ChantEditControl.cs
+  Class:    (retired) — replaced by CastablePopupControl's Lines tab
+  File:     Controls/World/Popups/CastablePopupControl.cs (primitive, no prefab)
   Purpose:  Chant/ability edit dialog — multi-line text, OK/Cancel
   Images referenced by controls:
     lssbook.epf/.spf     — Anchor background (likely in Cious archive)
-  Also manually loads:
-    butt001.epf          — Custom OK/Cancel buttons (GetEpfImages, palette 0)
+  Also manually loaded:
+    butt001.epf          — Custom OK/Cancel buttons (retired with the panel)
 
 _nhotkem.txt
   Class:    HotkeyHelpControl : PrefabPanel
@@ -315,8 +347,8 @@ _nhotkey.txt
 # ── Options / Settings ─────────────────────────────────────────────────────────
 
 _noptdlg.txt
-  Class:    MainOptionsControl : PrefabPanel
-  File:     Controls/World/Options/MainOptionsControl.cs
+  Class:    (retired) — replaced by OptionsModalControl's tab strip
+  File:     Controls/World/Popups/Options/OptionsModalControl.cs (primitive, no prefab)
   Purpose:  Options menu — music/sound volume sliders, Friends/Macro/Setting/ExitGame buttons
   Images referenced by controls:
     _noptdlg.epf/.spf    — Anchor background
@@ -324,16 +356,16 @@ _noptdlg.txt
     _nbtn.epf/.spf        — Action button frames
 
 _nmacro.txt
-  Class:    MacroMenuControl : PrefabPanel
-  File:     Controls/World/Options/MacroMenuControl.cs
+  Class:    (retired) — replaced by OptionsModalControl's Macros tab
+  File:     Controls/World/Popups/Options/OptionsModalControl.cs (primitive, no prefab)
   Purpose:  Macro menu (F3) — 8 macro slots (F5-F12), selection highlight, OK/Cancel
   Images referenced by controls:
     _nmacro.epf/.spf     — Anchor background
     _nbtn.epf/.spf       — OK/Cancel button frames
 
 _nsett.txt
-  Class:    SettingsControl : PrefabPanel
-  File:     Controls/World/Options/SettingsControl.cs
+  Class:    (retired) — replaced by OptionsModalControl's Settings tab
+  File:     Controls/World/Popups/Options/OptionsModalControl.cs (primitive, no prefab)
   Purpose:  Settings dialog (F4) — 8 toggle checkboxes, OK/Cancel
   Images referenced by controls:
     _nsett.epf/.spf      — Anchor background
@@ -342,8 +374,8 @@ _nsett.txt
     _nsettb.spf          — Toggle button frames (checked/unchecked, TextureConverter.LoadSpfTextures)
 
 _nfriend.txt
-  Class:    FriendsListControl : PrefabPanel
-  File:     Controls/World/Options/FriendsListControl.cs
+  Class:    (retired) — replaced by OptionsModalControl's Friends tab
+  File:     Controls/World/Popups/Options/OptionsModalControl.cs (primitive, no prefab)
   Purpose:  Friends list — two-column (online=green, offline=gray), OK/Cancel
   Images referenced by controls:
     _nfriend.epf/.spf    — Anchor background
@@ -435,7 +467,7 @@ dlgframe.epf
   Palette:    gui 0
 
 butt001.epf
-  Loaded by:  OkPopupMessageControl.cs:91-128, ChantEditControl.cs:148  (GetEpfImages)
+  Loaded by:  OkPopupMessageControl.cs:91-128  (GetEpfImages)
   Purpose:    Standard button spritesheet — OK/Cancel/Yes/No in normal+pressed states
   Palette:    gui 0
 
@@ -504,7 +536,7 @@ _nemots.spf
   Palette:    Embedded
 
 _nsettb.spf
-  Loaded by:  SettingsControl.cs:92  (TextureConverter.LoadSpfTextures)
+  Loaded by:  (retired with SettingsControl — the Settings tab is primitive)
   Purpose:    Settings toggle button frames — 8 settings x 2 states (checked/unchecked)
   Palette:    Embedded
 
@@ -606,12 +638,13 @@ msg.tbl
 # SECTION 5: SUMMARY — QUICK REFERENCE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Control .txt files:        34 total
+# Control .txt files:        38 total (12 retired — see the (retired) markers in Section 2)
 #   Login flow:              _nstart, _nlogin, _nsvr, _ncreate, _nagree, _npw
 #   Main HUD:                _nbk_s, _nstatus
 #   Self-profile tabs:       _nui, _nui_eq, _nui_sk, _nui_dr, _nui_ev, _nui_al, _nui_fm
-#   Popups/dialogs:          _nexch, _nmoney, _nmaill, _nmailr, _nmails, _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, lssbook, _nhotkem, _nhotkey
-#   Options/settings:        _noptdlg, _nmacro, _nsett, _nfriend
+#   Popups/dialogs:          _nexch, _nmoney, _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, _nhotkem, _nhotkey
+#   Retired (primitive now): _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook,
+#                            _noptdlg, _nmacro, _nsett, _nfriend
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm
 #

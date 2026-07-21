@@ -10,6 +10,10 @@ namespace Brigid.Data.Models;
 /// </summary>
 public sealed class AbilityMetadata
 {
+    //skills and spells are indexed separately: a class can legitimately have a skill and a spell of the same name.
+    private readonly Dictionary<string, AbilityMetadataEntry> SkillsByName;
+    private readonly Dictionary<string, AbilityMetadataEntry> SpellsByName;
+
     public IReadOnlyList<AbilityMetadataEntry> Skills { get; }
     public IReadOnlyList<AbilityMetadataEntry> Spells { get; }
 
@@ -17,6 +21,29 @@ public sealed class AbilityMetadata
     {
         Skills = skills;
         Spells = spells;
+        SkillsByName = BuildIndex(skills);
+        SpellsByName = BuildIndex(spells);
+    }
+
+    private static Dictionary<string, AbilityMetadataEntry> BuildIndex(IReadOnlyList<AbilityMetadataEntry> entries)
+    {
+        var index = new Dictionary<string, AbilityMetadataEntry>(entries.Count, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in entries)
+            index[entry.Name] = entry;
+
+        return index;
+    }
+
+    /// <summary>
+    ///     Looks an ability up by its display name (case-insensitive). False when this class's meta file has no such
+    ///     entry — e.g. a server-only castable the client's SClass table doesn't know about.
+    /// </summary>
+    public bool TryGet(string? name, bool isSpell, out AbilityMetadataEntry? entry)
+    {
+        entry = null;
+
+        return !string.IsNullOrEmpty(name) && (isSpell ? SpellsByName : SkillsByName).TryGetValue(name, out entry);
     }
 
     /// <summary>

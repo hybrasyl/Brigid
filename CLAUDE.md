@@ -141,13 +141,15 @@ Brigid/
 ├── Collections/              — WorldState, CircularBuffer
 ├── Models/                   — WorldEntity, Animation, EntityRemovalAnimation, WorldFrameState, SlotDragPayload, PathfindingState, etc.
 ├── ViewModel/                — Authoritative state classes owned by WorldState
-├── Systems/                  — AnimationSystem, CastingSystem, SoundSystem, Pathfinder, LightingSystem, LatencyMonitor, ClientSettings, MachineIdentity
+├── Systems/                  — AnimationSystem, CastingSystem, SoundSystem, Pathfinder, LightingSystem, LatencyMonitor, ClientSettings, MachineIdentity, AbilityRequirements
+│   └── Keybinds/             — CommandId, KeyChord, KeybindCatalog, Keybinds (rebindable key resolution)
 ├── Screens/                  — IScreen, ScreenManager, LobbyLoginScreen, WorldScreen (7 partial files)
 ├── Rendering/                — EntityOverlayManager, WorldDebugRenderer
 ├── Controls/                 — Full UI control hierarchy (see UI Control System below)
+│   └── Scrolling/            — ScrollModel, IScrollSource, ScrollView, ScrollBarBinder, VirtualizedListView, SelectableTextView, LabelScrollSource, TextBoxScrollSync
 ├── Definitions/              — Delegates, Enums, DoorTable, InputEvents, TextColors
 ├── Extensions/               — DirectionExtensions, RectangleExtensions, UIElementExtensions
-└── Utilities/                — Clipboard, DialogFrame, SlideAnimator
+└── Utilities/                — Clipboard, DialogFrame, Browser, FolderPicker, VersionInfo
 ```
 
 ### Screen System
@@ -165,11 +167,11 @@ Brigid/
 
 ### UI Control System
 
-**Component Primitives (`Controls/Components/`):** UIElement, UIPanel, UIButton, UITextBox, UIImage, UILabel, UIProgressBar, TextElement, PrefabPanel.
+**Component Primitives (`Controls/Components/`):** UIElement, UIPanel, UIButton, UITextBox, UIImage, UILabel, UIProgressBar, TextElement, PrefabPanel (prefab-art panels), CenteredModalPanel (base for from-scratch modals: DialogPalette frame, title band, per-view bottom action bar via `SetBottomBarActions`, Escape-dismiss, control-stack push), InputSlotPane (draws slot chrome behind a form's text fields).
 
 **Login Flow (`Controls/LobbyLogin/`):** LobbyLoginControl, LoginControl, ServerSelectControl, CharacterCreationControl, LoginNoticeControl, PasswordChangeControl, LogoImage.
 
-**Generic Controls (`Controls/Generic/`):** OkPopupMessageControl, TextPopupControl, MarkdownView (near-fullscreen markdown notice for `SystemMessageType.MarkdownNotice` = 0x20, a Hybrasyl/USDA extension: title bar with close/maximize, scrollbar, Escape dismisses, non-modal; debug-test via F11 overlay + Ctrl+M), ScrollBarControl, SliderControl, DebugOverlay.
+**Generic Controls (`Controls/Generic/`):** OkPopupMessageControl, TextPopupControl, MarkdownView (near-fullscreen markdown notice for `SystemMessageType.MarkdownNotice` = 0x20, a Hybrasyl/USDA extension: title bar with close/maximize, scrollbar, Escape dismisses, non-modal; debug-test via F11 overlay + Ctrl+M), ScrollBarControl, SliderControl, DebugOverlay. Asset-free primitives shared by the from-scratch modals: DialogPalette (the one colour source), TextButton, SelectableTab, TabStrip (row/column of tabs; clicked and selected are separate so a server-authoritative surface can defer selection to the reply), CheckBox.
 
 **World HUD (`Controls/World/Hud/`):** IWorldHud interface, WorldHudControl (classic compact HUD), LargeWorldHudControl (expanded HUD), OrangeBarControl, ChatInputControl, EffectBarControl/EffectSlotControl, MailButton (unread-mail pulse indicator driven by `PlayerAttributes.HasUnreadMail`).
 
@@ -177,9 +179,9 @@ Brigid/
 
 **Self Profile (`Popups/Profile/`):** SelfProfileTabControl with Equipment/Legend/AbilityMetadata/Events/Family/Blank tabs, SelfProfileTextEditorControl, AbilityMetadataDetailsControl/AbilityMetadataEntryControl, EventMetadataDetailsControl/EventMetadataEntryControl, LegendMarkControl. **Other Profile:** OtherProfileTabControl (Equipment via _nui_eqa + Legend tabs), OtherProfileEquipmentTab. (Legend tab reuses `SelfProfileLegendTab`.)
 
-**Options (`Popups/Options/`):** MainOptionsControl, MacrosListControl, SettingsControl, FriendsListControl.
+**Options (`Popups/Options/`):** OptionsModalControl (tabbed Settings|Macros|Friends|Keybinds modal), KeybindsTabControl, KeybindCaptureControl, PauseMenuControl.
 
-**Popups (`Popups/`):** AislingContextMenu, GoldAmountControl, ItemAmountControl, ChantEditControl, GroupRecruitPanel, GroupTab/GroupTabControl, HotkeyHelpControl, ItemTooltipControl, NotepadControl, SocialStatusControl, TownMapControl. Subdirectories: `Boards/` (BoardListControl, ArticleListControl/ArticleReadControl/ArticleSendControl, MailListControl/MailReadControl/MailSendControl), `Dialog/` (NpcSessionControl, FramedDialogPanelBase, DialogAlphaGradient, BankShopPanel, DialogTextEntryPanel, DialogProtectedTextEntryPanel, MenuTextEntryPanel, DialogOptionPanel, MenuListPanel), `Exchange/` (ExchangeControl/ExchangeItemControl), `WorldList/` (WorldListControl/WorldListEntryControl).
+**Popups (`Popups/`):** AislingContextMenu, GoldAmountControl, ItemAmountControl, CastablePopupControl (+CastableDetailsPane), GroupRecruitPanel, GroupTab/GroupTabControl, HotkeyHelpControl, ItemTooltipControl, NotepadControl, SocialStatusControl, TownMapControl. Subdirectories: `Boards/` (BoardsModalControl + BoardIndexPane/PostListPane/PostReadPane/PostComposePane), `Dialog/` (NpcSessionControl, FramedDialogPanelBase, DialogAlphaGradient, BankShopPanel, DialogTextEntryPanel, DialogProtectedTextEntryPanel, MenuTextEntryPanel, DialogOptionPanel, MenuListPanel), `Exchange/` (ExchangeControl/ExchangeItemControl), `WorldList/` (WorldListControl/WorldListEntryControl).
 
 **Viewport Overlays (`ViewPort/`):** ChatBubble, HealthBar, LoadingBar/MapLoadingBar, WorldMap/WorldMapNode, ChantText, GroupBox, SystemMessagePaneControl, PersistentMessageControl.
 
@@ -192,6 +194,8 @@ Brigid/
 - **`LatencyMonitor`** -- Static class. Passive sink for application-layer round-trip-time samples. Producers call `Update(long? rttMs)` (null clears the reading); the HUD subscribes to `LatencyChanged` and reads `LatencyMs`. May fire on any thread — subscribers must not block, and any non-trivial work should be marshalled to the game-loop thread by the consumer. Producer: `ChaosGame` runs a 2s polling task while in World state that calls `GameClient.TryGetTcpSmoothedRttMs` — real kernel-measured smoothed RTT, no protocol changes. Cross-platform via `SIO_TCP_INFO` IOCTL (Windows), `getsockopt(IPPROTO_TCP, TCP_INFO)` (Linux), or `getsockopt(IPPROTO_TCP, TCP_CONNECTION_INFO)` (macOS). Clears via `Update(null)` on World exit.
 - **`MachineIdentity`** -- Machine-specific identification for the client.
 - **`ClientSettings`** -- Static class. Persistent user settings. Access via `ClientSettings.SoundVolume`, etc.
+- **`Keybinds`** (`Systems/Keybinds/`) -- Static rebindable-key registry. A `CommandId` names an action; a `KeyChord` is a key + `ChordMods` (`Meta` is the per-OS primary modifier -- Ctrl on Windows/Linux, Cmd on macOS); `Defaults` maps command to chord plus a `KeybindContext` (`TextEditing`, `ReadView`, `Modal`, `WorldHud`), overlaid per-OS and then by the user's `keybinds.json`. Two entry points: `Resolve(e, context)` returns the `CommandId?` a key event means in that context (used by `UITextBox`/`UILabel`), and `Matches(e, commandId)` tests one command (used by `WorldScreen` hotkeys and `WorldScreen.TabCommands` for the HUD tabs). `KeybindCatalog` drives the Options -> Keybinds rebinding UI. `Modal` is deliberately unpopulated -- modal navigation keys (Escape/arrows/Enter) stay literal in the modal itself.
+- **`AbilityRequirements`** -- Formats a castable's learn/use requirements for the castable popup's Details tab.
 
 ### World State & Models
 - **`WorldState`** (`Collections/`) -- Static class. Entity tracking, sorted rendering, active effects, all ViewModel state. Access via `WorldState.Inventory`, `WorldState.Attributes`, etc.
@@ -235,13 +239,17 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - **Adding a handler:** write `private void HandleXxx(IServerPacket p)` in `ConnectionManager` (cast to the concrete `Server.XxxPacket` from `DALib.Networking.Packets.Server`), register it in `IndexHandlers()` as `PacketHandlers[(byte)ServerOpcode.Xxx] = HandleXxx`, then raise an event on the manager for `WorldScreen` to subscribe to.
 
 ### UI Patterns
-- All UI panels derive from `PrefabPanel` (for prefab-based layouts) or `UIPanel` (for manual layouts)
+- UI panels derive from `PrefabPanel` (legacy prefab-art layouts), `CenteredModalPanel` (from-scratch/asset-free modals -- the direction new panels go), or `UIPanel` (manual layouts)
 - `PrefabPanel` provides `CreateButton`/`CreateImage`/`CreateLabel`/`CreateTextBox`/`CreateProgressBar` to selectively create controls from prefab data. Panels explicitly create only the controls they need (no auto-populate).
 - Popup panels use `Show()`/`Hide()` for visibility and are children of the WorldScreen Root panel
 - HUD has two implementations behind `IWorldHud`: `WorldHudControl` (classic compact) and `LargeWorldHudControl` (expanded)
 - HUD tab panels share the center-bottom area via `ShowTab(HudTab)` -- only one visible at a time
 - World controls organized into subdirectories: `Hud/`, `Hud/Panel/`, `Hud/Panel/Slots/`, `Popups/`, `Popups/Boards/`, `Popups/Dialog/`, `Popups/Exchange/`, `Popups/Options/`, `Popups/Profile/`, `Popups/WorldList/`, `ViewPort/`
-- Hotkeys: A=Inventory, S=Skills, D=Spells, Shift+S/D=Alt panels, F=Chat, Shift+F=MessageHistory, G=Stats, Shift+G=ExtendedStats, H=Tools, F9=Ignore, Tab=TabMap, F1=Help, F3=Macros, F4=Settings, F5=Refresh, F7=Mail, F8=Group, F10=Friends
+- Hotkeys (all *defaults* -- every one resolves through `Keybinds` in `KeybindContext.WorldHud` and is rebindable in Options -> Keybinds; see `Keybinds.Defaults` for the authoritative table):
+  - HUD tabs: A=Inventory, S=Skills, D=Spells, F=Chat, G=Stats, H=Tools; the Shift variant selects the alternate panel (Shift+A expands Inventory, Shift+F=MessageHistory, Shift+G=ExtendedStats). Base and alt are independent bindings.
+  - Toggles: Q=PauseMenu, W=Boards, E=WorldList, R=SocialStatus, T=TownMap, Y=Group, B=PickupItem, J=GroupHighlight, Tab=TabMap (PageUp/PageDown zoom), `/`=SwapHudLayout, backtick=UnequipWeapon/Shield
+  - Function keys: F1=Help/Merchant, F3=Macros, F4=Settings, F5=Refresh, F7=BoardList, F8=KeybindMenu, F9=Ignore, F10=Friends
+  - Other: Space=Assail, Enter=ChatFocus, Alt+Enter=CycleWindowSize, Shift+1=Shout, Shift+'=Whisper
 - Textbox editing keys: Ctrl+A=select all, Ctrl+C/X/V=copy/cut/paste, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y=undo/redo, Home/End (or Alt+Left/Right)=line start/end; Enter inserts a newline in multiline boxes. These resolve through the keybind registry (`Keybinds`, `KeybindContext.TextEditing`) so they honour rebindings and the per-OS primary modifier (Cmd on macOS); the editor family is rebindable in Options → Keybinds. Pure caret nav (arrows/Home/End/word nav) and text mutation stay literal in `UITextBox.OnKeyDown`. Chat input: Up/Down cycles sent-message history (draft preserved).
 - Grid panels use `PanelBase` -> `PanelSlot` with slot number overlays and cooldown rendering
 - Server-driven UI: many panels (exchange, dialog, equipment, profile) are populated by server packets, not client state

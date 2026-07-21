@@ -96,16 +96,13 @@ public sealed partial class WorldScreen : IScreen
     private DoorContextMenu DoorContext = null!;
 
     private int AnimationTick;
-    private ArticleListControl ArticleList = null!;
-    private ArticleReadControl ArticleRead = null!;
-    private ArticleSendControl ArticleSend = null!;
-
-    //board/mail controls — 7 instances for 7 prefabs
     private bool AwaitingMapData;
-    private BoardListControl BoardList = null!;
+
+    //one modal for the whole board/mail flow (index -> list -> read/compose, Boards and Mail tabs)
+    private BoardsModalControl BoardsModal = null!;
     private OkPopupMessageControl BoardResponsePopup = null!;
     private Camera Camera = null!;
-    private ChantEditControl ChantEdit = null!;
+    private CastablePopupControl CastablePopup = null!;
     private ushort CurrentMapCheckSum;
     private MapFlags CurrentMapFlags;
     private short CurrentMapId;
@@ -146,9 +143,6 @@ public sealed partial class WorldScreen : IScreen
     private LargeWorldHudControl LargeHud = null!;
     private TileClickTracker LeftClickTracker;
     private readonly LightingSystem Lighting = new();
-    private MailListControl MailList = null!;
-    private MailReadControl MailRead = null!;
-    private MailSendControl MailSend = null!;
     private PauseMenuControl PauseMenu = null!;
     private MapFile? MapFile;
     private MapLoadingBar MapLoading = null!;
@@ -428,46 +422,22 @@ public sealed partial class WorldScreen : IScreen
 
         ItemAmount.Closed += () => WorldHud.SetDescription(null);
 
-        BoardList = new BoardListControl
+        //ZIndex 10 = the top modal tier, and no SetViewportBounds — like the Options modal it centers on the
+        //window rather than the play area, which is smaller than the modal.
+        BoardsModal = new BoardsModalControl
         {
-            ZIndex = -2
+            ZIndex = 10
         };
-
-        ArticleList = new ArticleListControl
-        {
-            ZIndex = -2
-        };
-
-        ArticleRead = new ArticleReadControl
-        {
-            ZIndex = -2
-        };
-
-        ArticleSend = new ArticleSendControl
-        {
-            ZIndex = -2
-        };
-
-        MailList = new MailListControl
-        {
-            ZIndex = -2
-        };
-
-        MailRead = new MailReadControl
-        {
-            ZIndex = -2
-        };
-
-        MailSend = new MailSendControl
-        {
-            ZIndex = -2
-        };
+        //above the modal tier (10): both popups are centered inside the boards modal's footprint, so at a lower
+        //ZIndex they would draw under it and every click would be claimed by the modal behind them.
         DeleteConfirm = new OkPopupMessageControl(true)
         {
+            ZIndex = 11,
             Name = "DeleteConfirm"
         };
         BoardResponsePopup = new OkPopupMessageControl
         {
+            ZIndex = 11,
             Name = "BoardResponsePopup"
         };
 
@@ -507,17 +477,8 @@ public sealed partial class WorldScreen : IScreen
         };
         ExitConfirmPopup.OnOk += ConfirmExit;
 
-        var boardViewport = WorldHud.ViewportBounds;
-        BoardList.SetViewportBounds(boardViewport);
-        ArticleList.SetViewportBounds(boardViewport);
-        ArticleRead.SetViewportBounds(boardViewport);
-        ArticleSend.SetViewportBounds(boardViewport);
-        MailList.SetViewportBounds(boardViewport);
-        MailRead.SetViewportBounds(boardViewport);
-        MailSend.SetViewportBounds(boardViewport);
-
         WireExchange();
-        WireMailControls();
+        WireBoardControls();
 
         StatusBook = new SelfProfileTabControl
         {
@@ -597,11 +558,14 @@ public sealed partial class WorldScreen : IScreen
         };
         OtherProfile.OnGroupInviteRequested += name => Game.Connection.SendGroupInvite(ClientGroupSwitch.TryInvite, name);
 
-        ChantEdit = new ChantEditControl
+        //no SetViewportBounds: like the Options modal it centers on the window, matching where the legacy chant
+        //popup put itself (CenterOnScreen). ZIndex 12 keeps it above the modal tier (10) and the confirm popups
+        //(11) — it is opened by right-clicking a HUD slot, which stays reachable while a modal is up.
+        CastablePopup = new CastablePopupControl
         {
-            ZIndex = 2
+            ZIndex = 12
         };
-        ChantEdit.OnChantSet += HandleChantSet;
+        CastablePopup.OnChantSet += HandleChantSet;
 
         WorldMap = new WorldMap(Game.Connection)
         {
@@ -652,13 +616,7 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(Exchange);
         Root.AddChild(GoldDrop);
         Root.AddChild(ItemAmount);
-        Root.AddChild(BoardList);
-        Root.AddChild(ArticleList);
-        Root.AddChild(ArticleRead);
-        Root.AddChild(ArticleSend);
-        Root.AddChild(MailList);
-        Root.AddChild(MailRead);
-        Root.AddChild(MailSend);
+        Root.AddChild(BoardsModal);
         Root.AddChild(DeleteConfirm);
         Root.AddChild(BoardResponsePopup);
         Root.AddChild(ExchangeResultPopup);
@@ -671,7 +629,7 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(TextPopup);
         Root.AddChild(MarkdownNotice);
         Root.AddChild(Notepad);
-        Root.AddChild(ChantEdit);
+        Root.AddChild(CastablePopup);
         Root.AddChild(WorldMap);
         Root.AddChild(SocialStatusPicker);
         Root.AddChild(AislingContext);

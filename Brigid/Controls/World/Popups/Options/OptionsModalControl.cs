@@ -15,7 +15,7 @@ namespace Brigid.Controls.World.Popups.Options;
 
 /// <summary>
 ///     The tabbed Options modal (Settings | Macros | Friends | Keybinds), built on
-///     <see cref="CenteredModalPanel" /> with a <see cref="SelectableTab" /> column. The first three tabs
+///     <see cref="CenteredModalPanel" /> with a <see cref="TabStrip" /> column. The first three tabs
 ///     re-home the legacy prefab panels (SettingsControl/MacrosListControl/FriendsListControl) onto one
 ///     primitive modal; the Keybinds tab (<see cref="KeybindsTabControl" />) is the new rebinder.
 ///     <list type="bullet">
@@ -58,7 +58,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     private static readonly string[] TabTitles = ["Settings", "Macros", "Friends", "Keybinds"];
 
-    private readonly SelectableTab[] Tabs = new SelectableTab[4];
+    private readonly TabStrip Tabs;
     private readonly UIPanel[] TabPanes = new UIPanel[4];
 
     private readonly CheckBox[] SettingChecks = new CheckBox[UserOptions.SETTING_COUNT];
@@ -105,7 +105,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
         PaneX = content.X + TAB_W + PANE_GAP;
         var paneRect = new Rectangle(PaneX, content.Y, content.Right - PaneX, content.Height);
 
-        BuildTabColumn(content);
+        Tabs = BuildTabColumn(content);
         BuildSettingsPane(paneRect);
         BuildMacrosPane(paneRect);
         BuildFriendsPane(paneRect);
@@ -116,22 +116,23 @@ public sealed class OptionsModalControl : CenteredModalPanel
         SelectTabInternal(OptionsTab.Settings);
     }
 
-    private void BuildTabColumn(Rectangle content)
+    private TabStrip BuildTabColumn(Rectangle content)
     {
-        for (var i = 0; i < Tabs.Length; i++)
+        var strip = new TabStrip(
+            TabTitles,
+            TAB_W,
+            TAB_H,
+            TAB_GAP,
+            TabOrientation.Vertical)
         {
-            var index = i;
+            X = content.X,
+            Y = content.Y
+        };
 
-            var tab = new SelectableTab(TabTitles[i], TAB_W, TAB_H)
-            {
-                X = content.X,
-                Y = content.Y + i * (TAB_H + TAB_GAP)
-            };
+        strip.TabClicked += index => SelectTab((OptionsTab)index);
+        AddChild(strip);
 
-            tab.Clicked += () => SelectTab((OptionsTab)index);
-            Tabs[i] = tab;
-            AddChild(tab);
-        }
+        return strip;
     }
 
     private void BuildSettingsPane(Rectangle pane)
@@ -296,12 +297,10 @@ public sealed class OptionsModalControl : CenteredModalPanel
     private void SelectTabInternal(OptionsTab tab)
     {
         Active = tab;
+        Tabs.SetSelected((int)tab);
 
-        for (var i = 0; i < Tabs.Length; i++)
-        {
-            Tabs[i].IsSelected = i == (int)tab;
+        for (var i = 0; i < TabPanes.Length; i++)
             TabPanes[i].Visible = i == (int)tab;
-        }
 
         if (tab == OptionsTab.Settings)
             SettingsRequested?.Invoke();
@@ -513,29 +512,5 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
         //vertical divider between the tab column and the content pane.
         DrawRectClipped(spriteBatch, new Rectangle(ScreenX + PaneX - PANE_GAP / 2, ScreenY + ContentTop, 1, ContentBounds.Height), DialogPalette.Divider);
-    }
-
-    /// <summary>
-    ///     A content pane that draws a dark, bordered "input slot" box behind each of its <see cref="UITextBox" />
-    ///     children, so the fillable areas read as solid boxes. The legacy prefabs baked these into their
-    ///     background art; the from-scratch modal draws them.
-    /// </summary>
-    private sealed class InputSlotPane : UIPanel
-    {
-        private static readonly Color SlotFill = new(0, 0, 0, 205);
-        private static readonly Color SlotBorder = DialogPalette.Divider;
-
-        public override void Draw(SpriteBatch spriteBatch)
-        {
-            if (!Visible)
-                return;
-
-            //behind the children (drawn by base.Draw): a filled box per text field.
-            foreach (var child in Children)
-                if (child is UITextBox { Visible: true } box)
-                    DrawBorderedRect(spriteBatch, new Rectangle(box.ScreenX, box.ScreenY, box.Width, box.Height), SlotFill, SlotBorder);
-
-            base.Draw(spriteBatch);
-        }
     }
 }

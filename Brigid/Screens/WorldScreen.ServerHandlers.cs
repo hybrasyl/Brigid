@@ -49,6 +49,13 @@ public sealed partial class WorldScreen
             WorldState.ReloadChants();
             PlayerPortrait = LoadPortraitFile(args.Name);
             StatusBook.SetProfileText(LoadProfileText());
+
+            //the class — and so the SClass ability metadata behind the castable popup's Details tab — is only
+            //revealed by a self-profile reply. Ask for one unsolicited (SelfProfileRequested stays false, so the
+            //handler populates state without opening the status book), but only until we have it: this runs on
+            //every map change, and a self-profile reply rebuilds group and paperdoll state as a side effect.
+            if (WorldState.AbilityMetadata is null)
+                Game.Connection.RequestSelfProfile();
         }
 
         //check for idle animation ("04") frames on this aisling's body
@@ -625,7 +632,7 @@ public sealed partial class WorldScreen
 
         WorldState.Board.OpenSession();
 
-        BoardList.ShowBoards(
+        BoardsModal.ShowBoardIndex(
             boards.Select(b => (b.BoardId, b.Name))
                   .ToList());
     }
@@ -635,25 +642,19 @@ public sealed partial class WorldScreen
         var board = WorldState.Board;
         var posts = board.Posts.ToList();
 
-        //reply to a scroll-paging request: the list itself tracks whether it asked for a page. append only while that
-        //list is still open on this board; if the user left before the reply arrived, drop it — never reopen the board.
-        if (board.IsPublicBoard)
+        //reply to a scroll-paging request: the modal tracks whether this board asked for a page. append only while
+        //that board's list is still open; if the user left before the reply arrived, fall through and treat it as a
+        //fresh open rather than dropping it.
+        //a scroll-back page we asked for: append it while its list is still on screen, and otherwise drop it —
+        //the user has moved on, and replacing the view would yank them out of a post or re-open a closed modal.
+        //Everything else is a fresh open (a tab click, a board picked from the index, the refresh after sending,
+        //or a board the server pushed unasked) and takes over the modal.
+        if (BoardsModal.IsPagingFor(board.BoardId))
         {
-            if (ArticleList.IsPaging)
-            {
-                if (ArticleList.Visible && (ArticleList.BoardId == board.BoardId))
-                    ArticleList.AppendEntries(posts);
-                else
-                    ArticleList.CancelPaging();
-
-                return;
-            }
-        } else if (MailList.IsPaging)
-        {
-            if (MailList.Visible && (MailList.BoardId == board.BoardId))
-                MailList.AppendEntries(posts);
+            if (BoardsModal.IsListing(board.BoardId))
+                BoardsModal.AppendPosts(posts);
             else
-                MailList.CancelPaging();
+                BoardsModal.CancelPaging();
 
             return;
         }
@@ -663,14 +664,12 @@ public sealed partial class WorldScreen
         if (!board.IsSessionOpen)
             board.OpenSession();
 
-        HideAllBoardControls();
-
-        if (board.IsPublicBoard)
-        {
-            ArticleList.ShowArticles(board.BoardId, posts);
-            ArticleList.SetHighlightEnabled(IsGameMaster);
-        } else
-            MailList.ShowMailList(board.BoardId, posts);
+        BoardsModal.ShowPostList(
+            board.BoardId,
+            board.GetBoardName(board.BoardId),
+            posts,
+            !board.IsPublicBoard,
+            IsGameMaster);
     }
 
     private void HandleBoardPostViewed()
@@ -682,37 +681,20 @@ public sealed partial class WorldScreen
 
         var board = WorldState.Board;
 
-        //ensure session is open — server can send a post directly without going through BoardList
+        //ensure session is open — server can send a post directly without going through the board list
         if (!board.IsSessionOpen)
             board.OpenSession();
 
-        HideAllBoardControls();
-
-        if (board.IsPublicBoard)
-        {
-            ArticleRead.BoardId = board.BoardId;
-
-            ArticleRead.ShowArticle(
-                p.PostId,
-                p.Author,
-                p.MonthOfYear,
-                p.DayOfMonth,
-                p.Subject,
-                p.Message,
-                board.EnablePrevButton);
-        } else
-        {
-            MailRead.BoardId = board.BoardId;
-
-            MailRead.ShowMail(
-                p.PostId,
-                p.Author,
-                p.MonthOfYear,
-                p.DayOfMonth,
-                p.Subject,
-                p.Message,
-                board.EnablePrevButton);
-        }
+        BoardsModal.ShowPost(
+            board.BoardId,
+            !board.IsPublicBoard,
+            p.PostId,
+            p.Author,
+            p.MonthOfYear,
+            p.DayOfMonth,
+            p.Subject,
+            p.Message,
+            board.EnablePrevButton);
     }
 
     //--- group ---
@@ -875,6 +857,10 @@ public sealed partial class WorldScreen
 
         //ability metadata (skills/spells from sclass file)
         var abilityMetadata = DataContext.MetaFiles.GetAbilityMetadata(args.Class);
+
+        //published to WorldState as well, so the castable popup can look an ability up by name without going
+        //through the status book's page controls.
+        WorldState.AbilityMetadata = abilityMetadata;
 
         if (abilityMetadata is not null)
             StatusBook.SetAbilityMetadata(abilityMetadata);

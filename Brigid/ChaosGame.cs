@@ -531,6 +531,10 @@ public sealed class ChaosGame : Game
     public void FinishAssetInitialization()
     {
         GlobalSettings.InitializeAssetData();
+
+        //the lobby host is settled by now (launcher selection or env override), so scope the server-pushed caches
+        //before anything reads or writes them.
+        AppPaths.SetServerScope(GlobalSettings.LobbyHost);
         DataDiagnostics.Try(() => Directory.CreateDirectory(MetaFilePath), "create metafile dir");
         ClientSettings.Load();
         //load keybind overrides (DataPath was resolved during config/launcher setup); pure defaults if absent.
