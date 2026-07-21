@@ -29,6 +29,7 @@ public sealed class OtherProfileTabControl : PrefabPanel
 
     private StatusBookTab ActiveTab = StatusBookTab.Equipment;
     private bool GroupButtonWired;
+    private uint ShownId;
 
     public UIButton? CloseButton { get; }
 
@@ -159,6 +160,8 @@ public sealed class OtherProfileTabControl : PrefabPanel
     /// </summary>
     public void Show(ProfilePacket args, List<LegendMarkEntry> legendMarks, AislingRenderer aislingRenderer)
     {
+        ShownId = args.Id;
+
         //equipment tab
         var equipPage = GetOrCreatePage<OtherProfileEquipmentTab>(StatusBookTab.Equipment);
 
@@ -202,6 +205,21 @@ public sealed class OtherProfileTabControl : PrefabPanel
         SwitchTab(StatusBookTab.Equipment);
         InputDispatcher.Instance?.PushControl(this);
         Visible = true;
+    }
+
+    /// <summary>
+    ///     Re-renders the paperdoll from the inspected player's live appearance when it changes while their profile is
+    ///     open (e.g. they equip/remove armor). No-op unless this profile is currently showing that same aisling —
+    ///     mirrors the self-profile refresh so an inspected player's paperdoll never goes stale/partial.
+    /// </summary>
+    public void RefreshPaperdoll(uint id, AislingRenderer aislingRenderer, in AislingAppearance appearance)
+    {
+        if (!Visible || id != ShownId)
+            return;
+
+        var equipPage = GetOrCreatePage<OtherProfileEquipmentTab>(StatusBookTab.Equipment);
+
+        equipPage?.SetPaperdoll(aislingRenderer, in appearance);
     }
 
     public void SwitchTab(StatusBookTab tab)
