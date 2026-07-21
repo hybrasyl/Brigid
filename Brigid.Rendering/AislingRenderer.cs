@@ -27,7 +27,12 @@ public record struct AislingAppearance
     public DisplayColor Accessory3Color { get; init; }
     public int Accessory3Sprite { get; init; }
     public DisplayColor ArmorColor { get; init; }
-    public int ArmorSprite { get; init; }
+
+    //Body armor is two independent wire sprites. ArmorSprite1 (retail arm_ / HumanPart.Arm) drives the arms
+    //'a'/'j' pass; ArmorSprite2 (retail armor_ / HumanPart.Armor) drives the torso 'u'/'i' pass. A real one-piece
+    //garment sends them equal; a starter/bare appearance sends armor1=1, armor2=0 so only the arms pass draws.
+    public int ArmorSprite1 { get; init; }
+    public int ArmorSprite2 { get; init; }
     public int BodyColor { get; init; }
     public int BodySpriteId { get; init; }
     public DisplayColor BootsColor { get; init; }
@@ -718,19 +723,24 @@ public sealed class AislingRenderer : IDisposable
                 idleFallbackFrame);
         }
 
+        //Overcoat (worn over armor) suppresses both body-armor passes and covers the body with a single sprite, so
+        //it feeds the same sprite to both the torso and arms passes. Otherwise the two body-armor passes are driven
+        //by their own wire sprites: torso from ArmorSprite2, arms from ArmorSprite1 (see RenderArmorLayers).
         if (appearance.OvercoatSprite > 0)
             RenderArmorLayers(
                 layers,
+                appearance.OvercoatSprite,
                 appearance.OvercoatSprite,
                 appearance.OvercoatColor,
                 in appearance,
                 frameIndex,
                 anim,
                 idleFallbackFrame);
-        else if (appearance.ArmorSprite > 0)
+        else if ((appearance.ArmorSprite1 > 0) || (appearance.ArmorSprite2 > 0))
             RenderArmorLayers(
                 layers,
-                appearance.ArmorSprite,
+                appearance.ArmorSprite2,
+                appearance.ArmorSprite1,
                 appearance.ArmorColor,
                 in appearance,
                 frameIndex,
@@ -832,23 +842,28 @@ public sealed class AislingRenderer : IDisposable
         }
     }
 
+    //Renders the two body-armor passes as independent sprites, mirroring the retail client's separate
+    //HumanPart.Armor (torso, from armor_) and HumanPart.Arm (arms, from arm_) parts: the torso 'u'/'i' pass is
+    //driven by bodySpriteId (ArmorSprite2) and the arms 'a'/'j' pass by armsSpriteId (ArmorSprite1). Each pass draws
+    //only when its own sprite is non-zero (RenderEquipLayer returns null for id <= 0), so a bare appearance
+    //(armor2=0) shows no torso garment — matching retail — while a one-piece garment (armor1==armor2) draws both.
+    //Sprites >= 1000 select the overcoat ('i'/'j') archives instead of ordinary armor ('u'/'a').
     private void RenderArmorLayers(
         LayerInfo?[] layers,
-        int spriteId,
+        int bodySpriteId,
+        int armsSpriteId,
         DisplayColor color,
         in AislingAppearance appearance,
         int frameIndex,
         string anim,
         int idleFallbackFrame = -1)
     {
-        var isOverType = spriteId >= 1000;
-        var adjustedId = isOverType ? spriteId - 1000 : spriteId;
-        var bodyLetter = isOverType ? 'i' : 'u';
-        var armsLetter = isOverType ? 'j' : 'a';
+        var bodyIsOver = bodySpriteId >= 1000;
+        var armsIsOver = armsSpriteId >= 1000;
 
         layers[(int)LayerSlot.Armor] = RenderEquipLayer(
-            bodyLetter,
-            adjustedId,
+            bodyIsOver ? 'i' : 'u',
+            bodyIsOver ? bodySpriteId - 1000 : bodySpriteId,
             color,
             in appearance,
             frameIndex,
@@ -856,8 +871,8 @@ public sealed class AislingRenderer : IDisposable
             idleFallbackFrame);
 
         layers[(int)LayerSlot.Arms] = RenderEquipLayer(
-            armsLetter,
-            adjustedId,
+            armsIsOver ? 'j' : 'a',
+            armsIsOver ? armsSpriteId - 1000 : armsSpriteId,
             color,
             in appearance,
             frameIndex,
@@ -1397,9 +1412,9 @@ public sealed class AislingRenderer : IDisposable
     {
         var spriteId = appearance.OvercoatSprite > 0
             ? appearance.OvercoatSprite
-            : appearance.ArmorSprite > 0
-                ? appearance.ArmorSprite
-                : 0;
+            : appearance.ArmorSprite2 > 0
+                ? appearance.ArmorSprite2
+                : appearance.ArmorSprite1;
 
         return DataContext.AislingDrawData.AbilityAnimations.IsAbilityAnimationAllowed(anim, spriteId);
     }

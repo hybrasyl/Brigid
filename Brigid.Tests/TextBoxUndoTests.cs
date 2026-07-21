@@ -35,8 +35,16 @@ public class TextBoxUndoTests
             box.OnTextInput(new TextInputEvent { Character = c });
     }
 
-    private static void Key(UITextBox box, Keys key, KeyModifiers mods = KeyModifiers.None) =>
+    //mirrors InputBuffer.TranslateSdlMods on Windows/Linux: a physical Ctrl press sets BOTH Ctrl and Meta (the
+    //primary-modifier abstraction the keybind resolver matches on). Tests pass KeyModifiers.Ctrl for a Ctrl
+    //chord and get the same event shape the real pipeline produces.
+    private static void Key(UITextBox box, Keys key, KeyModifiers mods = KeyModifiers.None)
+    {
+        if ((mods & KeyModifiers.Ctrl) != 0)
+            mods |= KeyModifiers.Meta;
+
         box.OnKeyDown(new KeyDownEvent { Key = key, Modifiers = mods });
+    }
 
     [Fact]
     public void Undo_RevertsWholeTypingBurst()
@@ -93,7 +101,7 @@ public class TextBoxUndoTests
         //intermediate state and undo reverts to empty instead of the pre-replace text
         var box = FocusedBox();
         Type(box, "abc");
-        Key(box, Keys.A, KeyModifiers.Ctrl | KeyModifiers.Shift);   //select all
+        Key(box, Keys.A, KeyModifiers.Ctrl);   //select all
         Type(box, "X");                                             //replaces selection -> "X"
 
         Assert.Equal("X", box.Text);
@@ -108,7 +116,7 @@ public class TextBoxUndoTests
     {
         var box = FocusedBox();
         Type(box, "abc");
-        Key(box, Keys.A, KeyModifiers.Ctrl | KeyModifiers.Shift);
+        Key(box, Keys.A, KeyModifiers.Ctrl);
         Key(box, Keys.Back);   //deletes the whole selection -> ""
 
         Assert.Equal(string.Empty, box.Text);
@@ -174,7 +182,7 @@ public class TextBoxUndoTests
     {
         var box = FocusedBox();
         Type(box, "abc");
-        Key(box, Keys.A, KeyModifiers.Ctrl | KeyModifiers.Shift);   //select all
+        Key(box, Keys.A, KeyModifiers.Ctrl);   //select all
         Key(box, Keys.X, KeyModifiers.Ctrl);                       //cut -> ""
 
         Assert.Equal(string.Empty, box.Text);

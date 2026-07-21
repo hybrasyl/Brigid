@@ -16,8 +16,10 @@ namespace Brigid.Systems.Keybinds;
 ///     is a poll-time variant reserved for a future fluid-movement model (no consumer yet).
 ///     <para>
 ///         Defaults live in code (<see cref="Defaults" />); <see cref="Load" /> merges overrides-only from
-///         <c>keybinds.json</c>. The WorldHud and editor hotkeys resolve through <see cref="Matches" /> (Phases
-///         B3/B4); the rebinding UI (Track C) will edit overrides via <see cref="SetBinding" />.
+///         <c>keybinds.json</c>. WorldHud hotkeys resolve through per-command <see cref="Matches" /> (interleaved
+///         with literal control flow in <c>WorldScreen.OnRootKeyDown</c>); the editor/read commands resolve
+///         through <see cref="Resolve" /> (a closed, mutually-exclusive family dispatched in one switch). The
+///         rebinding UI (Track C) edits overrides via <see cref="SetBinding" />.
 ///     </para>
 /// </summary>
 public static class Keybinds
@@ -49,17 +51,20 @@ public static class Keybinds
         //literal Ctrl+Y (secondary). Both must resolve to redo for parity with the live editor handler.
         [CommandId.Editor_Redo]      = new(new KeyChord(Keys.Z, ChordMods.Meta | ChordMods.Shift), new KeyChord(Keys.Y, ChordMods.Ctrl), KeybindContext.TextEditing),
 
-        //select-all in the editor is Meta+Shift+A: on Windows that is the current Ctrl+Shift+A; Meta+A is
-        //deliberately avoided in this context because literal Ctrl+A is line-start (below), and folding
-        //select-all onto Meta+A would collide with it on Windows.
-        [CommandId.Editor_SelectAll] = new(new KeyChord(Keys.A, ChordMods.Meta | ChordMods.Shift), KeybindContext.TextEditing),
+        //select-all is Meta+A: on Windows that is Ctrl+A, the universal Select-All convention. Line-start is no
+        //longer bound to Ctrl+A (see below), so there is nothing to collide with — we favour the average user's
+        //expectation over the readline carve-out this used to preserve.
+        [CommandId.Editor_SelectAll] = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.TextEditing),
 
-        //readline carve-out: literal Ctrl on every OS (also native macOS text-field behavior).
-        [CommandId.Editor_LineStart] = new(new KeyChord(Keys.A, ChordMods.Ctrl), KeybindContext.TextEditing),
-        [CommandId.Editor_LineEnd]   = new(new KeyChord(Keys.E, ChordMods.Ctrl), KeybindContext.TextEditing),
+        //readline line-start/end kept as remappable commands, but defaulted OFF Ctrl+A/Ctrl+E onto Alt+Left/Right
+        //so Ctrl+A is free for select-all above. Alt is unread by the literal text handlers, so these are
+        //collision-free with the Ctrl/Ctrl+Shift+arrow word nav and word-selection. Home/End still do line
+        //start/end for everyone; power users who want emacs bindings can rebind these back to Ctrl+A/Ctrl+E.
+        [CommandId.Editor_LineStart] = new(new KeyChord(Keys.Left, ChordMods.Alt), KeybindContext.TextEditing),
+        [CommandId.Editor_LineEnd]   = new(new KeyChord(Keys.Right, ChordMods.Alt), KeybindContext.TextEditing),
 
-        // ── ReadView (UILabel, read-only) ── no line-start binding here, so Ctrl+A is free for select-all
-        // (matches the live UILabel handler: select-all on plain Ctrl+A, → Cmd+A on macOS).
+        // ── ReadView (UILabel, read-only) ── select-all is Meta+A (Ctrl+A), matching the editor for average-user
+        // consistency. NOTE: this deliberately changes the old live UILabel handler, which was Ctrl+Shift+A.
         [CommandId.Read_Copy]        = new(new KeyChord(Keys.C, ChordMods.Meta), KeybindContext.ReadView),
         [CommandId.Read_SelectAll]   = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.ReadView),
 
@@ -93,6 +98,22 @@ public static class Keybinds
         [CommandId.World_PickupItem]          = new(new KeyChord(Keys.B), KeybindContext.WorldHud),
         [CommandId.World_TownMap]             = new(new KeyChord(Keys.T), KeybindContext.WorldHud),
         [CommandId.World_GroupPanel]          = new(new KeyChord(Keys.Y), KeybindContext.WorldHud),
+        // HUD tab panels — bare key switches to the tab; the Shift-variant selects the alternate panel (or
+        // expands, for Inventory). Matches the old HudTabHotkeys switch's bare/Shift cases; extra modifiers no
+        // longer fall through (consistent with the WorldHud exact-chord tightening). Base and alt are
+        // independent bindings.
+        [CommandId.World_TabInventory]        = new(new KeyChord(Keys.A), KeybindContext.WorldHud),
+        [CommandId.World_TabInventoryExpand]  = new(new KeyChord(Keys.A, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabSkills]           = new(new KeyChord(Keys.S), KeybindContext.WorldHud),
+        [CommandId.World_TabSkillsAlt]        = new(new KeyChord(Keys.S, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabSpells]           = new(new KeyChord(Keys.D), KeybindContext.WorldHud),
+        [CommandId.World_TabSpellsAlt]        = new(new KeyChord(Keys.D, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabChat]             = new(new KeyChord(Keys.F), KeybindContext.WorldHud),
+        [CommandId.World_TabChatHistory]      = new(new KeyChord(Keys.F, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabStats]            = new(new KeyChord(Keys.G), KeybindContext.WorldHud),
+        [CommandId.World_TabStatsExtended]    = new(new KeyChord(Keys.G, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_TabTools]            = new(new KeyChord(Keys.H), KeybindContext.WorldHud),
+
         [CommandId.World_ChatScrollUp]        = new(new KeyChord(Keys.Up, ChordMods.Shift), KeybindContext.WorldHud),
         [CommandId.World_ChatScrollDown]      = new(new KeyChord(Keys.Down, ChordMods.Shift), KeybindContext.WorldHud),
 
@@ -105,12 +126,47 @@ public static class Keybinds
         [CommandId.Move_Left]  = new(new KeyChord(Keys.Left), new KeyChord(Keys.Z), KeybindContext.WorldHud)
     }.ToFrozenDictionary();
 
+    /// <summary>
+    ///     Per-OS default-value overlay: commands whose out-of-box binding differs on macOS beyond the
+    ///     <see cref="ChordMods.Meta" /> resolution the base table already handles for free. Applied over
+    ///     <see cref="Defaults" /> only when macOS defaults are active (see <see cref="MacDefaultsActive" />).
+    ///     The context never diverges by OS, so it is read from <see cref="Defaults" />, not here.
+    ///     <para>
+    ///         Seeded only with line-nav today; this is also the home for future non-additive mac defaults the
+    ///         plan mentions (e.g. Cmd+, for settings, Fn-key ergonomics) which would <i>replace</i> a primary
+    ///         rather than add a secondary. Entries store the full binding so either shape is expressible.
+    ///     </para>
+    /// </summary>
+    private static readonly FrozenDictionary<CommandId, KeyBinding> MacDefaults = new Dictionary<CommandId, KeyBinding>
+    {
+        //mac-native line nav: Cmd+Left/Right, added as a SECONDARY on top of the cross-OS Alt+Left/Right primary
+        //so macOS users get both the portable chord and the platform-native one. The primary MUST stay equal to
+        //the base default's (MacDefaults_LineNav_KeepTheBasePrimary guards this) — this entry is purely additive.
+        [CommandId.Editor_LineStart] = new(new KeyChord(Keys.Left, ChordMods.Alt), new KeyChord(Keys.Left, ChordMods.Meta)),
+        [CommandId.Editor_LineEnd]   = new(new KeyChord(Keys.Right, ChordMods.Alt), new KeyChord(Keys.Right, ChordMods.Meta))
+    }.ToFrozenDictionary();
+
+    //test seam: whether the macOS default-value overlay applies. Defaults to the real OS; tests flip it to
+    //exercise the overlay on a non-mac host, mirroring how WinKey/MacKey simulate per-OS events in the resolver.
+    //NOTE: KeybindCatalog.Format's Cmd/Ctrl rendering keys off the real OS, not this seam — equal in production
+    //(both derive from the OS), so display and value stay consistent; only a test flipping this on a non-mac host
+    //would see them diverge.
+    internal static bool MacDefaultsActive = OperatingSystem.IsMacOS();
+
+    /// <summary>
+    ///     The out-of-box binding for <paramref name="id" /> on the active platform: the macOS overlay value when
+    ///     one exists and macOS defaults are active, else the cross-OS <see cref="Defaults" /> value. The single
+    ///     accessor every default read goes through, so per-OS values flow to resolve/display/reset uniformly.
+    /// </summary>
+    public static KeyBinding EffectiveDefault(CommandId id) =>
+        MacDefaultsActive && MacDefaults.TryGetValue(id, out var mac) ? mac : Defaults[id].Binding;
+
     /// <summary>The binding currently bound to <paramref name="id" /> (override if set, else default).</summary>
     public static KeyBinding Effective(CommandId id)
     {
         using var scope = Gate.EnterScope();
 
-        return Overrides.TryGetValue(id, out var binding) ? binding : Defaults[id].Binding;
+        return Overrides.TryGetValue(id, out var binding) ? binding : EffectiveDefault(id);
     }
 
     /// <summary>True if <paramref name="e" /> hits either chord of the binding for <paramref name="id" />.</summary>
@@ -195,28 +251,9 @@ public static class Keybinds
         return !meta && !ctrl;
     }
 
-    //keys handled by a modifier-agnostic literal switch in WorldScreen.OnRootKeyDown (the HUD tab switch,
-    //A/S/D/F/G/H) that fires regardless of modifiers and returns before most resolver checks — so a WorldHud
-    //command rebound onto one would be silently shadowed. The rebinder rejects these via IsShadowed. (This is
-    //deliberately conservative: a couple of commands whose Matches sits above the tab switch could technically
-    //use them, but blocking the whole set keeps the rule simple and can never produce a dead binding.)
-    private static readonly FrozenSet<Keys> WorldHudShadowKeys =
-        new[] { Keys.A, Keys.S, Keys.D, Keys.F, Keys.G, Keys.H }.ToFrozenSet();
-
-    /// <summary>
-    ///     Keys the WorldHud rebinder refuses (see <see cref="IsShadowed" />). A hand-maintained mirror of
-    ///     <c>WorldScreen.HudTabHotkeys</c> — a test cross-asserts the two so they can't silently drift.
-    /// </summary>
-    public static IReadOnlySet<Keys> ReservedWorldHudKeys => WorldHudShadowKeys;
-
-    /// <summary>
-    ///     True if binding <paramref name="chord" /> in <paramref name="context" /> would be swallowed by a
-    ///     literal (non-resolver) handler that runs first, making the binding dead. The rebinding UI uses this
-    ///     to refuse such a chord. Currently only the WorldHud tab-switch keys are reserved; the softer
-    ///     slot/emote number-row case is flagged by <see cref="UsesContestedNumberRow" /> instead.
-    /// </summary>
-    public static bool IsShadowed(KeybindContext context, KeyChord chord) =>
-        context == KeybindContext.WorldHud && WorldHudShadowKeys.Contains(chord.Key);
+    //the HUD tab-switch keys (A/S/D/F/G/H) used to be reserved here (they were a modifier-agnostic literal
+    //switch that ran before the resolver and would shadow any rebind). They are now resolver-driven WorldHud
+    //commands (World_Tab*), so the reserve and IsShadowed are gone — those keys rebind like any other.
 
     //the number row is scanned by two literal handlers in OnRootKeyDown — the slot hotkeys (1-9/0/-/=, any
     //modifier) and the emote hotkeys (Ctrl/Alt + number) — both of which dispatch before the movement and
@@ -231,9 +268,10 @@ public static class Keybinds
 
     /// <summary>
     ///     True if <paramref name="chord" /> uses a number-row key contested by the WorldHud slot/emote hotkeys
-    ///     (see <see cref="WorldHudNumberRowKeys" />). Unlike <see cref="IsShadowed" /> this is a soft signal:
-    ///     the collision only bites while a HUD panel is open and only for commands dispatched after those
-    ///     handlers, so the rebinder warns and still allows the bind rather than refusing it.
+    ///     (see <see cref="WorldHudNumberRowKeys" />). A soft signal: the collision only bites while a HUD panel
+    ///     is open and only for commands dispatched after those handlers, so the rebinder warns and still allows
+    ///     the bind rather than refusing it. (The slot/emote number-row handlers are the remaining literal
+    ///     dispatch ahead of the resolver; migrating them is a documented follow-up.)
     /// </summary>
     public static bool UsesContestedNumberRow(KeybindContext context, KeyChord chord) =>
         context == KeybindContext.WorldHud && WorldHudNumberRowKeys.Contains(chord.Key);
@@ -323,8 +361,9 @@ public static class Keybinds
     }
 
     /// <summary>True if <paramref name="id" />'s default binding has a secondary chord (so the rebinder shows a
-    ///     second field for it). Movement commands do; the single-chord world hotkeys don't.</summary>
-    public static bool SupportsSecondary(CommandId id) => Defaults[id].Binding.Secondary is not null;
+    ///     second field for it). Movement commands do; the single-chord world hotkeys don't. Reads the per-OS
+    ///     default, so a command can gain a secondary on one platform (e.g. line-nav's Cmd+Left/Right on macOS).</summary>
+    public static bool SupportsSecondary(CommandId id) => EffectiveDefault(id).Secondary is not null;
 
     /// <summary>
     ///     Rebinds one slot of <paramref name="id" /> to <paramref name="chord" />, preserving the other slot.
@@ -335,7 +374,7 @@ public static class Keybinds
     {
         using var scope = Gate.EnterScope();
 
-        var current = Overrides.TryGetValue(id, out var existing) ? existing : Defaults[id].Binding;
+        var current = Overrides.TryGetValue(id, out var existing) ? existing : EffectiveDefault(id);
 
         Overrides[id] = slot == ChordSlot.Primary
             ? current with { Primary = chord }

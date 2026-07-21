@@ -123,11 +123,14 @@ internal sealed class KeybindsTabControl : UIPanel
         //rebind — defaults never collide). The capture modal warns at set-time; this marks it in the overview.
         var primaryConflict = Keybinds.FindConflicts(item.Command, binding.Primary, context).Count > 0;
 
-        //a second field only for commands whose default carries a secondary; an empty override slot shows "—".
+        //a second field for commands whose default carries a secondary (an empty override slot shows "—"), OR
+        //whenever the effective binding actually has a secondary — so a secondary that exists but isn't part of
+        //this OS's default (e.g. a per-OS default's secondary baked into an override then carried cross-OS) is
+        //still visible and clearable rather than live-but-hidden.
         string? secondary = null;
         var secondaryConflict = false;
 
-        if (Keybinds.SupportsSecondary(item.Command))
+        if (Keybinds.SupportsSecondary(item.Command) || binding.Secondary is not null)
         {
             if (binding.Secondary is { } alt)
             {

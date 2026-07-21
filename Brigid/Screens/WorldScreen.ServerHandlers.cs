@@ -68,6 +68,16 @@ public sealed partial class WorldScreen
             //start idle cycling if entity is currently idle
             if (entity.AnimState == EntityAnimState.Idle)
                 AnimationSystem.ResetToIdle(entity);
+
+            //keep the profile paperdolls in sync with the aisling's live appearance: armor swaps arrive as a
+            //DisplayAisling (0x33) that overwrites entity.Appearance, not as a Self/Other Profile packet. Refreshing
+            //here — where the appearance is freshly rebuilt — mirrors how the world avatar re-renders every frame from
+            //entity.Appearance. (Doing this on Equipment.SlotChanged would race the 0x37 that precedes the 0x33.)
+            //Self and other profiles each no-op unless they are the one currently showing this id.
+            if (args.Id == Game.Connection.AislingId)
+                StatusBook.SetPaperdoll(Game.AislingRenderer, in appearance);
+            else
+                OtherProfile.RefreshPaperdoll(args.Id, Game.AislingRenderer, in appearance);
         }
     }
 
@@ -421,9 +431,22 @@ public sealed partial class WorldScreen
         if (menu is null)
             return;
 
+        //an empty ShowItems list (e.g. withdrawing from an empty bank) shows a blank BankShopPanel and reads as a
+        //dead no-op (retail behaviour). Surface it as a popup instead of showing the empty pane. A missing/non-
+        //ItemListMenu body counts as empty too, covering the malformed case BankShopPanel would otherwise skip.
+        if (((MenuType)(byte)menu.MenuType == MenuType.ShowItems) && (MerchantItemCount(menu) == 0))
+        {
+            NpcSession.HideAll();
+            EmptyMerchantPopup.Show("You have no items to withdraw.");
+
+            return;
+        }
+
         NpcSession.ShowMenu(menu);
         RenderNpcSessionPortrait();
     }
+
+    private static int MerchantItemCount(NpcMenuPacket pkt) => pkt.Menu is ItemListMenu list ? list.Items.Count : 0;
 
     private void RenderNpcSessionPortrait()
     {

@@ -123,6 +123,9 @@ public sealed partial class WorldScreen : IScreen
     private EventMetadataDetailsControl EventMetadataDetails = null!;
     private ExchangeControl Exchange = null!;
     private OkPopupMessageControl ExchangeResultPopup = null!;
+
+    //shown when a merchant/bank ShowItems list arrives empty (e.g. withdrawing from an empty bank) instead of a blank pane
+    private OkPopupMessageControl EmptyMerchantPopup = null!;
     private ItemAmountControl ItemAmount = null!;
 
     private ChaosGame Game = null!;
@@ -447,6 +450,13 @@ public sealed partial class WorldScreen : IScreen
         };
         ExchangeResultPopup.OnOk += () => ExchangeResultPopup.Hide();
 
+        EmptyMerchantPopup = new OkPopupMessageControl
+        {
+            ZIndex = 3,
+            Name = "EmptyMerchantPopup"
+        };
+        EmptyMerchantPopup.OnOk += () => EmptyMerchantPopup.Hide();
+
         DisconnectPopup = new OkPopupMessageControl(true)
         {
             ZIndex = 10,
@@ -610,6 +620,7 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(DeleteConfirm);
         Root.AddChild(BoardResponsePopup);
         Root.AddChild(ExchangeResultPopup);
+        Root.AddChild(EmptyMerchantPopup);
         Root.AddChild(StatusBook);
         Root.AddChild(SelfProfileTextEditor);
         Root.AddChild(AbilityMetadataDetails);
