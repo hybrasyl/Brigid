@@ -1003,40 +1003,67 @@ public sealed partial class WorldScreen
         //creatures use their mpffile attack frame counts; aislings use epf suffix-based frame counts
         if (entity.Type == ClientEntityType.Creature)
         {
-            var animInfo = Game.CreatureRenderer.GetAnimInfo(entity.SpriteId);
+            if (!AnimationSystem.HasCreatureBodyAnimation(bodyAnimation))
+            {
+                LogUnmappedMotion(args);
 
-            if (animInfo is { } info)
+                return;
+            }
+
+            if (Game.CreatureRenderer.GetAnimInfo(entity.SpriteId) is { } info)
                 AnimationSystem.StartCreatureBodyAnimation(
                     entity,
                     bodyAnimation,
                     args.Speed,
                     in info);
-        } else
-        {
-            (_, var framesPerDir, _, _) = AnimationSystem.ResolveBodyAnimParams(bodyAnimation);
 
-            if (framesPerDir > 0)
-            {
-                if (entity.Appearance.HasValue && !Game.AislingRenderer.HasArmorAnimation(entity.Appearance.Value, bodyAnimation))
-                    return;
-
-                AnimationSystem.StartBodyAnimation(entity, bodyAnimation, args.Speed);
-            } else if (DataUtilities.IsEmote(bodyAnimation))
-            {
-                //emote overlay — face/bubble icon composited into the aisling sprite
-                (var startFrame, var frameCount, var durationMs) = AnimationSystem.ResolveEmoteFrames(bodyAnimation);
-
-                if (startFrame >= 0)
-                {
-                    entity.EmoteStartFrame = startFrame;
-                    entity.EmoteFrameCount = frameCount;
-                    entity.ActiveEmoteFrame = startFrame;
-                    entity.EmoteDurationMs = durationMs;
-                    entity.EmoteElapsedMs = 0;
-                    entity.EmoteRemainingMs = durationMs;
-                }
-            }
+            return;
         }
+
+        if (AnimationSystem.HasBodyAnimation(bodyAnimation))
+        {
+            if (entity.Appearance.HasValue && !Game.AislingRenderer.HasArmorAnimation(entity.Appearance.Value, bodyAnimation))
+                return;
+
+            AnimationSystem.StartBodyAnimation(entity, bodyAnimation, args.Speed);
+
+            return;
+        }
+
+        if (!DataUtilities.IsEmote(bodyAnimation))
+        {
+            LogUnmappedMotion(args);
+
+            return;
+        }
+
+        //emote overlay — face/bubble icon composited into the aisling sprite
+        (var startFrame, var frameCount, var durationMs) = AnimationSystem.ResolveEmoteFrames(bodyAnimation);
+
+        if (startFrame >= 0)
+        {
+            entity.EmoteStartFrame = startFrame;
+            entity.EmoteFrameCount = frameCount;
+            entity.ActiveEmoteFrame = startFrame;
+            entity.EmoteDurationMs = durationMs;
+            entity.EmoteElapsedMs = 0;
+            entity.EmoteRemainingMs = durationMs;
+        }
+    }
+
+    private static readonly HashSet<byte> LoggedUnmappedMotions = [];
+
+    /// <summary>
+    ///     Reports a motion id we can't resolve. Retail's image session ignores those, so this is not an error — but a
+    ///     server sending one means an unmodelled motion or a protocol divergence. Reported once per id per session:
+    ///     NoticeDebugLog appends synchronously, and a repeating server action would otherwise write every packet.
+    /// </summary>
+    private static void LogUnmappedMotion(PlayerAnimationPacket args)
+    {
+        if (!LoggedUnmappedMotions.Add(args.Animation))
+            return;
+
+        NoticeDebugLog.Write($"0x1A unmapped motion {args.Animation} (0x{args.Animation:X2}) speed={args.Speed}");
     }
 
     //TargetAnimation values in [PROJECTILE_ANIMATION_BASE, PROJECTILE_ANIMATION_MAX_EXCLUSIVE) are MEFC projectiles;
