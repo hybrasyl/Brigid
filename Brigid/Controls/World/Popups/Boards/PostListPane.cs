@@ -261,6 +261,12 @@ internal sealed class PostListPane : UIPanel
             Width = width;
             Height = ROW_HEIGHT;
 
+            //the row has no interactive children (every column is IsHitTestVisible = false), so it must not absorb
+            //its own clicks — DispatchBubble stops click events at the first UIPanel. Pass-through lets the hit-test
+            //resolve to the list, whose OnClick/OnDoubleClick drive selection and open-on-double. Without this,
+            //mouse selection silently no-ops on post rows (they are panels) while it works on the plain-label index.
+            IsPassThrough = true;
+
             var authorX = ID_W + COLUMN_GAP;
             var dateX = authorX + AUTHOR_W + COLUMN_GAP;
             var subjectX = dateX + DATE_W + COLUMN_GAP;
