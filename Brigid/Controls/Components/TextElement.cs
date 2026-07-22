@@ -1,4 +1,5 @@
 #region
+using Brigid.Extensions;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -79,18 +80,7 @@ public sealed class TextElement
         }
 
         WrappedLines = null;
-        var marginX = ShadowStyle switch
-        {
-            ShadowStyle.BothSides or ShadowStyle.Outline       => 2,
-            ShadowStyle.BottomLeft or ShadowStyle.BottomRight  => 1,
-            _                                                  => 0
-        };
-        var marginY = ShadowStyle switch
-        {
-            ShadowStyle.None    => 0,
-            ShadowStyle.Outline => 2,
-            _                   => 1
-        };
+        (var marginX, var marginY) = ShadowStyle.ShadowMargin;
         Width = TextRenderer.MeasureWidth(text) + marginX;
         Height = TextRenderer.CHAR_HEIGHT + marginY;
     }
@@ -110,9 +100,17 @@ public sealed class TextElement
     /// <summary>
     ///     Draws <paramref name="text" /> (or <see cref="Text" /> when null) at <paramref name="position" />,
     ///     applying <see cref="ShadowStyle" /> and clipping each pass to <paramref name="clipRect" />. Pass
-    ///     <see cref="Rectangle.Empty" /> (or omit) to skip clipping entirely.
+    ///     <see cref="Rectangle.Empty" /> (or omit) to skip clipping entirely. <paramref name="characterSpacing" />
+    ///     is the per-glyph tracking adjustment (negative tightens) used by shrink-to-fit callers; every shadow pass
+    ///     uses the same value so the offsets stay aligned with the glyph pass.
     /// </summary>
-    public void Draw(SpriteBatch spriteBatch, Vector2 position, Rectangle clipRect = default, string? text = null, float opacity = 1f)
+    public void Draw(
+        SpriteBatch spriteBatch,
+        Vector2 position,
+        Rectangle clipRect = default,
+        string? text = null,
+        float opacity = 1f,
+        float characterSpacing = 0f)
     {
         text ??= Text;
 
@@ -122,46 +120,62 @@ public sealed class TextElement
         switch (ShadowStyle)
         {
             case ShadowStyle.None:
-                DrawClipped(spriteBatch, position, text, Color, clipRect, opacity);
+                DrawClipped(spriteBatch, position, text, Color, clipRect, opacity, characterSpacing);
 
                 break;
             case ShadowStyle.BottomLeft:
-                DrawClipped(spriteBatch, position + new Vector2(0, 1), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(1, 0), text, Color, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(0, 1), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(1, 0), text, Color, clipRect, opacity, characterSpacing);
 
                 break;
             case ShadowStyle.BottomRight:
-                DrawClipped(spriteBatch, position + new Vector2(1, 1), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position, text, Color, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(1, 1), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position, text, Color, clipRect, opacity, characterSpacing);
 
                 break;
             case ShadowStyle.BothSides:
-                DrawClipped(spriteBatch, position + new Vector2(2, 1), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(0, 1), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(1, 0), text, Color, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(2, 1), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(0, 1), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(1, 0), text, Color, clipRect, opacity, characterSpacing);
 
                 break;
             case ShadowStyle.Outline:
                 //8-way dark ring around the glyphs, then the glyph centered in the +1 margin on top
-                DrawClipped(spriteBatch, position + new Vector2(0, 0), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(1, 0), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(2, 0), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(0, 1), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(2, 1), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(0, 2), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(1, 2), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(2, 2), text, ShadowColor, clipRect, opacity);
-                DrawClipped(spriteBatch, position + new Vector2(1, 1), text, Color, clipRect, opacity);
+                DrawClipped(spriteBatch, position + new Vector2(0, 0), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(1, 0), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(2, 0), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(0, 1), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(2, 1), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(0, 2), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(1, 2), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(2, 2), text, ShadowColor, clipRect, opacity, characterSpacing);
+                DrawClipped(spriteBatch, position + new Vector2(1, 1), text, Color, clipRect, opacity, characterSpacing);
 
                 break;
         }
     }
 
-    private void DrawClipped(SpriteBatch spriteBatch, Vector2 position, string text, Color color, Rectangle clipRect, float opacity)
+    private void DrawClipped(
+        SpriteBatch spriteBatch,
+        Vector2 position,
+        string text,
+        Color color,
+        Rectangle clipRect,
+        float opacity,
+        float characterSpacing)
     {
         if (clipRect.IsEmpty)
         {
-            TextRenderer.DrawText(spriteBatch, position, text, color, ColorCodesEnabled, opacity);
+            TextRenderer.DrawText(spriteBatch, position, text, color, ColorCodesEnabled, opacity, characterSpacing);
+
+            return;
+        }
+
+        //tracking shifts the drawn width by an amount only DrawCore can compute exactly (it advances per colour
+        //run, excluding {=x} code chars), so the bounds fast paths below can't be trusted — clip per glyph instead
+        if (characterSpacing != 0f)
+        {
+            TextRenderer.DrawTextClipped(spriteBatch, position, text, color, clipRect, ColorCodesEnabled, opacity, characterSpacing);
 
             return;
         }
@@ -174,11 +188,11 @@ public sealed class TextElement
 
         if (clipRect.Contains(textBounds))
         {
-            TextRenderer.DrawText(spriteBatch, position, text, color, ColorCodesEnabled, opacity);
+            TextRenderer.DrawText(spriteBatch, position, text, color, ColorCodesEnabled, opacity, characterSpacing);
 
             return;
         }
 
-        TextRenderer.DrawTextClipped(spriteBatch, position, text, color, clipRect, ColorCodesEnabled, opacity);
+        TextRenderer.DrawTextClipped(spriteBatch, position, text, color, clipRect, ColorCodesEnabled, opacity, characterSpacing);
     }
 }

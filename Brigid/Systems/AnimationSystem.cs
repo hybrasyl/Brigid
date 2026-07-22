@@ -118,8 +118,8 @@ public static class AnimationSystem
     /// </summary>
     /// <remarks>
     ///     The <see cref="BodyAnimation" /> is mapped to an attack index — Kick(131)→Attack2, RoundHouseKick(133)→Attack3,
-    ///     everything else→Attack1 — and falls back to Attack1 when the mapped attack has no frames. Per-frame display time
-    ///     for creature attacks is fixed at 300 ms.
+    ///     Assail(1)/Punch(132)→Attack1 — and falls back to Attack1 when the mapped attack has no frames. Any other
+    ///     motion id is ignored, matching retail. Per-frame display time for creature attacks is fixed at 300 ms.
     /// </remarks>
     public static void StartCreatureBodyAnimation(
         WorldEntity entity,
@@ -148,7 +148,8 @@ public static class AnimationSystem
 
     /// <summary>
     ///     Maps a BodyAnimation to the correct creature attack range. Falls back to Attack1 if the mapped attack has no
-    ///     frames.
+    ///     frames. Retail's monster image session accepts only Assail (0x01), Kick (0x83), Punch (0x84) and
+    ///     RoundHouseKick (0x85) and rejects every other motion id, so anything else resolves to no frames.
     /// </summary>
     private static (byte StartIndex, byte FrameCount) ResolveCreatureAttack(BodyAnimation bodyAnim, in CreatureAnimInfo info)
     {
@@ -156,11 +157,19 @@ public static class AnimationSystem
         {
             BodyAnimation.Kick when info.Attack2FrameCount > 0           => (info.Attack2StartIndex, info.Attack2FrameCount),
             BodyAnimation.RoundHouseKick when info.Attack3FrameCount > 0 => (info.Attack3StartIndex, info.Attack3FrameCount),
-            _                                                            => (info.AttackFrameIndex, info.AttackFrameCount)
+            _ when HasCreatureBodyAnimation(bodyAnim)                     => (info.AttackFrameIndex, info.AttackFrameCount),
+            _                                                            => ((byte)0, (byte)0)
         };
 
         return (startIndex, frameCount);
     }
+
+    /// <summary>
+    ///     True when the motion id is one retail's monster image session accepts — Assail (0x01), Kick (0x83),
+    ///     Punch (0x84), RoundHouseKick (0x85). Every other id is rejected there rather than mapped to an attack.
+    /// </summary>
+    public static bool HasCreatureBodyAnimation(BodyAnimation anim)
+        => anim is BodyAnimation.Assail or BodyAnimation.Kick or BodyAnimation.Punch or BodyAnimation.RoundHouseKick;
     #endregion
 
     #region Advance
@@ -372,10 +381,10 @@ public static class AnimationSystem
                 };
             }
 
-            case EntityAnimState.BodyAnim:
+            case EntityAnimState.BodyAnim when entity.ActiveBodyAnimation is { } bodyAnim:
             {
                 //use the correct attack range based on the active bodyanimation
-                (var attackStart, var framesPerDir) = ResolveCreatureAttack(entity.ActiveBodyAnimation ?? BodyAnimation.Assail, in info);
+                (var attackStart, var framesPerDir) = ResolveCreatureAttack(bodyAnim, in info);
 
                 if (framesPerDir == 0)
                     return GetCreatureIdleFrame(entity, in info);
@@ -418,13 +427,16 @@ public static class AnimationSystem
                 return (frameIndex, flip, "01", isFront);
             }
 
-            case EntityAnimState.BodyAnim:
+            //an absent or unresolvable motion yields the idle pose, never a substitute animation
+            case EntityAnimState.BodyAnim when entity.ActiveBodyAnimation is { } bodyAnim:
             {
-                (var suffix, var framesPerDir, var upStart, var rightStart)
-                    = ResolveBodyAnimParams(entity.ActiveBodyAnimation ?? BodyAnimation.Assail);
+                (var suffix, var framesPerDir, var upStart, var rightStart) = ResolveBodyAnimParams(bodyAnim);
+
+                if (framesPerDir == 0)
+                    return GetAislingIdleFrame(entity);
 
                 var isFront = entity.Direction is Direction.Right or Direction.Down;
-                var frameIndex = Math.Clamp(entity.AnimFrameIndex, 0, Math.Max(framesPerDir - 1, 0));
+                var frameIndex = Math.Clamp(entity.AnimFrameIndex, 0, framesPerDir - 1);
                 var dirBase = isFront ? rightStart : upStart;
                 var flip = entity.Direction is Direction.Down or Direction.Left;
 
@@ -432,16 +444,19 @@ public static class AnimationSystem
             }
 
             default:
-            {
-                var isFront = entity.Direction is Direction.Right or Direction.Down;
-                var flip = entity.Direction is Direction.Down or Direction.Left;
-
-                if (entity.IdleAnimFrameCount > 0)
-                    return (entity.IdleAnimTick % entity.IdleAnimFrameCount, flip, "04", isFront);
-
-                return (isFront ? 5 : 0, flip, "01", isFront);
-            }
+                return GetAislingIdleFrame(entity);
         }
+    }
+
+    private static (int FrameIndex, bool Flip, string AnimSuffix, bool IsFrontFacing) GetAislingIdleFrame(WorldEntity entity)
+    {
+        var isFront = entity.Direction is Direction.Right or Direction.Down;
+        var flip = entity.Direction is Direction.Down or Direction.Left;
+
+        if (entity.IdleAnimFrameCount > 0)
+            return (entity.IdleAnimTick % entity.IdleAnimFrameCount, flip, "04", isFront);
+
+        return (isFront ? 5 : 0, flip, "01", isFront);
     }
     #endregion
 
@@ -449,7 +464,7 @@ public static class AnimationSystem
     /// <summary>
     ///     Maps a BodyAnimation enum to its EPF animation suffix, frames-per-direction count, and the starting frame index
     ///     for Up and Right directions within that EPF file. Multiple animations can share a single suffix file.
-    ///     Returns ("01", 0, 0, 0) for emotes (no body animation change).
+    ///     Returns ("01", 0, 0, 0) — no body animation change — for emotes and for any motion id with no mapping.
     /// </summary>
     public static (string Suffix, int FramesPerDirection, int UpStart, int RightStart) ResolveBodyAnimParams(BodyAnimation anim)
     {
@@ -502,10 +517,17 @@ public static class AnimationSystem
             //handsup2 — same as handsup
             BodyAnimation.HandsUp2 => ("03", 1, 0, 1),
 
-            //default fallback — assail
-            _ => ("02", 2, 0, 2)
+            //unknown motion — no body animation. Retail's human image session starts a motion only when it can
+            //resolve one from the current body resources, and otherwise does nothing
+            _ => ("01", 0, 0, 0)
         };
     }
+
+    /// <summary>
+    ///     True when the motion id maps to a real body animation. Emotes and unmapped ids resolve to no frames — see
+    ///     <see cref="ResolveBodyAnimParams" />.
+    /// </summary>
+    public static bool HasBodyAnimation(BodyAnimation anim) => ResolveBodyAnimParams(anim).FramesPerDirection > 0;
 
     private const float DEFAULT_EMOTE_DURATION_MS = 1500f;
 

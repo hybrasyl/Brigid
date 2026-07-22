@@ -148,13 +148,13 @@ public class UILabel : UIElement
                 HorizontalAlignment.Right  => innerX + (int)(innerW - fittedWidth),
                 _                          => innerX
             };
-            var textY = innerY + (int)(((VerticalAlignment == VerticalAlignment.Top ? TextElement.Height : innerH) - TextRenderer.CHAR_HEIGHT) / 2f);
+            //centred on TextElement.Height (shadow margin included), matching the non-shrink branch below, so a
+            //shadowed label doesn't shift vertically when it crosses the shrink threshold
+            var textY = innerY + (int)(((VerticalAlignment == VerticalAlignment.Top ? TextElement.Height : innerH) - TextElement.Height) / 2f);
             var pos = new Vector2(textX, textY);
 
-            if (ClipRect.IsEmpty)
-                TextRenderer.DrawText(spriteBatch, pos, TextElement.Text, TextElement.Color, ColorCodesEnabled, Opacity, spacing);
-            else
-                TextRenderer.DrawTextClipped(spriteBatch, pos, TextElement.Text, TextElement.Color, ClipRect, ColorCodesEnabled, Opacity, spacing);
+            //route through TextElement so a shrunk line still gets its ShadowStyle passes — TextRenderer has no shadow concept
+            TextElement.Draw(spriteBatch, pos, ClipRect, opacity: Opacity, characterSpacing: spacing);
         } else
         {
             var bounds = new Rectangle(
