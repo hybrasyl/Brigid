@@ -128,9 +128,7 @@ internal sealed class PostListPane : UIPanel
             return;
         }
 
-        //the yellow highlight is a bulletin-board affordance (GM "Hilight"); the legacy mail list ignored the flag
-        //even though the server sets it, so mail rows stay plain.
-        row.Bind(slot.Item, slot.Selected, !IsMail);
+        row.Bind(slot.Item, slot.Selected);
     }
 
     /// <summary>Replaces the list with a board's first page.</summary>
@@ -312,16 +310,18 @@ internal sealed class PostListPane : UIPanel
             BackgroundColor = null;
         }
 
-        public void Bind(MailEntry entry, bool selected, bool allowHighlight)
+        public void Bind(MailEntry entry, bool selected)
         {
             IdLabel.Text = entry.PostId.ToString();
             AuthorLabel.Text = entry.Author;
             DateLabel.Text = $"{entry.Month}/{entry.Day}";
             SubjectLabel.Text = entry.Subject;
 
+            //the wire Highlight bit is dual-purpose: the GM "Hilight" affordance on public boards and the
+            //"unread" marker on personal mail. Both render yellow. Selected wins and shows light blue.
             var color = selected
-                ? DialogPalette.SelectedText
-                : allowHighlight && entry.IsHighlighted
+                ? BoardPalette.SelectedText
+                : entry.IsHighlighted
                     ? Color.Yellow
                     : TextColors.Default;
 
@@ -330,7 +330,7 @@ internal sealed class PostListPane : UIPanel
             DateLabel.ForegroundColor = color;
             SubjectLabel.ForegroundColor = color;
 
-            BackgroundColor = selected ? DialogPalette.RowSelectedFill : null;
+            BackgroundColor = selected ? BoardPalette.RowSelectedFill : null;
         }
     }
 }
