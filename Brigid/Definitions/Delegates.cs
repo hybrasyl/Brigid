@@ -69,6 +69,11 @@ public delegate void DialogChangedHandler();
 public delegate void MenuChangedHandler();
 
 /// <summary>
+///     Fired when a board session opens (other toggle-group panels should close).
+/// </summary>
+public delegate void SessionOpenedHandler();
+
+/// <summary>
 ///     Fired when the board session is closed (all panels should hide).
 /// </summary>
 public delegate void SessionClosedHandler();

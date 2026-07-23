@@ -328,6 +328,10 @@ public sealed partial class WorldScreen
         };
 
         WorldState.Board.SessionClosed += HideAllBoardControls;
+
+        //close the other toggle-group panels whenever a board/mail session opens by ANY route (signpost,
+        //mailbox, F7), not just the W hotkey. Keys.W keeps the board itself open.
+        WorldState.Board.SessionOpened += () => ForceCloseOtherTogglePanels(Keys.W);
     }
 
     private void ToggleSocialStatusPicker()
