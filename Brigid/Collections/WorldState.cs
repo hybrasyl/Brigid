@@ -143,6 +143,12 @@ public static class WorldState
     /// <summary>
     ///     Adds or updates an aisling entity from a DisplayAisling packet.
     /// </summary>
+    //opt-in diagnostic: set DA_LOG_APPEARANCE to dump every aisling appearance packet (wire fields + Brigid's
+    //derived flags) to notice-debug.log. Used to reverse-engineer how retail marks stealthed/invisible players so a
+    //client-side sight gate can be built. Off by default so normal play is not spammed.
+    private static readonly bool LogAppearance =
+        !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DA_LOG_APPEARANCE"));
+
     public static void AddOrUpdateAisling(DisplayUserPacket args)
     {
         if (!Entities.TryGetValue(args.Id, out var entity))
@@ -229,6 +235,14 @@ public static class WorldState
                     Accessory3Color = (DisplayColor)eq.AccessoryColor3,
                     PantsColor = pantsColor == 0 ? null : (DisplayColor)pantsColor
                 };
+
+                if (LogAppearance)
+                    NoticeDebugLog.Write(
+                        $"[appearance] id={args.Id} name='{args.Name}' nameTag={args.NameTagStyle}({(NameTagStyle)args.NameTagStyle}) "
+                        + $"bodyByte=0x{eq.BodySprite:X2} form={bodySprite} wireHide={eq.IsHidden} "
+                        + $"head={eq.HeadSprite} arm1={eq.ArmorSprite1} arm2={eq.ArmorSprite2} coat={eq.OvercoatSprite} "
+                        + $"weap={eq.WeaponSprite} shield={eq.ShieldSprite} "
+                        + $"=> IsHidden={entity.IsHidden} IsTransparent={entity.IsTransparent} bodyId={entity.Appearance?.BodySpriteId}");
 
                 break;
         }
