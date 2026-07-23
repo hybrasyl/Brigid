@@ -139,6 +139,7 @@ internal sealed class PostListPane : UIPanel
         IsMail = isMail;
         //copy: the pane mutates this list (append/remove), and the caller's may be ViewModel-owned.
         Entries = [..entries];
+        SortNewestFirst();
         HeaderLabel.Text = header;
 
         //a full first page means the server may have older posts behind it.
@@ -168,6 +169,9 @@ internal sealed class PostListPane : UIPanel
                 added++;
             }
 
+        if (added > 0)
+            SortNewestFirst();
+
         //keep paging while a batch brings at least one genuinely new post. retail's paged response is inclusive of
         //the cursor post, so a full page always overlaps by one — gating on "a full page of new" would stop after a
         //single fetch. a batch that adds nothing new means we reached the oldest post (or the server does not page).
@@ -175,6 +179,11 @@ internal sealed class PostListPane : UIPanel
 
         ListView.Refresh();
     }
+
+    //boards render newest-first: PostId increases with recency (the retail open asks for startPostId=short.MaxValue,
+    //"the most recent"). Sorting descending also keeps Entries[^1] the OLDEST held post — the cursor MaybeRequestOlder
+    //sends to page further back. Ids are unique (deduped), so the order is total.
+    private void SortNewestFirst() => Entries.Sort(static (a, b) => b.PostId.CompareTo(a.PostId));
 
     /// <summary>Clears the in-flight paging flag without appending (a reply that arrived after the user left).</summary>
     public void CancelPaging() => LoadingMore = false;
