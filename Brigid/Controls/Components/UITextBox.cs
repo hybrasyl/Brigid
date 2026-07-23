@@ -413,7 +413,7 @@ public class UITextBox : UIElement
 
         if ((cursorLine >= firstLine) && (cursorLine < lastLine))
         {
-            var cLineText = GetLineText(cursorLine);
+            var cLineText = GetLineText(cursorLine, trimTrailingSpaces: false);
             var colOffset = Math.Min(CursorPosition - LineStarts[cursorLine], cLineText.Length);
             var cursorX = textX + (colOffset > 0 ? TextRenderer.MeasureWidth(cLineText[..colOffset]) : 0);
             var cursorY = textY + (cursorLine - firstLine) * TextRenderer.CHAR_HEIGHT;
@@ -715,7 +715,11 @@ public class UITextBox : UIElement
         return 0;
     }
 
-    private string GetLineText(int lineIndex)
+    //trimTrailingSpaces strips a hard-line/final-line's trailing spaces for display and end-of-line
+    //navigation. Caret-measurement call sites pass false so the caret advances over a just-typed
+    //trailing space; a soft-wrapped line's boundary space is never trimmed here (it is inside the range),
+    //so MoveToLineEnd/hit-test on wrapped lines still need the default true.
+    private string GetLineText(int lineIndex, bool trimTrailingSpaces = true)
     {
         if ((lineIndex < 0) || (lineIndex >= LineStarts.Count))
             return string.Empty;
@@ -732,8 +736,9 @@ public class UITextBox : UIElement
         } else
             end = Text.Length;
 
-        while ((end > start) && (Text[end - 1] == ' '))
-            end--;
+        if (trimTrailingSpaces)
+            while ((end > start) && (Text[end - 1] == ' '))
+                end--;
 
         return Text[start..end];
     }
@@ -1207,7 +1212,7 @@ public class UITextBox : UIElement
                     if (cursorLine > 0)
                     {
                         var colOffset = CursorPosition - LineStarts[cursorLine];
-                        var currentLineText = GetLineText(cursorLine);
+                        var currentLineText = GetLineText(cursorLine, trimTrailingSpaces: false);
                         var colPixelX = TextRenderer.MeasureWidth(currentLineText[..Math.Min(colOffset, currentLineText.Length)]);
                         var targetLine = cursorLine - 1;
                         var targetText = GetLineText(targetLine);
@@ -1230,7 +1235,7 @@ public class UITextBox : UIElement
                     if ((cursorLine + 1) < LineStarts.Count)
                     {
                         var colOffset = CursorPosition - LineStarts[cursorLine];
-                        var currentLineText = GetLineText(cursorLine);
+                        var currentLineText = GetLineText(cursorLine, trimTrailingSpaces: false);
                         var colPixelX = TextRenderer.MeasureWidth(currentLineText[..Math.Min(colOffset, currentLineText.Length)]);
                         var targetLine = cursorLine + 1;
                         var targetText = GetLineText(targetLine);
