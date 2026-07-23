@@ -191,11 +191,14 @@ public static class WorldState
                 var pantsColor = (byte)(eq.BodySprite & 0x0F);
                 var bodySprite = (BodySprite)(eq.BodySprite & 0xF0);
 
-                //an aisling is invisible either via the wire "Hide" transparent flag (Hybrasyl sends the normal body
-                //plus the flag) or the retail MaleInvis/FemaleInvis body form. Fully hidden (admin) is the bodiless
-                //form + flag and is not drawn at all (IsHidden). The see-through case is drawn translucent.
+                //a bodiless (None) body form means "draw nothing". Retail gates sight server-side: a viewer who
+                //cannot see a stealthed player receives body 0x00 with no equipment (and admin \hide is likewise the
+                //None form). Do NOT also require the wire Hide flag — retail clears it in that no-sight case, so
+                //gating on it left the None body drawn as a normal naked body. An aisling is otherwise invisible —
+                //drawn as a translucent outline — when a viewer CAN see them: the retail MaleInvis/FemaleInvis body
+                //form, or the Hide flag (Hybrasyl sends the normal body + flag).
                 var isInvisibleForm = bodySprite is BodySprite.MaleInvis or BodySprite.FemaleInvis;
-                entity.IsHidden = eq.IsHidden && eq.BodySprite == 0;
+                entity.IsHidden = bodySprite == BodySprite.None;
                 entity.IsTransparent = !entity.IsHidden && (eq.IsHidden || isInvisibleForm);
                 entity.IsDead = bodySprite is BodySprite.MaleGhost or BodySprite.FemaleGhost;
                 entity.LanternSize = (LanternSize)eq.LanternSize;
@@ -229,16 +232,6 @@ public static class WorldState
                     Accessory3Color = (DisplayColor)eq.AccessoryColor3,
                     PantsColor = pantsColor == 0 ? null : (DisplayColor)pantsColor
                 };
-
-                //diagnostic: dump every aisling appearance packet (wire fields + Brigid's derived flags) to
-                //notice-debug.log to reverse-engineer how retail marks stealthed/invisible players. Remove once the
-                //client-side sight gate is built.
-                NoticeDebugLog.Write(
-                    $"[appearance] id={args.Id} name='{args.Name}' nameTag={args.NameTagStyle}({(NameTagStyle)args.NameTagStyle}) "
-                    + $"bodyByte=0x{eq.BodySprite:X2} form={bodySprite} wireHide={eq.IsHidden} "
-                    + $"head={eq.HeadSprite} arm1={eq.ArmorSprite1} arm2={eq.ArmorSprite2} coat={eq.OvercoatSprite} "
-                    + $"weap={eq.WeaponSprite} shield={eq.ShieldSprite} "
-                    + $"=> IsHidden={entity.IsHidden} IsTransparent={entity.IsTransparent} bodyId={entity.Appearance?.BodySpriteId}");
 
                 break;
         }
