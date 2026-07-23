@@ -191,9 +191,12 @@ public static class WorldState
                 var pantsColor = (byte)(eq.BodySprite & 0x0F);
                 var bodySprite = (BodySprite)(eq.BodySprite & 0xF0);
 
-                //the wire bool means translucent-visible (Hide); fully hidden only for the bodiless form
-                entity.IsTransparent = eq.IsHidden;
+                //an aisling is invisible either via the wire "Hide" transparent flag (Hybrasyl sends the normal body
+                //plus the flag) or the retail MaleInvis/FemaleInvis body form. Fully hidden (admin) is the bodiless
+                //form + flag and is not drawn at all (IsHidden). The see-through case is drawn translucent.
+                var isInvisibleForm = bodySprite is BodySprite.MaleInvis or BodySprite.FemaleInvis;
                 entity.IsHidden = eq.IsHidden && eq.BodySprite == 0;
+                entity.IsTransparent = !entity.IsHidden && (eq.IsHidden || isInvisibleForm);
                 entity.IsDead = bodySprite is BodySprite.MaleGhost or BodySprite.FemaleGhost;
                 entity.LanternSize = (LanternSize)eq.LanternSize;
                 entity.RestPosition = (RestPosition)eq.RestPosition;
@@ -201,7 +204,10 @@ public static class WorldState
                 entity.Appearance = new AislingAppearance
                 {
                     Gender = DataUtilities.DetermineGender(bodySprite),
-                    BodySpriteId = GetBodySpriteId(bodySprite),
+                    //an invisible aisling renders as the gender-neutral "invisible" body outline (mb003) with its real
+                    //equipment drawn on top, the whole avatar translucent (IsTransparent). A visible aisling uses its
+                    //normal body form.
+                    BodySpriteId = entity.IsTransparent ? 3 : GetBodySpriteId(bodySprite),
                     BodyColor = eq.BodyColor,
                     HeadSprite = eq.HeadSprite,
                     HeadColor = (DisplayColor)eq.HeadColor,
@@ -343,11 +349,12 @@ public static class WorldState
         return blocked;
     }
 
+    //MaleInvis/FemaleInvis are intentionally absent: an invisible aisling is forced to the mb003 outline via the
+    //IsTransparent path in AddOrUpdateAisling, so this only maps visible body forms.
     private static int GetBodySpriteId(BodySprite bodySprite)
         => bodySprite switch
         {
             BodySprite.MaleGhost or BodySprite.FemaleGhost => 2,
-            BodySprite.MaleInvis or BodySprite.FemaleInvis => 3,
             BodySprite.MaleJester                          => 4,
             _                                              => 1
         };
