@@ -28,7 +28,6 @@ public static class KeybindCatalog
         Panels,
         HudTabs,
         Chat,
-        FunctionKeys,
         Actions,
         TextEditing
     }
@@ -44,7 +43,6 @@ public static class KeybindCatalog
         KeybindSection.HudTabs,
         KeybindSection.Chat,
         KeybindSection.Actions,
-        KeybindSection.FunctionKeys,
         KeybindSection.TextEditing
     ];
 
@@ -55,14 +53,21 @@ public static class KeybindCatalog
         new(CommandId.Move_Down, "Move Down", KeybindSection.Movement),
         new(CommandId.Move_Left, "Move Left", KeybindSection.Movement),
         new(CommandId.Move_Right, "Move Right", KeybindSection.Movement),
+        new(CommandId.World_Refresh, "Refresh", KeybindSection.Movement),
 
         new(CommandId.World_TogglePauseMenu, "Menu / Pause", KeybindSection.Panels),
         new(CommandId.World_ToggleBoard, "Bulletin Board", KeybindSection.Panels),
+        new(CommandId.World_BoardList, "Board List", KeybindSection.Panels),
         new(CommandId.World_ToggleWorldList, "World List", KeybindSection.Panels),
+        new(CommandId.World_FriendsList, "Friends List", KeybindSection.Panels),
         new(CommandId.World_ToggleSocialStatus, "Social Status", KeybindSection.Panels),
         new(CommandId.World_ToggleTabMap, "Map Overlay", KeybindSection.Panels),
         new(CommandId.World_TownMap, "Town Map", KeybindSection.Panels),
         new(CommandId.World_GroupPanel, "Group Panel", KeybindSection.Panels),
+        new(CommandId.World_HelpMerchant, "Help", KeybindSection.Panels),
+        new(CommandId.World_MacroMenu, "Macros", KeybindSection.Panels),
+        new(CommandId.World_Settings, "Settings", KeybindSection.Panels),
+        new(CommandId.World_KeybindMenu, "Keybinds", KeybindSection.Panels),
         new(CommandId.World_SwapHudLayout, "Swap HUD Layout", KeybindSection.Panels),
 
         new(CommandId.World_TabInventory, "Inventory", KeybindSection.HudTabs),
@@ -82,6 +87,7 @@ public static class KeybindCatalog
         new(CommandId.World_Whisper, "Whisper", KeybindSection.Chat),
         new(CommandId.World_ChatScrollUp, "Scroll Chat Up", KeybindSection.Chat),
         new(CommandId.World_ChatScrollDown, "Scroll Chat Down", KeybindSection.Chat),
+        new(CommandId.World_IgnoreList, "Ignore List", KeybindSection.Chat),
 
         new(CommandId.World_Assail, "Assail", KeybindSection.Actions),
         new(CommandId.World_PickupItem, "Pick Up Item", KeybindSection.Actions),
@@ -90,15 +96,6 @@ public static class KeybindCatalog
         new(CommandId.World_CycleWindowSize, "Cycle Window Size", KeybindSection.Actions),
         new(CommandId.World_TabMapZoomIn, "Map Zoom In", KeybindSection.Actions),
         new(CommandId.World_TabMapZoomOut, "Map Zoom Out", KeybindSection.Actions),
-
-        new(CommandId.World_HelpMerchant, "Help", KeybindSection.FunctionKeys),
-        new(CommandId.World_MacroMenu, "Macros", KeybindSection.FunctionKeys),
-        new(CommandId.World_Settings, "Settings", KeybindSection.FunctionKeys),
-        new(CommandId.World_Refresh, "Refresh", KeybindSection.FunctionKeys),
-        new(CommandId.World_BoardList, "Board List", KeybindSection.FunctionKeys),
-        new(CommandId.World_KeybindMenu, "Keybinds", KeybindSection.FunctionKeys),
-        new(CommandId.World_IgnoreList, "Ignore List", KeybindSection.FunctionKeys),
-        new(CommandId.World_FriendsList, "Friends List", KeybindSection.FunctionKeys),
 
         new(CommandId.Editor_SelectAll, "Select All", KeybindSection.TextEditing),
         new(CommandId.Editor_Copy, "Copy", KeybindSection.TextEditing),
@@ -124,7 +121,6 @@ public static class KeybindCatalog
         KeybindSection.HudTabs      => "HUD Tabs",
         KeybindSection.Chat         => "Chat",
         KeybindSection.Actions      => "Actions",
-        KeybindSection.FunctionKeys => "Function Keys",
         KeybindSection.TextEditing  => "Text Editing",
         _                           => section.ToString()
     };

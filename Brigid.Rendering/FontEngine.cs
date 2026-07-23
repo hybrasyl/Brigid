@@ -54,7 +54,10 @@ public sealed class FontEngine : ITextMeasurer
             Bold: "AnonymousPro-Bold.ttf",
             Italic: "AnonymousPro-Italic.ttf",
             BoldItalic: "AnonymousPro-BoldItalic.ttf"),
-        new("Iosevka Mono", "IosevkaCharonMono-Regular.ttf"),
+        //IsIcon marks the face FontStyle.Icon resolves to. Keep Iosevka here: it carries the UI symbol glyphs the
+        //other faces lack (e.g. the ↺ keybind-reset glyph). Do NOT remove or swap this for a face without those
+        //glyphs, or FontStyle.Icon text renders blank.
+        new("Iosevka Mono", "IosevkaCharonMono-Regular.ttf", IsIcon: true),
         new("Comic Shanns Mono", "ComicShannsMono-Regular.ttf")
     ];
 
@@ -73,6 +76,9 @@ public sealed class FontEngine : ITextMeasurer
 
     //index of the FontStyle.Mono face in Faces, or -1 when not loaded (Mono then falls back to the active face)
     private readonly int MonoIndex;
+
+    //index of the FontStyle.Icon face in Faces, or -1 when not loaded (Icon then falls back to the active face)
+    private readonly int IconIndex;
     private int ActiveIndex;
 
     //virtual→native scale of the active draw pass. When both are 1 (the default), text is drawn into the 640×480
@@ -132,6 +138,7 @@ public sealed class FontEngine : ITextMeasurer
 
         var faces = new List<Face>();
         var monoIndex = -1;
+        var iconIndex = -1;
 
         foreach (var def in FaceDefs)
         {
@@ -164,6 +171,9 @@ public sealed class FontEngine : ITextMeasurer
             if (def.IsMono && (monoIndex < 0))
                 monoIndex = faces.Count;
 
+            if (def.IsIcon && (iconIndex < 0))
+                iconIndex = faces.Count;
+
             faces.Add(face);
         }
 
@@ -193,6 +203,7 @@ public sealed class FontEngine : ITextMeasurer
 
         Faces = [.. faces];
         MonoIndex = monoIndex;
+        IconIndex = iconIndex;
         ActiveIndex = Math.Clamp(initialIndex, 0, Faces.Length - 1);
     }
 
@@ -374,18 +385,24 @@ public sealed class FontEngine : ITextMeasurer
     }
 
     /// <summary>
-    ///     Resolves a style to the face and face-local style to render with: <see cref="FontStyle.Mono" /> selects the
-    ///     dedicated monospace face (falling back to the active face when none is loaded); everything else selects the
-    ///     active face. The Mono flag is masked off the returned style, so <see cref="Face" /> only ever sees
+    ///     Resolves a style to the face and face-local style to render with: <see cref="FontStyle.Icon" /> selects the
+    ///     dedicated symbol face and <see cref="FontStyle.Mono" /> the dedicated monospace face (each falling back to the
+    ///     active face when its face isn't loaded; Icon wins when both are set); everything else selects the active face.
+    ///     The Mono/Icon flags are masked off the returned style, so <see cref="Face" /> only ever sees
     ///     Regular/Bold/Italic/BoldItalic — missing variants there fall back to the face's regular file.
     /// </summary>
     private (Face Face, FontStyle Style) Resolve(FontStyle style)
     {
-        var face = (style & FontStyle.Mono) != 0 && (MonoIndex >= 0)
-            ? Faces[MonoIndex]
-            : Faces[ActiveIndex];
+        Face face;
 
-        return (face, style & ~FontStyle.Mono);
+        if (((style & FontStyle.Icon) != 0) && (IconIndex >= 0))
+            face = Faces[IconIndex];
+        else if (((style & FontStyle.Mono) != 0) && (MonoIndex >= 0))
+            face = Faces[MonoIndex];
+        else
+            face = Faces[ActiveIndex];
+
+        return (face, style & ~(FontStyle.Mono | FontStyle.Icon));
     }
 
     /// <summary>
@@ -462,7 +479,8 @@ public sealed class FontEngine : ITextMeasurer
         string? Bold = null,
         string? Italic = null,
         string? BoldItalic = null,
-        bool IsMono = false);
+        bool IsMono = false,
+        bool IsIcon = false);
 
     /// <summary>
     ///     A selectable UI face: a FontSystem per loaded style variant, a per-(style, size) glyph cache, and a
