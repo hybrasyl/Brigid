@@ -178,6 +178,17 @@ public static class Keybinds
     }
 
     /// <summary>
+    ///     Whether <paramref name="e" /> is one of the mutually-exclusive Q/W/E/R toggle-panel hotkeys (Pause,
+    ///     Bulletin Board, World List, Social Status). One home for that group so a new toggle panel is added in a
+    ///     single place rather than being silently missed by callers that switch between them.
+    /// </summary>
+    public static bool IsToggleGroupCommand(KeyEvent e) =>
+        Matches(e, CommandId.World_TogglePauseMenu)
+        || Matches(e, CommandId.World_ToggleBoard)
+        || Matches(e, CommandId.World_ToggleWorldList)
+        || Matches(e, CommandId.World_ToggleSocialStatus);
+
+    /// <summary>
     ///     The command bound to <paramref name="e" /> within <paramref name="context" />, or null. Bindings
     ///     never overlap within a context by design (enforced by test), so match order is irrelevant.
     /// </summary>

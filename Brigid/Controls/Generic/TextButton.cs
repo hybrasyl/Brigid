@@ -79,7 +79,8 @@ public sealed class TextButton : UIPanel
 
         //centre the styled glyph in the button using the styled width; band-centred vertically like a normal label.
         //clip to this element's ClipRect (refreshed by base.Draw) so a partially-scrolled row trims the glyph.
-        var color = Enabled ? TextColorOverride ?? LegendColors.White : DisabledText;
+        //RefreshVisual keeps Label.ForegroundColor current (even while the label is hidden), so reuse it.
+        var color = Label.ForegroundColor;
         var textWidth = TextRenderer.MeasureWidth(text, LabelStyle);
         var x = ScreenX + (Width - textWidth) / 2;
         var y = ScreenY + (Height - TextRenderer.CHAR_HEIGHT) / 2;
