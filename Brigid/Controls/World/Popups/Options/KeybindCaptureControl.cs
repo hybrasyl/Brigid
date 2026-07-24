@@ -92,9 +92,9 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
 
         var name = KeybindCatalog.Entry(command)?.DisplayName ?? command.ToString();
 
-        var slotLabel = Keybinds.SupportsSecondary(command)
-            ? slot == ChordSlot.Primary ? "Primary" : "Alternate"
-            : "Key";
+        //every command now exposes both a primary and an alternate slot, so label by slot, not by whether the
+        //default happened to ship a secondary.
+        var slotLabel = slot == ChordSlot.Primary ? "Primary" : "Alternate";
 
         SetTitle($"Rebind — {name}");
         PromptLabel.Text = $"{name} · {slotLabel}";
