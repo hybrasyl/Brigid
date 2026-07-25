@@ -72,7 +72,7 @@ internal sealed class BoardIndexPane : UIPanel
         }
 
         label.Text = row.Item.Name;
-        label.ForegroundColor = row.Selected ? DialogPalette.SelectedText : TextColors.Default;
+        label.ForegroundColor = row.Selected ? BoardPalette.SelectedText : TextColors.Default;
     }
 
     /// <summary>Populates the pane and selects the first board (matching the legacy panel).</summary>

@@ -94,11 +94,16 @@ public sealed class Board
     public void HandleResponse(string message, bool success) => ResponseReceived?.Invoke(message, success);
 
     /// <summary>
-    ///     Opens a new board session.
+    ///     Opens a new board session. Fires <see cref="SessionOpened" /> only on the closed→open transition, so a
+    ///     board-list refresh while already open does not re-fire it.
     /// </summary>
     public void OpenSession()
     {
+        if (IsSessionOpen)
+            return;
+
         IsSessionOpen = true;
+        SessionOpened?.Invoke();
     }
 
     /// <summary>
@@ -115,6 +120,11 @@ public sealed class Board
     ///     Fired when a server response message is received (submit/delete/highlight result).
     /// </summary>
     public event BoardResponseReceivedHandler? ResponseReceived;
+
+    /// <summary>
+    ///     Fired when a board session opens (other toggle-group panels should close).
+    /// </summary>
+    public event SessionOpenedHandler? SessionOpened;
 
     /// <summary>
     ///     Fired when the board session is closed (all panels should hide).

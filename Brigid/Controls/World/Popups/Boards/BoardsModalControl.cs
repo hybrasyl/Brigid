@@ -445,6 +445,13 @@ public sealed class BoardsModalControl : CenteredModalPanel
             return;
         }
 
+        //let the sibling toggle-group hotkeys (WorldList/Social/Pause) bubble to the root handlers unhandled so they
+        //can switch away from an open board, the same way an open WorldList lets W switch to the board. Without this
+        //the base swallow would eat them and the switch would silently do nothing. (The board's own W is handled
+        //above, so reaching here means a sibling.)
+        if (Keybinds.IsToggleGroupCommand(e))
+            return;
+
         switch (View)
         {
             case BoardView.Index:

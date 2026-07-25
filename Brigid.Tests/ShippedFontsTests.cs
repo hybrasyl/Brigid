@@ -1,4 +1,5 @@
 #region
+using Brigid.Rendering;
 using FontStashSharp;
 using Xunit;
 #endregion
@@ -47,5 +48,23 @@ public class ShippedFontsTests
         var size = system.GetFont(15).MeasureString(sample);
 
         Assert.True(size.X > 0, $"{file} measured zero width for its sample");
+    }
+
+    [Fact]
+    public void IconFont_CoversResetGlyph()
+    {
+        //FontStyle.Icon exists because the UI faces lack the symbol glyphs, notably the keybind reset glyph ↺ (U+21BA).
+        //Resolve the face the same way FontEngine does rather than naming a file, so moving IsIcon to a face without
+        //the glyph fails here instead of silently blanking the reset button — the bug this face selection fixes.
+        var iconFile = FontEngine.IconFaceFile;
+
+        Assert.NotNull(iconFile);
+
+        var system = new FontSystem();
+        system.AddFont(File.ReadAllBytes(Path.Combine(FontsDir(), iconFile)));
+
+        var width = system.GetFont(15).MeasureString("↺").X;
+
+        Assert.True(width > 0, $"{iconFile} (the IsIcon face) does not cover U+21BA (the ↺ reset glyph)");
     }
 }

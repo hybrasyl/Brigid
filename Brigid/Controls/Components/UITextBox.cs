@@ -30,6 +30,10 @@ public class UITextBox : UIElement
     private long LastClickTime;
     private int LastClickPosition = -1;
     private List<int> LineStarts = [0];
+
+    //parallel to LineStarts: entry i is true when line i ends at a soft wrap rather than a newline or the end of
+    //the text. Only a soft wrap's boundary spaces are dropped from the line's text — see GetLineText.
+    private List<bool> SoftLineEnds = [false];
     private int SelectionAnchor;
 
     //── single-level undo/redo (one step back, one forward) ──
@@ -203,6 +207,7 @@ public class UITextBox : UIElement
         CachedLayoutWidth = innerWidth;
         CachedLayoutText = Text;
         LineStarts = [0];
+        SoftLineEnds = [false];
 
         if (string.IsNullOrEmpty(Text) || (innerWidth <= 0))
             return;
@@ -220,7 +225,7 @@ public class UITextBox : UIElement
                 pos = paraEnd + 1;
 
                 if ((nlIndex >= 0) && (pos <= Text.Length))
-                    LineStarts.Add(pos);
+                    StartLine(pos, false);
 
                 continue;
             }
@@ -240,18 +245,26 @@ public class UITextBox : UIElement
                 paraOffset += consumed;
 
                 if (remaining.Length > 0)
-                    LineStarts.Add(paraOffset);
+                    StartLine(paraOffset, true);
             }
 
             pos = paraEnd + 1;
 
             if ((nlIndex >= 0) && (pos <= Text.Length))
-                LineStarts.Add(pos);
+                StartLine(pos, false);
         }
 
         //ensure trailing \n produces a final empty line
         if ((Text.Length > 0) && (Text[^1] == '\n') && (LineStarts[^1] != Text.Length))
-            LineStarts.Add(Text.Length);
+            StartLine(Text.Length, false);
+
+        //opens a new line at start, recording how the line it displaces ended
+        void StartLine(int start, bool previousEndedSoft)
+        {
+            SoftLineEnds[^1] = previousEndedSoft;
+            LineStarts.Add(start);
+            SoftLineEnds.Add(false);
+        }
     }
 
     public void ClearSelection() => SelectionAnchor = CursorPosition;
@@ -732,8 +745,12 @@ public class UITextBox : UIElement
         } else
             end = Text.Length;
 
-        while ((end > start) && (Text[end - 1] == ' '))
-            end--;
+        //drop only a soft wrap's boundary spaces: the wrapper consumed them into this line's range, but they belong
+        //to the break, not the text. A hard line's authored trailing spaces stay, so the caret can sit after them —
+        //display, End, Up/Down and hit-testing all agree on where the line ends.
+        if (SoftLineEnds[lineIndex])
+            while ((end > start) && (Text[end - 1] == ' '))
+                end--;
 
         return Text[start..end];
     }

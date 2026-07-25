@@ -1301,12 +1301,11 @@ public sealed class AislingRenderer : IDisposable
     //   - 's' (shield): retail hardcodes the male prefix; khanwns has only vestigial entries
     //     for 3 sprite IDs that the paperdoll builder never requests.
     //
-    //   - 'b' with spriteId == 3 (BodySprite.{Male,Female}Invis): asset bug. wb003 exists in
-    //     khanwad but contains wrong art (a "guard outfit"), not a female invisible body. mb003
-    //     is the correct invisible silhouette and is gender-neutral when invisible (no skin
-    //     shows), so it renders fine for female characters while w-prefix overlays continue to
-    //     apply. REMOVE this branch if a .datf asset pack ships a correct wb003 — at that point
-    //     wb003 should load normally via appearance.IsMale.
+    //   - 'b' with spriteId == 3 (the invisible body): every invisible aisling is drawn with a single
+    //     gender-neutral "invisible" outline — the male mb003 body — with its real per-gender equipment
+    //     overlays on top and the whole avatar translucent (set via IsTransparent in WorldState). We use
+    //     mb003 for both genders on purpose as the shared invisible silhouette; the overlays still load
+    //     per-gender. (wb003 is not used.)
     private static bool ForceMaleArchive(char typeLetter, int spriteId)
         => typeLetter == 's'
            || ((typeLetter == 'b') && (spriteId == 3));

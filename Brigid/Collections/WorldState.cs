@@ -191,9 +191,15 @@ public static class WorldState
                 var pantsColor = (byte)(eq.BodySprite & 0x0F);
                 var bodySprite = (BodySprite)(eq.BodySprite & 0xF0);
 
-                //the wire bool means translucent-visible (Hide); fully hidden only for the bodiless form
-                entity.IsTransparent = eq.IsHidden;
-                entity.IsHidden = eq.IsHidden && eq.BodySprite == 0;
+                //a bodiless (None) body form means "draw nothing". Retail gates sight server-side: a viewer who
+                //cannot see a stealthed player receives body 0x00 with no equipment (and admin \hide is likewise the
+                //None form). Do NOT also require the wire Hide flag — retail clears it in that no-sight case, so
+                //gating on it left the None body drawn as a normal naked body. An aisling is otherwise invisible —
+                //drawn as a translucent outline — when a viewer CAN see them: the retail MaleInvis/FemaleInvis body
+                //form, or the Hide flag (Hybrasyl sends the normal body + flag).
+                var isInvisibleForm = bodySprite is BodySprite.MaleInvis or BodySprite.FemaleInvis;
+                entity.IsHidden = bodySprite == BodySprite.None;
+                entity.IsTransparent = !entity.IsHidden && (eq.IsHidden || isInvisibleForm);
                 entity.IsDead = bodySprite is BodySprite.MaleGhost or BodySprite.FemaleGhost;
                 entity.LanternSize = (LanternSize)eq.LanternSize;
                 entity.RestPosition = (RestPosition)eq.RestPosition;
@@ -201,7 +207,10 @@ public static class WorldState
                 entity.Appearance = new AislingAppearance
                 {
                     Gender = DataUtilities.DetermineGender(bodySprite),
-                    BodySpriteId = GetBodySpriteId(bodySprite),
+                    //an invisible aisling renders as the gender-neutral "invisible" body outline (mb003) with its real
+                    //equipment drawn on top, the whole avatar translucent (IsTransparent). A visible aisling uses its
+                    //normal body form.
+                    BodySpriteId = entity.IsTransparent ? 3 : GetBodySpriteId(bodySprite),
                     BodyColor = eq.BodyColor,
                     HeadSprite = eq.HeadSprite,
                     HeadColor = (DisplayColor)eq.HeadColor,
@@ -343,11 +352,12 @@ public static class WorldState
         return blocked;
     }
 
+    //MaleInvis/FemaleInvis are intentionally absent: an invisible aisling is forced to the mb003 outline via the
+    //IsTransparent path in AddOrUpdateAisling, so this only maps visible body forms.
     private static int GetBodySpriteId(BodySprite bodySprite)
         => bodySprite switch
         {
             BodySprite.MaleGhost or BodySprite.FemaleGhost => 2,
-            BodySprite.MaleInvis or BodySprite.FemaleInvis => 3,
             BodySprite.MaleJester                          => 4,
             _                                              => 1
         };

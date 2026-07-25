@@ -732,6 +732,7 @@ public sealed partial class WorldScreen : IScreen
         WorldState.Board.PostViewed -= HandleBoardPostViewed;
         WorldState.Board.BoardListReceived -= HandleBoardListReceived;
         WorldState.Board.SessionClosed -= HideAllBoardControls;
+        WorldState.Board.SessionOpened -= OnBoardSessionOpened;
         WorldState.Board.ResponseReceived -= HandleBoardResponse;
         WorldState.Board.SessionClosed -= ResetBulletinButtonSelection;
         WorldState.Board.SessionClosed -= ResetMailButtonSelection;
