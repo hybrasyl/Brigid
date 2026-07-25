@@ -61,6 +61,11 @@ public sealed class FontEngine : ITextMeasurer
         new("Comic Shanns Mono", "ComicShannsMono-Regular.ttf")
     ];
 
+    //the regular file FontStyle.Icon resolves to, or null when no face is marked IsIcon. Exposed so the glyph-coverage
+    //test follows the same selection the engine does, instead of hard-coding a filename that could drift out from
+    //under IsIcon.
+    internal static string? IconFaceFile => FaceDefs.FirstOrDefault(static d => d.IsIcon)?.File;
+
     //optional fallback faces for codepoints the primaries lack (CJK, emoji), added to every face. Loaded if
     //present. NotoEmoji is the MONOCHROME variable font (glyf outlines, default instance) — FontStashSharp's
     //rasterizer cannot read color tables (CBDT/COLR), so emoji render as line art tinted with the text color.

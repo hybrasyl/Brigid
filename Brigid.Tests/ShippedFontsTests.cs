@@ -1,4 +1,5 @@
 #region
+using Brigid.Rendering;
 using FontStashSharp;
 using Xunit;
 #endregion
@@ -52,14 +53,18 @@ public class ShippedFontsTests
     [Fact]
     public void IconFont_CoversResetGlyph()
     {
-        //FontStyle.Icon resolves to Iosevka specifically because it carries the UI symbol glyphs the other faces lack,
-        //notably the keybind reset glyph ↺ (U+21BA). Guard that the shipped icon font still covers it — swapping it for
-        //a font without the glyph would silently blank the reset button, the exact bug this face selection fixes.
+        //FontStyle.Icon exists because the UI faces lack the symbol glyphs, notably the keybind reset glyph ↺ (U+21BA).
+        //Resolve the face the same way FontEngine does rather than naming a file, so moving IsIcon to a face without
+        //the glyph fails here instead of silently blanking the reset button — the bug this face selection fixes.
+        var iconFile = FontEngine.IconFaceFile;
+
+        Assert.NotNull(iconFile);
+
         var system = new FontSystem();
-        system.AddFont(File.ReadAllBytes(Path.Combine(FontsDir(), "IosevkaCharonMono-Regular.ttf")));
+        system.AddFont(File.ReadAllBytes(Path.Combine(FontsDir(), iconFile)));
 
         var width = system.GetFont(15).MeasureString("↺").X;
 
-        Assert.True(width > 0, "IosevkaCharonMono-Regular.ttf does not cover U+21BA (the ↺ reset glyph)");
+        Assert.True(width > 0, $"{iconFile} (the IsIcon face) does not cover U+21BA (the ↺ reset glyph)");
     }
 }
