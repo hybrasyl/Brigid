@@ -51,6 +51,43 @@ public class ChatAutofitTests
         Assert.True(failures.Count == 0, string.Join("\n", failures));
     }
 
+    /// <summary>
+    ///     The wrapper accumulates width one character at a time while everything else measures whole runs. A single
+    ///     character has no inter-character gap, so per-character measurement silently drops the tracking that both a
+    ///     string measurement and the draw apply between glyphs — which made every line break ~1px per character early.
+    ///     Autofit is meaningless if the two disagree: it would size text against a width the wrapper never uses.
+    /// </summary>
+    [Fact]
+    public void WrapAccumulation_AgreesWithWholeStringMeasurement()
+    {
+        FontEngine.Initialize(0);
+
+        var probe = new string('M', BUDGET);
+        var failures = new List<string>();
+
+        for (var i = 0; i < FontEngine.Instance.FontCount; i++)
+        {
+            FontEngine.Instance.SetActiveFont(i);
+
+            foreach (var size in new[] { FontEngine.RENDER_SIZE, 13, 11 })
+            {
+                var whole = FontEngine.Instance.MeasureWidth(probe, size);
+
+                //given exactly the measured width, the wrapper must take the whole run
+                var atExactWidth = TextRenderer.FindLineBreak(probe, whole, size: size);
+
+                if (atExactWidth != BUDGET)
+                    failures.Add($"face {i} size {size}: measured {whole}px but the wrapper broke at {atExactWidth}/{BUDGET}");
+
+                //and one pixel under, it must break — otherwise it is not measuring at all
+                if (TextRenderer.FindLineBreak(probe, whole - 1, size: size) >= BUDGET)
+                    failures.Add($"face {i} size {size}: wrapper did not break below the measured width");
+            }
+        }
+
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
     [Fact]
     public void Autofit_NeverExceedsTheDefaultRenderSize()
     {

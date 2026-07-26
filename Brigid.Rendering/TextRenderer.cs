@@ -125,7 +125,7 @@ public static class TextRenderer
 
         if (!colorCodesEnabled)
         {
-            engine.DrawLine(spriteBatch, text, new Vector2(cursorX, y), activeColor, clip, px, FontStyle.Regular, characterSpacing);
+            engine.DrawLine(spriteBatch, text, new Vector2(cursorX, y), activeColor, clip, characterSpacing, size: px);
 
             return;
         }
@@ -140,7 +140,7 @@ public static class TextRenderer
             if (i > runStart)
             {
                 var run = text[runStart..i];
-                engine.DrawLine(spriteBatch, run, new Vector2(cursorX, y), activeColor, clip, px, FontStyle.Regular, characterSpacing);
+                engine.DrawLine(spriteBatch, run, new Vector2(cursorX, y), activeColor, clip, characterSpacing, size: px);
                 cursorX += engine.MeasureWidth(run, px) + characterSpacing * run.Length;
             }
 
@@ -151,15 +151,7 @@ public static class TextRenderer
         }
 
         if (runStart < text.Length)
-            engine.DrawLine(
-                spriteBatch,
-                text[runStart..],
-                new Vector2(cursorX, y),
-                activeColor,
-                clip,
-                px,
-                FontStyle.Regular,
-                characterSpacing);
+            engine.DrawLine(spriteBatch, text[runStart..], new Vector2(cursorX, y), activeColor, clip, characterSpacing, size: px);
     }
     #endregion
 
@@ -173,6 +165,7 @@ public static class TextRenderer
     {
         var width = 0;
         var lastSpace = -1;
+        var glyphs = 0;
 
         for (var i = 0; i < text.Length; i++)
         {
@@ -186,7 +179,15 @@ public static class TextRenderer
             if (text[i] == ' ')
                 lastSpace = i;
 
+            //measuring one character at a time loses the inter-character tracking that a whole-string measurement
+            //(and the draw) applies between glyphs, which over-estimated every wrapped line by ~1px per character
+            //and broke lines well before they actually overflowed. Add it back for every glyph after the first.
             width += MeasureCharWidth(text[i], size);
+
+            if (glyphs > 0)
+                width += (int)FontEngine.DEFAULT_TRACKING;
+
+            glyphs++;
 
             if (width > maxWidth)
                 return lastSpace > 0 ? lastSpace + 1 : Math.Max(1, i);

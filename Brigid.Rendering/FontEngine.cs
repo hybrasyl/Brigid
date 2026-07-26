@@ -162,19 +162,8 @@ public sealed class FontEngine : ITextMeasurer
             face.SetVariant(FontStyle.Italic, TryLoadSystem(def.Italic));
             face.SetVariant(FontStyle.BoldItalic, TryLoadSystem(def.BoldItalic));
 
-            //center the actual glyph *ink* in the layout band, not the declared line box. FontStashSharp's
-            //LineHeight bakes in per-face internal leading that varies wildly (Comic Shanns reports a tall box
-            //with dead space below the glyphs), so box-centering makes such faces sit high with a gap beneath.
-            //Measuring real ink via TextBounds and centering that keeps every face on the same visual band.
-            var probeFont = face.GetFont(FontStyle.Regular, RENDER_SIZE);
-            var ink = probeFont.TextBounds(VERTICAL_METRIC_PROBE, Vector2.Zero);
-            var inkHeight = ink.Y2 - ink.Y;
-
-            //offset so the ink midpoint lands at the band midpoint; ink.Y is the ink top relative to the pen, so
-            //subtracting it cancels the face's ascent. Fall back to line-box centering if the probe has no ink.
-            face.VerticalOffset = inkHeight > 0f
-                ? (int)MathF.Round(((TextRenderer.CHAR_HEIGHT - inkHeight) / 2f) - ink.Y)
-                : (int)MathF.Round((TextRenderer.CHAR_HEIGHT - probeFont.LineHeight) / 2f);
+            //warm the default size's band offset here so the first draw doesn't pay the probe
+            face.VerticalOffsetFor(RENDER_SIZE);
 
             if (def.IsMono && (monoIndex < 0))
                 monoIndex = faces.Count;
@@ -350,18 +339,20 @@ public sealed class FontEngine : ITextMeasurer
         Color color,
         Rectangle? clip,
         float characterSpacing = 0f,
-        FontStyle style = FontStyle.Regular)
+        FontStyle style = FontStyle.Regular,
+        int? size = null)
     {
         if (string.IsNullOrEmpty(text))
             return;
 
-        //legacy path: active face at RENDER_SIZE, line box centered in the 12px layout band. A style (e.g. bold)
-        //resolves to the active face's variant while keeping that band centering, so styled and regular runs on the
-        //same baseline align vertically. style defaults to Regular, so untyped callers are unchanged.
+        //legacy path: active face, line box centered in the 12px layout band. A style (e.g. bold) resolves to the
+        //active face's variant while keeping that band centering, so styled and regular runs on the same baseline
+        //align vertically. style defaults to Regular and size to RENDER_SIZE, so untyped callers are unchanged.
         var (face, faceStyle) = Resolve(style);
-        var pos = new Vector2(position.X, position.Y + face.VerticalOffset);
+        var px = size ?? RENDER_SIZE;
+        var pos = new Vector2(position.X, position.Y + face.VerticalOffsetFor(px));
 
-        DrawLineCore(spriteBatch, SanitizeSurrogates(text), pos, color, clip, face, faceStyle, RENDER_SIZE, characterSpacing);
+        DrawLineCore(spriteBatch, SanitizeSurrogates(text), pos, color, clip, face, faceStyle, px, characterSpacing);
     }
 
     /// <summary>
@@ -536,8 +527,34 @@ public sealed class FontEngine : ITextMeasurer
         //indexed by FontStyle value, which Resolve masks to Regular..BoldItalic (0..3) before any Face call —
         //the Mono flag never reaches here. The Regular slot is always populated (set in the constructor).
         private readonly FontSystem?[] Variants = new FontSystem?[4];
+
+        //band-centering offset per pixel size. Sizes other than RENDER_SIZE arrive when a caller autofits text down
+        //to fit a fixed-width area, and a smaller glyph needs a larger offset to sit on the same visual band.
+        private readonly Dictionary<int, int> VerticalOffsets = [];
         public readonly string Name;
-        public int VerticalOffset;
+
+        public int VerticalOffsetFor(int size)
+        {
+            if (VerticalOffsets.TryGetValue(size, out var cached))
+                return cached;
+
+            //center the actual glyph *ink* in the layout band, not the declared line box. FontStashSharp's LineHeight
+            //bakes in per-face internal leading that varies wildly (Comic Shanns reports a tall box with dead space
+            //below the glyphs), so box-centering makes such faces sit high with a gap beneath.
+            var probeFont = GetFont(FontStyle.Regular, size);
+            var ink = probeFont.TextBounds(VERTICAL_METRIC_PROBE, Vector2.Zero);
+            var inkHeight = ink.Y2 - ink.Y;
+
+            //offset so the ink midpoint lands at the band midpoint; ink.Y is the ink top relative to the pen, so
+            //subtracting it cancels the face's ascent. Fall back to line-box centering if the probe has no ink.
+            var offset = inkHeight > 0f
+                ? (int)MathF.Round(((TextRenderer.CHAR_HEIGHT - inkHeight) / 2f) - ink.Y)
+                : (int)MathF.Round((TextRenderer.CHAR_HEIGHT - probeFont.LineHeight) / 2f);
+
+            VerticalOffsets[size] = offset;
+
+            return offset;
+        }
 
         public Face(string name, FontSystem regular)
         {
