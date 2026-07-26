@@ -31,8 +31,9 @@ public static class TextRenderer
         Color color,
         bool colorCodesEnabled = true,
         float opacity = 1f,
-        float characterSpacing = 0f)
-        => DrawCore(spriteBatch, position, text, color, colorCodesEnabled, opacity, null, characterSpacing);
+        float characterSpacing = 0f,
+        int? size = null)
+        => DrawCore(spriteBatch, position, text, color, colorCodesEnabled, opacity, null, characterSpacing, size);
 
     /// <summary>
     ///     Draws a single line in an explicit font style (e.g. <see cref="FontStyle.Bold" />) on the band-centered
@@ -55,8 +56,9 @@ public static class TextRenderer
         Rectangle clipRect,
         bool colorCodesEnabled = true,
         float opacity = 1f,
-        float characterSpacing = 0f)
-        => DrawCore(spriteBatch, position, text, color, colorCodesEnabled, opacity, clipRect, characterSpacing);
+        float characterSpacing = 0f,
+        int? size = null)
+        => DrawCore(spriteBatch, position, text, color, colorCodesEnabled, opacity, clipRect, characterSpacing, size);
 
     /// <summary>
     ///     Draws a list of text lines top-to-bottom, each on its own row (<see cref="CHAR_HEIGHT" /> line height).
@@ -109,19 +111,21 @@ public static class TextRenderer
         bool colorCodesEnabled,
         float opacity,
         Rectangle? clip,
-        float characterSpacing = 0f)
+        float characterSpacing = 0f,
+        int? size = null)
     {
         if (string.IsNullOrEmpty(text))
             return;
 
         var engine = FontEngine.Instance;
+        var px = size ?? FontEngine.RENDER_SIZE;
         var cursorX = position.X;
         var y = position.Y;
         var activeColor = opacity < 1f ? color * opacity : color;
 
         if (!colorCodesEnabled)
         {
-            engine.DrawLine(spriteBatch, text, new Vector2(cursorX, y), activeColor, clip, characterSpacing);
+            engine.DrawLine(spriteBatch, text, new Vector2(cursorX, y), activeColor, clip, px, FontStyle.Regular, characterSpacing);
 
             return;
         }
@@ -136,8 +140,8 @@ public static class TextRenderer
             if (i > runStart)
             {
                 var run = text[runStart..i];
-                engine.DrawLine(spriteBatch, run, new Vector2(cursorX, y), activeColor, clip, characterSpacing);
-                cursorX += engine.MeasureWidth(run) + characterSpacing * run.Length;
+                engine.DrawLine(spriteBatch, run, new Vector2(cursorX, y), activeColor, clip, px, FontStyle.Regular, characterSpacing);
+                cursorX += engine.MeasureWidth(run, px) + characterSpacing * run.Length;
             }
 
             var codeColor = GetColorCode(text[i + 2])!.Value;
@@ -147,7 +151,15 @@ public static class TextRenderer
         }
 
         if (runStart < text.Length)
-            engine.DrawLine(spriteBatch, text[runStart..], new Vector2(cursorX, y), activeColor, clip, characterSpacing);
+            engine.DrawLine(
+                spriteBatch,
+                text[runStart..],
+                new Vector2(cursorX, y),
+                activeColor,
+                clip,
+                px,
+                FontStyle.Regular,
+                characterSpacing);
     }
     #endregion
 
@@ -157,7 +169,7 @@ public static class TextRenderer
     ///     space; falls back to force-breaking mid-word. When colorCodesEnabled is true, {=x} color codes are skipped for
     ///     width measurement (they have zero visual width). When false, they are measured as literal characters.
     /// </summary>
-    public static int FindLineBreak(string text, int maxWidth, bool colorCodesEnabled = true)
+    public static int FindLineBreak(string text, int maxWidth, bool colorCodesEnabled = true, int? size = null)
     {
         var width = 0;
         var lastSpace = -1;
@@ -174,7 +186,7 @@ public static class TextRenderer
             if (text[i] == ' ')
                 lastSpace = i;
 
-            width += MeasureCharWidth(text[i]);
+            width += MeasureCharWidth(text[i], size);
 
             if (width > maxWidth)
                 return lastSpace > 0 ? lastSpace + 1 : Math.Max(1, i);
@@ -205,18 +217,20 @@ public static class TextRenderer
     /// <summary>
     ///     Returns the horizontal pixel advance for a single character, from the active font's metrics.
     /// </summary>
-    public static int MeasureCharWidth(char c) => FontEngine.Instance.MeasureWidth(c.ToString());
+    public static int MeasureCharWidth(char c, int? size = null)
+        => FontEngine.Instance.MeasureWidth(c.ToString(), size ?? FontEngine.RENDER_SIZE);
 
     /// <summary>
     ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Sums per color run so
     ///     the result matches the cursor advance used while drawing.
     /// </summary>
-    public static int MeasureWidth(string text)
+    public static int MeasureWidth(string text, int? size = null)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
 
         var engine = FontEngine.Instance;
+        var px = size ?? FontEngine.RENDER_SIZE;
         var width = 0;
         var runStart = 0;
 
@@ -226,14 +240,14 @@ public static class TextRenderer
                 continue;
 
             if (i > runStart)
-                width += engine.MeasureWidth(text[runStart..i]);
+                width += engine.MeasureWidth(text[runStart..i], px);
 
             i += 2;
             runStart = i + 1;
         }
 
         if (runStart < text.Length)
-            width += engine.MeasureWidth(text[runStart..]);
+            width += engine.MeasureWidth(text[runStart..], px);
 
         return width;
     }
@@ -265,7 +279,7 @@ public static class TextRenderer
     ///     Word-wraps text into lines that fit within maxWidth pixels. Splits on explicit newlines, then wraps each
     ///     paragraph by character width.
     /// </summary>
-    public static List<string> WrapLines(string text, int maxWidth)
+    public static List<string> WrapLines(string text, int maxWidth, int? size = null)
     {
         var lines = new List<string>();
 
@@ -278,7 +292,7 @@ public static class TextRenderer
 
             while (remaining.Length > 0)
             {
-                var lineEnd = FindLineBreak(remaining, maxWidth);
+                var lineEnd = FindLineBreak(remaining, maxWidth, size: size);
 
                 lines.Add(
                     remaining[..lineEnd]
@@ -299,7 +313,7 @@ public static class TextRenderer
     ///     Word-wraps text with full escape sequence preprocessing. Handles literal \n, \r, tab collapsing, and splits on
     ///     \r, \n, \t delimiters before word-wrapping each paragraph.
     /// </summary>
-    public static List<string> WrapText(string text, int maxWidth)
+    public static List<string> WrapText(string text, int maxWidth, int? size = null)
     {
         var lines = new List<string>();
 
@@ -328,7 +342,7 @@ public static class TextRenderer
 
             while (remaining.Length > 0)
             {
-                var lineEnd = FindLineBreak(remaining, maxWidth);
+                var lineEnd = FindLineBreak(remaining, maxWidth, size: size);
                 var line = remaining[..lineEnd].TrimEnd();
                 lines.Add(line);
                 activeColorCode = FindLastColorCode(line) ?? activeColorCode;

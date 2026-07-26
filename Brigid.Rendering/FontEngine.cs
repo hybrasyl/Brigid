@@ -30,6 +30,9 @@ public sealed class FontEngine : ITextMeasurer
     /// <summary>Pixel size faces are rasterized at for virtual-space layout. Visual glyph size; not the line grid.</summary>
     public const int RENDER_SIZE = 15;
 
+    /// <summary>Floor for <see cref="LargestSizeFitting" />. Below this, text is legible only in principle.</summary>
+    public const int MIN_AUTOFIT_SIZE = 8;
+
     /// <summary>
     ///     Global default letter-spacing (tracking) in virtual px, applied to all text in both measurement and draw so
     ///     layout stays consistent. Negative tightens. Per-call <c>characterSpacing</c> (e.g. shrink-to-fit) stacks on top.
@@ -255,6 +258,41 @@ public sealed class FontEngine : ITextMeasurer
     }
 
     /// <summary>Pixel width of <paramref name="text" /> as laid out by the font (single line, no color codes).</summary>
+    /// <summary>
+    ///     The largest pixel size, at or below <paramref name="maxSize" />, at which <paramref name="charCount" />
+    ///     characters of the active face fit within <paramref name="availableWidth" />. Returns
+    ///     <see cref="MIN_AUTOFIT_SIZE" /> when even that overflows, so a caller always gets a usable size.
+    ///     <para>
+    ///         The UI faces are monospace and their advances land on whole pixels, so the fit is exact and the size
+    ///         ladder is coarse — several adjacent sizes routinely share one advance width, and there is no size
+    ///         between the steps. Callers wanting slack should widen <paramref name="availableWidth" /> rather than
+    ///         expect a fractional size.
+    ///     </para>
+    ///     <para>
+    ///         Probes with 'M' so a proportional face (none ship today) would be measured at its widest glyph and
+    ///         therefore under- rather than over-estimate the fit. Measures through <see cref="MeasureWidth(string,
+    ///         int, FontStyle)" /> so the answer is in the same space, tracking and layout scale included, that the
+    ///         wrap and draw paths use — a fit computed any other way can disagree with where text actually breaks.
+    ///     </para>
+    /// </summary>
+    public int LargestSizeFitting(
+        int charCount,
+        int availableWidth,
+        int maxSize = RENDER_SIZE,
+        FontStyle style = FontStyle.Regular)
+    {
+        if ((charCount <= 0) || (availableWidth <= 0))
+            return MIN_AUTOFIT_SIZE;
+
+        var probe = new string('M', charCount);
+
+        for (var size = Math.Max(MIN_AUTOFIT_SIZE, maxSize); size > MIN_AUTOFIT_SIZE; size--)
+            if (MeasureWidth(probe, size, style) <= availableWidth)
+                return size;
+
+        return MIN_AUTOFIT_SIZE;
+    }
+
     public int MeasureWidth(string text) => MeasureWidth(text, RENDER_SIZE, FontStyle.Regular);
 
     /// <summary>

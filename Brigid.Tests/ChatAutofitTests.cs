@@ -1,0 +1,75 @@
+#region
+using Brigid.Rendering;
+using Xunit;
+#endregion
+
+namespace Brigid.Tests;
+
+/// <summary>
+///     Guards the chat panel's no-wrap goal: the autofit size must make the worst realistic chat line fit the chat
+///     area, for <em>every</em> selectable face. Faces differ by up to ~40% in advance width at the same pixel size, so
+///     this is the check that a font addition/swap cannot quietly reintroduce wrapping.
+/// </summary>
+[Collection("FontEngine")]
+public class ChatAutofitTests
+{
+    //ChattingRect is 432px wide in setoa.dat — identical in _nbk_s, _nbk_l and _nbk_l's expanded variant — less the
+    //scrollbar gutter. Hardcoded because the real rect comes from game data the test suite has no access to; if the
+    //shipped art ever changes, this number is the thing to revisit.
+    private const int CHAT_WIDTH = 432 - ScrollBarWidth;
+    private const int ScrollBarWidth = 16;
+
+    //server sends "{name}: {message}" (whispers use {name}" / {name}>); names are 4-12 chars, message caps at 55
+    private const int BUDGET = 12 + 2 + 55;
+
+    [Fact]
+    public void EveryFace_AutofitsTheWorstCaseChatLine()
+    {
+        FontEngine.Initialize(0);
+        var faceCount = FontEngine.Instance.FontCount;
+
+        Assert.True(faceCount > 0, "no faces loaded");
+
+        var probe = new string('M', BUDGET);
+        var failures = new List<string>();
+
+        for (var i = 0; i < faceCount; i++)
+        {
+            FontEngine.Instance.SetActiveFont(i);
+
+            var size = FontEngine.Instance.LargestSizeFitting(BUDGET, CHAT_WIDTH);
+            var width = FontEngine.Instance.MeasureWidth(probe, size);
+
+            if (width > CHAT_WIDTH)
+                failures.Add($"face {i}: autofit chose {size}px, which measures {width}px > {CHAT_WIDTH}px");
+
+            //bottoming out means even 8px could not fit it — the budget or the rect would have to be wrong
+            if (size <= FontEngine.MIN_AUTOFIT_SIZE)
+                failures.Add($"face {i}: autofit bottomed out at {size}px");
+        }
+
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    [Fact]
+    public void Autofit_NeverExceedsTheDefaultRenderSize()
+    {
+        FontEngine.Initialize(0);
+
+        //a very wide budget must not grow text: line height at RENDER_SIZE already exceeds the CHAR_HEIGHT line grid,
+        //so autofit is deliberately shrink-only until the grid itself is variable.
+        var size = FontEngine.Instance.LargestSizeFitting(1, 10_000);
+
+        Assert.Equal(FontEngine.RENDER_SIZE, size);
+    }
+
+    [Fact]
+    public void Autofit_DegradesToTheFloor_RatherThanReturningNonsense()
+    {
+        FontEngine.Initialize(0);
+
+        Assert.Equal(FontEngine.MIN_AUTOFIT_SIZE, FontEngine.Instance.LargestSizeFitting(500, 10));
+        Assert.Equal(FontEngine.MIN_AUTOFIT_SIZE, FontEngine.Instance.LargestSizeFitting(0, 400));
+        Assert.Equal(FontEngine.MIN_AUTOFIT_SIZE, FontEngine.Instance.LargestSizeFitting(69, 0));
+    }
+}

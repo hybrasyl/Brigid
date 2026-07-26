@@ -14,6 +14,7 @@ namespace Brigid.Controls.Components;
 public sealed class TextElement
 {
     private int LastWrapWidth;
+    private int? LastFontSize;
     private int LastFontGeneration = -1;
     private ShadowStyle LastShadowStyle;
 
@@ -29,6 +30,13 @@ public sealed class TextElement
     ///     Width to wrap at, in pixels. Zero disables wrapping. Read by <see cref="Update" />.
     /// </summary>
     public int WrapWidth { get; set; }
+
+    /// <summary>
+    ///     Explicit glyph pixel size, or null for <see cref="Rendering.FontEngine.RENDER_SIZE" />. Measurement, wrapping
+    ///     and drawing all honour it, so a caller that shrinks text to fit gets a wrap that agrees with what is drawn.
+    ///     The line grid (<see cref="TextRenderer.CHAR_HEIGHT" />) is unaffected — this changes ink, not layout pitch.
+    /// </summary>
+    public int? FontSize { get; set; }
 
     /// <summary>
     ///     Shadow style applied during <see cref="Draw" />; also widens/heightens the bounding box reported by
@@ -52,12 +60,13 @@ public sealed class TextElement
         var fontGeneration = Rendering.FontEngine.Instance.Generation;
 
         if ((text == Text) && (color == Color) && (WrapWidth == LastWrapWidth) && (ShadowStyle == LastShadowStyle)
-            && (fontGeneration == LastFontGeneration))
+            && (FontSize == LastFontSize) && (fontGeneration == LastFontGeneration))
             return;
 
         Text = text;
         Color = color;
         LastWrapWidth = WrapWidth;
+        LastFontSize = FontSize;
         LastShadowStyle = ShadowStyle;
         LastFontGeneration = fontGeneration;
 
@@ -72,7 +81,7 @@ public sealed class TextElement
 
         if (WrapWidth > 0)
         {
-            WrappedLines = TextRenderer.WrapText(text, WrapWidth);
+            WrappedLines = TextRenderer.WrapText(text, WrapWidth, FontSize);
             Width = WrapWidth;
             Height = Math.Max(TextRenderer.CHAR_HEIGHT, WrappedLines.Count * TextRenderer.CHAR_HEIGHT);
 
@@ -81,7 +90,7 @@ public sealed class TextElement
 
         WrappedLines = null;
         (var marginX, var marginY) = ShadowStyle.ShadowMargin;
-        Width = TextRenderer.MeasureWidth(text) + marginX;
+        Width = TextRenderer.MeasureWidth(text, FontSize) + marginX;
         Height = TextRenderer.CHAR_HEIGHT + marginY;
     }
 
@@ -166,7 +175,7 @@ public sealed class TextElement
     {
         if (clipRect.IsEmpty)
         {
-            TextRenderer.DrawText(spriteBatch, position, text, color, ColorCodesEnabled, opacity, characterSpacing);
+            TextRenderer.DrawText(spriteBatch, position, text, color, ColorCodesEnabled, opacity, characterSpacing, FontSize);
 
             return;
         }
@@ -175,7 +184,16 @@ public sealed class TextElement
         //run, excluding {=x} code chars), so the bounds fast paths below can't be trusted — clip per glyph instead
         if (characterSpacing != 0f)
         {
-            TextRenderer.DrawTextClipped(spriteBatch, position, text, color, clipRect, ColorCodesEnabled, opacity, characterSpacing);
+            TextRenderer.DrawTextClipped(
+                spriteBatch,
+                position,
+                text,
+                color,
+                clipRect,
+                ColorCodesEnabled,
+                opacity,
+                characterSpacing,
+                FontSize);
 
             return;
         }
@@ -188,7 +206,7 @@ public sealed class TextElement
 
         if (clipRect.Contains(textBounds))
         {
-            TextRenderer.DrawText(spriteBatch, position, text, color, ColorCodesEnabled, opacity, characterSpacing);
+            TextRenderer.DrawText(spriteBatch, position, text, color, ColorCodesEnabled, opacity, characterSpacing, FontSize);
 
             return;
         }

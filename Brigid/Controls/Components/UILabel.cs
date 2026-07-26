@@ -83,6 +83,17 @@ public class UILabel : UIElement
     public bool WordWrap { get; set; }
 
     /// <summary>
+    ///     Explicit glyph pixel size, or null for the default. Affects ink only — lines still sit on the
+    ///     <see cref="TextRenderer.CHAR_HEIGHT" /> grid, so a label set smaller does not pack more lines into the
+    ///     same box.
+    /// </summary>
+    public int? FontSize
+    {
+        get => TextElement.FontSize;
+        set => TextElement.FontSize = value;
+    }
+
+    /// <summary>
     ///     Total pixel height of the rendered content. For wrapped text, this may exceed the label bounds.
     /// </summary>
     public int ContentHeight => TextElement.Height;
