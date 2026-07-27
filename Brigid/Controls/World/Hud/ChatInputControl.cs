@@ -47,6 +47,9 @@ public sealed class ChatInputControl : UIPanel
     private Action<string>? PromptCallback;
     private Color? SavedFocusedBackgroundColor;
     private int SavedMaxLength;
+
+    //last ChatTextStyle.Revision applied to the prefix label and text box
+    private int AppliedTextStyleRevision = -1;
     private int WhisperHistoryIndex;
     private string? WhisperTarget;
 
@@ -125,7 +128,7 @@ public sealed class ChatInputControl : UIPanel
             return;
         }
 
-        var prefixWidth = TextRenderer.MeasureWidth(prefix) + PrefixLabel.PaddingLeft;
+        var prefixWidth = TextRenderer.MeasureWidth(prefix, ChatTextStyle.Size, ChatTextStyle.Spacing) + PrefixLabel.PaddingLeft;
         PrefixLabel.Text = prefix;
         PrefixLabel.ForegroundColor = color;
         PrefixLabel.Width = prefixWidth;
@@ -133,6 +136,25 @@ public sealed class ChatInputControl : UIPanel
 
         TextBox.X = prefixWidth;
         TextBox.Width = FullWidth - prefixWidth;
+    }
+
+    //follow the chat display's autofit so the input can't render at a different size from the lines above it. The
+    //display publishes on its own schedule (it owns the width), so track the revision rather than assuming an order.
+    private void ApplyTextStyle()
+    {
+        if (AppliedTextStyleRevision == ChatTextStyle.Revision)
+            return;
+
+        AppliedTextStyleRevision = ChatTextStyle.Revision;
+
+        TextBox.FontSize = ChatTextStyle.Size;
+        TextBox.CharacterSpacing = ChatTextStyle.Spacing;
+        PrefixLabel.FontSize = ChatTextStyle.Size;
+        PrefixLabel.CharacterSpacing = ChatTextStyle.Spacing;
+
+        //the prefix width was measured at the previous size; re-lay it out at the new one
+        if (Mode != ChatMode.None)
+            UpdateLayout(PrefixLabel.Text, PrefixLabel.ForegroundColor);
     }
 
     //--- focus methods ---
@@ -466,6 +488,8 @@ public sealed class ChatInputControl : UIPanel
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
+
+        ApplyTextStyle();
 
         //self-heal a focus desync: the bar renders active (Mode set) but the box lost focus without
         //going through Unfocus. The bar is hit-invisible while unfocused (by design — idle clicks

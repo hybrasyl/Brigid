@@ -19,16 +19,8 @@ public sealed class ChatPanel : ExpandablePanel
     private const int MAX_CHAT_LINES = 200;
     private const int GLYPH_HEIGHT = 12;
 
-    //widest line the panel is expected to show without wrapping. The server sends chat pre-prefixed as
-    //"{name}: {message}" (whispers use {name}" / {name}>), names are 4-12 characters (server-side validation) and the
-    //retail say/shout/whisper input caps the message at 55 — so 12 + 2 + 55 is the worst case, not 55.
-    private const int AUTOFIT_BUDGET_CHARS = 12 + 2 + 55;
-
-    //cancels the global negative tracking for chat. None of the shipped faces carry sidebearing slack — glyph ink
-    //fills its advance cell exactly (Anonymous Pro's actually overflows it) — so the default -1px pulls each glyph
-    //into its neighbour. Sizing and drawing at the natural advance keeps letters apart; the size is picked to fill
-    //the line at that spacing, so the width is still used, just by a larger glyph rather than a squeezed one.
-    private const float NATURAL_SPACING = -FontEngine.DEFAULT_TRACKING;
+    //sizing/spacing live in ChatTextStyle so the chat input renders identically — see that class for the why
+    private const float NATURAL_SPACING = ChatTextStyle.Spacing;
 
     //raw messages as received; wrapping is derived (see RebuildRenderLines), never stored, so a font-size or width
     //change re-wraps the whole backlog instead of leaving old lines broken at the previous width.
@@ -79,7 +71,10 @@ public sealed class ChatPanel : ExpandablePanel
                 Width = displayBounds.Width - ScrollBarControl.DEFAULT_WIDTH,
                 Height = GLYPH_HEIGHT,
                 PaddingLeft = 0,
-                PaddingTop = 0
+                PaddingTop = 0,
+                //autofit already guarantees the line fits; per-label shrink-to-fit on top would squeeze individual
+                //lines by different amounts and read as inconsistent sizing across the panel
+                ShrinkToFit = false
             };
 
             AddChild(Lines[i]);
@@ -166,6 +161,7 @@ public sealed class ChatPanel : ExpandablePanel
                     Height = GLYPH_HEIGHT,
                     PaddingLeft = 0,
                     PaddingTop = 0,
+                    ShrinkToFit = false,
                     Visible = false
                 };
 
@@ -216,10 +212,9 @@ public sealed class ChatPanel : ExpandablePanel
             return;
         }
 
-        FontSize = FontEngine.Instance.LargestSizeFitting(
-            AUTOFIT_BUDGET_CHARS,
-            maxWidth,
-            extraSpacing: NATURAL_SPACING);
+        //publish for the input box, then take the result
+        ChatTextStyle.Recompute(maxWidth);
+        FontSize = ChatTextStyle.Size;
         LayoutWidth = maxWidth;
         LayoutFontGeneration = FontEngine.Instance.Generation;
 
@@ -283,10 +278,13 @@ public sealed class ChatPanel : ExpandablePanel
         for (var i = startIndex; (i < RenderLines.Count) && (lineIndex < maxLines); i++)
         {
             var line = RenderLines[i];
-            Lines[lineIndex].Text = line.Text;
-            Lines[lineIndex].ForegroundColor = line.Color;
+
+            //size and spacing first: assigning Text re-measures, and doing it in the other order measures at the
+            //previous size
             Lines[lineIndex].FontSize = FontSize;
             Lines[lineIndex].CharacterSpacing = NATURAL_SPACING;
+            Lines[lineIndex].Text = line.Text;
+            Lines[lineIndex].ForegroundColor = line.Color;
             lineIndex++;
         }
 

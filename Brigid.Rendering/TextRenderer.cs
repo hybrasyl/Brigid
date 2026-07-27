@@ -227,7 +227,7 @@ public static class TextRenderer
         => FontEngine.Instance.MeasureWidth(c.ToString(), size ?? FontEngine.RENDER_SIZE);
 
     //advance of one glyph with the caller's extra spacing folded in, used by the per-character wrap accumulation
-    private static int MeasureCharWidth(char c, int? size, float extraSpacing)
+    public static int MeasureCharWidth(char c, int? size, float extraSpacing)
         => FontEngine.Instance.MeasureWidth(
             c.ToString(),
             size ?? FontEngine.RENDER_SIZE,

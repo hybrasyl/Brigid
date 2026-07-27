@@ -87,10 +87,21 @@ public class UILabel : UIElement
     ///     <see cref="TextRenderer.CHAR_HEIGHT" /> grid, so a label set smaller does not pack more lines into the
     ///     same box.
     /// </summary>
+    //re-invalidate on change, like ShadowStyle: the cached measurement is size-dependent, and a label whose Text was
+    //assigned before its FontSize would otherwise keep a width measured at the previous size — which then trips
+    //ShrinkToFit and squeezes that one line, so a font switch left neighbouring lines visibly different.
     public int? FontSize
     {
         get => TextElement.FontSize;
-        set => TextElement.FontSize = value;
+
+        set
+        {
+            if (TextElement.FontSize == value)
+                return;
+
+            TextElement.FontSize = value;
+            Invalidate(TextElement.Text, TextElement.Color);
+        }
     }
 
     /// <summary>
@@ -101,7 +112,15 @@ public class UILabel : UIElement
     public float CharacterSpacing
     {
         get => TextElement.CharacterSpacing;
-        set => TextElement.CharacterSpacing = value;
+
+        set
+        {
+            if (TextElement.CharacterSpacing.Equals(value))
+                return;
+
+            TextElement.CharacterSpacing = value;
+            Invalidate(TextElement.Text, TextElement.Color);
+        }
     }
 
     /// <summary>
