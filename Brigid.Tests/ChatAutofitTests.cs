@@ -22,6 +22,14 @@ public class ChatAutofitTests
     //server sends "{name}: {message}" (whispers use {name}" / {name}>); names are 4-12 chars, message caps at 55
     private const int BUDGET = 12 + 2 + 55;
 
+    //chat cancels the global negative tracking and sizes against the faces' natural advances — see ChatPanel
+    private const float NATURAL = -FontEngine.DEFAULT_TRACKING;
+
+    //how much of the available width a correctly-sized line must occupy. Advances are whole pixels, so the reachable
+    //widths are multiples of BUDGET; the best available here is 414 of 416. Anything materially below means autofit
+    //dropped a rung and is wasting a visible band down the right-hand side.
+    private const double MIN_FILL = 0.95;
+
     [Fact]
     public void EveryFace_AutofitsTheWorstCaseChatLine()
     {
@@ -37,11 +45,17 @@ public class ChatAutofitTests
         {
             FontEngine.Instance.SetActiveFont(i);
 
-            var size = FontEngine.Instance.LargestSizeFitting(BUDGET, CHAT_WIDTH);
-            var width = FontEngine.Instance.MeasureWidth(probe, size);
+            var size = FontEngine.Instance.LargestSizeFitting(BUDGET, CHAT_WIDTH, extraSpacing: NATURAL);
+            var width = FontEngine.Instance.MeasureWidth(probe, size, FontStyle.Regular, NATURAL);
 
             if (width > CHAT_WIDTH)
                 failures.Add($"face {i}: autofit chose {size}px, which measures {width}px > {CHAT_WIDTH}px");
+
+            //the point of autofit: fill the line, don't leave a band of dead space
+            if (((double)width / CHAT_WIDTH) < MIN_FILL)
+                failures.Add(
+                    $"face {i}: autofit chose {size}px using only {width}px of {CHAT_WIDTH}px "
+                    + $"({100.0 * width / CHAT_WIDTH:0.0}%)");
 
             //bottoming out means even 8px could not fit it — the budget or the rect would have to be wrong
             if (size <= FontEngine.MIN_AUTOFIT_SIZE)
@@ -71,16 +85,16 @@ public class ChatAutofitTests
 
             foreach (var size in new[] { FontEngine.RENDER_SIZE, 13, 11 })
             {
-                var whole = FontEngine.Instance.MeasureWidth(probe, size);
+                var whole = FontEngine.Instance.MeasureWidth(probe, size, FontStyle.Regular, NATURAL);
 
                 //given exactly the measured width, the wrapper must take the whole run
-                var atExactWidth = TextRenderer.FindLineBreak(probe, whole, size: size);
+                var atExactWidth = TextRenderer.FindLineBreak(probe, whole, size: size, extraSpacing: NATURAL);
 
                 if (atExactWidth != BUDGET)
                     failures.Add($"face {i} size {size}: measured {whole}px but the wrapper broke at {atExactWidth}/{BUDGET}");
 
                 //and one pixel under, it must break — otherwise it is not measuring at all
-                if (TextRenderer.FindLineBreak(probe, whole - 1, size: size) >= BUDGET)
+                if (TextRenderer.FindLineBreak(probe, whole - 1, size: size, extraSpacing: NATURAL) >= BUDGET)
                     failures.Add($"face {i} size {size}: wrapper did not break below the measured width");
             }
         }

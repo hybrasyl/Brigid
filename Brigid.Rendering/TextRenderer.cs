@@ -161,7 +161,12 @@ public static class TextRenderer
     ///     space; falls back to force-breaking mid-word. When colorCodesEnabled is true, {=x} color codes are skipped for
     ///     width measurement (they have zero visual width). When false, they are measured as literal characters.
     /// </summary>
-    public static int FindLineBreak(string text, int maxWidth, bool colorCodesEnabled = true, int? size = null)
+    public static int FindLineBreak(
+        string text,
+        int maxWidth,
+        bool colorCodesEnabled = true,
+        int? size = null,
+        float extraSpacing = 0f)
     {
         var width = 0;
         var lastSpace = -1;
@@ -182,10 +187,10 @@ public static class TextRenderer
             //measuring one character at a time loses the inter-character tracking that a whole-string measurement
             //(and the draw) applies between glyphs, which over-estimated every wrapped line by ~1px per character
             //and broke lines well before they actually overflowed. Add it back for every glyph after the first.
-            width += MeasureCharWidth(text[i], size);
+            width += MeasureCharWidth(text[i], size, extraSpacing);
 
             if (glyphs > 0)
-                width += (int)FontEngine.DEFAULT_TRACKING;
+                width += (int)(FontEngine.DEFAULT_TRACKING + extraSpacing);
 
             glyphs++;
 
@@ -221,11 +226,19 @@ public static class TextRenderer
     public static int MeasureCharWidth(char c, int? size = null)
         => FontEngine.Instance.MeasureWidth(c.ToString(), size ?? FontEngine.RENDER_SIZE);
 
+    //advance of one glyph with the caller's extra spacing folded in, used by the per-character wrap accumulation
+    private static int MeasureCharWidth(char c, int? size, float extraSpacing)
+        => FontEngine.Instance.MeasureWidth(
+            c.ToString(),
+            size ?? FontEngine.RENDER_SIZE,
+            FontStyle.Regular,
+            extraSpacing);
+
     /// <summary>
     ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Sums per color run so
     ///     the result matches the cursor advance used while drawing.
     /// </summary>
-    public static int MeasureWidth(string text, int? size = null)
+    public static int MeasureWidth(string text, int? size = null, float extraSpacing = 0f)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
@@ -241,14 +254,14 @@ public static class TextRenderer
                 continue;
 
             if (i > runStart)
-                width += engine.MeasureWidth(text[runStart..i], px);
+                width += engine.MeasureWidth(text[runStart..i], px, FontStyle.Regular, extraSpacing);
 
             i += 2;
             runStart = i + 1;
         }
 
         if (runStart < text.Length)
-            width += engine.MeasureWidth(text[runStart..], px);
+            width += engine.MeasureWidth(text[runStart..], px, FontStyle.Regular, extraSpacing);
 
         return width;
     }
@@ -280,7 +293,7 @@ public static class TextRenderer
     ///     Word-wraps text into lines that fit within maxWidth pixels. Splits on explicit newlines, then wraps each
     ///     paragraph by character width.
     /// </summary>
-    public static List<string> WrapLines(string text, int maxWidth, int? size = null)
+    public static List<string> WrapLines(string text, int maxWidth, int? size = null, float extraSpacing = 0f)
     {
         var lines = new List<string>();
 
@@ -293,7 +306,7 @@ public static class TextRenderer
 
             while (remaining.Length > 0)
             {
-                var lineEnd = FindLineBreak(remaining, maxWidth, size: size);
+                var lineEnd = FindLineBreak(remaining, maxWidth, size: size, extraSpacing: extraSpacing);
 
                 lines.Add(
                     remaining[..lineEnd]
@@ -314,7 +327,7 @@ public static class TextRenderer
     ///     Word-wraps text with full escape sequence preprocessing. Handles literal \n, \r, tab collapsing, and splits on
     ///     \r, \n, \t delimiters before word-wrapping each paragraph.
     /// </summary>
-    public static List<string> WrapText(string text, int maxWidth, int? size = null)
+    public static List<string> WrapText(string text, int maxWidth, int? size = null, float extraSpacing = 0f)
     {
         var lines = new List<string>();
 

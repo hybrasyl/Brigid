@@ -94,6 +94,17 @@ public class UILabel : UIElement
     }
 
     /// <summary>
+    ///     Persistent letter-spacing stacked on the global default tracking. Set to <c>-FontEngine.DEFAULT_TRACKING</c>
+    ///     to draw at the face's natural advances, which is what autofit-sized text wants — see
+    ///     <see cref="TextElement.CharacterSpacing" />.
+    /// </summary>
+    public float CharacterSpacing
+    {
+        get => TextElement.CharacterSpacing;
+        set => TextElement.CharacterSpacing = value;
+    }
+
+    /// <summary>
     ///     Total pixel height of the rendered content. For wrapped text, this may exceed the label bounds.
     /// </summary>
     public int ContentHeight => TextElement.Height;

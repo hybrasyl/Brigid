@@ -24,6 +24,12 @@ public sealed class ChatPanel : ExpandablePanel
     //retail say/shout/whisper input caps the message at 55 — so 12 + 2 + 55 is the worst case, not 55.
     private const int AUTOFIT_BUDGET_CHARS = 12 + 2 + 55;
 
+    //cancels the global negative tracking for chat. None of the shipped faces carry sidebearing slack — glyph ink
+    //fills its advance cell exactly (Anonymous Pro's actually overflows it) — so the default -1px pulls each glyph
+    //into its neighbour. Sizing and drawing at the natural advance keeps letters apart; the size is picked to fill
+    //the line at that spacing, so the width is still used, just by a larger glyph rather than a squeezed one.
+    private const float NATURAL_SPACING = -FontEngine.DEFAULT_TRACKING;
+
     //raw messages as received; wrapping is derived (see RebuildRenderLines), never stored, so a font-size or width
     //change re-wraps the whole backlog instead of leaving old lines broken at the previous width.
     private readonly List<ChatLine> Messages = [];
@@ -210,7 +216,10 @@ public sealed class ChatPanel : ExpandablePanel
             return;
         }
 
-        FontSize = FontEngine.Instance.LargestSizeFitting(AUTOFIT_BUDGET_CHARS, maxWidth);
+        FontSize = FontEngine.Instance.LargestSizeFitting(
+            AUTOFIT_BUDGET_CHARS,
+            maxWidth,
+            extraSpacing: NATURAL_SPACING);
         LayoutWidth = maxWidth;
         LayoutFontGeneration = FontEngine.Instance.Generation;
 
@@ -230,7 +239,7 @@ public sealed class ChatPanel : ExpandablePanel
 
         while (remaining.Length > 0)
         {
-            var lineEnd = TextRenderer.FindLineBreak(remaining, maxWidth, size: FontSize);
+            var lineEnd = TextRenderer.FindLineBreak(remaining, maxWidth, size: FontSize, extraSpacing: NATURAL_SPACING);
 
             sink.Add(
                 new ChatLine(
@@ -277,6 +286,7 @@ public sealed class ChatPanel : ExpandablePanel
             Lines[lineIndex].Text = line.Text;
             Lines[lineIndex].ForegroundColor = line.Color;
             Lines[lineIndex].FontSize = FontSize;
+            Lines[lineIndex].CharacterSpacing = NATURAL_SPACING;
             lineIndex++;
         }
 

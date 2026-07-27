@@ -268,7 +268,8 @@ public sealed class FontEngine : ITextMeasurer
         int charCount,
         int availableWidth,
         int maxSize = RENDER_SIZE,
-        FontStyle style = FontStyle.Regular)
+        FontStyle style = FontStyle.Regular,
+        float extraSpacing = 0f)
     {
         if ((charCount <= 0) || (availableWidth <= 0))
             return MIN_AUTOFIT_SIZE;
@@ -276,7 +277,7 @@ public sealed class FontEngine : ITextMeasurer
         var probe = new string('M', charCount);
 
         for (var size = Math.Max(MIN_AUTOFIT_SIZE, maxSize); size > MIN_AUTOFIT_SIZE; size--)
-            if (MeasureWidth(probe, size, style) <= availableWidth)
+            if (MeasureWidth(probe, size, style, extraSpacing) <= availableWidth)
                 return size;
 
         return MIN_AUTOFIT_SIZE;
@@ -288,6 +289,14 @@ public sealed class FontEngine : ITextMeasurer
     ///     Pixel width of <paramref name="text" /> at an explicit pixel size and style (single line, no color codes).
     /// </summary>
     public int MeasureWidth(string text, int size, FontStyle style = FontStyle.Regular)
+        => MeasureWidth(text, size, style, 0f);
+
+    /// <summary>
+    ///     As <see cref="MeasureWidth(string, int, FontStyle)" />, with <paramref name="extraSpacing" /> stacked on top
+    ///     of <see cref="DEFAULT_TRACKING" />. Pass <c>-DEFAULT_TRACKING</c> to measure at the faces' natural advances —
+    ///     what autofit needs, since the default tracking is what pushes glyph ink into collision.
+    /// </summary>
+    public int MeasureWidth(string text, int size, FontStyle style, float extraSpacing)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
@@ -297,13 +306,17 @@ public sealed class FontEngine : ITextMeasurer
         var (face, faceStyle) = Resolve(style);
 
         if ((LayoutScaleX == 1f) && (LayoutScaleY == 1f))
-            return (int)MathF.Round(face.GetFont(faceStyle, size).MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING).X);
+            return (int)MathF.Round(
+                face.GetFont(faceStyle, size)
+                    .MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING + extraSpacing)
+                    .X);
 
         //mirror the native draw: measure at the native pixel size with native-scaled tracking, then divide back into
         //virtual space. This is what makes the measured width equal the drawn width glyph-for-glyph.
         var nativeSize = Math.Max(1, (int)MathF.Round(size * LayoutScaleY));
         var nativeWidth = face.GetFont(faceStyle, nativeSize)
-                              .MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING * LayoutScaleX).X;
+                              .MeasureString(sanitized, characterSpacing: (DEFAULT_TRACKING + extraSpacing) * LayoutScaleX)
+                              .X;
 
         return (int)MathF.Round(nativeWidth / LayoutScaleX);
     }
