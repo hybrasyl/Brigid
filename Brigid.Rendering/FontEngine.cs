@@ -120,6 +120,42 @@ public sealed class FontEngine : ITextMeasurer
     /// </summary>
     public int Generation { get; private set; }
 
+    /// <summary>
+    ///     Pixel size ordinary UI text draws at: the largest size at or below <see cref="RENDER_SIZE" /> whose glyph ink
+    ///     fits the <see cref="TextRenderer.CHAR_HEIGHT" /> cell the Dark Ages layouts are built on (every prefab text
+    ///     rect — stat fields, the zone name, the system-message bar — is exactly that tall).
+    ///     <para>
+    ///         This has to be per-face: at <see cref="RENDER_SIZE" /> Noto and Iosevka ink exactly 12px, but Anonymous
+    ///         Pro inks 13 and Comic Shanns 16, so a single constant clipped their glyphs and let descenders (commas,
+    ///         'p', 'g') escape onto the surrounding art.
+    ///     </para>
+    /// </summary>
+    public int UiSize
+    {
+        get
+        {
+            if (UiSizeGeneration == Generation)
+                return CachedUiSize;
+
+            var face = Faces[ActiveIndex];
+            var size = RENDER_SIZE;
+
+            while ((size > MIN_AUTOFIT_SIZE) && (face.InkHeightFor(size) > TextRenderer.CHAR_HEIGHT))
+                size--;
+
+            CachedUiSize = size;
+            UiSizeGeneration = Generation;
+
+            return size;
+        }
+    }
+
+    /// <summary>Glyph ink height (ascender to descender) of the active face at <paramref name="size" />.</summary>
+    public int InkHeight(int size) => Faces[ActiveIndex].InkHeightFor(size);
+
+    private int CachedUiSize = RENDER_SIZE;
+    private int UiSizeGeneration = -1;
+
     /// <summary>The active face's line height in pixels at <see cref="RENDER_SIZE" /> (virtual space).</summary>
     public int LineHeight => (int)MathF.Round(GetFont(RENDER_SIZE).LineHeight);
 
@@ -267,7 +303,7 @@ public sealed class FontEngine : ITextMeasurer
     public int LargestSizeFitting(
         int charCount,
         int availableWidth,
-        int maxSize = RENDER_SIZE,
+        int? maxSize = null,
         FontStyle style = FontStyle.Regular,
         float extraSpacing = 0f)
     {
@@ -276,14 +312,15 @@ public sealed class FontEngine : ITextMeasurer
 
         var probe = new string('M', charCount);
 
-        for (var size = Math.Max(MIN_AUTOFIT_SIZE, maxSize); size > MIN_AUTOFIT_SIZE; size--)
+        //never exceed the size that fits the line cell vertically — a wider box is no licence to clip glyphs
+        for (var size = Math.Max(MIN_AUTOFIT_SIZE, maxSize ?? UiSize); size > MIN_AUTOFIT_SIZE; size--)
             if (MeasureWidth(probe, size, style, extraSpacing) <= availableWidth)
                 return size;
 
         return MIN_AUTOFIT_SIZE;
     }
 
-    public int MeasureWidth(string text) => MeasureWidth(text, RENDER_SIZE, FontStyle.Regular);
+    public int MeasureWidth(string text) => MeasureWidth(text, UiSize, FontStyle.Regular);
 
     /// <summary>
     ///     Pixel width of <paramref name="text" /> at an explicit pixel size and style (single line, no color codes).
@@ -362,7 +399,7 @@ public sealed class FontEngine : ITextMeasurer
         //active face's variant while keeping that band centering, so styled and regular runs on the same baseline
         //align vertically. style defaults to Regular and size to RENDER_SIZE, so untyped callers are unchanged.
         var (face, faceStyle) = Resolve(style);
-        var px = size ?? RENDER_SIZE;
+        var px = size ?? UiSize;
         var pos = new Vector2(position.X, position.Y + face.VerticalOffsetFor(px));
 
         DrawLineCore(spriteBatch, SanitizeSurrogates(text), pos, color, clip, face, faceStyle, px, characterSpacing);
@@ -545,6 +582,21 @@ public sealed class FontEngine : ITextMeasurer
         //to fit a fixed-width area, and a smaller glyph needs a larger offset to sit on the same visual band.
         private readonly Dictionary<int, int> VerticalOffsets = [];
         public readonly string Name;
+
+        private readonly Dictionary<int, int> InkHeights = [];
+
+        public int InkHeightFor(int size)
+        {
+            if (InkHeights.TryGetValue(size, out var cached))
+                return cached;
+
+            var ink = GetFont(FontStyle.Regular, size)
+                .TextBounds(VERTICAL_METRIC_PROBE, Vector2.Zero);
+            var height = (int)MathF.Ceiling(ink.Y2 - ink.Y);
+            InkHeights[size] = height;
+
+            return height;
+        }
 
         public int VerticalOffsetFor(int size)
         {

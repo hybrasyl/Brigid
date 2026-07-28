@@ -33,7 +33,7 @@ internal static class ChatTextStyle
     private static int Width;
     private static int MeasuredWidth = -1;
     private static int MeasuredGeneration = -1;
-    private static int CachedSize = FontEngine.RENDER_SIZE;
+    private static int CachedSize = -1;
 
     /// <summary>
     ///     Records the usable text width chat sizes against. Published by the display, which owns the rect; kept here
@@ -55,7 +55,7 @@ internal static class ChatTextStyle
         get
         {
             if (Width <= 0)
-                return CachedSize;
+                return CachedSize > 0 ? CachedSize : FontEngine.Instance.UiSize;
 
             var generation = FontEngine.Instance.Generation;
 

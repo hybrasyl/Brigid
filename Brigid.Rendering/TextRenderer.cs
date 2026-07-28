@@ -118,7 +118,7 @@ public static class TextRenderer
             return;
 
         var engine = FontEngine.Instance;
-        var px = size ?? FontEngine.RENDER_SIZE;
+        var px = size ?? FontEngine.Instance.UiSize;
         var cursorX = position.X;
         var y = position.Y;
         var activeColor = opacity < 1f ? color * opacity : color;
@@ -224,13 +224,13 @@ public static class TextRenderer
     ///     Returns the horizontal pixel advance for a single character, from the active font's metrics.
     /// </summary>
     public static int MeasureCharWidth(char c, int? size = null)
-        => FontEngine.Instance.MeasureWidth(c.ToString(), size ?? FontEngine.RENDER_SIZE);
+        => FontEngine.Instance.MeasureWidth(c.ToString(), size ?? FontEngine.Instance.UiSize);
 
     //advance of one glyph with the caller's extra spacing folded in, used by the per-character wrap accumulation
     public static int MeasureCharWidth(char c, int? size, float extraSpacing)
         => FontEngine.Instance.MeasureWidth(
             c.ToString(),
-            size ?? FontEngine.RENDER_SIZE,
+            size ?? FontEngine.Instance.UiSize,
             FontStyle.Regular,
             extraSpacing);
 
@@ -244,7 +244,7 @@ public static class TextRenderer
             return 0;
 
         var engine = FontEngine.Instance;
-        var px = size ?? FontEngine.RENDER_SIZE;
+        var px = size ?? FontEngine.Instance.UiSize;
         var width = 0;
         var runStart = 0;
 
@@ -272,7 +272,7 @@ public static class TextRenderer
     ///     wider than regular, so alignment must measure in the style it draws.
     /// </summary>
     public static int MeasureWidth(string text, FontStyle style)
-        => string.IsNullOrEmpty(text) ? 0 : FontEngine.Instance.MeasureWidth(text, FontEngine.RENDER_SIZE, style);
+        => string.IsNullOrEmpty(text) ? 0 : FontEngine.Instance.MeasureWidth(text, FontEngine.Instance.UiSize, style);
 
     /// <summary>
     ///     Clips <paramref name="text" /> to at most <paramref name="maxChars" /> characters, appending a single-glyph

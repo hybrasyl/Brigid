@@ -24,7 +24,7 @@ public sealed class LinkLabel : UILabel
     public event Action? Clicked;
 
     /// <summary>Pixel width of the current text under <see cref="TextStyle" /> — use for hit-box sizing.</summary>
-    public int MeasureTextWidth() => FontEngine.Instance.MeasureWidth(Text, FontEngine.RENDER_SIZE, TextStyle);
+    public int MeasureTextWidth() => FontEngine.Instance.MeasureWidth(Text, FontEngine.Instance.UiSize, TextStyle);
 
     public override void Draw(SpriteBatch spriteBatch)
     {
@@ -34,13 +34,13 @@ public sealed class LinkLabel : UILabel
         UpdateClipRect();
 
         var engine = FontEngine.Instance;
-        var textWidth = engine.MeasureWidth(Text, FontEngine.RENDER_SIZE, TextStyle);
+        var textWidth = engine.MeasureWidth(Text, engine.UiSize, TextStyle);
 
         var x = HorizontalAlignment == HorizontalAlignment.Right
             ? ScreenX + Width - textWidth
             : ScreenX;
 
-        var y = ScreenY + (Height - engine.GetLineHeight(FontEngine.RENDER_SIZE, TextStyle)) / 2;
+        var y = ScreenY + (Height - engine.GetLineHeight(engine.UiSize, TextStyle)) / 2;
 
         engine.DrawLine(
             spriteBatch,
@@ -48,7 +48,7 @@ public sealed class LinkLabel : UILabel
             new Vector2(x, y),
             ForegroundColor,
             ClipRect,
-            FontEngine.RENDER_SIZE,
+            FontEngine.Instance.UiSize,
             TextStyle);
     }
 

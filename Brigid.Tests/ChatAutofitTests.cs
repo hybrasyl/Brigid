@@ -102,6 +102,36 @@ public class ChatAutofitTests
         Assert.True(failures.Count == 0, string.Join("\n", failures));
     }
 
+    /// <summary>
+    ///     Every text rect in the Dark Ages prefabs is exactly CHAR_HEIGHT tall — s_Str 10..22, s_EXP 62..74, SZ_ZONE
+    ///     464..476, SystemMessage 316..328. So the size ordinary UI text draws at must ink no taller than that cell, or
+    ///     glyphs clip against the box and descenders (commas, p, g) spill onto the surrounding art. This is per-face:
+    ///     at RENDER_SIZE, Noto and Iosevka ink exactly 12 while Anonymous Pro inks 13 and Comic Shanns 16.
+    /// </summary>
+    [Fact]
+    public void UiSize_InksWithinTheLayoutCell_ForEveryFace()
+    {
+        FontEngine.Initialize(0);
+
+        var failures = new List<string>();
+
+        for (var i = 0; i < FontEngine.Instance.FontCount; i++)
+        {
+            FontEngine.Instance.SetActiveFont(i);
+
+            var size = FontEngine.Instance.UiSize;
+            var ink = FontEngine.Instance.InkHeight(size);
+
+            if (ink > TextRenderer.CHAR_HEIGHT)
+                failures.Add($"face {i}: UiSize {size} inks {ink}px, taller than the {TextRenderer.CHAR_HEIGHT}px cell");
+
+            if (size > FontEngine.RENDER_SIZE)
+                failures.Add($"face {i}: UiSize {size} exceeds RENDER_SIZE {FontEngine.RENDER_SIZE}");
+        }
+
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
     [Fact]
     public void Autofit_NeverExceedsTheDefaultRenderSize()
     {
@@ -111,7 +141,7 @@ public class ChatAutofitTests
         //so autofit is deliberately shrink-only until the grid itself is variable.
         var size = FontEngine.Instance.LargestSizeFitting(1, 10_000);
 
-        Assert.Equal(FontEngine.RENDER_SIZE, size);
+        Assert.Equal(FontEngine.Instance.UiSize, size);
     }
 
     [Fact]
