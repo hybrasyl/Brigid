@@ -30,27 +30,43 @@ internal static class ChatTextStyle
     /// </summary>
     public const int BudgetChars = 12 + 2 + 55;
 
-    /// <summary>Glyph pixel size chat draws at. Defaults to the UI size until the display first measures itself.</summary>
-    public static int Size { get; private set; } = FontEngine.RENDER_SIZE;
-
-    /// <summary>Bumped whenever <see cref="Size" /> changes, so followers can re-apply without polling for equality.</summary>
-    public static int Revision { get; private set; }
+    private static int Width;
+    private static int MeasuredWidth = -1;
+    private static int MeasuredGeneration = -1;
+    private static int CachedSize = FontEngine.RENDER_SIZE;
 
     /// <summary>
-    ///     Recomputes <see cref="Size" /> for the given usable text width. Called by the chat display whenever its width
-    ///     or the active face changes.
+    ///     Records the usable text width chat sizes against. Published by the display, which owns the rect; kept here
+    ///     rather than recomputed on demand by the display because the display is a HUD tab and stops updating when
+    ///     another tab is shown, while the input bar stays visible and still needs the right size.
     /// </summary>
-    public static void Recompute(int availableWidth)
+    public static void SetWidth(int availableWidth)
     {
-        if (availableWidth <= 0)
-            return;
+        if (availableWidth > 0)
+            Width = availableWidth;
+    }
 
-        var size = FontEngine.Instance.LargestSizeFitting(BudgetChars, availableWidth, extraSpacing: Spacing);
+    /// <summary>
+    ///     Glyph pixel size chat draws at, recomputed on demand when the width or the active face has changed. Falls
+    ///     back to the UI default until a width has been published.
+    /// </summary>
+    public static int Size
+    {
+        get
+        {
+            if (Width <= 0)
+                return CachedSize;
 
-        if (size == Size)
-            return;
+            var generation = FontEngine.Instance.Generation;
 
-        Size = size;
-        Revision++;
+            if ((Width == MeasuredWidth) && (generation == MeasuredGeneration))
+                return CachedSize;
+
+            MeasuredWidth = Width;
+            MeasuredGeneration = generation;
+            CachedSize = FontEngine.Instance.LargestSizeFitting(BudgetChars, Width, extraSpacing: Spacing);
+
+            return CachedSize;
+        }
     }
 }

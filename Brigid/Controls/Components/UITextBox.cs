@@ -431,7 +431,14 @@ public class UITextBox : UIElement
 
                 //pre-selection segment
                 if (hlStart > 0)
-                    DrawTextClipped(spriteBatch, new Vector2(textX, lineY), lineText[..hlStart], ForegroundColor, ColorCodesEnabled);
+                    DrawTextClipped(
+                        spriteBatch,
+                        new Vector2(textX, lineY),
+                        lineText[..hlStart],
+                        ForegroundColor,
+                        ColorCodesEnabled,
+                        size: FontSize,
+                        characterSpacing: CharacterSpacing);
 
                 //selection segment: white rect + black text
                 var hlX = textX + (hlStart > 0 ? TextRenderer.MeasureWidth(lineText[..hlStart], FontSize, CharacterSpacing) : 0);
@@ -439,13 +446,27 @@ public class UITextBox : UIElement
                 var hlWidth = TextRenderer.MeasureWidth(hlText, FontSize, CharacterSpacing);
 
                 DrawRectClipped(spriteBatch, new Rectangle(hlX, lineY, hlWidth, TextRenderer.CHAR_HEIGHT), Color.White);
-                DrawTextClipped(spriteBatch, new Vector2(hlX, lineY), hlText, Color.Black, ColorCodesEnabled);
+                DrawTextClipped(
+                    spriteBatch,
+                    new Vector2(hlX, lineY),
+                    hlText,
+                    Color.Black,
+                    ColorCodesEnabled,
+                    size: FontSize,
+                    characterSpacing: CharacterSpacing);
 
                 //post-selection segment
                 if (hlEnd < lineText.Length)
                 {
                     var postX = hlX + hlWidth;
-                    DrawTextClipped(spriteBatch, new Vector2(postX, lineY), lineText[hlEnd..], ForegroundColor, ColorCodesEnabled);
+                    DrawTextClipped(
+                        spriteBatch,
+                        new Vector2(postX, lineY),
+                        lineText[hlEnd..],
+                        ForegroundColor,
+                        ColorCodesEnabled,
+                        size: FontSize,
+                        characterSpacing: CharacterSpacing);
                 }
             } else if (lineText.Length > 0)
                 DrawTextClipped(
@@ -453,7 +474,9 @@ public class UITextBox : UIElement
                     new Vector2(textX, lineY),
                     lineText,
                     ForegroundColor,
-                    ColorCodesEnabled);
+                    ColorCodesEnabled,
+                    size: FontSize,
+                    characterSpacing: CharacterSpacing);
         }
 
         if (!IsFocused || !CursorVisible || IsReadOnly)
@@ -493,7 +516,13 @@ public class UITextBox : UIElement
         if ((Prefix.Length > 0) && IsFocused)
         {
             prefixWidth = TextRenderer.MeasureWidth(Prefix, FontSize, CharacterSpacing);
-            DrawTextClipped(spriteBatch, new Vector2(sx + PaddingLeft, textY), Prefix, ForegroundColor);
+            DrawTextClipped(
+                spriteBatch,
+                new Vector2(sx + PaddingLeft, textY),
+                Prefix,
+                ForegroundColor,
+                size: FontSize,
+                characterSpacing: CharacterSpacing);
         }
 
         //when focused, scroll horizontally so the caret stays visible; unfocused boxes render from the start (or via
@@ -514,7 +543,14 @@ public class UITextBox : UIElement
 
             //pre-selection segment
             if (selStart > 0)
-                DrawTextClipped(spriteBatch, new Vector2(textStartX, textY), displayText[..selStart], ForegroundColor, ColorCodesEnabled);
+                DrawTextClipped(
+                    spriteBatch,
+                    new Vector2(textStartX, textY),
+                    displayText[..selStart],
+                    ForegroundColor,
+                    ColorCodesEnabled,
+                    size: FontSize,
+                    characterSpacing: CharacterSpacing);
 
             //selection segment: white rect + black text
             var selStartX = textStartX + (selStart > 0 ? TextRenderer.MeasureWidth(displayText[..selStart], FontSize, CharacterSpacing) : 0);
@@ -522,13 +558,27 @@ public class UITextBox : UIElement
             var selWidth = TextRenderer.MeasureWidth(selText, FontSize, CharacterSpacing);
 
             DrawRectClipped(spriteBatch, new Rectangle(selStartX, textY, selWidth, TextRenderer.CHAR_HEIGHT), Color.White);
-            DrawTextClipped(spriteBatch, new Vector2(selStartX, textY), selText, Color.Black, ColorCodesEnabled);
+            DrawTextClipped(
+                spriteBatch,
+                new Vector2(selStartX, textY),
+                selText,
+                Color.Black,
+                ColorCodesEnabled,
+                size: FontSize,
+                characterSpacing: CharacterSpacing);
 
             //post-selection segment
             if (selEnd < displayText.Length)
             {
                 var postX = selStartX + selWidth;
-                DrawTextClipped(spriteBatch, new Vector2(postX, textY), displayText[selEnd..], ForegroundColor, ColorCodesEnabled);
+                DrawTextClipped(
+                    spriteBatch,
+                    new Vector2(postX, textY),
+                    displayText[selEnd..],
+                    ForegroundColor,
+                    ColorCodesEnabled,
+                    size: FontSize,
+                    characterSpacing: CharacterSpacing);
             }
         } else
         {
@@ -550,9 +600,23 @@ public class UITextBox : UIElement
                 };
 
                 var alignY = alignBounds.Y + (alignBounds.Height - TextElement.Height) / 2;
-                DrawTextClipped(spriteBatch, new Vector2(alignX, alignY), displayText, ForegroundColor, ColorCodesEnabled);
+                DrawTextClipped(
+                    spriteBatch,
+                    new Vector2(alignX, alignY),
+                    displayText,
+                    ForegroundColor,
+                    ColorCodesEnabled,
+                    size: FontSize,
+                    characterSpacing: CharacterSpacing);
             } else
-                DrawTextClipped(spriteBatch, new Vector2(textStartX, textY), displayText, ForegroundColor, ColorCodesEnabled);
+                DrawTextClipped(
+                    spriteBatch,
+                    new Vector2(textStartX, textY),
+                    displayText,
+                    ForegroundColor,
+                    ColorCodesEnabled,
+                    size: FontSize,
+                    characterSpacing: CharacterSpacing);
         }
 
         if (!IsFocused || !CursorVisible || IsReadOnly)

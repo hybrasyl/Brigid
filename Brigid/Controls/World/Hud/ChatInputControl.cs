@@ -48,8 +48,8 @@ public sealed class ChatInputControl : UIPanel
     private Color? SavedFocusedBackgroundColor;
     private int SavedMaxLength;
 
-    //last ChatTextStyle.Revision applied to the prefix label and text box
-    private int AppliedTextStyleRevision = -1;
+    //last ChatTextStyle.Size applied to the prefix label and text box
+    private int AppliedTextSize = -1;
     private int WhisperHistoryIndex;
     private string? WhisperTarget;
 
@@ -142,14 +142,16 @@ public sealed class ChatInputControl : UIPanel
     //display publishes on its own schedule (it owns the width), so track the revision rather than assuming an order.
     private void ApplyTextStyle()
     {
-        if (AppliedTextStyleRevision == ChatTextStyle.Revision)
+        var size = ChatTextStyle.Size;
+
+        if (AppliedTextSize == size)
             return;
 
-        AppliedTextStyleRevision = ChatTextStyle.Revision;
+        AppliedTextSize = size;
 
-        TextBox.FontSize = ChatTextStyle.Size;
+        TextBox.FontSize = size;
         TextBox.CharacterSpacing = ChatTextStyle.Spacing;
-        PrefixLabel.FontSize = ChatTextStyle.Size;
+        PrefixLabel.FontSize = size;
         PrefixLabel.CharacterSpacing = ChatTextStyle.Spacing;
 
         //the prefix width was measured at the previous size; re-lay it out at the new one

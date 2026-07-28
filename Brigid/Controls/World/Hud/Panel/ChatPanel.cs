@@ -80,6 +80,7 @@ public sealed class ChatPanel : ExpandablePanel
             AddChild(Lines[i]);
         }
 
+        ChatTextStyle.SetWidth(displayBounds.Width - ScrollBarControl.DEFAULT_WIDTH);
         RepositionLabels();
 
         //position relative to panel origin (panel is placed at panelbounds by registertab)
@@ -213,7 +214,7 @@ public sealed class ChatPanel : ExpandablePanel
         }
 
         //publish for the input box, then take the result
-        ChatTextStyle.Recompute(maxWidth);
+        ChatTextStyle.SetWidth(maxWidth);
         FontSize = ChatTextStyle.Size;
         LayoutWidth = maxWidth;
         LayoutFontGeneration = FontEngine.Instance.Generation;
