@@ -515,12 +515,18 @@ public static class DebugOverlay
     /// <summary>
     ///     Draws performance stats (frame time graph, GC, heap). Called as a separate top-level pass.
     /// </summary>
-    public static void DrawStats(SpriteBatch spriteBatch)
+    /// <param name="transform">
+    ///     Virtual→native scale for the pass this draws in. Supplied because the stats draw at native resolution with
+    ///     the rest of the UI: positions stay in virtual coordinates and the transform scales them, while FontEngine
+    ///     rasterizes glyphs at native size. Drawn into the virtual render target instead, the text was point-upscaled
+    ///     along with the world and came out blurry against the crisp UI beside it.
+    /// </param>
+    public static void DrawStats(SpriteBatch spriteBatch, Matrix? transform = null)
     {
         if (!IsActive)
             return;
 
-        spriteBatch.Begin(samplerState: GlobalSettings.Sampler);
+        spriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: transform);
 
         if (ShowPerf)
         {

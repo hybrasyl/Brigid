@@ -249,9 +249,6 @@ public sealed class ChaosGame : Game
         GraphicsDevice.Clear(Color.Black);
         Screens.Draw(SpriteBatch, gameTime);
 
-        if (DebugOverlay.IsActive)
-            DebugOverlay.DrawStats(SpriteBatch);
-
         //capture screenshot while the render target is still bound — this grabs the world layer only (the stylized
         //"lod" capture is intentionally UI-free). DiscardContents may invalidate pixel data after SetRenderTarget(null).
         if (ScreenshotRequested)
@@ -278,6 +275,12 @@ public sealed class ChaosGame : Game
 
         FontEngine.Instance.SetNativeScale(scaleX, scaleY);
         Screens.DrawNative(SpriteBatch, scaleX, scaleY);
+
+        //stats readout draws here, not in the virtual pass: it is the last text that was rasterizing at 640x480 and
+        //then point-upscaled, which is why the heap/fps/draw counters read blurry next to crisp UI text. Also keeps it
+        //out of the render target, so the screenshot capture above stays UI-free as intended.
+        if (DebugOverlay.IsActive)
+            DebugOverlay.DrawStats(SpriteBatch, Matrix.CreateScale(scaleX, scaleY, 1f));
 
         //custom cursor — topmost, in virtual space; the pass transform scales it to native like the rest of the UI
         if (CursorTexture is not null)

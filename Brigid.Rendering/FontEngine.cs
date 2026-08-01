@@ -1,4 +1,5 @@
 #region
+using System.Diagnostics;
 using FontStashSharp;
 using FontStashSharp.Interfaces;
 using Microsoft.Xna.Framework;
@@ -428,6 +429,19 @@ public sealed class FontEngine : ITextMeasurer
         DrawLineCore(spriteBatch, SanitizeSurrogates(text), position, color, clip, face, faceStyle, Math.Max(1, size), characterSpacing);
     }
 
+    /// <summary>
+    ///     Whether a text draw with these scales is landing in the upscaled virtual target rather than the native pass.
+    ///     <para>
+    ///         <see cref="SetLayoutScale" /> is set once per frame from the window ratio and is therefore non-1 whenever
+    ///         the window is not exactly the virtual resolution. <see cref="SetNativeScale" /> is set <em>only</em> for
+    ///         the duration of the native pass. So "native is 1 while layout is not" means text is being rasterized at
+    ///         640x480 and then point-upscaled — blurry beside the crisp UI. Both being 1 is the legitimate 1:1 window.
+    ///     </para>
+    ///     Pure and separate from the draw path so it can be tested without a graphics device.
+    /// </summary>
+    internal static bool IsUpscaledTextDraw(float nativeScaleX, float nativeScaleY, float layoutScaleX, float layoutScaleY)
+        => (nativeScaleX == 1f) && (nativeScaleY == 1f) && ((layoutScaleX != 1f) || (layoutScaleY != 1f));
+
     private void DrawLineCore(
         SpriteBatch spriteBatch,
         string sanitized,
@@ -439,6 +453,13 @@ public sealed class FontEngine : ITextMeasurer
         int size,
         float characterSpacing)
     {
+        //catches a text draw that has slipped back into the virtual render target. The stats readout sat there for a
+        //long time unnoticed because blurriness is easy to stop seeing; this makes it fail loudly in dev instead.
+        Debug.Assert(
+            !IsUpscaledTextDraw(NativeScaleX, NativeScaleY, LayoutScaleX, LayoutScaleY),
+            "text drawn outside the native pass — it will be point-upscaled with the world and render blurry. "
+            + "Draw it from IScreen.DrawNative (or ChaosGame's native layer) instead.");
+
         Renderer.SpriteBatch = spriteBatch;
         Renderer.Clip = clip;
 
