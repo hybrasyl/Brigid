@@ -12,8 +12,9 @@ namespace Brigid.Tests;
 // user had just typed. Only a soft wrap's boundary spaces are dropped, because the wrapper consumed them into the
 // previous line's range and they belong to the break.
 //
-// Coverage limit: ComputeLineLayout runs off the draw path, so a headless box keeps the degenerate single-line
-// layout and these exercise the no-wrap case only. The soft-wrap branch (SoftLineEnds) is not reachable here.
+// These cover the no-wrap case: the box here is never laid out (no FontEngine.Initialize, no Update), so it keeps a
+// degenerate single-line layout. That is a property of this fixture, not a limit of the harness — the soft-wrap
+// branch is covered in TextBoxSoftWrapTests, which initializes the engine and calls Update to drive real layout.
 // Shares the UITextBoxFocus collection so it doesn't run in parallel with other classes that steal static focus.
 [Collection("UITextBoxFocus")]
 public class TextBoxTrailingSpaceTests
