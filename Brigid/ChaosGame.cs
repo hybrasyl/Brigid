@@ -357,7 +357,9 @@ public sealed class ChaosGame : Game
         using var intermediary = ImageProcessor.PreserveNonTransparentBlacks(sourceImage);
         using var quantized = ImageProcessor.Quantize(QuantizerOptions.Default, intermediary);
         var palette = quantized.Palette;
-        var indices = quantized.Entity.GetPalettizedPixelData(palette);
+        //not DALib's GetPalettizedPixelData: it throws when a pixel is not an exact palette member, and Quantize does
+        //not guarantee its own output satisfies that. A screenshot must not be able to crash the game loop.
+        var indices = PaletteMapper.MapToIndices(quantized.Entity, palette);
 
         var rgbPalette = new List<uint>(palette.Count);
 
