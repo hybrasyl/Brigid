@@ -249,9 +249,6 @@ public sealed class ChaosGame : Game
         GraphicsDevice.Clear(Color.Black);
         Screens.Draw(SpriteBatch, gameTime);
 
-        if (DebugOverlay.IsActive)
-            DebugOverlay.DrawStats(SpriteBatch);
-
         //capture screenshot while the render target is still bound — this grabs the world layer only (the stylized
         //"lod" capture is intentionally UI-free). DiscardContents may invalidate pixel data after SetRenderTarget(null).
         if (ScreenshotRequested)
@@ -276,8 +273,16 @@ public sealed class ChaosGame : Game
         var scaleX = (float)pp.BackBufferWidth / VIRTUAL_WIDTH;
         var scaleY = (float)pp.BackBufferHeight / VIRTUAL_HEIGHT;
 
+        var nativeScale = Matrix.CreateScale(scaleX, scaleY, 1f);
+
         FontEngine.Instance.SetNativeScale(scaleX, scaleY);
         Screens.DrawNative(SpriteBatch, scaleX, scaleY);
+
+        //stats readout draws here, not in the virtual pass: it is the last text that was rasterizing at 640x480 and
+        //then point-upscaled, which is why the heap/fps/draw counters read blurry next to crisp UI text. Also keeps it
+        //out of the render target, so the screenshot capture above stays UI-free as intended.
+        if (DebugOverlay.IsActive)
+            DebugOverlay.DrawStats(SpriteBatch, nativeScale);
 
         //custom cursor — topmost, in virtual space; the pass transform scales it to native like the rest of the UI
         if (CursorTexture is not null)
@@ -286,7 +291,7 @@ public sealed class ChaosGame : Game
             var offsetX = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetX : CursorOffsetX;
             var offsetY = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetY : CursorOffsetY;
 
-            SpriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: Matrix.CreateScale(scaleX, scaleY, 1f));
+            SpriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: nativeScale);
             SpriteBatch.Draw(activeCursor, new Vector2(InputBuffer.MouseX - offsetX, InputBuffer.MouseY - offsetY), Color.White);
             SpriteBatch.End();
         }
@@ -354,7 +359,9 @@ public sealed class ChaosGame : Game
         using var intermediary = ImageProcessor.PreserveNonTransparentBlacks(sourceImage);
         using var quantized = ImageProcessor.Quantize(QuantizerOptions.Default, intermediary);
         var palette = quantized.Palette;
-        var indices = quantized.Entity.GetPalettizedPixelData(palette);
+        //not DALib's GetPalettizedPixelData: it throws when a pixel is not an exact palette member, and Quantize does
+        //not guarantee its own output satisfies that. A screenshot must not be able to crash the game loop.
+        var indices = PaletteMapper.MapToIndices(quantized.Entity, palette);
 
         var rgbPalette = new List<uint>(palette.Count);
 

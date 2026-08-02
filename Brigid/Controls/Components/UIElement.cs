@@ -365,18 +365,24 @@ public abstract class UIElement : IDisposable
     /// <summary>
     ///     Draws single-line text clipped to this element's ClipRect.
     /// </summary>
+    /// <param name="size">Glyph pixel size, or null for the default.</param>
+    /// <param name="characterSpacing">Letter spacing stacked on the global tracking.</param>
     protected void DrawTextClipped(
         SpriteBatch spriteBatch,
         Vector2 position,
         string text,
         Color color,
         bool colorCodesEnabled = true,
-        float opacity = 1f)
+        float opacity = 1f,
+        int? size = null,
+        float characterSpacing = 0f)
     {
         if (string.IsNullOrEmpty(text))
             return;
 
-        var textWidth = TextRenderer.MeasureWidth(text);
+        //measure at the size/spacing this will actually draw with: a caller that sizes its text but measures at the
+        //default gets a caret and selection placed against a run width the glyphs never occupy
+        var textWidth = TextRenderer.MeasureWidth(text, size, characterSpacing);
         var textBounds = new Rectangle((int)position.X, (int)position.Y, textWidth, TextRenderer.CHAR_HEIGHT);
 
         //fully outside
@@ -386,13 +392,22 @@ public abstract class UIElement : IDisposable
         //fully inside — fast path
         if (ClipRect.Contains(textBounds))
         {
-            TextRenderer.DrawText(spriteBatch, position, text, color, colorCodesEnabled, opacity);
+            TextRenderer.DrawText(spriteBatch, position, text, color, colorCodesEnabled, opacity, characterSpacing, size);
 
             return;
         }
 
         //partially clipped — per-glyph clipping
-        TextRenderer.DrawTextClipped(spriteBatch, position, text, color, ClipRect, colorCodesEnabled, opacity);
+        TextRenderer.DrawTextClipped(
+            spriteBatch,
+            position,
+            text,
+            color,
+            ClipRect,
+            colorCodesEnabled,
+            opacity,
+            characterSpacing,
+            size);
     }
 
     //── event handlers (dispatched by inputdispatcher) ──

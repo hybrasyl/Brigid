@@ -16,9 +16,15 @@ namespace Brigid.Controls.World.Hud.Panel;
 /// </summary>
 public sealed class ChatPanel : ExpandablePanel
 {
-    private const int MAX_CHAT_LINES = 200;
+    //caps retained messages, not rendered lines — a wrapped message contributes several of the latter
+    private const int MAX_CHAT_MESSAGES = 200;
     private const int GLYPH_HEIGHT = 12;
-    private readonly List<ChatLine> ChatLog = [];
+
+    //raw messages as received, each with the number of RenderLines it currently produces, so evicting the oldest
+    //drops exactly its lines. Wrapping is derived (see RebuildRenderLines), never stored, so a font-size or width
+    //change re-wraps the whole backlog instead of leaving old lines broken at the previous width.
+    private readonly List<(ChatLine Line, int LineCount)> Messages = [];
+    private readonly List<ChatLine> RenderLines = [];
     private readonly ScrollBarControl Bar;
     private readonly ScrollBarBinder Binder;
     //Offset is lines-from-bottom (0 = newest at bottom); Inverted maps wheel/page + the bar thumb accordingly
@@ -31,8 +37,28 @@ public sealed class ChatPanel : ExpandablePanel
     private Rectangle ExpandedDisplayBounds;
     private UILabel[] Lines;
     private int LogVersion;
+    private int FontSize = FontEngine.Instance.UiSize;
+    private int LayoutFontGeneration = -1;
+    private int LayoutWidth = -1;
     private int MaxVisibleLines;
     private int RenderedVersion = -1;
+
+    //usable text width: the display rect less the scrollbar gutter. One expression, because EnsureLayoutCurrent
+    //compares its value against the one RebuildRenderLines stored — they have to be the same computation.
+    private int TextWidth => DisplayBounds.Width - ScrollBarControl.DEFAULT_WIDTH;
+
+    /// <summary>
+    ///     Glyph pixel size chat draws at, bringing the layout up to date first. The chat input calls this so it cannot
+    ///     render at a different size from the lines above it: the display owns the width, so it owns the derived size.
+    ///     Refreshing here rather than only in <see cref="Update" /> matters because this panel is a HUD tab and stops
+    ///     updating when another tab is shown, while the input bar stays visible and still needs the right size.
+    /// </summary>
+    public int EnsureTextSize()
+    {
+        EnsureLayoutCurrent();
+
+        return FontSize;
+    }
 
     public ChatPanel(Rectangle displayBounds, Rectangle panelBounds)
     {
@@ -58,7 +84,10 @@ public sealed class ChatPanel : ExpandablePanel
                 Width = displayBounds.Width - ScrollBarControl.DEFAULT_WIDTH,
                 Height = GLYPH_HEIGHT,
                 PaddingLeft = 0,
-                PaddingTop = 0
+                PaddingTop = 0,
+                //autofit already guarantees the line fits; per-label shrink-to-fit on top would squeeze individual
+                //lines by different amounts and read as inconsistent sizing across the panel
+                ShrinkToFit = false
             };
 
             AddChild(Lines[i]);
@@ -85,32 +114,21 @@ public sealed class ChatPanel : ExpandablePanel
 
     private void AddMessage(string text, Color color)
     {
-        var maxWidth = DisplayBounds.Width - ScrollBarControl.DEFAULT_WIDTH;
+        var message = new ChatLine(text, color);
 
-        if (maxWidth <= 0)
-            return;
+        //wrap only the arrival, and drop the evicted message's lines by its recorded count — re-wrapping the whole
+        //backlog per message would be quadratic over a session, and chat is the one panel that updates constantly
+        Messages.Add((message, WrapInto(message, TextWidth, RenderLines)));
 
-        var remaining = text;
-
-        while (remaining.Length > 0)
+        while (Messages.Count > MAX_CHAT_MESSAGES)
         {
-            var lineEnd = TextRenderer.FindLineBreak(remaining, maxWidth);
-
-            var line = remaining[..lineEnd]
-                .TrimEnd();
-
-            remaining = remaining[lineEnd..]
-                .TrimStart();
-
-            ChatLog.Add(new ChatLine(line, color));
+            RenderLines.RemoveRange(0, Messages[0].LineCount);
+            Messages.RemoveAt(0);
         }
-
-        if (ChatLog.Count > MAX_CHAT_LINES)
-            ChatLog.RemoveRange(0, ChatLog.Count - MAX_CHAT_LINES);
 
         var wasAtBottom = Model.Offset == 0;
 
-        Model.SetMetrics(ChatLog.Count, MaxVisibleLines);
+        Model.SetMetrics(RenderLines.Count, MaxVisibleLines);
 
         //stick to the bottom when already there; otherwise SetMetrics keeps the same lines-from-bottom offset
         if (wasAtBottom)
@@ -154,6 +172,7 @@ public sealed class ChatPanel : ExpandablePanel
                     Height = GLYPH_HEIGHT,
                     PaddingLeft = 0,
                     PaddingTop = 0,
+                    ShrinkToFit = false,
                     Visible = false
                 };
 
@@ -176,6 +195,70 @@ public sealed class ChatPanel : ExpandablePanel
 
     private void OnMessageAdded(Chat.ChatMessage msg) => AddMessage(msg.Text, msg.Color);
 
+    /// <summary>
+    ///     Recomputes the autofit glyph size and re-wraps every held message at it. Wrapping is derived state: the size
+    ///     depends on the active face (faces differ by up to ~40% in advance width at the same pixel size, so no fixed
+    ///     size holds the no-wrap goal across a font switch) and on the panel width, so both must be able to change
+    ///     without leaving stale line breaks behind.
+    ///     <para>
+    ///         Wrapping is kept as a backstop rather than removed: the autofit budget covers the ASCII the DA protocol
+    ///         carries, but fallback faces (CJK, emoji) do not share the monospace advance, so an unusual message can
+    ///         still overflow and must break rather than run past the panel.
+    ///     </para>
+    /// </summary>
+    private void RebuildRenderLines()
+    {
+        var maxWidth = TextWidth;
+
+        RenderLines.Clear();
+
+        //record the keys unconditionally, including on the degenerate path — leaving them unset there would make
+        //EnsureLayoutCurrent's guard permanently unsatisfiable and rebuild the whole backlog every frame
+        LayoutWidth = maxWidth;
+        LayoutFontGeneration = FontEngine.Instance.Generation;
+
+        if (maxWidth <= 0)
+        {
+            //zero lines each, so the counts still line up with Messages and an eviction removes the right range
+            for (var i = 0; i < Messages.Count; i++)
+                Messages[i] = (Messages[i].Line, 0);
+
+            return;
+        }
+
+        FontSize = ChatTextStyle.SizeFor(maxWidth);
+
+        for (var i = 0; i < Messages.Count; i++)
+            Messages[i] = (Messages[i].Line, WrapInto(Messages[i].Line, maxWidth, RenderLines));
+    }
+
+    //appends message's wrapped lines to sink and returns how many were added, so an eviction can drop exactly that
+    //many. An empty message yields zero lines, matching the pre-existing behaviour of dropping blanks entirely.
+    private int WrapInto(ChatLine message, int maxWidth, List<ChatLine> sink)
+    {
+        if ((maxWidth <= 0) || (message.Text.Length == 0))
+            return 0;
+
+        var wrapped = TextRenderer.WrapLines(message.Text, maxWidth, FontSize, ChatTextStyle.Spacing);
+
+        foreach (var line in wrapped)
+            sink.Add(new ChatLine(line, message.Color));
+
+        return wrapped.Count;
+    }
+
+    //re-wrap when the active face changed (the user cycled fonts) or the panel width moved under us; both invalidate
+    //the autofit size and every stored line break. Cheap no-op otherwise — this runs every frame.
+    private void EnsureLayoutCurrent()
+    {
+        if ((TextWidth == LayoutWidth) && (FontEngine.Instance.Generation == LayoutFontGeneration))
+            return;
+
+        RebuildRenderLines();
+        Model.SetMetrics(RenderLines.Count, MaxVisibleLines);
+        LogVersion++;
+    }
+
     private void RefreshDisplay()
     {
         if (RenderedVersion == LogVersion)
@@ -184,12 +267,17 @@ public sealed class ChatPanel : ExpandablePanel
         RenderedVersion = LogVersion;
 
         var maxLines = Math.Min(MaxVisibleLines, Lines.Length);
-        var startIndex = Math.Max(0, ChatLog.Count - maxLines - Model.Offset);
+        var startIndex = Math.Max(0, RenderLines.Count - maxLines - Model.Offset);
         var lineIndex = 0;
 
-        for (var i = startIndex; (i < ChatLog.Count) && (lineIndex < maxLines); i++)
+        for (var i = startIndex; (i < RenderLines.Count) && (lineIndex < maxLines); i++)
         {
-            var line = ChatLog[i];
+            var line = RenderLines[i];
+
+            //size and spacing first: assigning Text re-measures, and doing it in the other order measures at the
+            //previous size
+            Lines[lineIndex].FontSize = FontSize;
+            Lines[lineIndex].CharacterSpacing = ChatTextStyle.Spacing;
             Lines[lineIndex].Text = line.Text;
             Lines[lineIndex].ForegroundColor = line.Color;
             lineIndex++;
@@ -223,7 +311,8 @@ public sealed class ChatPanel : ExpandablePanel
         Bar.Visible = expanded;
         Bar.Height = DisplayBounds.Height;
 
-        Model.SetMetrics(ChatLog.Count, MaxVisibleLines);
+        RebuildRenderLines();
+        Model.SetMetrics(RenderLines.Count, MaxVisibleLines);
 
         //show/hide labels based on current line count
         for (var i = 0; i < Lines.Length; i++)
@@ -263,6 +352,7 @@ public sealed class ChatPanel : ExpandablePanel
 
         base.Update(gameTime);
 
+        EnsureLayoutCurrent();
         RefreshDisplay();
     }
 

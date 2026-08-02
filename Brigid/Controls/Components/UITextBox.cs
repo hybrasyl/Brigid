@@ -137,6 +137,55 @@ public class UITextBox : UIElement
 
     public string Text { get; set; } = string.Empty;
 
+    /// <summary>
+    ///     Explicit glyph pixel size, or null for the default. Changing it resets the layout cache: line breaks, caret
+    ///     pixel positions and hit-testing are all measured at this size.
+    /// </summary>
+    public int? FontSize
+    {
+        get => TextElement.FontSize;
+
+        set
+        {
+            if (TextElement.FontSize == value)
+                return;
+
+            TextElement.FontSize = value;
+            InvalidateLayout();
+        }
+    }
+
+    /// <summary>Persistent letter spacing stacked on the global tracking; see <see cref="TextElement.CharacterSpacing" />.</summary>
+    public float CharacterSpacing
+    {
+        get => TextElement.CharacterSpacing;
+
+        set
+        {
+            if (TextElement.CharacterSpacing.Equals(value))
+                return;
+
+            TextElement.CharacterSpacing = value;
+            InvalidateLayout();
+        }
+    }
+
+    //the element's size and spacing reach every draw through here. Repeating the pair at each call site is what let
+    //UILabel's equivalents get missed; one helper means there is nothing left to forget.
+    private void DrawRun(SpriteBatch spriteBatch, Vector2 position, string text, Color color)
+        => DrawTextClipped(
+            spriteBatch,
+            position,
+            text,
+            color,
+            ColorCodesEnabled,
+            size: FontSize,
+            characterSpacing: CharacterSpacing);
+
+    //force ComputeLineLayout to re-run: it early-outs on unchanged width+text, and neither changes when only the
+    //glyph metrics do
+    private void InvalidateLayout() => CachedLayoutWidth = -1;
+
     public static bool IsAnyFocused
     {
         get
@@ -235,7 +284,7 @@ public class UITextBox : UIElement
 
             while (remaining.Length > 0)
             {
-                var lineEnd = TextRenderer.FindLineBreak(remaining, innerWidth, ColorCodesEnabled);
+                var lineEnd = TextRenderer.FindLineBreak(remaining, innerWidth, ColorCodesEnabled, FontSize, CharacterSpacing);
                 var consumed = lineEnd;
 
                 while ((consumed < remaining.Length) && (remaining[consumed] == ' '))
@@ -394,29 +443,24 @@ public class UITextBox : UIElement
 
                 //pre-selection segment
                 if (hlStart > 0)
-                    DrawTextClipped(spriteBatch, new Vector2(textX, lineY), lineText[..hlStart], ForegroundColor, ColorCodesEnabled);
+                    DrawRun(spriteBatch, new Vector2(textX, lineY), lineText[..hlStart], ForegroundColor);
 
                 //selection segment: white rect + black text
-                var hlX = textX + (hlStart > 0 ? TextRenderer.MeasureWidth(lineText[..hlStart]) : 0);
+                var hlX = textX + (hlStart > 0 ? TextElement.Measure(lineText[..hlStart]) : 0);
                 var hlText = lineText[hlStart..hlEnd];
-                var hlWidth = TextRenderer.MeasureWidth(hlText);
+                var hlWidth = TextElement.Measure(hlText);
 
                 DrawRectClipped(spriteBatch, new Rectangle(hlX, lineY, hlWidth, TextRenderer.CHAR_HEIGHT), Color.White);
-                DrawTextClipped(spriteBatch, new Vector2(hlX, lineY), hlText, Color.Black, ColorCodesEnabled);
+                DrawRun(spriteBatch, new Vector2(hlX, lineY), hlText, Color.Black);
 
                 //post-selection segment
                 if (hlEnd < lineText.Length)
                 {
                     var postX = hlX + hlWidth;
-                    DrawTextClipped(spriteBatch, new Vector2(postX, lineY), lineText[hlEnd..], ForegroundColor, ColorCodesEnabled);
+                    DrawRun(spriteBatch, new Vector2(postX, lineY), lineText[hlEnd..], ForegroundColor);
                 }
             } else if (lineText.Length > 0)
-                DrawTextClipped(
-                    spriteBatch,
-                    new Vector2(textX, lineY),
-                    lineText,
-                    ForegroundColor,
-                    ColorCodesEnabled);
+                DrawRun(spriteBatch, new Vector2(textX, lineY), lineText, ForegroundColor);
         }
 
         if (!IsFocused || !CursorVisible || IsReadOnly)
@@ -428,7 +472,7 @@ public class UITextBox : UIElement
         {
             var cLineText = GetLineText(cursorLine);
             var colOffset = Math.Min(CursorPosition - LineStarts[cursorLine], cLineText.Length);
-            var cursorX = textX + (colOffset > 0 ? TextRenderer.MeasureWidth(cLineText[..colOffset]) : 0);
+            var cursorX = textX + (colOffset > 0 ? TextElement.Measure(cLineText[..colOffset]) : 0);
             var cursorY = textY + (cursorLine - firstLine) * TextRenderer.CHAR_HEIGHT;
 
             DrawRectClipped(
@@ -455,8 +499,8 @@ public class UITextBox : UIElement
 
         if ((Prefix.Length > 0) && IsFocused)
         {
-            prefixWidth = TextRenderer.MeasureWidth(Prefix);
-            DrawTextClipped(spriteBatch, new Vector2(sx + PaddingLeft, textY), Prefix, ForegroundColor);
+            prefixWidth = TextElement.Measure(Prefix);
+            DrawRun(spriteBatch, new Vector2(sx + PaddingLeft, textY), Prefix, ForegroundColor);
         }
 
         //when focused, scroll horizontally so the caret stays visible; unfocused boxes render from the start (or via
@@ -477,21 +521,21 @@ public class UITextBox : UIElement
 
             //pre-selection segment
             if (selStart > 0)
-                DrawTextClipped(spriteBatch, new Vector2(textStartX, textY), displayText[..selStart], ForegroundColor, ColorCodesEnabled);
+                DrawRun(spriteBatch, new Vector2(textStartX, textY), displayText[..selStart], ForegroundColor);
 
             //selection segment: white rect + black text
-            var selStartX = textStartX + (selStart > 0 ? TextRenderer.MeasureWidth(displayText[..selStart]) : 0);
+            var selStartX = textStartX + (selStart > 0 ? TextElement.Measure(displayText[..selStart]) : 0);
             var selText = displayText[selStart..selEnd];
-            var selWidth = TextRenderer.MeasureWidth(selText);
+            var selWidth = TextElement.Measure(selText);
 
             DrawRectClipped(spriteBatch, new Rectangle(selStartX, textY, selWidth, TextRenderer.CHAR_HEIGHT), Color.White);
-            DrawTextClipped(spriteBatch, new Vector2(selStartX, textY), selText, Color.Black, ColorCodesEnabled);
+            DrawRun(spriteBatch, new Vector2(selStartX, textY), selText, Color.Black);
 
             //post-selection segment
             if (selEnd < displayText.Length)
             {
                 var postX = selStartX + selWidth;
-                DrawTextClipped(spriteBatch, new Vector2(postX, textY), displayText[selEnd..], ForegroundColor, ColorCodesEnabled);
+                DrawRun(spriteBatch, new Vector2(postX, textY), displayText[selEnd..], ForegroundColor);
             }
         } else
         {
@@ -513,9 +557,9 @@ public class UITextBox : UIElement
                 };
 
                 var alignY = alignBounds.Y + (alignBounds.Height - TextElement.Height) / 2;
-                DrawTextClipped(spriteBatch, new Vector2(alignX, alignY), displayText, ForegroundColor, ColorCodesEnabled);
+                DrawRun(spriteBatch, new Vector2(alignX, alignY), displayText, ForegroundColor);
             } else
-                DrawTextClipped(spriteBatch, new Vector2(textStartX, textY), displayText, ForegroundColor, ColorCodesEnabled);
+                DrawRun(spriteBatch, new Vector2(textStartX, textY), displayText, ForegroundColor);
         }
 
         if (!IsFocused || !CursorVisible || IsReadOnly)
@@ -525,7 +569,7 @@ public class UITextBox : UIElement
         var clampedPos = Math.Min(CursorPosition, displayText.Length);
 
         if (clampedPos > 0)
-            cursorX += TextRenderer.MeasureWidth(displayText[..clampedPos]);
+            cursorX += TextElement.Measure(displayText[..clampedPos]);
 
         DrawRectClipped(
             spriteBatch,
@@ -552,7 +596,7 @@ public class UITextBox : UIElement
         }
 
         var clampedPos = Math.Min(CursorPosition, displayText.Length);
-        var caretPixel = clampedPos > 0 ? TextRenderer.MeasureWidth(displayText[..clampedPos]) : 0;
+        var caretPixel = clampedPos > 0 ? TextElement.Measure(displayText[..clampedPos]) : 0;
 
         if (caretPixel < HScrollOffset)
             HScrollOffset = caretPixel;
@@ -560,7 +604,7 @@ public class UITextBox : UIElement
             HScrollOffset = caretPixel - availableWidth + CURSOR_WIDTH;
 
         //never scroll past the end or leave a gap once the text fits within the box
-        var maxOffset = Math.Max(0, TextRenderer.MeasureWidth(displayText) - availableWidth + CURSOR_WIDTH);
+        var maxOffset = Math.Max(0, TextElement.Measure(displayText) - availableWidth + CURSOR_WIDTH);
         HScrollOffset = Math.Clamp(HScrollOffset, 0, maxOffset);
     }
 
@@ -781,7 +825,7 @@ public class UITextBox : UIElement
     {
         //offset by prefix width when focused
         if ((Prefix.Length > 0) && IsFocused)
-            localX -= TextRenderer.MeasureWidth(Prefix);
+            localX -= TextElement.Measure(Prefix);
 
         //account for horizontal scroll so clicks map to the actual character under the cursor
         if (IsFocused)
@@ -804,7 +848,7 @@ public class UITextBox : UIElement
             }
 
             var nextI = i + 1;
-            var charWidth = prevWidth + TextRenderer.MeasureCharWidth(displayText[i]);
+            var charWidth = prevWidth + TextElement.MeasureChar(displayText[i]);
             var midpoint = (prevWidth + charWidth) / 2;
 
             if (localX < midpoint)
@@ -835,7 +879,7 @@ public class UITextBox : UIElement
             }
 
             var nextI = i + 1;
-            var charWidth = prevWidth + TextRenderer.MeasureCharWidth(lineText[i]);
+            var charWidth = prevWidth + TextElement.MeasureChar(lineText[i]);
             var midpoint = (prevWidth + charWidth) / 2;
 
             if (targetPixelX < midpoint)
@@ -1225,7 +1269,7 @@ public class UITextBox : UIElement
                     {
                         var colOffset = CursorPosition - LineStarts[cursorLine];
                         var currentLineText = GetLineText(cursorLine);
-                        var colPixelX = TextRenderer.MeasureWidth(currentLineText[..Math.Min(colOffset, currentLineText.Length)]);
+                        var colPixelX = TextElement.Measure(currentLineText[..Math.Min(colOffset, currentLineText.Length)]);
                         var targetLine = cursorLine - 1;
                         var targetText = GetLineText(targetLine);
                         var targetCol = HitTestCursorPosition(colPixelX, targetText);
@@ -1248,7 +1292,7 @@ public class UITextBox : UIElement
                     {
                         var colOffset = CursorPosition - LineStarts[cursorLine];
                         var currentLineText = GetLineText(cursorLine);
-                        var colPixelX = TextRenderer.MeasureWidth(currentLineText[..Math.Min(colOffset, currentLineText.Length)]);
+                        var colPixelX = TextElement.Measure(currentLineText[..Math.Min(colOffset, currentLineText.Length)]);
                         var targetLine = cursorLine + 1;
                         var targetText = GetLineText(targetLine);
                         var targetCol = HitTestCursorPosition(colPixelX, targetText);

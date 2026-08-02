@@ -1,4 +1,5 @@
 #region
+using System.Diagnostics;
 using FontStashSharp;
 using FontStashSharp.Interfaces;
 using Microsoft.Xna.Framework;
@@ -29,6 +30,9 @@ public sealed class FontEngine : ITextMeasurer
 {
     /// <summary>Pixel size faces are rasterized at for virtual-space layout. Visual glyph size; not the line grid.</summary>
     public const int RENDER_SIZE = 15;
+
+    /// <summary>Floor for <see cref="LargestSizeFitting" />. Below this, text is legible only in principle.</summary>
+    public const int MIN_AUTOFIT_SIZE = 8;
 
     /// <summary>
     ///     Global default letter-spacing (tracking) in virtual px, applied to all text in both measurement and draw so
@@ -117,6 +121,21 @@ public sealed class FontEngine : ITextMeasurer
     /// </summary>
     public int Generation { get; private set; }
 
+    /// <summary>
+    ///     Pixel size ordinary UI text draws at: the largest size at or below <see cref="RENDER_SIZE" /> whose glyph ink
+    ///     fits the <see cref="TextRenderer.CHAR_HEIGHT" /> cell the Dark Ages layouts are built on (every prefab text
+    ///     rect — stat fields, the zone name, the system-message bar — is exactly that tall).
+    ///     <para>
+    ///         This has to be per-face: at <see cref="RENDER_SIZE" /> Noto and Iosevka ink exactly 12px, but Anonymous
+    ///         Pro inks 13 and Comic Shanns 16, so a single constant clipped their glyphs and let descenders (commas,
+    ///         'p', 'g') escape onto the surrounding art.
+    ///     </para>
+    /// </summary>
+    public int UiSize => Faces[ActiveIndex].UiSize;
+
+    /// <summary>Glyph ink height (ascender to descender) of the active face at <paramref name="size" />.</summary>
+    public int InkHeight(int size) => Faces[ActiveIndex].InkHeightFor(size);
+
     /// <summary>The active face's line height in pixels at <see cref="RENDER_SIZE" /> (virtual space).</summary>
     public int LineHeight => (int)MathF.Round(GetFont(RENDER_SIZE).LineHeight);
 
@@ -159,19 +178,9 @@ public sealed class FontEngine : ITextMeasurer
             face.SetVariant(FontStyle.Italic, TryLoadSystem(def.Italic));
             face.SetVariant(FontStyle.BoldItalic, TryLoadSystem(def.BoldItalic));
 
-            //center the actual glyph *ink* in the layout band, not the declared line box. FontStashSharp's
-            //LineHeight bakes in per-face internal leading that varies wildly (Comic Shanns reports a tall box
-            //with dead space below the glyphs), so box-centering makes such faces sit high with a gap beneath.
-            //Measuring real ink via TextBounds and centering that keeps every face on the same visual band.
-            var probeFont = face.GetFont(FontStyle.Regular, RENDER_SIZE);
-            var ink = probeFont.TextBounds(VERTICAL_METRIC_PROBE, Vector2.Zero);
-            var inkHeight = ink.Y2 - ink.Y;
-
-            //offset so the ink midpoint lands at the band midpoint; ink.Y is the ink top relative to the pen, so
-            //subtracting it cancels the face's ascent. Fall back to line-box centering if the probe has no ink.
-            face.VerticalOffset = inkHeight > 0f
-                ? (int)MathF.Round(((TextRenderer.CHAR_HEIGHT - inkHeight) / 2f) - ink.Y)
-                : (int)MathF.Round((TextRenderer.CHAR_HEIGHT - probeFont.LineHeight) / 2f);
+            //warm the band offset at the size this face will actually draw at, so the first draw doesn't pay the probe.
+            //Not RENDER_SIZE: faces that ink taller than the layout cell (Anonymous Pro, Comic Shanns) draw smaller.
+            face.VerticalOffsetFor(face.UiSize);
 
             if (def.IsMono && (monoIndex < 0))
                 monoIndex = faces.Count;
@@ -254,13 +263,53 @@ public sealed class FontEngine : ITextMeasurer
         Generation++;
     }
 
+    /// <summary>
+    ///     The largest pixel size, at or below <see cref="UiSize" />, at which <paramref name="charCount" />
+    ///     characters of the active face fit within <paramref name="availableWidth" />. Returns
+    ///     <see cref="MIN_AUTOFIT_SIZE" /> when even that overflows, so a caller always gets a usable size.
+    ///     <para>
+    ///         The UI faces are monospace and their advances land on whole pixels, so the fit is exact and the size
+    ///         ladder is coarse — several adjacent sizes routinely share one advance width, and there is no size
+    ///         between the steps. Callers wanting slack should widen <paramref name="availableWidth" /> rather than
+    ///         expect a fractional size.
+    ///     </para>
+    ///     <para>
+    ///         Probes with 'M' so a proportional face (none ship today) would be measured at its widest glyph and
+    ///         therefore under- rather than over-estimate the fit. Measures through <see cref="MeasureWidth(string,
+    ///         int, FontStyle)" /> so the answer is in the same space, tracking and layout scale included, that the
+    ///         wrap and draw paths use — a fit computed any other way can disagree with where text actually breaks.
+    ///     </para>
+    /// </summary>
+    public int LargestSizeFitting(int charCount, int availableWidth, float extraSpacing = 0f)
+    {
+        if ((charCount <= 0) || (availableWidth <= 0))
+            return MIN_AUTOFIT_SIZE;
+
+        var probe = new string('M', charCount);
+
+        //start at UiSize, never above it — a wider box is no licence to clip glyphs out of the line cell
+        for (var size = UiSize; size > MIN_AUTOFIT_SIZE; size--)
+            if (MeasureWidth(probe, size, FontStyle.Regular, extraSpacing) <= availableWidth)
+                return size;
+
+        return MIN_AUTOFIT_SIZE;
+    }
+
     /// <summary>Pixel width of <paramref name="text" /> as laid out by the font (single line, no color codes).</summary>
-    public int MeasureWidth(string text) => MeasureWidth(text, RENDER_SIZE, FontStyle.Regular);
+    public int MeasureWidth(string text) => MeasureWidth(text, UiSize, FontStyle.Regular);
 
     /// <summary>
     ///     Pixel width of <paramref name="text" /> at an explicit pixel size and style (single line, no color codes).
     /// </summary>
     public int MeasureWidth(string text, int size, FontStyle style = FontStyle.Regular)
+        => MeasureWidth(text, size, style, 0f);
+
+    /// <summary>
+    ///     As <see cref="MeasureWidth(string, int, FontStyle)" />, with <paramref name="extraSpacing" /> stacked on top
+    ///     of <see cref="DEFAULT_TRACKING" />. Pass <c>-DEFAULT_TRACKING</c> to measure at the faces' natural advances —
+    ///     what autofit needs, since the default tracking is what pushes glyph ink into collision.
+    /// </summary>
+    public int MeasureWidth(string text, int size, FontStyle style, float extraSpacing)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
@@ -270,13 +319,17 @@ public sealed class FontEngine : ITextMeasurer
         var (face, faceStyle) = Resolve(style);
 
         if ((LayoutScaleX == 1f) && (LayoutScaleY == 1f))
-            return (int)MathF.Round(face.GetFont(faceStyle, size).MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING).X);
+            return (int)MathF.Round(
+                face.GetFont(faceStyle, size)
+                    .MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING + extraSpacing)
+                    .X);
 
         //mirror the native draw: measure at the native pixel size with native-scaled tracking, then divide back into
         //virtual space. This is what makes the measured width equal the drawn width glyph-for-glyph.
         var nativeSize = Math.Max(1, (int)MathF.Round(size * LayoutScaleY));
         var nativeWidth = face.GetFont(faceStyle, nativeSize)
-                              .MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING * LayoutScaleX).X;
+                              .MeasureString(sanitized, characterSpacing: (DEFAULT_TRACKING + extraSpacing) * LayoutScaleX)
+                              .X;
 
         return (int)MathF.Round(nativeWidth / LayoutScaleX);
     }
@@ -312,18 +365,20 @@ public sealed class FontEngine : ITextMeasurer
         Color color,
         Rectangle? clip,
         float characterSpacing = 0f,
-        FontStyle style = FontStyle.Regular)
+        FontStyle style = FontStyle.Regular,
+        int? size = null)
     {
         if (string.IsNullOrEmpty(text))
             return;
 
-        //legacy path: active face at RENDER_SIZE, line box centered in the 12px layout band. A style (e.g. bold)
-        //resolves to the active face's variant while keeping that band centering, so styled and regular runs on the
-        //same baseline align vertically. style defaults to Regular, so untyped callers are unchanged.
+        //legacy path: active face, line box centered in the 12px layout band. A style (e.g. bold) resolves to the
+        //active face's variant while keeping that band centering, so styled and regular runs on the same baseline
+        //align vertically. style defaults to Regular and size to RENDER_SIZE, so untyped callers are unchanged.
         var (face, faceStyle) = Resolve(style);
-        var pos = new Vector2(position.X, position.Y + face.VerticalOffset);
+        var px = size ?? UiSize;
+        var pos = new Vector2(position.X, position.Y + face.VerticalOffsetFor(px));
 
-        DrawLineCore(spriteBatch, SanitizeSurrogates(text), pos, color, clip, face, faceStyle, RENDER_SIZE, characterSpacing);
+        DrawLineCore(spriteBatch, SanitizeSurrogates(text), pos, color, clip, face, faceStyle, px, characterSpacing);
     }
 
     /// <summary>
@@ -349,6 +404,19 @@ public sealed class FontEngine : ITextMeasurer
         DrawLineCore(spriteBatch, SanitizeSurrogates(text), position, color, clip, face, faceStyle, Math.Max(1, size), characterSpacing);
     }
 
+    /// <summary>
+    ///     Whether a text draw with these scales is landing in the upscaled virtual target rather than the native pass.
+    ///     <para>
+    ///         <see cref="SetLayoutScale" /> is set once per frame from the window ratio and is therefore non-1 whenever
+    ///         the window is not exactly the virtual resolution. <see cref="SetNativeScale" /> is set <em>only</em> for
+    ///         the duration of the native pass. So "native is 1 while layout is not" means text is being rasterized at
+    ///         640x480 and then point-upscaled — blurry beside the crisp UI. Both being 1 is the legitimate 1:1 window.
+    ///     </para>
+    ///     Pure and separate from the draw path so it can be tested without a graphics device.
+    /// </summary>
+    internal static bool IsUpscaledTextDraw(float nativeScaleX, float nativeScaleY, float layoutScaleX, float layoutScaleY)
+        => (nativeScaleX == 1f) && (nativeScaleY == 1f) && ((layoutScaleX != 1f) || (layoutScaleY != 1f));
+
     private void DrawLineCore(
         SpriteBatch spriteBatch,
         string sanitized,
@@ -360,6 +428,13 @@ public sealed class FontEngine : ITextMeasurer
         int size,
         float characterSpacing)
     {
+        //catches a text draw that has slipped back into the virtual render target. The stats readout sat there for a
+        //long time unnoticed because blurriness is easy to stop seeing; this makes it fail loudly in dev instead.
+        Debug.Assert(
+            !IsUpscaledTextDraw(NativeScaleX, NativeScaleY, LayoutScaleX, LayoutScaleY),
+            "text drawn outside the native pass — it will be point-upscaled with the world and render blurry. "
+            + "Draw it from IScreen.DrawNative (or ChaosGame's native layer) instead.");
+
         Renderer.SpriteBatch = spriteBatch;
         Renderer.Clip = clip;
 
@@ -498,8 +573,66 @@ public sealed class FontEngine : ITextMeasurer
         //indexed by FontStyle value, which Resolve masks to Regular..BoldItalic (0..3) before any Face call —
         //the Mono flag never reaches here. The Regular slot is always populated (set in the constructor).
         private readonly FontSystem?[] Variants = new FontSystem?[4];
+
+        //band-centering offset per pixel size. Sizes other than RENDER_SIZE arrive when a caller autofits text down
+        //to fit a fixed-width area, and a smaller glyph needs a larger offset to sit on the same visual band.
+        private readonly Dictionary<int, int> VerticalOffsets = [];
         public readonly string Name;
-        public int VerticalOffset;
+
+        private readonly Dictionary<int, int> InkHeights = [];
+
+        //the one place the ink convention lives: extents of the probe string at a size, in pen-relative coordinates.
+        //InkHeightFor rounds it up (a cell must contain the ink); VerticalOffsetFor needs the unrounded height and
+        //ink.Y, so both read this rather than each running TextBounds with its own rounding.
+        private (float Top, float Height) InkExtents(int size)
+        {
+            var ink = GetFont(FontStyle.Regular, size)
+                .TextBounds(VERTICAL_METRIC_PROBE, Vector2.Zero);
+
+            return (ink.Y, ink.Y2 - ink.Y);
+        }
+
+        public int InkHeightFor(int size)
+            => InkHeights.GetOrAdd(size, px => (int)MathF.Ceiling(InkExtents(px).Height));
+
+        //largest size at or below RENDER_SIZE whose ink fits the CHAR_HEIGHT layout cell. Ink extents depend only on
+        //the face and the pixel size — not on the layout scale — so this is computed once and never invalidated.
+        private int? CachedUiSize;
+
+        public int UiSize
+        {
+            get
+            {
+                if (CachedUiSize is { } cached)
+                    return cached;
+
+                var size = RENDER_SIZE;
+
+                while ((size > MIN_AUTOFIT_SIZE) && (InkHeightFor(size) > TextRenderer.CHAR_HEIGHT))
+                    size--;
+
+                CachedUiSize = size;
+
+                return size;
+            }
+        }
+
+        public int VerticalOffsetFor(int size)
+            => VerticalOffsets.GetOrAdd(
+                size,
+                px =>
+                {
+                    //center the actual glyph *ink* in the layout band, not the declared line box. FontStashSharp's
+                    //LineHeight bakes in per-face internal leading that varies wildly (Comic Shanns reports a tall box
+                    //with dead space below the glyphs), so box-centering makes such faces sit high with a gap beneath.
+                    (var top, var height) = InkExtents(px);
+
+                    //offset so the ink midpoint lands at the band midpoint; top is the ink top relative to the pen, so
+                    //subtracting it cancels the face's ascent. Fall back to line-box centering if there is no ink.
+                    return height > 0f
+                        ? (int)MathF.Round(((TextRenderer.CHAR_HEIGHT - height) / 2f) - top)
+                        : (int)MathF.Round((TextRenderer.CHAR_HEIGHT - GetFont(FontStyle.Regular, px).LineHeight) / 2f);
+                });
 
         public Face(string name, FontSystem regular)
         {
