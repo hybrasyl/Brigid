@@ -178,12 +178,13 @@ public static class TextRenderer
         var width = 0;
         var lastSpace = -1;
         var glyphs = 0;
+        var i = 0;
 
-        for (var i = 0; i < text.Length; i++)
+        while (i < text.Length)
         {
             if (colorCodesEnabled && IsColorCode(text, i))
             {
-                i += 2;
+                i += 3;
 
                 continue;
             }
@@ -191,18 +192,35 @@ public static class TextRenderer
             if (text[i] == ' ')
                 lastSpace = i;
 
-            //measuring one character at a time loses the inter-character tracking that a whole-string measurement
-            //(and the draw) applies between glyphs, which over-estimated every wrapped line by ~1px per character
-            //and broke lines well before they actually overflowed. Add it back for every glyph after the first.
-            width += MeasureCharWidth(text[i], size, extraSpacing);
+            //a surrogate pair is one scalar: measure and step it atomically. Breaking between the halves leaves a
+            //lone surrogate on each side, and SanitizeSurrogates turns each into U+FFFD — so an emoji that overflows
+            //became two replacement glyphs instead of wrapping. Every index this returns is a scalar boundary
+            //because the walk only ever advances by whole scalars.
+            var step = char.IsHighSurrogate(text[i]) && (i + 1 < text.Length) && char.IsLowSurrogate(text[i + 1])
+                ? 2
+                : 1;
+
+            //measuring one glyph at a time loses the inter-character tracking that a whole-string measurement (and
+            //the draw) applies between glyphs, which over-estimated every wrapped line by ~1px per character and
+            //broke lines well before they actually overflowed. Add it back for every glyph after the first.
+            width += step == 1
+                ? MeasureCharWidth(text[i], size, extraSpacing)
+                : FontEngine.Instance.MeasureWidth(
+                    text.Substring(i, 2),
+                    size ?? FontEngine.Instance.UiSize,
+                    FontStyle.Regular,
+                    extraSpacing);
 
             if (glyphs > 0)
                 width += (int)(FontEngine.DEFAULT_TRACKING + extraSpacing);
 
             glyphs++;
 
+            //the floor is `step`, not 1: forcing a break at 1 inside a pair is the very split this guards against
             if (width > maxWidth)
-                return lastSpace > 0 ? lastSpace + 1 : Math.Max(1, i);
+                return lastSpace > 0 ? lastSpace + 1 : Math.Max(step, i);
+
+            i += step;
         }
 
         return text.Length;
