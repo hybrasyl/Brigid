@@ -273,6 +273,8 @@ public sealed class ChaosGame : Game
         var scaleX = (float)pp.BackBufferWidth / VIRTUAL_WIDTH;
         var scaleY = (float)pp.BackBufferHeight / VIRTUAL_HEIGHT;
 
+        var nativeScale = Matrix.CreateScale(scaleX, scaleY, 1f);
+
         FontEngine.Instance.SetNativeScale(scaleX, scaleY);
         Screens.DrawNative(SpriteBatch, scaleX, scaleY);
 
@@ -280,7 +282,7 @@ public sealed class ChaosGame : Game
         //then point-upscaled, which is why the heap/fps/draw counters read blurry next to crisp UI text. Also keeps it
         //out of the render target, so the screenshot capture above stays UI-free as intended.
         if (DebugOverlay.IsActive)
-            DebugOverlay.DrawStats(SpriteBatch, Matrix.CreateScale(scaleX, scaleY, 1f));
+            DebugOverlay.DrawStats(SpriteBatch, nativeScale);
 
         //custom cursor — topmost, in virtual space; the pass transform scales it to native like the rest of the UI
         if (CursorTexture is not null)
@@ -289,7 +291,7 @@ public sealed class ChaosGame : Game
             var offsetX = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetX : CursorOffsetX;
             var offsetY = UseHandCursor && HandCursorTexture is not null ? HandCursorOffsetY : CursorOffsetY;
 
-            SpriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: Matrix.CreateScale(scaleX, scaleY, 1f));
+            SpriteBatch.Begin(samplerState: GlobalSettings.Sampler, transformMatrix: nativeScale);
             SpriteBatch.Draw(activeCursor, new Vector2(InputBuffer.MouseX - offsetX, InputBuffer.MouseY - offsetY), Color.White);
             SpriteBatch.End();
         }

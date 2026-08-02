@@ -520,8 +520,12 @@ public static class DebugOverlay
     ///     the rest of the UI: positions stay in virtual coordinates and the transform scales them, while FontEngine
     ///     rasterizes glyphs at native size. Drawn into the virtual render target instead, the text was point-upscaled
     ///     along with the world and came out blurry against the crisp UI beside it.
+    ///     <para>
+    ///         Deliberately required rather than defaulting to null: null is exactly the untransformed, virtual-target
+    ///         draw this exists to eliminate, so the compiler should not let a caller back into it.
+    ///     </para>
     /// </param>
-    public static void DrawStats(SpriteBatch spriteBatch, Matrix? transform = null)
+    public static void DrawStats(SpriteBatch spriteBatch, Matrix transform)
     {
         if (!IsActive)
             return;
