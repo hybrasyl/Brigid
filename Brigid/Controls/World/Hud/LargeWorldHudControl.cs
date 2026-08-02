@@ -545,6 +545,9 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         //chat — stores both normal and expanded bounds for expand toggle
         NormalChatBounds = GetRect("ChattingRect");
         ChatDisplay = new ChatPanel(NormalChatBounds, tabRect);
+
+        //the input renders at the size the display computed, so the two can never disagree
+        ChatInput.Display = ChatDisplay;
         ChatDisplay.ConfigureExpand(chatExpandedTexture, ExpandedChatBounds, tabRect);
         RegisterTab(HudTab.Chat, ChatDisplay, tabRect);
 

@@ -9,9 +9,11 @@ namespace Brigid.Controls.World.Hud;
 ///     they cannot drift apart — the input sits directly under the display, and a size difference between them reads as
 ///     a bug even when each is individually reasonable.
 ///     <para>
-///         The size is whatever makes a worst-case line fill the display width at the faces' natural advances. The
-///         display owns that width (it comes from game data), so it publishes the result here via
-///         <see cref="Recompute" /> and the input follows.
+///         Deliberately stateless. The width chat sizes against belongs to the display, which owns the rect, so the
+///         display holds the derived size (<see cref="Panel.ChatPanel.EnsureTextSize" />) and the input asks it. An
+///         earlier version cached the width and size in statics here; that made two simultaneously-live HUDs write the
+///         same globals with last-writer-wins, correct only because <c>ChattingRect</c>, <c>ChattingRect</c> (large)
+///         and <c>ChattingRectExpanded</c> all happen to be 432px wide in <c>setoa.dat</c>.
 ///     </para>
 /// </summary>
 internal static class ChatTextStyle
@@ -30,43 +32,13 @@ internal static class ChatTextStyle
     /// </summary>
     public const int BudgetChars = 12 + 2 + 55;
 
-    private static int Width;
-    private static int MeasuredWidth = -1;
-    private static int MeasuredGeneration = -1;
-    private static int CachedSize = -1;
-
     /// <summary>
-    ///     Records the usable text width chat sizes against. Published by the display, which owns the rect; kept here
-    ///     rather than recomputed on demand by the display because the display is a HUD tab and stops updating when
-    ///     another tab is shown, while the input bar stays visible and still needs the right size.
+    ///     Glyph pixel size that makes a worst-case chat line fill <paramref name="availableWidth" /> at the faces'
+    ///     natural advances. Falls back to the ordinary UI size for a width that is not yet known. Pure — callers cache
+    ///     it against their own width and <see cref="FontEngine.Generation" />.
     /// </summary>
-    public static void SetWidth(int availableWidth)
-    {
-        if (availableWidth > 0)
-            Width = availableWidth;
-    }
-
-    /// <summary>
-    ///     Glyph pixel size chat draws at, recomputed on demand when the width or the active face has changed. Falls
-    ///     back to the UI default until a width has been published.
-    /// </summary>
-    public static int Size
-    {
-        get
-        {
-            if (Width <= 0)
-                return CachedSize > 0 ? CachedSize : FontEngine.Instance.UiSize;
-
-            var generation = FontEngine.Instance.Generation;
-
-            if ((Width == MeasuredWidth) && (generation == MeasuredGeneration))
-                return CachedSize;
-
-            MeasuredWidth = Width;
-            MeasuredGeneration = generation;
-            CachedSize = FontEngine.Instance.LargestSizeFitting(BudgetChars, Width, extraSpacing: Spacing);
-
-            return CachedSize;
-        }
-    }
+    public static int SizeFor(int availableWidth)
+        => availableWidth > 0
+            ? FontEngine.Instance.LargestSizeFitting(BudgetChars, availableWidth, Spacing)
+            : FontEngine.Instance.UiSize;
 }

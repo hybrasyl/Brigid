@@ -477,6 +477,9 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         //chat (f)
         var chatDisplayBounds = GetRect("ChattingRect");
         ChatDisplay = new ChatPanel(chatDisplayBounds, tabRect);
+
+        //the input renders at the size the display computed, so the two can never disagree
+        ChatInput.Display = ChatDisplay;
         RegisterTab(HudTab.Chat, ChatDisplay, tabRect);
 
         //stats (g) / extended stats (shift+g) — both load from _nstatus prefab

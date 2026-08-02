@@ -48,8 +48,16 @@ public sealed class ChatInputControl : UIPanel
     private Color? SavedFocusedBackgroundColor;
     private int SavedMaxLength;
 
-    //last ChatTextStyle.Size applied to the prefix label and text box
+    //last size and font generation applied to the prefix label and text box
     private int AppliedTextSize = -1;
+    private int AppliedGeneration = -1;
+
+    /// <summary>
+    ///     The chat display this input sits beneath. Set by the owning HUD after both exist, so the input matches the
+    ///     size of the lines above it. Null until wired (and for any HUD without a display), in which case the input
+    ///     falls back to the ordinary UI size rather than guessing.
+    /// </summary>
+    public Panel.ChatPanel? Display { get; set; }
     private int WhisperHistoryIndex;
     private string? WhisperTarget;
 
@@ -128,7 +136,10 @@ public sealed class ChatInputControl : UIPanel
             return;
         }
 
-        var prefixWidth = TextRenderer.MeasureWidth(prefix, ChatTextStyle.Size, ChatTextStyle.Spacing) + PrefixLabel.PaddingLeft;
+        //measure at the size the label itself is set to, not at a size fetched separately — those are the same thing
+        //only if the two lookups agree, and ApplyTextStyle re-runs this whenever it changes the label
+        var prefixWidth = TextRenderer.MeasureWidth(prefix, PrefixLabel.FontSize, PrefixLabel.CharacterSpacing)
+                          + PrefixLabel.PaddingLeft;
         PrefixLabel.Text = prefix;
         PrefixLabel.ForegroundColor = color;
         PrefixLabel.Width = prefixWidth;
@@ -139,15 +150,21 @@ public sealed class ChatInputControl : UIPanel
     }
 
     //follow the chat display's autofit so the input can't render at a different size from the lines above it. The
-    //display publishes on its own schedule (it owns the width), so track the revision rather than assuming an order.
+    //display owns the width and therefore the size; ask it rather than assuming an update order.
     private void ApplyTextStyle()
     {
-        var size = ChatTextStyle.Size;
+        var size = Display?.EnsureTextSize() ?? FontEngine.Instance.UiSize;
+        var generation = FontEngine.Instance.Generation;
 
-        if (AppliedTextSize == size)
+        //the resolved size alone is not enough. Generation also bumps on a layout-scale change, and MeasureWidth is
+        //layout-scale dependent (it measures at native pixel size and divides back), so the prefix can measure to a
+        //different virtual width without the size ever crossing a rung — leaving PrefixLabel.Width and the text
+        //box's X/Width laid out against the previous metrics.
+        if ((AppliedTextSize == size) && (AppliedGeneration == generation))
             return;
 
         AppliedTextSize = size;
+        AppliedGeneration = generation;
 
         TextBox.FontSize = size;
         TextBox.CharacterSpacing = ChatTextStyle.Spacing;
