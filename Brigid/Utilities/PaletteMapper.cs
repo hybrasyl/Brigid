@@ -19,6 +19,12 @@ namespace Brigid.Utilities;
 ///         the nearest palette entry rather than throwing — for a colour the quantizer itself chose, the nearest entry
 ///         is by construction a near-perfect match, so the saved image is visually unchanged.
 ///     </para>
+///     <para>
+///         <strong>Workaround for HTOO-15</strong> (Hybrasyl Tooling board). This class exists only because the
+///         upstream pair is inconsistent; when DALib guarantees <c>Quantize</c>'s output is a member of the palette it
+///         returns, delete this and call <c>GetPalettizedPixelData</c> directly. The tolerant mapping arguably belongs
+///         in DALib as an overload — it is Hybrasyl-owned — which is what the ticket proposes.
+///     </para>
 /// </summary>
 internal static class PaletteMapper
 {
@@ -28,25 +34,26 @@ internal static class PaletteMapper
     /// </summary>
     public static byte[] MapToIndices(SKImage image, Palette palette)
     {
-        var exact = new Dictionary<SKColor, byte>();
+        //one map, seeded with the palette and back-filled with nearest-matches as they are resolved, so the hot loop
+        //is a single lookup. Safe to share: an exact colour is already present and so never reaches Nearest, and a
+        //resolved miss can only ever map to the same entry again.
+        var indexOf = new Dictionary<SKColor, byte>(palette.Count);
 
         //first index wins, matching DALib's DistinctBy so a duplicated colour resolves the same way
         for (var i = 0; i < palette.Count; i++)
-        {
-            var entry = palette[i]
-                .WithAlpha(byte.MaxValue);
-
-            if (!exact.ContainsKey(entry))
-                exact[entry] = (byte)i;
-        }
+            indexOf.TryAdd(
+                palette[i]
+                    .WithAlpha(byte.MaxValue),
+                (byte)i);
 
         var indices = new byte[image.Width * image.Height];
 
         using var pixels = image.PeekPixels();
 
-        //memoised so an off-palette colour costs one scan of the palette, not one per pixel — a full-screen gradient
-        //would otherwise be 307k pixels times 256 entries
-        var resolved = new Dictionary<SKColor, byte>();
+        //a non-raster-backed image has no pixels to peek. Nothing in this client produces one, but the whole point of
+        //this class is that saving a screenshot cannot take down the game loop, so it must not end in a null deref.
+        if (pixels is null)
+            return indices;
 
         for (var y = 0; y < image.Height; y++)
             for (var x = 0; x < image.Width; x++)
@@ -54,10 +61,12 @@ internal static class PaletteMapper
                 var color = pixels.GetPixelColor(x, y)
                                   .WithAlpha(byte.MaxValue);
 
-                if (!exact.TryGetValue(color, out var index) && !resolved.TryGetValue(color, out index))
+                if (!indexOf.TryGetValue(color, out var index))
                 {
+                    //memoised so an off-palette colour costs one scan of the palette, not one per pixel — a
+                    //full-screen gradient would otherwise be 307k pixels times 256 entries
                     index = Nearest(color, palette);
-                    resolved[color] = index;
+                    indexOf[color] = index;
                 }
 
                 indices[(y * image.Width) + x] = index;
