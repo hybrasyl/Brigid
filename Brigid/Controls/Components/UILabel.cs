@@ -238,21 +238,21 @@ public class UILabel : UIElement
 
         //pre-selection segment
         if (selStart > 0)
-            DrawTextClipped(spriteBatch, new Vector2(drawX, drawY), text[..selStart], TextElement.Color, ColorCodesEnabled);
+            DrawRun(spriteBatch, new Vector2(drawX, drawY), text[..selStart], TextElement.Color);
 
         //selection segment: white rect + black text
-        var selStartX = drawX + (selStart > 0 ? TextRenderer.MeasureWidth(text[..selStart]) : 0);
+        var selStartX = drawX + (selStart > 0 ? TextElement.Measure(text[..selStart]) : 0);
         var selText = text[selStart..selEnd];
-        var selWidth = TextRenderer.MeasureWidth(selText);
+        var selWidth = TextElement.Measure(selText);
 
         DrawRectClipped(spriteBatch, new Rectangle(selStartX, drawY, selWidth, TextRenderer.CHAR_HEIGHT), Color.White);
-        DrawTextClipped(spriteBatch, new Vector2(selStartX, drawY), selText, Color.Black, ColorCodesEnabled);
+        DrawRun(spriteBatch, new Vector2(selStartX, drawY), selText, Color.Black);
 
         //post-selection segment
         if (selEnd < text.Length)
         {
             var postX = selStartX + selWidth;
-            DrawTextClipped(spriteBatch, new Vector2(postX, drawY), text[selEnd..], TextElement.Color, ColorCodesEnabled);
+            DrawRun(spriteBatch, new Vector2(postX, drawY), text[selEnd..], TextElement.Color);
         }
     }
 
@@ -284,30 +284,43 @@ public class UILabel : UIElement
 
                 //pre-selection segment
                 if (hlStart > 0)
-                    DrawTextClipped(spriteBatch, new Vector2(innerX, lineY), lineText[..hlStart], TextElement.Color, ColorCodesEnabled);
+                    DrawRun(spriteBatch, new Vector2(innerX, lineY), lineText[..hlStart], TextElement.Color);
 
                 //selection segment: white rect + black text
-                var hlX = innerX + (hlStart > 0 ? TextRenderer.MeasureWidth(lineText[..hlStart]) : 0);
+                var hlX = innerX + (hlStart > 0 ? TextElement.Measure(lineText[..hlStart]) : 0);
                 var hlText = lineText[hlStart..hlEnd];
-                var hlWidth = TextRenderer.MeasureWidth(hlText);
+                var hlWidth = TextElement.Measure(hlText);
 
                 DrawRectClipped(spriteBatch, new Rectangle(hlX, lineY, hlWidth, TextRenderer.CHAR_HEIGHT), Color.White);
-                DrawTextClipped(spriteBatch, new Vector2(hlX, lineY), hlText, Color.Black, ColorCodesEnabled);
+                DrawRun(spriteBatch, new Vector2(hlX, lineY), hlText, Color.Black);
 
                 //post-selection segment
                 if (hlEnd < lineText.Length)
                 {
                     var postX = hlX + hlWidth;
-                    DrawTextClipped(spriteBatch, new Vector2(postX, lineY), lineText[hlEnd..], TextElement.Color, ColorCodesEnabled);
+                    DrawRun(spriteBatch, new Vector2(postX, lineY), lineText[hlEnd..], TextElement.Color);
                 }
             } else if (lineText.Length > 0)
-                DrawTextClipped(spriteBatch, new Vector2(innerX, lineY), lineText, TextElement.Color, ColorCodesEnabled);
+                DrawRun(spriteBatch, new Vector2(innerX, lineY), lineText, TextElement.Color);
 
             charOffset = lineEndIdx;
         }
     }
 
     private string PlainText => TextElement.Text;
+
+    //one place the element's size and spacing reach a draw. Every selection branch below bypasses TextElement.Draw
+    //(it draws whole runs in one colour, these draw segments in two), so without this they silently render at the
+    //default size while the ordinary path honours FontSize — which is exactly how they were missed.
+    private void DrawRun(SpriteBatch spriteBatch, Vector2 position, string text, Color color)
+        => DrawTextClipped(
+            spriteBatch,
+            position,
+            text,
+            color,
+            ColorCodesEnabled,
+            size: TextElement.FontSize,
+            characterSpacing: TextElement.CharacterSpacing);
 
     private void Invalidate(string text, Color color)
     {
@@ -503,7 +516,7 @@ public class UILabel : UIElement
             }
 
             var nextI = i + 1;
-            var charWidth = prevWidth + TextRenderer.MeasureCharWidth(text[i]);
+            var charWidth = prevWidth + TextElement.MeasureChar(text[i]);
             var midpoint = (prevWidth + charWidth) / 2;
 
             if (localX < midpoint)
@@ -553,7 +566,7 @@ public class UILabel : UIElement
             }
 
             var nextI = i + 1;
-            var charWidth = prevWidth + TextRenderer.MeasureCharWidth(lineText[i]);
+            var charWidth = prevWidth + TextElement.MeasureChar(lineText[i]);
             var midpoint = (prevWidth + charWidth) / 2;
 
             if (localX < midpoint)

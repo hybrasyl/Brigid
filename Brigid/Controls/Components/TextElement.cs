@@ -33,7 +33,7 @@ public sealed class TextElement
     public int WrapWidth { get; set; }
 
     /// <summary>
-    ///     Explicit glyph pixel size, or null for <see cref="Rendering.FontEngine.RENDER_SIZE" />. Measurement, wrapping
+    ///     Explicit glyph pixel size, or null for <see cref="Rendering.FontEngine.UiSize" />. Measurement, wrapping
     ///     and drawing all honour it, so a caller that shrinks text to fit gets a wrap that agrees with what is drawn.
     ///     The line grid (<see cref="TextRenderer.CHAR_HEIGHT" />) is unaffected — this changes ink, not layout pitch.
     /// </summary>
@@ -47,6 +47,17 @@ public sealed class TextElement
     ///     which stacks on top of this.
     /// </summary>
     public float CharacterSpacing { get; set; }
+
+    /// <summary>
+    ///     Pixel width of <paramref name="text" /> at <em>this element's</em> size and spacing. Owning controls measure
+    ///     through here rather than calling <see cref="TextRenderer" /> directly: measuring at the default while
+    ///     drawing at an explicit size is what puts carets, selection rects and hit-tests out of step with the glyphs,
+    ///     and it is a whole class of bug that cannot occur if the size never has to be passed by hand.
+    /// </summary>
+    public int Measure(string text) => TextRenderer.MeasureWidth(text, FontSize, CharacterSpacing);
+
+    /// <summary>Advance of a single glyph at this element's size and spacing; see <see cref="Measure" />.</summary>
+    public int MeasureChar(char c) => TextRenderer.MeasureCharWidth(c, FontSize, CharacterSpacing);
 
     /// <summary>
     ///     Shadow style applied during <see cref="Draw" />; also widens/heightens the bounding box reported by
