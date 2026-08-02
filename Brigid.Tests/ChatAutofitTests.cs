@@ -1,4 +1,6 @@
 #region
+using Brigid.Controls.Generic;
+using Brigid.Controls.World.Hud;
 using Brigid.Rendering;
 using Xunit;
 #endregion
@@ -14,16 +16,14 @@ namespace Brigid.Tests;
 public class ChatAutofitTests
 {
     //ChattingRect is 432px wide in setoa.dat — identical in _nbk_s, _nbk_l and _nbk_l's expanded variant — less the
-    //scrollbar gutter. Hardcoded because the real rect comes from game data the test suite has no access to; if the
-    //shipped art ever changes, this number is the thing to revisit.
-    private const int CHAT_WIDTH = 432 - ScrollBarWidth;
-    private const int ScrollBarWidth = 16;
+    //scrollbar gutter. The 432 is hardcoded because the real rect comes from game data the test suite has no access
+    //to; if the shipped art ever changes, that number is the thing to revisit.
+    private const int CHAT_WIDTH = 432 - ScrollBarControl.DEFAULT_WIDTH;
 
-    //server sends "{name}: {message}" (whispers use {name}" / {name}>); names are 4-12 chars, message caps at 55
-    private const int BUDGET = 12 + 2 + 55;
-
-    //chat cancels the global negative tracking and sizes against the faces' natural advances — see ChatPanel
-    private const float NATURAL = -FontEngine.DEFAULT_TRACKING;
+    //referenced, not re-declared: a local copy would keep this test green against the old numbers after the shipped
+    //ones move, which is precisely the drift it exists to catch
+    private const int BUDGET = ChatTextStyle.BudgetChars;
+    private const float NATURAL = ChatTextStyle.Spacing;
 
     //how much of the available width a correctly-sized line must occupy. Advances are whole pixels, so the reachable
     //widths are multiples of BUDGET; the best available here is 414 of 416. Anything materially below means autofit
@@ -40,6 +40,8 @@ public class ChatAutofitTests
 
         var probe = new string('M', BUDGET);
         var failures = new List<string>();
+
+        using var face = new ActiveFaceScope();
 
         for (var i = 0; i < faceCount; i++)
         {
@@ -70,6 +72,15 @@ public class ChatAutofitTests
     ///     character has no inter-character gap, so per-character measurement silently drops the tracking that both a
     ///     string measurement and the draw apply between glyphs — which made every line break ~1px per character early.
     ///     Autofit is meaningless if the two disagree: it would size text against a width the wrapper never uses.
+    ///     <para>
+    ///         The assertion is deliberately an <em>exact prefix</em> one, and it sweeps both spacings. Asserting
+    ///         "at the full measured width, take the whole run" cannot catch a broken accumulation: the whole-string
+    ///         fast path answers it without ever entering the loop. And sweeping only <see cref="NATURAL" /> cannot
+    ///         catch it either, because the per-glyph term is <c>DEFAULT_TRACKING + extraSpacing</c>, which at natural
+    ///         spacing is identically zero — the one value at which the thing under test is a no-op. Both of those
+    ///         were true of the original version of this test, verified by mutation: disabling the tracking add-back
+    ///         left it green.
+    ///     </para>
     /// </summary>
     [Fact]
     public void WrapAccumulation_AgreesWithWholeStringMeasurement()
@@ -79,27 +90,47 @@ public class ChatAutofitTests
         var probe = new string('M', BUDGET);
         var failures = new List<string>();
 
+        using var face = new ActiveFaceScope();
+
         for (var i = 0; i < FontEngine.Instance.FontCount; i++)
         {
             FontEngine.Instance.SetActiveFont(i);
 
             foreach (var size in new[] { FontEngine.RENDER_SIZE, 13, 11 })
-            {
-                var whole = FontEngine.Instance.MeasureWidth(probe, size, FontStyle.Regular, NATURAL);
+                //NATURAL is what chat uses; 0 is the global default tracking every other wrap in the app runs at, and
+                //is the only one of the two at which the per-glyph tracking term is non-zero
+                foreach (var spacing in new[] { NATURAL, 0f })
+                {
+                    //an exact prefix: the width of k glyphs must admit exactly k glyphs and no more. Over-estimating
+                    //the accumulation breaks early (returns < k), under-estimating runs long (> k) — both caught.
+                    foreach (var k in new[] { BUDGET / 3, BUDGET / 2, BUDGET - 1 })
+                    {
+                        var prefixWidth = FontEngine.Instance.MeasureWidth(probe[..k], size, FontStyle.Regular, spacing);
+                        var broke = TextRenderer.FindLineBreak(probe, prefixWidth, size: size, extraSpacing: spacing);
 
-                //given exactly the measured width, the wrapper must take the whole run
-                var atExactWidth = TextRenderer.FindLineBreak(probe, whole, size: size, extraSpacing: NATURAL);
+                        if (broke != k)
+                            failures.Add(
+                                $"face {i} size {size} spacing {spacing}: {k} glyphs measure {prefixWidth}px, "
+                                + $"but the wrapper fit {broke} of them into exactly that width");
+                    }
 
-                if (atExactWidth != BUDGET)
-                    failures.Add($"face {i} size {size}: measured {whole}px but the wrapper broke at {atExactWidth}/{BUDGET}");
+                    //and the whole run must still be taken at its own measured width
+                    var whole = FontEngine.Instance.MeasureWidth(probe, size, FontStyle.Regular, spacing);
 
-                //and one pixel under, it must break — otherwise it is not measuring at all
-                if (TextRenderer.FindLineBreak(probe, whole - 1, size: size, extraSpacing: NATURAL) >= BUDGET)
-                    failures.Add($"face {i} size {size}: wrapper did not break below the measured width");
-            }
+                    if (TextRenderer.FindLineBreak(probe, whole, size: size, extraSpacing: spacing) != BUDGET)
+                        failures.Add($"face {i} size {size} spacing {spacing}: measured {whole}px but the wrapper still broke");
+                }
         }
 
         Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
+    //the engine is a static singleton; leaving another face active leaks into every test sharing this collection
+    private sealed class ActiveFaceScope : IDisposable
+    {
+        private readonly int Original = FontEngine.Instance.ActiveFontIndex;
+
+        public void Dispose() => FontEngine.Instance.SetActiveFont(Original);
     }
 
     /// <summary>
@@ -114,6 +145,8 @@ public class ChatAutofitTests
         FontEngine.Initialize(0);
 
         var failures = new List<string>();
+
+        using var face = new ActiveFaceScope();
 
         for (var i = 0; i < FontEngine.Instance.FontCount; i++)
         {
