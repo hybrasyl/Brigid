@@ -131,31 +131,10 @@ public sealed class FontEngine : ITextMeasurer
     ///         'p', 'g') escape onto the surrounding art.
     ///     </para>
     /// </summary>
-    public int UiSize
-    {
-        get
-        {
-            if (UiSizeGeneration == Generation)
-                return CachedUiSize;
-
-            var face = Faces[ActiveIndex];
-            var size = RENDER_SIZE;
-
-            while ((size > MIN_AUTOFIT_SIZE) && (face.InkHeightFor(size) > TextRenderer.CHAR_HEIGHT))
-                size--;
-
-            CachedUiSize = size;
-            UiSizeGeneration = Generation;
-
-            return size;
-        }
-    }
+    public int UiSize => Faces[ActiveIndex].UiSize;
 
     /// <summary>Glyph ink height (ascender to descender) of the active face at <paramref name="size" />.</summary>
     public int InkHeight(int size) => Faces[ActiveIndex].InkHeightFor(size);
-
-    private int CachedUiSize = RENDER_SIZE;
-    private int UiSizeGeneration = -1;
 
     /// <summary>The active face's line height in pixels at <see cref="RENDER_SIZE" /> (virtual space).</summary>
     public int LineHeight => (int)MathF.Round(GetFont(RENDER_SIZE).LineHeight);
@@ -199,8 +178,9 @@ public sealed class FontEngine : ITextMeasurer
             face.SetVariant(FontStyle.Italic, TryLoadSystem(def.Italic));
             face.SetVariant(FontStyle.BoldItalic, TryLoadSystem(def.BoldItalic));
 
-            //warm the default size's band offset here so the first draw doesn't pay the probe
-            face.VerticalOffsetFor(RENDER_SIZE);
+            //warm the band offset at the size this face will actually draw at, so the first draw doesn't pay the probe.
+            //Not RENDER_SIZE: faces that ink taller than the layout cell (Anonymous Pro, Comic Shanns) draw smaller.
+            face.VerticalOffsetFor(face.UiSize);
 
             if (def.IsMono && (monoIndex < 0))
                 monoIndex = faces.Count;
@@ -283,9 +263,8 @@ public sealed class FontEngine : ITextMeasurer
         Generation++;
     }
 
-    /// <summary>Pixel width of <paramref name="text" /> as laid out by the font (single line, no color codes).</summary>
     /// <summary>
-    ///     The largest pixel size, at or below <paramref name="maxSize" />, at which <paramref name="charCount" />
+    ///     The largest pixel size, at or below <see cref="UiSize" />, at which <paramref name="charCount" />
     ///     characters of the active face fit within <paramref name="availableWidth" />. Returns
     ///     <see cref="MIN_AUTOFIT_SIZE" /> when even that overflows, so a caller always gets a usable size.
     ///     <para>
@@ -301,26 +280,22 @@ public sealed class FontEngine : ITextMeasurer
     ///         wrap and draw paths use — a fit computed any other way can disagree with where text actually breaks.
     ///     </para>
     /// </summary>
-    public int LargestSizeFitting(
-        int charCount,
-        int availableWidth,
-        int? maxSize = null,
-        FontStyle style = FontStyle.Regular,
-        float extraSpacing = 0f)
+    public int LargestSizeFitting(int charCount, int availableWidth, float extraSpacing = 0f)
     {
         if ((charCount <= 0) || (availableWidth <= 0))
             return MIN_AUTOFIT_SIZE;
 
         var probe = new string('M', charCount);
 
-        //never exceed the size that fits the line cell vertically — a wider box is no licence to clip glyphs
-        for (var size = Math.Max(MIN_AUTOFIT_SIZE, maxSize ?? UiSize); size > MIN_AUTOFIT_SIZE; size--)
-            if (MeasureWidth(probe, size, style, extraSpacing) <= availableWidth)
+        //start at UiSize, never above it — a wider box is no licence to clip glyphs out of the line cell
+        for (var size = UiSize; size > MIN_AUTOFIT_SIZE; size--)
+            if (MeasureWidth(probe, size, FontStyle.Regular, extraSpacing) <= availableWidth)
                 return size;
 
         return MIN_AUTOFIT_SIZE;
     }
 
+    /// <summary>Pixel width of <paramref name="text" /> as laid out by the font (single line, no color codes).</summary>
     public int MeasureWidth(string text) => MeasureWidth(text, UiSize, FontStyle.Regular);
 
     /// <summary>
@@ -606,41 +581,58 @@ public sealed class FontEngine : ITextMeasurer
 
         private readonly Dictionary<int, int> InkHeights = [];
 
-        public int InkHeightFor(int size)
+        //the one place the ink convention lives: extents of the probe string at a size, in pen-relative coordinates.
+        //InkHeightFor rounds it up (a cell must contain the ink); VerticalOffsetFor needs the unrounded height and
+        //ink.Y, so both read this rather than each running TextBounds with its own rounding.
+        private (float Top, float Height) InkExtents(int size)
         {
-            if (InkHeights.TryGetValue(size, out var cached))
-                return cached;
-
             var ink = GetFont(FontStyle.Regular, size)
                 .TextBounds(VERTICAL_METRIC_PROBE, Vector2.Zero);
-            var height = (int)MathF.Ceiling(ink.Y2 - ink.Y);
-            InkHeights[size] = height;
 
-            return height;
+            return (ink.Y, ink.Y2 - ink.Y);
+        }
+
+        public int InkHeightFor(int size)
+            => InkHeights.GetOrAdd(size, px => (int)MathF.Ceiling(InkExtents(px).Height));
+
+        //largest size at or below RENDER_SIZE whose ink fits the CHAR_HEIGHT layout cell. Ink extents depend only on
+        //the face and the pixel size — not on the layout scale — so this is computed once and never invalidated.
+        private int? CachedUiSize;
+
+        public int UiSize
+        {
+            get
+            {
+                if (CachedUiSize is { } cached)
+                    return cached;
+
+                var size = RENDER_SIZE;
+
+                while ((size > MIN_AUTOFIT_SIZE) && (InkHeightFor(size) > TextRenderer.CHAR_HEIGHT))
+                    size--;
+
+                CachedUiSize = size;
+
+                return size;
+            }
         }
 
         public int VerticalOffsetFor(int size)
-        {
-            if (VerticalOffsets.TryGetValue(size, out var cached))
-                return cached;
+            => VerticalOffsets.GetOrAdd(
+                size,
+                px =>
+                {
+                    //center the actual glyph *ink* in the layout band, not the declared line box. FontStashSharp's
+                    //LineHeight bakes in per-face internal leading that varies wildly (Comic Shanns reports a tall box
+                    //with dead space below the glyphs), so box-centering makes such faces sit high with a gap beneath.
+                    (var top, var height) = InkExtents(px);
 
-            //center the actual glyph *ink* in the layout band, not the declared line box. FontStashSharp's LineHeight
-            //bakes in per-face internal leading that varies wildly (Comic Shanns reports a tall box with dead space
-            //below the glyphs), so box-centering makes such faces sit high with a gap beneath.
-            var probeFont = GetFont(FontStyle.Regular, size);
-            var ink = probeFont.TextBounds(VERTICAL_METRIC_PROBE, Vector2.Zero);
-            var inkHeight = ink.Y2 - ink.Y;
-
-            //offset so the ink midpoint lands at the band midpoint; ink.Y is the ink top relative to the pen, so
-            //subtracting it cancels the face's ascent. Fall back to line-box centering if the probe has no ink.
-            var offset = inkHeight > 0f
-                ? (int)MathF.Round(((TextRenderer.CHAR_HEIGHT - inkHeight) / 2f) - ink.Y)
-                : (int)MathF.Round((TextRenderer.CHAR_HEIGHT - probeFont.LineHeight) / 2f);
-
-            VerticalOffsets[size] = offset;
-
-            return offset;
-        }
+                    //offset so the ink midpoint lands at the band midpoint; top is the ink top relative to the pen, so
+                    //subtracting it cancels the face's ascent. Fall back to line-box centering if there is no ink.
+                    return height > 0f
+                        ? (int)MathF.Round(((TextRenderer.CHAR_HEIGHT - height) / 2f) - top)
+                        : (int)MathF.Round((TextRenderer.CHAR_HEIGHT - GetFont(FontStyle.Regular, px).LineHeight) / 2f);
+                });
 
         public Face(string name, FontSystem regular)
         {
