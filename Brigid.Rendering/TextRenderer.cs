@@ -168,6 +168,13 @@ public static class TextRenderer
         int? size = null,
         float extraSpacing = 0f)
     {
+        //whole-string fast path: one MeasureString instead of one per character, and it is the measurement the draw
+        //actually uses. Autofit exists to make a full-width line fit without wrapping, so this is the dominant case by
+        //construction — and re-wrapping the chat backlog on a resize drag pays this per message, per frame.
+        //Only valid when color codes are skipped, which is the one thing MeasureWidth always does.
+        if (colorCodesEnabled && (MeasureWidth(text, size, extraSpacing) <= maxWidth))
+            return text.Length;
+
         var width = 0;
         var lastSpace = -1;
         var glyphs = 0;
@@ -223,11 +230,7 @@ public static class TextRenderer
     /// <summary>
     ///     Returns the horizontal pixel advance for a single character, from the active font's metrics.
     /// </summary>
-    public static int MeasureCharWidth(char c, int? size = null)
-        => FontEngine.Instance.MeasureWidth(c.ToString(), size ?? FontEngine.Instance.UiSize);
-
-    //advance of one glyph with the caller's extra spacing folded in, used by the per-character wrap accumulation
-    public static int MeasureCharWidth(char c, int? size, float extraSpacing)
+    public static int MeasureCharWidth(char c, int? size = null, float extraSpacing = 0f)
         => FontEngine.Instance.MeasureWidth(
             c.ToString(),
             size ?? FontEngine.Instance.UiSize,
@@ -356,7 +359,7 @@ public static class TextRenderer
 
             while (remaining.Length > 0)
             {
-                var lineEnd = FindLineBreak(remaining, maxWidth, size: size);
+                var lineEnd = FindLineBreak(remaining, maxWidth, size: size, extraSpacing: extraSpacing);
                 var line = remaining[..lineEnd].TrimEnd();
                 lines.Add(line);
                 activeColorCode = FindLastColorCode(line) ?? activeColorCode;
