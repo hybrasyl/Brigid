@@ -30,8 +30,10 @@ namespace Brigid.Data.AssetPacks;
 ///     </para>
 ///     <para>
 ///     A pack may supply only one of the two pair-masters per creature; in that case the single image renders for
-///     all four directions of that pair, and the other pair falls through to the legacy MPF path. For full
-///     coverage with a single source image (typical of viewer-facing static portraits), the same PNG can be
+///     <b>all four directions</b>, mirrored for Down and Left. There is no per-pair fallback to legacy MPF —
+///     <see cref="Covers" /> is true as soon as one pair-master exists, and coverage gates the whole creature.
+///     Supplying both pair-masters is therefore about pose accuracy, not about avoiding a legacy fallback. For
+///     full coverage with a single source image (typical of viewer-facing static creatures), the same PNG can be
 ///     copied into both <c>n_001.png</c> and <c>e_001.png</c> slots.
 ///     </para>
 /// </summary>
