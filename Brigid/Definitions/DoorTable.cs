@@ -10,13 +10,13 @@ namespace Brigid.Definitions;
 /// </summary>
 public static class DoorTable
 {
-    private static readonly FrozenDictionary<short, short> ClosedToOpen;
-    private static readonly FrozenDictionary<short, short> OpenToClosed;
+    private static readonly FrozenDictionary<ushort, ushort> ClosedToOpen;
+    private static readonly FrozenDictionary<ushort, ushort> OpenToClosed;
 
     static DoorTable()
     {
         //sorted by closed sprite id. see doors.md in the document repo for door-group context (axis, tile count, center-only flag).
-        var pairs = new (short Closed, short Open)[]
+        var pairs = new (ushort Closed, ushort Open)[]
         {
             (1993, 1996), (1994, 1997),
             (2000, 2003), (2001, 2004),
@@ -94,8 +94,8 @@ public static class DoorTable
             (18714, 18718), (18715, 18719)
         };
 
-        var closedToOpen = new Dictionary<short, short>(pairs.Length);
-        var openToClosed = new Dictionary<short, short>(pairs.Length);
+        var closedToOpen = new Dictionary<ushort, ushort>(pairs.Length);
+        var openToClosed = new Dictionary<ushort, ushort>(pairs.Length);
 
         foreach ((var closed, var open) in pairs)
         {
@@ -110,24 +110,24 @@ public static class DoorTable
     /// <summary>
     ///     Gets the closed tile ID for an open tile. Returns null if the tile is not a recognized door.
     /// </summary>
-    public static short? GetClosedTileId(short openTileId) => OpenToClosed.TryGetValue(openTileId, out var closed) ? closed : null;
+    public static ushort? GetClosedTileId(ushort openTileId) => OpenToClosed.TryGetValue(openTileId, out var closed) ? closed : null;
 
     /// <summary>
     ///     Gets the open tile ID for a closed tile. Returns null if the tile is not a recognized door.
     /// </summary>
-    public static short? GetOpenTileId(short closedTileId) => ClosedToOpen.TryGetValue(closedTileId, out var open) ? open : null;
+    public static ushort? GetOpenTileId(ushort closedTileId) => ClosedToOpen.TryGetValue(closedTileId, out var open) ? open : null;
 
     /// <summary>
     ///     Returns true when the tile id matches either the closed or open variant of any catalogued door pair.
     /// </summary>
-    public static bool IsDoorTile(short tileId) => ClosedToOpen.ContainsKey(tileId) || OpenToClosed.ContainsKey(tileId);
+    public static bool IsDoorTile(ushort tileId) => ClosedToOpen.ContainsKey(tileId) || OpenToClosed.ContainsKey(tileId);
 
     /// <summary>
     ///     Enumerates door counterparts of a given tile id. If the tile is a known closed door, yields its open variant.
     ///     If the tile is a known open door, yields its closed variant. Empty otherwise. Used by map preload to ensure
     ///     both sides of every door end up in the foreground atlas.
     /// </summary>
-    public static IEnumerable<short> GetVariants(short tileId)
+    public static IEnumerable<ushort> GetVariants(ushort tileId)
     {
         if (ClosedToOpen.TryGetValue(tileId, out var open))
             yield return open;
