@@ -6,7 +6,7 @@ constraints enforced in code.
 
 Counterpart to `controlFileList.txt` (which catalogs the *legacy* prefab/EPF/SPF world). Same
 altitude: reference, not tutorial. Artist-facing narrative — authoring workflow, dye rationale,
-roadmap — lives in the document repo's `plans/hybrasyl.client/asset-pack-format.md` and its
+roadmap — lives in the document repo's `plans/brigid/asset-pack-format.md` and its
 `*-asset-pack-scoping.md` siblings; see [Further reading](#further-reading).
 
 Ground truth is `Brigid.Data/AssetPacks/`. When this file and any other doc disagree, the code wins
@@ -606,7 +606,7 @@ current state.
 
 ## Further reading
 
-Document repo, `plans/hybrasyl.client/`:
+Document repo, `plans/brigid/`:
 
 - `asset-pack-format.md` — artist-facing container spec and authoring workflow
 - `world-map-asset-pack-scoping.md`, `town-map-asset-pack-scoping.md`,
