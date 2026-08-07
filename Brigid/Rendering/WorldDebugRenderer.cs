@@ -34,7 +34,13 @@ public sealed class WorldDebugRenderer
     public void Clear() => LabelCache.Clear();
 
     /// <summary>
-    ///     Draws all debug overlays. Call within a SpriteBatch Begin/End block with camera transform applied.
+    ///     Draws the pixel-texture geometry. Call within a SpriteBatch Begin/End block with camera transform applied.
+    ///     <para>
+    ///         Entity labels are <em>not</em> drawn here. They are queued and drawn by <see cref="DrawLabels" /> from
+    ///         the native pass, because text rasterized into the 640x480 virtual target is point-upscaled with the
+    ///         world and renders blurry. Positions need no conversion: both passes carry the same viewport
+    ///         translation and differ only by the native scale.
+    ///     </para>
     /// </summary>
     public void Draw(
         SpriteBatch spriteBatch,
@@ -80,10 +86,22 @@ public sealed class WorldDebugRenderer
                 tile);
 
         DrawEntityClickHitboxes(spriteBatch, pixel, entityHitBoxes);
+    }
 
-        //deferred entity debug labels — drawn after all pixel-texture geometry to minimize batch breaks
+    /// <summary>
+    ///     Draws the entity labels queued by the preceding <see cref="Draw" />. Call from the native pass, inside a
+    ///     batch carrying the viewport translation and native scale.
+    /// </summary>
+    /// <remarks>
+    ///     Drains the queue, so a frame in which <see cref="Draw" /> did not run — the overlay was toggled off, the
+    ///     screen changed — draws nothing rather than repeating the last frame's labels.
+    /// </remarks>
+    public void DrawLabels(SpriteBatch spriteBatch)
+    {
         foreach ((var text, var pos) in PendingLabels)
             text.Draw(spriteBatch, pos);
+
+        PendingLabels.Clear();
     }
 
     private static void DrawEntityClickHitboxes(SpriteBatch spriteBatch, Texture2D pixel, IReadOnlyList<EntityHitBox> entityHitBoxes)
