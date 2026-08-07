@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Data.Models;
 using Brigid.Rendering;
 using Brigid.Systems;
 using Brigid.Utilities;
@@ -72,18 +73,19 @@ public sealed class LobbyLoginControl : PrefabPanel
             btn.Enabled = false;
         }
 
-        //animated logo — logo control has 20 frames. create as static image first,
-        //then replace with LogoImage using the prefab's frames.
+        //animated logo. LOGO's two <IMAGE> entries are the endpoints of the flame loop, not two visual states, so
+        //the span is expanded here rather than read off the prefab's rendered images — drawing those two alone
+        //blinks the ring on and off. Create as static image first, then replace with LogoImage.
         var logoImage = CreateImage("LOGO");
 
         if (logoImage is not null)
         {
-            var logoPrefab = PrefabSet["LOGO"];
             var cache = UiRenderer.Instance!;
-            var animFrames = new Texture2D[logoPrefab.Images.Count];
+            (var logoSpf, var firstFrame, var frameCount) = ControlPrefab.ResolveAnimationSpan(PrefabSet["LOGO"].Control.Images);
+            var animFrames = new Texture2D[frameCount];
 
-            for (var i = 0; i < logoPrefab.Images.Count; i++)
-                animFrames[i] = cache.GetPrefabTexture(PrefabSet.Name, "LOGO", i);
+            for (var i = 0; i < frameCount; i++)
+                animFrames[i] = cache.GetSpfTexture(logoSpf, firstFrame + i);
 
             AnimatedLogo = new LogoImage
             {
