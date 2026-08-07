@@ -564,6 +564,9 @@ public sealed class LobbyLoginScreen : IScreen
         Connecting = false;
         AwaitingCharFinalize = false;
 
+        if (!CharCreateFailure.IsDocumented(pkt.Type))
+            NoticeDebugLog.Write($"char-create: undocumented 0x02 result code 0x{pkt.Type:X2} — \"{pkt.Message}\"");
+
         switch (CharCreateFailure.FieldFor(pkt.Type))
         {
             case CharCreateFailureField.Name:

@@ -53,6 +53,48 @@ public class CharCreateFailureTests
     public void UnclassifiedCodes_BlameNoField(byte type)
         => Assert.Equal(CharCreateFailureField.None, CharCreateFailure.FieldFor(type));
 
+    /// <summary>
+    ///     Retail defines 0, the 3–10 error families, and the message-only 0x0B. The caller logs anything
+    ///     else, which is the diagnostic the removed throw was accidentally providing.
+    /// </summary>
+    [Theory]
+    [InlineData(0x00)]
+    [InlineData(0x03)]
+    [InlineData(0x04)]
+    [InlineData(0x05)]
+    [InlineData(0x0A)]
+    [InlineData(0x0B)]
+    public void DocumentedCodes_AreNotReportedAsUnknown(byte type)
+        => Assert.True(CharCreateFailure.IsDocumented(type));
+
+    /// <summary>
+    ///     0x01/0x02 sit inside retail's range but have no defined behaviour, and 0x0E/0x0F are login-screen
+    ///     codes with no meaning during creation — all four are undocumented *here*.
+    /// </summary>
+    [Theory]
+    [InlineData(0x01)]
+    [InlineData(0x02)]
+    [InlineData(0x0C)]
+    [InlineData(0x0E)]
+    [InlineData(0x0F)]
+    [InlineData(0xFF)]
+    public void UndocumentedCodes_AreReportedAsUnknown(byte type)
+        => Assert.False(CharCreateFailure.IsDocumented(type));
+
+    /// <summary>
+    ///     0x0B classifies as None because it blames no field, not because it is unknown — the two reasons a
+    ///     code reaches None must stay distinguishable, which is the whole point of the predicate.
+    /// </summary>
+    [Fact]
+    public void MessageOnlyIsNotConflatedWithUnknown()
+    {
+        Assert.Equal(CharCreateFailureField.None, CharCreateFailure.FieldFor(0x0B));
+        Assert.Equal(CharCreateFailureField.None, CharCreateFailure.FieldFor(0xFF));
+
+        Assert.True(CharCreateFailure.IsDocumented(0x0B));
+        Assert.False(CharCreateFailure.IsDocumented(0xFF));
+    }
+
     /// <summary>No code may be both, and none may throw — swept over the whole byte range.</summary>
     [Fact]
     public void EveryByteClassifiesWithoutThrowing()

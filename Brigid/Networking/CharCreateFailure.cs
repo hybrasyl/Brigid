@@ -52,6 +52,20 @@ internal enum CharCreateFailureField
 internal static class CharCreateFailure
 {
     /// <summary>
+    ///     Whether retail's CreateA handler has defined behaviour for this code &mdash; success, one of the two
+    ///     error families, or the message-only 0x0B. Everything else it silently ignores.
+    /// </summary>
+    /// <remarks>
+    ///     The throwing default this class replaced was, accidentally, the only instrument pointing at an
+    ///     unmodelled code: the exception is how the 0x04 rejection surfaced at all. Returning
+    ///     <see cref="CharCreateFailureField.None" /> quietly would have made the next such code invisible
+    ///     instead of merely unhandled, so the caller logs on this predicate to keep the signal without the
+    ///     exception.
+    /// </remarks>
+    /// <param name="type">The result code byte, straight off the wire.</param>
+    public static bool IsDocumented(byte type) => type is 0x00 or (>= 0x03 and <= 0x0B);
+
+    /// <summary>
     ///     Maps a 0x02 LoginMessage result code to the field the client should clear.
     /// </summary>
     /// <param name="type">The result code byte, straight off the wire.</param>
