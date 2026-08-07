@@ -564,25 +564,19 @@ public sealed class LobbyLoginScreen : IScreen
         Connecting = false;
         AwaitingCharFinalize = false;
 
-        switch (messageType)
+        switch (CharCreateFailure.FieldFor(pkt.Type))
         {
-            case LoginMessageType.ClearNameMessage:
+            case CharCreateFailureField.Name:
                 CharCreateControl.NameField?.Text = string.Empty;
 
                 break;
-            case LoginMessageType.ClearPswdMessage:
+            case CharCreateFailureField.Password:
                 CharCreateControl.PasswordField?.Text = string.Empty;
                 CharCreateControl.PasswordConfirmField?.Text = string.Empty;
 
                 break;
-            case LoginMessageType.Confirm:
+            case CharCreateFailureField.None:
                 break;
-            case LoginMessageType.CharacterDoesntExist:
-                break;
-            case LoginMessageType.WrongPassword:
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
         }
 
         LobbyLoginPopupMessage.Show(pkt.Message ?? "Character creation failed.");
