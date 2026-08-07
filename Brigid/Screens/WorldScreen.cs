@@ -15,6 +15,7 @@ using Brigid.Controls.World.ViewPort;
 using Brigid.Data.Repositories;
 using Brigid.Extensions;
 using Brigid.Models;
+using Brigid.Networking;
 using Brigid.Rendering.Models;
 using Brigid.Systems;
 using Brigid.Systems.Keybinds;
@@ -324,6 +325,12 @@ public sealed partial class WorldScreen : IScreen
             maxP,
             maxM) =>
         {
+            // USDA reads wire bytes 2 and 4 as Monk and Rogue, the reverse of what the retail
+            // client sends, so the caps must be pre-swapped for it to store what the player asked
+            // for. See RetailGroupBoxQuirk; no-op off retail.
+            var (rogueField, monkField) =
+                RetailGroupBoxQuirk.CapsForWire(maxR, maxM, GlobalSettings.IsCursed);
+
             Game.Connection.SendCreateGroupBox(
                 WorldState.PlayerName,
                 name,
@@ -332,9 +339,9 @@ public sealed partial class WorldScreen : IScreen
                 maxLvl,
                 maxW,
                 maxWiz,
-                maxR,
+                rogueField,
                 maxP,
-                maxM);
+                monkField);
             WorldState.Group.MarkGroupBoxActive();
         };
 
