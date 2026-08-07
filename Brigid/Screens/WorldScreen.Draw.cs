@@ -259,6 +259,10 @@ public sealed partial class WorldScreen
                 null,
                 Matrix.CreateTranslation(vr.X, vr.Y, 0f) * nativeScale);
             Overlays.Draw(spriteBatch, Camera, MapFile.Height);
+
+            //entity debug labels queued by DebugRenderer.Draw in pass 1 — text has to land here, not in the
+            //upscaled world target. No-op when the overlay is off, since nothing was queued.
+            DebugRenderer.DrawLabels(spriteBatch);
             spriteBatch.End();
         }
 
