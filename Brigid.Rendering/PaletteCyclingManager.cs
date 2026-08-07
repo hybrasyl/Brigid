@@ -138,14 +138,14 @@ public sealed class PaletteCyclingManager : IDisposable
                         registeredBg,
                         bgTilesByPalette);
 
-                if (tile.LeftForeground.IsRenderedTileIndex())
+                if (((int)tile.LeftForeground).IsRenderedTileIndex())
                     TryRegisterTile(
                         tile.LeftForeground,
                         fgLookup,
                         registeredFg,
                         fgTilesByPalette);
 
-                if (tile.RightForeground.IsRenderedTileIndex())
+                if (((int)tile.RightForeground).IsRenderedTileIndex())
                     TryRegisterTile(
                         tile.RightForeground,
                         fgLookup,

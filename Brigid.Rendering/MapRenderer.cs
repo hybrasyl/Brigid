@@ -242,7 +242,7 @@ public sealed class MapRenderer : IDisposable
         var worldPos = Camera.TileToWorld(x, y, mapFile.Height);
 
         //left foreground
-        if (tile.LeftForeground.IsRenderedTileIndex())
+        if (((int)tile.LeftForeground).IsRenderedTileIndex())
         {
             var lfgTileId = ResolveAnimatedTileId(
                 tile.LeftForeground,
@@ -259,7 +259,7 @@ public sealed class MapRenderer : IDisposable
         }
 
         //right foreground
-        if (tile.RightForeground.IsRenderedTileIndex())
+        if (((int)tile.RightForeground).IsRenderedTileIndex())
         {
             var rfgTileId = ResolveAnimatedTileId(
                 tile.RightForeground,
@@ -379,9 +379,9 @@ public sealed class MapRenderer : IDisposable
                 var tile = mapFile.Tiles[x, y];
                 var worldPos = Camera.TileToWorld(x, y, mapFile.Height);
 
-                if ((tile.LeftForeground.IsRenderedTileIndex()
+                if ((((int)tile.LeftForeground).IsRenderedTileIndex()
                      && FgSpriteContains(camera, worldPos.X, worldPos.Y, tile.LeftForeground, screenX, screenY))
-                    || (tile.RightForeground.IsRenderedTileIndex()
+                    || (((int)tile.RightForeground).IsRenderedTileIndex()
                         && FgSpriteContains(camera, worldPos.X + CONSTANTS.HALF_TILE_WIDTH, worldPos.Y, tile.RightForeground, screenX, screenY)))
                 {
                     bestDepth = depth;
@@ -553,10 +553,10 @@ public sealed class MapRenderer : IDisposable
                 if (tile.Background > 0)
                     uniqueBgTileIds.Add(tile.Background);
 
-                if (tile.LeftForeground.IsRenderedTileIndex())
+                if (((int)tile.LeftForeground).IsRenderedTileIndex())
                     uniqueFgTileIds.Add(tile.LeftForeground);
 
-                if (tile.RightForeground.IsRenderedTileIndex())
+                if (((int)tile.RightForeground).IsRenderedTileIndex())
                     uniqueFgTileIds.Add(tile.RightForeground);
             }
         }

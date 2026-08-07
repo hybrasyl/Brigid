@@ -120,9 +120,9 @@ public sealed partial class WorldScreen
         for (var x = 0; x < tileCount; x++)
         {
             var offset = x * 6;
-            var background = (short)((data[offset] << 8) | data[offset + 1]);
-            var leftForeground = (short)((data[offset + 2] << 8) | data[offset + 3]);
-            var rightForeground = (short)((data[offset + 4] << 8) | data[offset + 5]);
+            var background = (ushort)((data[offset] << 8) | data[offset + 1]);
+            var leftForeground = (ushort)((data[offset + 2] << 8) | data[offset + 3]);
+            var rightForeground = (ushort)((data[offset + 4] << 8) | data[offset + 5]);
 
             MapFile.Tiles[x, y] = new MapTile
             {
@@ -161,7 +161,7 @@ public sealed partial class WorldScreen
                 Device,
                 MapFile,
                 MapLoading.SetProgress,
-                static id => DoorTable.GetVariants((short)id).Select(static v => (int)v));
+                static id => DoorTable.GetVariants((ushort)id).Select(static v => (int)v));
             TabMapRenderer.Generate(Device, MapFile);
             (MapPathfinder, MapWaterTiles) = BuildPathfinder(MapFile);
             MapPreloaded = true;
@@ -228,7 +228,7 @@ public sealed partial class WorldScreen
 
         var tile = MapFile.Tiles[tileX, tileY];
 
-        return tile.LeftForeground.IsRenderedTileIndex() || tile.RightForeground.IsRenderedTileIndex();
+        return ((int)tile.LeftForeground).IsRenderedTileIndex() || ((int)tile.RightForeground).IsRenderedTileIndex();
     }
 
     /// <summary>
@@ -242,7 +242,7 @@ public sealed partial class WorldScreen
             return false;
 
         //an open door foreground is walkable regardless of SOTP
-        if (DoorTable.GetClosedTileId((short)fgIndex).HasValue)
+        if (DoorTable.GetClosedTileId((ushort)fgIndex).HasValue)
             return false;
 
         var sotpIndex = fgIndex - 1;
@@ -321,9 +321,9 @@ public sealed partial class WorldScreen
             for (var y = 0; y < height; y++)
                 for (var x = 0; x < width; x++)
                 {
-                    var background = (short)(fileBytes[index] | (fileBytes[index + 1] << 8));
-                    var leftForeground = (short)(fileBytes[index + 2] | (fileBytes[index + 3] << 8));
-                    var rightForeground = (short)(fileBytes[index + 4] | (fileBytes[index + 5] << 8));
+                    var background = (ushort)(fileBytes[index] | (fileBytes[index + 1] << 8));
+                    var leftForeground = (ushort)(fileBytes[index + 2] | (fileBytes[index + 3] << 8));
+                    var rightForeground = (ushort)(fileBytes[index + 4] | (fileBytes[index + 5] << 8));
                     index += 6;
 
                     mapFile.Tiles[x, y] = new MapTile
