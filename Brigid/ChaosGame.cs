@@ -588,6 +588,30 @@ public sealed class ChaosGame : Game
     }
 
     /// <summary>
+    ///     Republishes the virtual→native scale to everything that caches it: the mouse coordinate transform and text
+    ///     measurement. The render target is stretched to fill the backbuffer, so the scale is per-axis — equal on both
+    ///     axes when 4:3 is locked, unequal when the user has maximized to a non-4:3 window.
+    ///     <para>
+    ///         Every <c>ApplyChanges</c> must be followed by this. The backbuffer can change part-way through a frame
+    ///         (Alt+Enter cycling resizes from inside input dispatch), and until the scale is republished the rest of
+    ///         that frame maps mouse events and measures text against the previous window size. Worse, <c>Draw</c> then
+    ///         reads a fresh native scale while <see cref="FontEngine" /> still holds the stale layout scale, and the
+    ///         native-pass assertion fires on a legitimate draw.
+    ///     </para>
+    /// </summary>
+    private void SyncScalesToBackBuffer()
+    {
+        var pp = GraphicsDevice.PresentationParameters;
+        var scaleX = (float)pp.BackBufferWidth / VIRTUAL_WIDTH;
+        var scaleY = (float)pp.BackBufferHeight / VIRTUAL_HEIGHT;
+
+        InputBuffer.SetVirtualScale(scaleX, scaleY);
+
+        //a ClientSizeChanged raised while the window is still being created lands before LoadContent builds the engine
+        FontEngine.Instance?.SetLayoutScale(scaleX, scaleY);
+    }
+
+    /// <summary>
     ///     Resizes the window to <paramref name="multiplier" />× the 640×480 virtual resolution, clamped to what fits the
     ///     current display. Leaves any maximized state so the OS window actually resizes. Returns the applied multiplier.
     /// </summary>
@@ -606,6 +630,7 @@ public sealed class ChaosGame : Game
         Graphics.PreferredBackBufferWidth = VIRTUAL_WIDTH * clamped;
         Graphics.PreferredBackBufferHeight = VIRTUAL_HEIGHT * clamped;
         Graphics.ApplyChanges();
+        SyncScalesToBackBuffer();
         ResizingInProgress = false;
 
         return clamped;
@@ -681,6 +706,7 @@ public sealed class ChaosGame : Game
         Graphics.PreferredBackBufferWidth = newWidth;
         Graphics.PreferredBackBufferHeight = newHeight;
         Graphics.ApplyChanges();
+        SyncScalesToBackBuffer();
 
         ResizingInProgress = false;
     }
@@ -749,16 +775,7 @@ public sealed class ChaosGame : Game
     {
         DebugOverlay.BeginFrame();
 
-        //compute mouse coordinate transform. the render target is stretched to fill the
-        //backbuffer, so the raw→virtual scale is per-axis — equal on both axes when 4:3 is
-        //locked, unequal when the user has maximized to a non-4:3 window.
-        var ppt = GraphicsDevice.PresentationParameters;
-        var scaleX = (float)ppt.BackBufferWidth / VIRTUAL_WIDTH;
-        var scaleY = (float)ppt.BackBufferHeight / VIRTUAL_HEIGHT;
-        InputBuffer.SetVirtualScale(scaleX, scaleY);
-
-        //keep text measurement in sync with the native draw size so right-aligned multi-glyph values land flush
-        FontEngine.Instance.SetLayoutScale(scaleX, scaleY);
+        SyncScalesToBackBuffer();
 
         //freeze buffered input for this frame before anything reads it
         InputBuffer.Update(IsActive);
