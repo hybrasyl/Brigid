@@ -4,5 +4,7 @@
         <PackageReference Include="Chaos.Geometry"/>
         <PackageReference Include="DALib" Condition="'$(UseLocalDALib)' != 'true'" />
         <ProjectReference Include="$(LocalDALibProjectPath)" Condition="'$(UseLocalDALib)' == 'true'" />
+        <PackageReference Include="Hybrasyl.Protocol" Condition="'$(UseLocalProtocol)' != 'true'" />
+        <ProjectReference Include="$(LocalProtocolProjectPath)" Condition="'$(UseLocalProtocol)' == 'true'" />
     </ItemGroup>
 </Project>
