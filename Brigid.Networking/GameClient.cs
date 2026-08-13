@@ -4,6 +4,7 @@ using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using System.Threading.Channels;
 using DALib.Networking.Crypto;
 using DALib.Networking.Packets.Server;
 using DALib.Networking.Wire;
@@ -20,13 +21,11 @@ namespace Brigid.Networking;
 public sealed class GameClient : IDisposable
 {
     private const int RECEIVE_BUFFER_SIZE = ushort.MaxValue * 8;
-    private const int INITIAL_SEND_ARGS_COUNT = 5;
 
     //the codec is stateless and shared across every connection; only CryptoState is per-connection.
     private static readonly PacketCodec Codec = new();
 
     private readonly ConcurrentQueue<IServerPacket> InboundQueue = new();
-    private readonly ConcurrentQueue<SocketAsyncEventArgs> SendArgsPool = new();
 
     private readonly Lock SendLock = new();
     private int ConnectionGeneration;
@@ -37,7 +36,20 @@ public sealed class GameClient : IDisposable
     private IMemoryOwner<byte>? ReceiveMemoryOwner;
     private Task? ReceiveTask;
 
+    //encoded frames queued for the send pump. Written under SendLock so channel order matches the
+    //order the codec allocated crypto ordinals in; drained by the single SendTask.
+    private Channel<byte[]>? SendQueue;
+    private Task? SendTask;
+
     private Socket? Socket;
+
+    /// <summary>
+    ///     The byte stream this connection reads and writes. A <see cref="NetworkStream" /> for a
+    ///     plaintext connection; the STARTTLS upgrade replaces it with an <c>SslStream</c> wrapping
+    ///     the same socket, which is why all traffic goes through a stream rather than the socket
+    ///     even before TLS exists.
+    /// </summary>
+    private Stream? Transport;
 
     /// <summary>
     ///     This connection's crypto state (seed, key, key table, and ordinal counters). Replaced wholesale at each
@@ -185,19 +197,6 @@ public sealed class GameClient : IDisposable
         }
     }
 
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="GameClient" /> class.
-    /// </summary>
-    public GameClient()
-    {
-        for (var i = 0; i < INITIAL_SEND_ARGS_COUNT; i++)
-        {
-            var args = new SocketAsyncEventArgs();
-            args.Completed += ReuseSendArgs;
-            SendArgsPool.Enqueue(args);
-        }
-    }
-
     /// <inheritdoc />
     public void Dispose()
     {
@@ -226,8 +225,9 @@ public sealed class GameClient : IDisposable
         };
 
         Socket.Connect(host, port);
+        Transport = new NetworkStream(Socket, false);
 
-        StartReceiveLoop();
+        StartPumps();
     }
 
     /// <summary>
@@ -249,8 +249,9 @@ public sealed class GameClient : IDisposable
         };
 
         await Socket.ConnectAsync(host, port, ct);
+        Transport = new NetworkStream(Socket, false);
 
-        StartReceiveLoop();
+        StartPumps();
     }
 
     /// <summary>
@@ -271,6 +272,10 @@ public sealed class GameClient : IDisposable
             /* ignored */
         }
 
+        //stop accepting sends before the transport goes away, so a Send racing this call is dropped
+        //rather than writing to a disposed stream.
+        SendQueue?.Writer.TryComplete();
+
         try
         {
             Socket?.Shutdown(SocketShutdown.Both);
@@ -278,6 +283,16 @@ public sealed class GameClient : IDisposable
         {
             /* ignored */
         }
+
+        try
+        {
+            Transport?.Dispose();
+        } catch
+        {
+            /* ignored */
+        }
+
+        Transport = null;
 
         try
         {
@@ -302,6 +317,18 @@ public sealed class GameClient : IDisposable
         }
 
         ReceiveTask = null;
+
+        try
+        {
+            SendTask?.GetAwaiter()
+                    .GetResult();
+        } catch
+        {
+            /* ignored */
+        }
+
+        SendTask = null;
+        SendQueue = null;
 
         try
         {
@@ -353,31 +380,20 @@ public sealed class GameClient : IDisposable
         if (!Connected)
             return;
 
-        ReadOnlyMemory<byte> wire;
-        SocketAsyncEventArgs args;
+        var writer = SendQueue?.Writer;
+
+        if (writer is null)
+            return;
 
         using (SendLock.EnterScope())
         {
-            //EncodeClient advances Crypto.ClientOrdinal for encrypted opcodes; hold the lock across encode+dispatch so
-            //ordinals stay monotonic and frames hit the socket in ordinal order.
-            wire = Codec.EncodeClient(packet, Crypto);
+            //EncodeClient advances Crypto.ClientOrdinal for encrypted opcodes; hold the lock across encode+enqueue so
+            //ordinals stay monotonic and the queue's FIFO order is the ordinal order the pump writes in.
+            var wire = Codec.EncodeClient(packet, Crypto);
 
             NoticeDebugLog.Write($"outbound opcode=0x{packet.Opcode:X2} len={wire.Length} hex={HexPreview(wire.Span)}");
 
-            var owner = MemoryPool<byte>.Shared.Rent(wire.Length);
-            wire.Span.CopyTo(owner.Memory.Span);
-            args = DequeueSendArgs(owner, wire.Length);
-        }
-
-        try
-        {
-            var completedSynchronously = !Socket!.SendAsync(args);
-
-            if (completedSynchronously)
-                ReuseSendArgs(this, args);
-        } catch
-        {
-            ReuseSendArgs(this, args);
+            writer.TryWrite(wire.ToArray());
         }
     }
 
@@ -420,15 +436,56 @@ public sealed class GameClient : IDisposable
     /// <param name="newSequence">The new ordinal value.</param>
     public void SetSequence(byte newSequence) => Crypto.ClientOrdinal = newSequence;
 
-    private void StartReceiveLoop()
+    private void StartPumps()
     {
         ReceiveMemoryOwner = MemoryPool<byte>.Shared.Rent(RECEIVE_BUFFER_SIZE);
         ReceiveCount = 0;
         IsAlive = true;
 
+        //single reader: the send pump is the only writer to the transport, which is what serializes
+        //writes now that SslStream (which forbids overlapping writes) is a possible transport.
+        SendQueue = Channel.CreateUnbounded<byte[]>(
+            new UnboundedChannelOptions
+            {
+                SingleReader = true,
+                SingleWriter = false
+            });
+
         var generation = Interlocked.Increment(ref ConnectionGeneration);
         ReceiveCts = new CancellationTokenSource();
-        ReceiveTask = Task.Run(() => ReceiveLoopAsync(ReceiveCts.Token, generation), ReceiveCts.Token);
+
+        var token = ReceiveCts.Token;
+        var reader = SendQueue.Reader;
+
+        ReceiveTask = Task.Run(() => ReceiveLoopAsync(token, generation), token);
+        SendTask = Task.Run(() => SendLoopAsync(reader, token), token);
+    }
+
+    private async Task SendLoopAsync(ChannelReader<byte[]> reader, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var wire in reader.ReadAllAsync(ct))
+            {
+                //read the transport at dispatch rather than capturing it: a STARTTLS upgrade replaces it,
+                //and a frame queued before the swap must go out on whichever stream is current when it is
+                //actually written.
+                var transport = Transport;
+
+                if (transport is null)
+                    break;
+
+                await transport.WriteAsync(wire, ct);
+                await transport.FlushAsync(ct);
+            }
+        } catch (OperationCanceledException)
+        {
+            //disconnect cancelled the pump; nothing to report.
+        } catch (Exception ex)
+        {
+            //the receive loop owns disconnect detection, so a dead socket here is logged, not escalated.
+            NoticeDebugLog.Write($"!!! send pump stopped: {ex.GetType().Name}: {ex.Message}");
+        }
     }
 
     #region Private
@@ -451,7 +508,7 @@ public sealed class GameClient : IDisposable
 
                 try
                 {
-                    bytesRead = await Socket!.ReceiveAsync(memory, SocketFlags.None, ct);
+                    bytesRead = await Transport!.ReadAsync(memory, ct);
                 } catch (OperationCanceledException)
                 {
                     break;
@@ -553,32 +610,6 @@ public sealed class GameClient : IDisposable
 
                 return;
         }
-    }
-
-    private SocketAsyncEventArgs DequeueSendArgs(IMemoryOwner<byte> owner, int length)
-    {
-        if (!SendArgsPool.TryDequeue(out var args))
-        {
-            args = new SocketAsyncEventArgs();
-            args.Completed += ReuseSendArgs;
-        }
-
-        args.UserToken = owner;
-        args.SetBuffer(owner.Memory[..length]);
-
-        return args;
-    }
-
-    private static void ReuseSendArgs(object? sender, SocketAsyncEventArgs args)
-    {
-        if (args.UserToken is IMemoryOwner<byte> owner)
-        {
-            owner.Dispose();
-            args.UserToken = null;
-        }
-
-        if (sender is GameClient client)
-            client.SendArgsPool.Enqueue(args);
     }
 
     private static string HexPreview(ReadOnlySpan<byte> wire)
