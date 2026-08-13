@@ -597,18 +597,44 @@ public sealed class GameClient : IDisposable
 
         var tls = new SslStream(Transport!, false);
 
-        await tls.AuthenticateAsClientAsync(TlsConfig.ClientOptions(host, CertificateValidator), deadline.Token);
+        try
+        {
+            await tls.AuthenticateAsClientAsync(TlsConfig.ClientOptions(host, CertificateValidator), deadline.Token);
+        } catch (Exception ex)
+        {
+            //logged here rather than left to the caller: an upgrade failure otherwise surfaces only as a
+            //disconnect, with the reason — very often a certificate the system roots do not trust —
+            //invisible in the log.
+            NoticeDebugLog.Write(
+                $"!!! TLS handshake with {host} failed: {ex.GetType().Name}: {ex.Message}"
+                + (ex.InnerException is { } inner ? $" <- {inner.GetType().Name}: {inner.Message}" : string.Empty));
+
+            throw;
+        }
 
         //published before negotiating so the negotiation itself travels encrypted.
         Transport = tls;
 
-        var result = await DialectNegotiator.NegotiateAsClientAsync(tls, DialectPolicy, ClientVersion, deadline.Token);
+        NoticeDebugLog.Write($"TLS handshake with {host} complete ({tls.SslProtocol}); negotiating dialect");
 
-        Negotiated = result.Resolution;
+        try
+        {
+            var result = await DialectNegotiator.NegotiateAsClientAsync(tls, DialectPolicy, ClientVersion, deadline.Token);
 
-        NoticeDebugLog.Write(
-            $"TLS established with {host}; mode={result.Resolution.Mode} dialect={result.Resolution.Dialect} "
-            + $"offer=0x{result.Offer.MinDialect:X2}..0x{result.Offer.MaxDialect:X2}");
+            Negotiated = result.Resolution;
+
+            NoticeDebugLog.Write(
+                $"TLS established with {host}; mode={result.Resolution.Mode} dialect={result.Resolution.Dialect} "
+                + $"offer=0x{result.Offer.MinDialect:X2}..0x{result.Offer.MaxDialect:X2}");
+        } catch (Exception ex)
+        {
+            //a negotiation failure after a good handshake usually means the two ends disagree on the
+            //negotiation wire format, which is not itself versioned by the dialect mechanism.
+            NoticeDebugLog.Write(
+                $"!!! dialect negotiation with {host} failed: {ex.GetType().Name}: {ex.Message}");
+
+            throw;
+        }
     }
 
     private void PublishGreetingCapability(ReadOnlyMemory<byte> frame, bool isClean)

@@ -199,6 +199,7 @@ public sealed class ConnectionManager : IDisposable
         {
             PendingLobbyVersion = false;
             State = ConnectionState.Disconnected;
+            NoticeDebugLog.Write($"!!! lobby connect failed: {ex.GetType().Name}: {ex.Message}");
             OnError?.Invoke($"Failed to connect to lobby: {ex.Message}");
         }
     }
@@ -318,6 +319,7 @@ public sealed class ConnectionManager : IDisposable
         } catch (Exception ex)
         {
             State = ConnectionState.Disconnected;
+            NoticeDebugLog.Write($"!!! redirect connect failed: {ex.GetType().Name}: {ex.Message}");
             OnError?.Invoke($"Failed to connect after redirect: {ex.Message}");
 
             return;
