@@ -46,6 +46,7 @@ public sealed class LobbyLoginScreen : IScreen
     private bool PendingConfigSwitch;
     private OkPopupMessageControl LobbyLoginPopupMessage = null!;
     private OkPopupMessageControl MigrationPrompt = null!;
+    private CertificateTrustPromptControl TrustPrompt = null!;
     private IList<ServerEntry> ServerList = [];
     private ServerSelectControl ServerSelectControl = null!;
 
@@ -153,6 +154,10 @@ public sealed class LobbyLoginScreen : IScreen
         MigrationPrompt.OnOk += OnMigrationImport;
         MigrationPrompt.OnCancel += OnMigrationSkip;
 
+        TrustPrompt = new CertificateTrustPromptControl { Name = "TrustPrompt" };
+        TrustPrompt.OnTrusted += OnCertificateTrusted;
+        TrustPrompt.OnDeclined += CertificateTrustStore.Decline;
+
         Root = new LobbyRootPanel
         {
             Name = "LobbyRoot",
@@ -167,6 +172,7 @@ public sealed class LobbyLoginScreen : IScreen
         Root.AddChild(PasswordChangeControl);
         Root.AddChild(LobbyLoginPopupMessage);
         Root.AddChild(MigrationPrompt);
+        Root.AddChild(TrustPrompt);
 
         //build ui atlas after all login controls are constructed
         UiRenderer.Instance?.BuildAtlas();
@@ -229,8 +235,32 @@ public sealed class LobbyLoginScreen : IScreen
             return;
         }
 
+        MaybeShowTrustPrompt();
+
         Game.Dispatcher.ProcessInput(Root!, gameTime);
         Root!.Update(gameTime);
+    }
+
+    /// <summary>
+    ///     Raises the certificate prompt from the game loop rather than from the connect failure that
+    ///     produced it: that failure surfaces on the connect task's thread, and building a modal there
+    ///     would mutate the control tree while this loop is drawing it.
+    /// </summary>
+    private void MaybeShowTrustPrompt()
+    {
+        if (TrustPrompt.Visible || CertificateTrustStore.Pending is not { } pending)
+            return;
+
+        Connecting = false;
+        TrustPrompt.Show(pending);
+    }
+
+    private void OnCertificateTrusted(string endpoint, string fingerprint, CertificateTrustPath path)
+    {
+        CertificateTrustStore.Trust(endpoint, fingerprint, path);
+
+        //the refusal that raised the prompt already dropped the connection, so accepting means reconnecting.
+        BeginLobbyConnect();
     }
 
     private void WireRootInputHandlers() => ((LobbyRootPanel)Root!).Screen = this;
