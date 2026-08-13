@@ -4,6 +4,7 @@ using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using DALib.Networking.Crypto;
@@ -99,6 +100,14 @@ public sealed class GameClient : IDisposable
     ///     validation; the trust-on-first-use flow supplies its own.
     /// </summary>
     public RemoteCertificateValidationCallback? CertificateValidator { get; set; }
+
+    /// <summary>
+    ///     Revocation policy for the TLS upgrade, supplied by the same trust policy that supplies
+    ///     <see cref="CertificateValidator" />. It turns on whether the endpoint has a revocation
+    ///     responder to consult at all, which is a property of how its trust was established — not of
+    ///     whether it is pinned.
+    /// </summary>
+    public X509RevocationMode CertificateRevocation { get; set; } = X509RevocationMode.Online;
 
     /// <summary>The dialect this connection negotiated, or null when no TLS upgrade occurred.</summary>
     public DialectResolution? Negotiated { get; private set; }
@@ -599,7 +608,9 @@ public sealed class GameClient : IDisposable
 
         try
         {
-            await tls.AuthenticateAsClientAsync(TlsConfig.ClientOptions(host, CertificateValidator), deadline.Token);
+            await tls.AuthenticateAsClientAsync(
+                TlsConfig.ClientOptions(host, CertificateValidator, CertificateRevocation),
+                deadline.Token);
         } catch (Exception ex)
         {
             //logged here rather than left to the caller: an upgrade failure otherwise surfaces only as a
