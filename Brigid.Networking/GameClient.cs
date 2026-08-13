@@ -319,16 +319,52 @@ public sealed class GameClient : IDisposable
         await Socket.ConnectAsync(host, port, ct);
         Transport = new NetworkStream(Socket, false);
 
-        var carryOver = expectGreeting ? await ReadGreetingAsync(ct) : ReadOnlyMemory<byte>.Empty;
+        try
+        {
+            var carryOver = expectGreeting ? await ReadGreetingAsync(ct) : ReadOnlyMemory<byte>.Empty;
 
-        //the lobby's marker is what licenses every later hop to upgrade, so record it before using it.
-        if (expectGreeting)
-            UpgradeToTls = ServerCapability is not null;
+            //the lobby's marker is what licenses every later hop to upgrade, so record it before using it.
+            if (expectGreeting)
+                UpgradeToTls = ServerCapability is not null;
 
-        if (UpgradeToTls && carryOver.IsEmpty)
-            await UpgradeToTlsAsync(host, port, ct);
+            if (UpgradeToTls && carryOver.IsEmpty)
+                await UpgradeToTlsAsync(host, port, ct);
 
-        StartPumps(carryOver.Span);
+            StartPumps(carryOver.Span);
+        } catch
+        {
+            //nothing is alive yet, so Disconnect declines to clean up and the socket would leak. That is
+            //routine now rather than exceptional: a first-contact certificate is refused by design, and
+            //the user is expected to accept and reconnect.
+            AbandonTransport();
+
+            throw;
+        }
+    }
+
+    /// <summary>
+    ///     Releases the transport and socket for a connection that never started its pumps.
+    /// </summary>
+    private void AbandonTransport()
+    {
+        try
+        {
+            Transport?.Dispose();
+        } catch
+        {
+            /* ignored */
+        }
+
+        try
+        {
+            Socket?.Dispose();
+        } catch
+        {
+            /* ignored */
+        }
+
+        Transport = null;
+        Socket = null;
     }
 
     /// <summary>
@@ -601,13 +637,16 @@ public sealed class GameClient : IDisposable
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(UpgradeTimeout);
 
-        var tls = new SslStream(Transport!, false);
+        SslStream tls;
 
         try
         {
-            await tls.AuthenticateAsClientAsync(
+            //the shared upgrade, so the TLS 1.3 postcondition is enforced rather than merely requested:
+            //options cannot express it on a platform whose stack negotiates something lower.
+            tls = await TlsChannel.UpgradeAsClientAsync(
+                Transport!,
                 TlsOptions?.Invoke(host, port) ?? TlsConfig.ClientOptions(host),
-                deadline.Token);
+                cancellationToken: deadline.Token);
         } catch (Exception ex)
         {
             //logged here rather than left to the caller: an upgrade failure otherwise surfaces only as a
