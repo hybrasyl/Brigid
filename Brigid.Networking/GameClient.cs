@@ -8,6 +8,7 @@ using System.Threading.Channels;
 using DALib.Networking.Crypto;
 using DALib.Networking.Packets.Server;
 using DALib.Networking.Wire;
+using Hybrasyl.Protocol.Negotiation;
 #endregion
 
 namespace Brigid.Networking;
@@ -21,6 +22,16 @@ namespace Brigid.Networking;
 public sealed class GameClient : IDisposable
 {
     private const int RECEIVE_BUFFER_SIZE = ushort.MaxValue * 8;
+
+    //the greeting is one small retail frame; a full retail frame can never exceed marker + u16 length.
+    private const int GREETING_READ_BUFFER_SIZE = ushort.MaxValue + 3;
+
+    /// <summary>
+    ///     How long to wait for a server-first hop's greeting before declaring the connection dead.
+    ///     Generous on purpose: this bounds a <em>liveness</em> failure, and is never allowed to decide
+    ///     anything about capability. Internal-settable so tests need not wait it out.
+    /// </summary>
+    internal static TimeSpan GreetingTimeout { get; set; } = TimeSpan.FromSeconds(15);
 
     //the codec is stateless and shared across every connection; only CryptoState is per-connection.
     private static readonly PacketCodec Codec = new();
@@ -56,6 +67,13 @@ public sealed class GameClient : IDisposable
     ///     handshake via <see cref="ResetCrypto" /> / <see cref="ApplyCryptoKey" />.
     /// </summary>
     public CryptoState Crypto { get; private set; } = new();
+
+    /// <summary>
+    ///     The capability marker carried on the server's opening greeting, or null when no greeting was
+    ///     read, the server sent none, or the greeting could not be trusted as an upgrade point. Null
+    ///     means retail forever — silence is the fallback, decided by content rather than by a clock.
+    /// </summary>
+    public CapabilityMarker? ServerCapability { get; private set; }
 
     /// <summary>
     ///     Whether the client is currently connected to a server.
@@ -227,7 +245,9 @@ public sealed class GameClient : IDisposable
         Socket.Connect(host, port);
         Transport = new NetworkStream(Socket, false);
 
-        StartPumps();
+        //redirect hops are client-first, so there is no greeting to read here.
+        ServerCapability = null;
+        StartPumps([]);
     }
 
     /// <summary>
@@ -236,12 +256,35 @@ public sealed class GameClient : IDisposable
     /// <param name="host">The server hostname or IP address.</param>
     /// <param name="port">The server port.</param>
     /// <param name="ct">Cancellation token.</param>
-    public async Task ConnectAsync(string host, int port, CancellationToken ct = default)
+    public Task ConnectAsync(string host, int port, CancellationToken ct = default)
+        => ConnectAsync(host, port, false, ct);
+
+    /// <summary>
+    ///     Connects asynchronously and, for a server-first hop, reads the server's opening greeting
+    ///     before starting the receive pump — publishing any capability marker it carries on
+    ///     <see cref="ServerCapability" />.
+    /// </summary>
+    /// <remarks>
+    ///     The greeting is read inline rather than through the pump so that a STARTTLS upgrade has a
+    ///     seam where nothing else owns the stream and no byte of the peer's has been buffered past
+    ///     the frame. Buffering pre-handshake plaintext and acting on it afterwards is the entire
+    ///     STARTTLS injection class, so the upgrade point is placed where that cannot happen.
+    /// </remarks>
+    /// <param name="host">The server hostname or IP address.</param>
+    /// <param name="port">The server port.</param>
+    /// <param name="expectGreeting">
+    ///     True for the lobby, which is the only server-first hop; login and world are client-first
+    ///     and have no greeting to wait for.
+    /// </param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task ConnectAsync(string host, int port, bool expectGreeting, CancellationToken ct = default)
     {
         if (Disposed)
             throw new ObjectDisposedException(nameof(GameClient));
 
         Disconnect();
+
+        ServerCapability = null;
 
         Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
         {
@@ -251,7 +294,9 @@ public sealed class GameClient : IDisposable
         await Socket.ConnectAsync(host, port, ct);
         Transport = new NetworkStream(Socket, false);
 
-        StartPumps();
+        var carryOver = expectGreeting ? await ReadGreetingAsync(ct) : ReadOnlyMemory<byte>.Empty;
+
+        StartPumps(carryOver.Span);
     }
 
     /// <summary>
@@ -436,10 +481,105 @@ public sealed class GameClient : IDisposable
     /// <param name="newSequence">The new ordinal value.</param>
     public void SetSequence(byte newSequence) => Crypto.ClientOrdinal = newSequence;
 
-    private void StartPumps()
+    /// <summary>
+    ///     Reads exactly one retail frame — the server's greeting — and publishes any capability
+    ///     marker on <see cref="ServerCapability" />. Returns whatever arrived past that frame, for
+    ///     the receive pump to consume.
+    /// </summary>
+    /// <remarks>
+    ///     A marker is published only when the greeting is the last thing in the buffer. Hybrasyl is
+    ///     silent after its greeting until the client speaks, so bytes past it mean this is not a
+    ///     server whose upgrade point we can identify — and rather than fail a connection that works
+    ///     today, we decline the upgrade and stay retail. Third-party servers Brigid already talks to
+    ///     have not been verified to go quiet here, which is exactly why this degrades instead of
+    ///     throwing.
+    /// </remarks>
+    /// <exception cref="TimeoutException">
+    ///     No greeting arrived within <see cref="GreetingTimeout" />. This is deliberately fail-closed
+    ///     rather than "assume retail and carry on": inferring plaintext from silence would hand an
+    ///     attacker who cannot strip the marker the same result by merely delaying it. The timeout
+    ///     declares the <em>connection</em> dead and never decides capability — and a connection with
+    ///     no greeting could not have progressed anyway, since the lobby's first client packet is a
+    ///     reply to it.
+    /// </exception>
+    private async Task<ReadOnlyMemory<byte>> ReadGreetingAsync(CancellationToken ct)
+    {
+        var buffer = new byte[GREETING_READ_BUFFER_SIZE];
+        var filled = 0;
+
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(GreetingTimeout);
+
+        while (true)
+        {
+            if (filled >= WireFrameHeaderLength)
+            {
+                //a non-retail first byte is not something this client can resynchronize from.
+                if (buffer[0] != WireFrameMarker)
+                    throw new InvalidDataException(
+                        $"Server greeting began 0x{buffer[0]:X2}, expected the retail frame marker 0x{WireFrameMarker:X2}.");
+
+                var frameLength = WireFrameHeaderLength + ((buffer[1] << 8) | buffer[2]);
+
+                if (frameLength > buffer.Length)
+                    throw new InvalidDataException(
+                        $"Server greeting claims {frameLength} bytes, beyond the {buffer.Length}-byte greeting buffer.");
+
+                if (frameLength <= filled)
+                {
+                    PublishGreetingCapability(buffer.AsMemory(0, frameLength), isClean: filled == frameLength);
+
+                    return buffer.AsMemory(frameLength, filled - frameLength);
+                }
+            }
+
+            int read;
+
+            try
+            {
+                read = await Transport!.ReadAsync(buffer.AsMemory(filled), deadline.Token);
+            } catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                //phrased so it cannot be read as "extensions are unavailable" — a greeting that arrives
+                //without a marker is the ordinary retail outcome and is silent, never an error.
+                throw new TimeoutException(
+                    $"The server accepted the connection but sent no greeting within {GreetingTimeout.TotalSeconds:0}s. "
+                    + "Brigid needs the lobby's 0x7E greeting before it can begin the handshake.");
+            }
+
+            if (read == 0)
+                throw new EndOfStreamException("Connection closed before the server greeting arrived.");
+
+            filled += read;
+        }
+    }
+
+    private void PublishGreetingCapability(ReadOnlyMemory<byte> frame, bool isClean)
+    {
+        //the greeting still travels the normal path, so ConnectionManager's handler drives the
+        //client's first send exactly as before.
+        if (Codec.TryGetServerPacket(frame, Crypto, out var packet, out _) && (packet is not null))
+            InboundQueue.Enqueue(packet);
+
+        if (!CapabilityMarker.TryRead(frame.Span[WireFrameHeaderLength..], out var marker))
+            return;
+
+        if (!isClean)
+        {
+            NoticeDebugLog.Write("capability marker present but bytes followed the greeting; declining the upgrade");
+
+            return;
+        }
+
+        ServerCapability = marker;
+        NoticeDebugLog.Write($"capability marker v{marker.Version} flags=0x{(byte)marker.Flags:X2}");
+    }
+
+    private void StartPumps(ReadOnlySpan<byte> carryOver)
     {
         ReceiveMemoryOwner = MemoryPool<byte>.Shared.Rent(RECEIVE_BUFFER_SIZE);
-        ReceiveCount = 0;
+        carryOver.CopyTo(ReceiveMemoryOwner.Memory.Span);
+        ReceiveCount = carryOver.Length;
         IsAlive = true;
 
         //single reader: the send pump is the only writer to the transport, which is what serializes
@@ -456,6 +596,12 @@ public sealed class GameClient : IDisposable
 
         var token = ReceiveCts.Token;
         var reader = SendQueue.Reader;
+
+        //drain anything that arrived alongside the greeting; the pump only processes after a read, so
+        //a complete frame already in the buffer would otherwise wait on unrelated traffic. Safe to do
+        //here because no pump is running yet.
+        if (ReceiveCount > 0)
+            ProcessReceivedData();
 
         ReceiveTask = Task.Run(() => ReceiveLoopAsync(token, generation), token);
         SendTask = Task.Run(() => SendLoopAsync(reader, token), token);

@@ -192,7 +192,9 @@ public sealed class ConnectionManager : IDisposable
 
         try
         {
-            await Client.ConnectAsync(host, port, ct);
+            //the lobby is the only server-first hop: its 0x7E greeting carries the capability marker,
+            //and is read before the pumps start so an upgrade has a clean seam.
+            await Client.ConnectAsync(host, port, true, ct);
         } catch (Exception ex)
         {
             PendingLobbyVersion = false;
