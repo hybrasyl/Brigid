@@ -1,4 +1,12 @@
 <Project>
+
+    <!-- Optional, git-ignored, per-machine overrides. Imported first so anything it sets wins over the
+         defaults below, which are all written as "only if not already set". Use it to hold a setting you
+         want on every build on one machine — co-developing against a sibling DALib or Hybrasyl.Protocol
+         checkout, say — instead of remembering the -p: flag each time. See Directory.Build.local.props.example. -->
+    <Import Project="$(MSBuildThisFileDirectory)Directory.Build.local.props"
+            Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.local.props')" />
+
     <PropertyGroup>
         <LangVersion>14</LangVersion>
         <TargetFramework>net10.0</TargetFramework>
