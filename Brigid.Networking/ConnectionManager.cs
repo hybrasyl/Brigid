@@ -289,7 +289,14 @@ public sealed class ConnectionManager : IDisposable
                 Count = count
             });
 
-    private void FollowPendingRedirect()
+    /// <summary>
+    ///     Follows a pending redirect onto the next hop. Async because login and world are
+    ///     client-first: when the lobby advertised TLS, the upgrade must complete before the
+    ///     <c>ClientJoin</c> below goes out, or the credentials it carries travel in plaintext.
+    ///     Clearing <see cref="PendingRedirect" /> up front is what keeps the game loop from
+    ///     starting a second one while this is in flight.
+    /// </summary>
+    private async Task FollowPendingRedirectAsync()
     {
         if (PendingRedirect is not { } redirect)
             return;
@@ -307,7 +314,7 @@ public sealed class ConnectionManager : IDisposable
 
         try
         {
-            Client.Connect(redirect.EndPoint.Address.ToString(), redirect.EndPoint.Port);
+            await Client.ConnectAsync(redirect.EndPoint.Address.ToString(), redirect.EndPoint.Port, false);
         } catch (Exception ex)
         {
             State = ConnectionState.Disconnected;
@@ -556,9 +563,10 @@ public sealed class ConnectionManager : IDisposable
                 NoticeDebugLog.Write($"  stack: {ex.StackTrace}");
             }
 
-        //follow pending redirect once the old connection is fully torn down
+        //follow pending redirect once the old connection is fully torn down. Not awaited: this runs on
+        //the game loop, and the hop now includes a TLS handshake. Failures route to OnError inside.
         if (PendingRedirect is not null && !Client.Connected)
-            FollowPendingRedirect();
+            _ = FollowPendingRedirectAsync();
     }
 
     /// <summary>

@@ -38,10 +38,15 @@
         <LocalDALibProjectPath Condition="'$(LocalDALibProjectPath)' == ''">$(MSBuildThisFileDirectory)..\dalib\DALib\DALib.csproj</LocalDALibProjectPath>
 
         <!-- Hybrasyl.Protocol (repo: sreang) carries the extended-framing dialect shared with the
-             Hybrasyl server. Same toggle shape as DALib: -p:UseLocalProtocol=true builds the sibling
-             checkout instead of the pinned package, which also removes the DALib binding skew (the
-             published package is compiled against an older DALib than Brigid pins). -->
-        <UseLocalProtocol Condition="'$(UseLocalProtocol)' == ''">false</UseLocalProtocol>
+             Hybrasyl server. Same toggle shape as DALib: -p:UseLocalProtocol=false uses the pinned
+             package instead of the sibling checkout.
+             TEMPORARY: defaults to the sibling checkout because 0.0.2 is not published yet, and
+             0.0.1 is both source- and wire-incompatible with it (DialectOffer's members were renamed,
+             and negotiation moved into a 0xFF envelope). Flip this default back to false the day
+             0.0.2 lands on NuGet — the pinned version above is already correct. Until then a release
+             build fails loudly on a missing package rather than quietly producing a client that
+             cannot negotiate. -->
+        <UseLocalProtocol Condition="'$(UseLocalProtocol)' == ''">true</UseLocalProtocol>
         <LocalProtocolProjectPath Condition="'$(LocalProtocolProjectPath)' == ''">$(MSBuildThisFileDirectory)..\sreang\src\Hybrasyl.Protocol\Hybrasyl.Protocol.csproj</LocalProtocolProjectPath>
     </PropertyGroup>
 

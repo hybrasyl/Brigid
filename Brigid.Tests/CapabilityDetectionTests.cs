@@ -23,26 +23,45 @@ public class CapabilityDetectionTests
 
     private const int TIMEOUT_MS = 5000;
 
-    /// <summary>A marked greeting is detected, and still reaches the game loop as a normal packet.</summary>
+    /// <summary>
+    ///     A server that advertises capability and then never completes a TLS handshake fails the
+    ///     connect rather than blocking forever. Neither SslStream nor the negotiator bounds itself,
+    ///     so without the client's own deadline this hangs — the same failure the missing-greeting
+    ///     timeout closes, one layer up.
+    /// </summary>
+    /// <remarks>
+    ///     Detection of a marker on a well-behaved server is covered by
+    ///     <c>TlsUpgradeTests.MarkedGreeting_UpgradesAndEngagesTheDialect</c>, which needs a real
+    ///     TLS peer: after a marker is seen the upgrade is automatic, so there is no longer a
+    ///     detected-but-not-upgraded state to observe against a plaintext server.
+    /// </remarks>
     [Fact]
-    public async Task Greeting_WithMarker_PublishesCapabilityAndStillSurfacesThePacket()
+    public async Task Greeting_WithMarker_ButNoTlsBehindIt_FailsInsteadOfHanging()
     {
-        using var listener = new LoopbackListener();
-        using var client = new GameClient();
+        var previous = GameClient.UpgradeTimeout;
+        GameClient.UpgradeTimeout = TimeSpan.FromMilliseconds(250);
 
-        client.ResetCrypto();
+        try
+        {
+            using var listener = new LoopbackListener();
+            using var client = new GameClient();
 
-        var connect = client.ConnectAsync("127.0.0.1", listener.Port, true);
-        var accepted = await listener.AcceptAsync();
+            client.ResetCrypto();
 
-        await WriteGreetingAsync(accepted, CapabilityMarker.Current);
-        await connect;
+            var connect = client.ConnectAsync("127.0.0.1", listener.Port, true);
+            var accepted = await listener.AcceptAsync();
 
-        Assert.NotNull(client.ServerCapability);
-        Assert.Equal(CapabilityMarker.CurrentVersion, client.ServerCapability!.Value.Version);
+            await WriteGreetingAsync(accepted, CapabilityMarker.Current);
 
-        //the greeting must still drive ConnectionManager's handler, which sends the client's first packet.
-        Assert.IsType<AcceptConnectionPacket>(await DrainOneAsync(client));
+            //the server never answers the ClientHello.
+            await Assert.ThrowsAnyAsync<Exception>(() => connect);
+
+            Assert.NotNull(client.ServerCapability);
+            Assert.Null(client.Negotiated);
+        } finally
+        {
+            GameClient.UpgradeTimeout = previous;
+        }
     }
 
     /// <summary>

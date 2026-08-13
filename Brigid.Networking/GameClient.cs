@@ -3,12 +3,15 @@ using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using DALib.Networking.Crypto;
 using DALib.Networking.Packets.Server;
 using DALib.Networking.Wire;
+using Hybrasyl.Protocol;
 using Hybrasyl.Protocol.Negotiation;
+using Hybrasyl.Protocol.Transport;
 #endregion
 
 namespace Brigid.Networking;
@@ -32,6 +35,14 @@ public sealed class GameClient : IDisposable
     ///     anything about capability. Internal-settable so tests need not wait it out.
     /// </summary>
     internal static TimeSpan GreetingTimeout { get; set; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    ///     How long the TLS handshake and dialect negotiation together may take before the connection
+    ///     is declared dead. A server can advertise capability and then fail to complete a handshake,
+    ///     which would otherwise block forever — neither <c>SslStream</c> nor the negotiator imposes a
+    ///     bound of its own. Mirrors the server's own handshake timeout. Internal-settable for tests.
+    /// </summary>
+    internal static TimeSpan UpgradeTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
     //the codec is stateless and shared across every connection; only CryptoState is per-connection.
     private static readonly PacketCodec Codec = new();
@@ -74,6 +85,35 @@ public sealed class GameClient : IDisposable
     ///     means retail forever — silence is the fallback, decided by content rather than by a clock.
     /// </summary>
     public CapabilityMarker? ServerCapability { get; private set; }
+
+    /// <summary>
+    ///     Whether this server family speaks TLS. Learned once from the lobby's capability marker and
+    ///     <em>deliberately not reset by <see cref="Disconnect" /></em>: login and world are
+    ///     client-first, so Brigid must decide to upgrade before the server says anything, and the
+    ///     lobby marker is the only thing that can tell it that is safe.
+    /// </summary>
+    public bool UpgradeToTls { get; set; }
+
+    /// <summary>
+    ///     Certificate trust policy for the TLS upgrade. Null means platform default (system-root)
+    ///     validation; the trust-on-first-use flow supplies its own.
+    /// </summary>
+    public RemoteCertificateValidationCallback? CertificateValidator { get; set; }
+
+    /// <summary>The dialect this connection negotiated, or null when no TLS upgrade occurred.</summary>
+    public DialectResolution? Negotiated { get; private set; }
+
+    /// <summary>
+    ///     The version string reported to the server in the dialect negotiation, for its records.
+    ///     Defaults to this assembly's version; the client overrides it with its display version.
+    /// </summary>
+    public string ClientVersion { get; set; } =
+        typeof(GameClient).Assembly.GetName()
+                          .Version?.ToString()
+        ?? "0.0.0";
+
+    /// <summary>The single dialect this client release speaks.</summary>
+    private static readonly ClientDialectPolicy DialectPolicy = new(Dialect.V1);
 
     /// <summary>
     ///     Whether the client is currently connected to a server.
@@ -228,28 +268,6 @@ public sealed class GameClient : IDisposable
     /// <summary>
     ///     Connects synchronously to the specified host and port and begins receiving packets.
     /// </summary>
-    /// <param name="host">The server hostname or IP address.</param>
-    /// <param name="port">The server port.</param>
-    public void Connect(string host, int port)
-    {
-        if (Disposed)
-            throw new ObjectDisposedException(nameof(GameClient));
-
-        Disconnect();
-
-        Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
-        {
-            NoDelay = true
-        };
-
-        Socket.Connect(host, port);
-        Transport = new NetworkStream(Socket, false);
-
-        //redirect hops are client-first, so there is no greeting to read here.
-        ServerCapability = null;
-        StartPumps([]);
-    }
-
     /// <summary>
     ///     Connects asynchronously to the specified host and port and begins receiving packets.
     /// </summary>
@@ -285,6 +303,7 @@ public sealed class GameClient : IDisposable
         Disconnect();
 
         ServerCapability = null;
+        Negotiated = null;
 
         Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
         {
@@ -295,6 +314,13 @@ public sealed class GameClient : IDisposable
         Transport = new NetworkStream(Socket, false);
 
         var carryOver = expectGreeting ? await ReadGreetingAsync(ct) : ReadOnlyMemory<byte>.Empty;
+
+        //the lobby's marker is what licenses every later hop to upgrade, so record it before using it.
+        if (expectGreeting)
+            UpgradeToTls = ServerCapability is not null;
+
+        if (UpgradeToTls && carryOver.IsEmpty)
+            await UpgradeToTlsAsync(host, ct);
 
         StartPumps(carryOver.Span);
     }
@@ -552,6 +578,37 @@ public sealed class GameClient : IDisposable
 
             filled += read;
         }
+    }
+
+    /// <summary>
+    ///     Performs the STARTTLS upgrade: wraps the connection in TLS 1.3 and runs the dialect
+    ///     negotiation inside it, leaving <see cref="Negotiated" /> set and <see cref="Transport" />
+    ///     pointing at the encrypted stream.
+    /// </summary>
+    /// <remarks>
+    ///     Called only with an empty receive buffer and before any pump exists, so no plaintext byte
+    ///     of the peer's can survive into the encrypted session and nothing else holds the stream
+    ///     during the handshake. Both properties are the caller's to preserve.
+    /// </remarks>
+    private async Task UpgradeToTlsAsync(string host, CancellationToken ct)
+    {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(UpgradeTimeout);
+
+        var tls = new SslStream(Transport!, false);
+
+        await tls.AuthenticateAsClientAsync(TlsConfig.ClientOptions(host, CertificateValidator), deadline.Token);
+
+        //published before negotiating so the negotiation itself travels encrypted.
+        Transport = tls;
+
+        var result = await DialectNegotiator.NegotiateAsClientAsync(tls, DialectPolicy, ClientVersion, deadline.Token);
+
+        Negotiated = result.Resolution;
+
+        NoticeDebugLog.Write(
+            $"TLS established with {host}; mode={result.Resolution.Mode} dialect={result.Resolution.Dialect} "
+            + $"offer=0x{result.Offer.MinDialect:X2}..0x{result.Offer.MaxDialect:X2}");
     }
 
     private void PublishGreetingCapability(ReadOnlyMemory<byte> frame, bool isClean)
