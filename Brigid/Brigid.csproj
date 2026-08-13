@@ -31,7 +31,9 @@
          Set through runtimeconfig rather than AppContext.SetSwitch in Main so the host applies it
          before any code runs: the switch is only read when SslStream first initializes its backend,
          and a call ordered after that would be silently ignored.
-         Note it governs client operations only; a server on macOS is still capped at 1.2. -->
+         Documented to govern client operations only, so it does not change what a server on macOS
+         negotiates. Whether such a server can reach 1.3 by other means is unverified — do not read
+         this as a ceiling on it. -->
     <ItemGroup>
         <RuntimeHostConfigurationOption Include="System.Net.Security.UseNetworkFramework" Value="true" />
     </ItemGroup>
