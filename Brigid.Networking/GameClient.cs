@@ -96,18 +96,15 @@ public sealed class GameClient : IDisposable
     public bool UpgradeToTls { get; set; }
 
     /// <summary>
-    ///     Certificate trust policy for the TLS upgrade. Null means platform default (system-root)
-    ///     validation; the trust-on-first-use flow supplies its own.
+    ///     Supplies the TLS options for one endpoint, given its host and port. Null means platform
+    ///     default (system-root) validation with no pinning.
     /// </summary>
-    public RemoteCertificateValidationCallback? CertificateValidator { get; set; }
-
-    /// <summary>
-    ///     Revocation policy for the TLS upgrade, supplied by the same trust policy that supplies
-    ///     <see cref="CertificateValidator" />. It turns on whether the endpoint has a revocation
-    ///     responder to consult at all, which is a property of how its trust was established — not of
-    ///     whether it is pinned.
-    /// </summary>
-    public X509RevocationMode CertificateRevocation { get; set; } = X509RevocationMode.Online;
+    /// <remarks>
+    ///     A factory rather than a stored callback because trust is <em>per endpoint</em>: the lobby,
+    ///     login, and world hops are different servers, and a validator built for one would key a pin
+    ///     lookup on the wrong endpoint after a redirect. It is consulted afresh on every upgrade.
+    /// </remarks>
+    public Func<string, int, SslClientAuthenticationOptions>? TlsOptions { get; set; }
 
     /// <summary>The dialect this connection negotiated, or null when no TLS upgrade occurred.</summary>
     public DialectResolution? Negotiated { get; private set; }
@@ -329,7 +326,7 @@ public sealed class GameClient : IDisposable
             UpgradeToTls = ServerCapability is not null;
 
         if (UpgradeToTls && carryOver.IsEmpty)
-            await UpgradeToTlsAsync(host, ct);
+            await UpgradeToTlsAsync(host, port, ct);
 
         StartPumps(carryOver.Span);
     }
@@ -599,7 +596,7 @@ public sealed class GameClient : IDisposable
     ///     of the peer's can survive into the encrypted session and nothing else holds the stream
     ///     during the handshake. Both properties are the caller's to preserve.
     /// </remarks>
-    private async Task UpgradeToTlsAsync(string host, CancellationToken ct)
+    private async Task UpgradeToTlsAsync(string host, int port, CancellationToken ct)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(UpgradeTimeout);
@@ -609,7 +606,7 @@ public sealed class GameClient : IDisposable
         try
         {
             await tls.AuthenticateAsClientAsync(
-                TlsConfig.ClientOptions(host, CertificateValidator, CertificateRevocation),
+                TlsOptions?.Invoke(host, port) ?? TlsConfig.ClientOptions(host),
                 deadline.Token);
         } catch (Exception ex)
         {

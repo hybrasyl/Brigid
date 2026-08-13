@@ -39,7 +39,7 @@ public class TlsUpgradeTests
         using var server = new TlsLoopbackServer(certificate, CapabilityMarker.Current);
         using var client = new GameClient
         {
-            CertificateValidator = AcceptOnly(certificate)
+            TlsOptions = (host, _) => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
         };
 
         client.ResetCrypto();
@@ -72,7 +72,7 @@ public class TlsUpgradeTests
         using var server = new TlsLoopbackServer(certificate, marker: null);
         using var client = new GameClient
         {
-            CertificateValidator = AcceptOnly(certificate)
+            TlsOptions = (host, _) => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
         };
 
         client.ResetCrypto();
@@ -95,7 +95,7 @@ public class TlsUpgradeTests
         using var server = new TlsLoopbackServer(certificate, CapabilityMarker.Current);
         using var client = new GameClient
         {
-            CertificateValidator = (_, _, _, _) => false
+            TlsOptions = (host, _) => TlsConfig.ClientOptions(host, (_, _, _, _) => false, X509RevocationMode.NoCheck)
         };
 
         client.ResetCrypto();
@@ -119,7 +119,7 @@ public class TlsUpgradeTests
         using var lobby = new TlsLoopbackServer(certificate, CapabilityMarker.Current);
         using var client = new GameClient
         {
-            CertificateValidator = AcceptOnly(certificate)
+            TlsOptions = (host, _) => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
         };
 
         client.ResetCrypto();

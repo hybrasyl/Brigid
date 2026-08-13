@@ -5,6 +5,8 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Brigid.Data;
+using Brigid.Networking;
+using Hybrasyl.Protocol.Transport;
 #endregion
 
 namespace Brigid.Systems;
@@ -52,7 +54,11 @@ public static class CertificateTrustStore
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+
+        //this file is the known_hosts analogue and will be read and sometimes hand-edited by operators;
+        //a trust path written as a bare 0 or 1 is both unreadable and easy to set wrongly.
+        Converters = { new JsonStringEnumConverter() }
     };
 
     //guards Entries and Pending: the validation callback runs on the handshake's thread while the game
@@ -163,6 +169,14 @@ public static class CertificateTrustStore
         => (_, certificate, _, errors) => Validate(KeyFor(host, port), certificate, errors);
 
     /// <summary>
+    ///     The complete TLS client options for an endpoint — validator and revocation policy together,
+    ///     since both follow from the same trust record. This is what
+    ///     <c>GameClient.TlsOptions</c> is set to.
+    /// </summary>
+    public static SslClientAuthenticationOptions OptionsFor(string host, int port)
+        => TlsConfig.ClientOptions(host, ValidatorFor(host, port), RevocationModeFor(host, port));
+
+    /// <summary>
     ///     The revocation policy for an endpoint, from how its trust was established. See
     ///     <see cref="CertificateTrustDecision.RevocationFor" /> for why the predicate is the trust path
     ///     rather than the presence of a pin.
@@ -203,6 +217,12 @@ public static class CertificateTrustStore
             ParseNotAfter(certificate),
             verdict == CertificateTrustVerdict.RejectPinMismatch,
             errors == SslPolicyErrors.None);
+
+        //the fingerprint is what the user is being asked to vouch for, so it belongs in the log whether
+        //or not a prompt is reachable — it is also the value needed to pin an endpoint by hand.
+        NoticeDebugLog.Write(
+            $"certificate refused for {endpoint} ({(verdict == CertificateTrustVerdict.RejectPinMismatch ? "pinned to a different certificate" : "not trusted")}); "
+            + $"subject={certificate.Subject} issuer={certificate.Issuer} sha256={presented}");
 
         return false;
     }

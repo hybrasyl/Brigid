@@ -198,6 +198,12 @@ public sealed class ChaosGame : Game
         InactiveSleepTime = TimeSpan.Zero;
 
         Connection = new ConnectionManager();
+
+        //trust policy is consulted per hop, since lobby, login and world are different endpoints and a
+        //pin must be looked up under the one being connected to.
+        CertificateTrustStore.Load();
+        Connection.Client.TlsOptions = CertificateTrustStore.OptionsFor;
+
         //the friendly server name drives the window-title suffix; refresh from the write itself so no caller has to remember
         Connection.ServerNameChanged += UpdateWindowTitle;
         Connection.OnMetaData += HandleMetaData;
