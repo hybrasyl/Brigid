@@ -10,6 +10,8 @@ using DALib.Networking.Packets.Server;
 using DALib.Networking.Wire;
 using Hybrasyl.Protocol;
 using Hybrasyl.Protocol.Negotiation;
+using Hybrasyl.Protocol.Packets;
+using Hybrasyl.Protocol.Wire;
 using Hybrasyl.Protocol.Transport;
 using Xunit;
 #endregion
@@ -245,6 +247,81 @@ public class TlsUpgradeTests
         Assert.Equal(["localhost"], seen);
     }
 
+    /// <summary>
+    ///     A whole extension frame out and back: encoded on the negotiated dialect, carried inside TLS
+    ///     alongside retail framing, decoded by the peer, and routed home by byte 0 rather than by any
+    ///     connection state. The token proves the round trip is this probe's reply and not merely
+    ///     traffic — a client that echoed its own send, or replied to the wrong probe, fails here.
+    /// </summary>
+    [Fact]
+    public async Task ExtensionFrame_RoundTripsOnTheNegotiatedDialect()
+    {
+        using var certificate = CreateSelfSignedCertificate();
+        using var server = new TlsLoopbackServer(certificate, CapabilityMarker.Current, echo: true);
+        using var client = new GameClient
+        {
+            TlsOptions = host => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
+        };
+
+        client.ResetCrypto();
+        await client.ConnectAsync("localhost", server.Port, true, "localhost").WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+
+        Assert.True(client.DialectEngaged);
+
+        const ulong TOKEN = 0x0123_4567_89AB_CDEFUL;
+        client.SendExtension(new ClientEcho(TOKEN));
+
+        var reply = await DrainOneExtensionAsync(client);
+
+        Assert.Equal(TOKEN, Assert.IsType<ClientEcho>(reply).Token);
+    }
+
+    /// <summary>
+    ///     No dialect, no extension frame. The send is refused rather than encoded against a default
+    ///     dialect, which would put a frame on the wire that the peer's router hands to a codec it never
+    ///     built — a decode error on a live connection.
+    /// </summary>
+    [Fact]
+    public async Task ExtensionSend_IsRefusedWhenNoDialectIsEngaged()
+    {
+        using var certificate = CreateSelfSignedCertificate();
+        using var server = new TlsLoopbackServer(certificate, marker: null);
+        using var client = new GameClient
+        {
+            TlsOptions = host => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
+        };
+
+        client.ResetCrypto();
+        await client.ConnectAsync("localhost", server.Port, true, "localhost").WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+
+        Assert.False(client.DialectEngaged);
+
+        //must not throw, and must not reach the wire.
+        client.SendExtension(new ClientEcho(1));
+
+        var drained = new List<IExtensionServerPacket>();
+        client.DrainExtensionPackets(drained);
+
+        Assert.Empty(drained);
+    }
+
+    private static async Task<IExtensionServerPacket> DrainOneExtensionAsync(GameClient client)
+    {
+        var buffer = new List<IExtensionServerPacket>();
+        using var timeout = new CancellationTokenSource(TIMEOUT_MS);
+
+        while (buffer.Count == 0)
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+            client.DrainExtensionPackets(buffer);
+
+            if (buffer.Count == 0)
+                await Task.Delay(10, timeout.Token);
+        }
+
+        return buffer[0];
+    }
+
     private static async Task<IServerPacket> DrainOneAsync(GameClient client)
     {
         var buffer = new List<IServerPacket>();
@@ -290,6 +367,7 @@ public class TlsUpgradeTests
     private sealed class TlsLoopbackServer : IDisposable
     {
         private static readonly ServerDialectPolicy Policy = ServerDialectPolicy.Create(Dialect.V1, Dialect.V1);
+        private static readonly ExtensionCodec ExtensionCodec = new();
 
         private readonly TcpListener Listener;
         private readonly TaskCompletionSource<DialectChoice> Choice = new();
@@ -299,12 +377,13 @@ public class TlsUpgradeTests
             X509Certificate2 certificate,
             CapabilityMarker? marker,
             bool greetFirst = true,
-            TimeSpan handshakeDelay = default)
+            TimeSpan handshakeDelay = default,
+            bool echo = false)
         {
             Listener = new TcpListener(IPAddress.Loopback, 0);
             Listener.Start();
 
-            _ = RunAsync(certificate, marker, greetFirst, handshakeDelay);
+            _ = RunAsync(certificate, marker, greetFirst, handshakeDelay, echo);
         }
 
         public int Port => ((IPEndPoint)Listener.LocalEndpoint).Port;
@@ -315,7 +394,8 @@ public class TlsUpgradeTests
             X509Certificate2 certificate,
             CapabilityMarker? marker,
             bool greetFirst,
-            TimeSpan handshakeDelay)
+            TimeSpan handshakeDelay,
+            bool echo)
         {
             try
             {
@@ -350,11 +430,54 @@ public class TlsUpgradeTests
                 var result = await DialectNegotiator.NegotiateAsServerAsync(tls, Policy, Cts.Token);
                 Choice.TrySetResult(result.Choice);
 
+                if (echo)
+                {
+                    await EchoLoopAsync(tls, result.Resolution);
+
+                    return;
+                }
+
                 //hold the connection open so the client's pumps see a live stream.
                 await Task.Delay(Timeout.Infinite, Cts.Token);
             } catch (Exception ex)
             {
                 Choice.TrySetException(ex);
+            }
+        }
+
+        /// <summary>
+        ///     Mirrors the real server's ClientEcho handler: decode the probe, return the token verbatim
+        ///     at the same opcode. Reading a whole extension frame is the point — a reply built without
+        ///     decoding would pass a client that never encoded correctly.
+        /// </summary>
+        private async Task EchoLoopAsync(SslStream tls, DialectResolution resolution)
+        {
+            var codec = ExtensionCodec.ForConnection(resolution);
+            var buffer = new byte[4096];
+            var filled = 0;
+
+            while (!Cts.IsCancellationRequested)
+            {
+                var read = await tls.ReadAsync(buffer.AsMemory(filled), Cts.Token);
+
+                if (read == 0)
+                    return;
+
+                filled += read;
+
+                while (codec.TryDecodeClient(buffer.AsMemory(0, filled), out var packet, out var consumed))
+                {
+                    buffer.AsSpan(consumed, filled - consumed)
+                          .CopyTo(buffer);
+
+                    filled -= consumed;
+
+                    if (packet is ClientEcho probe)
+                    {
+                        await tls.WriteAsync(codec.EncodeServer(new ClientEcho(probe.Token)), Cts.Token);
+                        await tls.FlushAsync(Cts.Token);
+                    }
+                }
             }
         }
 

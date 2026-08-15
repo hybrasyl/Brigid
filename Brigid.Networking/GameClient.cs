@@ -12,6 +12,7 @@ using DALib.Networking.Packets.Server;
 using DALib.Networking.Wire;
 using Hybrasyl.Protocol;
 using Hybrasyl.Protocol.Negotiation;
+using Hybrasyl.Protocol.Wire;
 using Hybrasyl.Protocol.Transport;
 #endregion
 
@@ -48,7 +49,14 @@ public sealed class GameClient : IDisposable
     //the codec is stateless and shared across every connection; only CryptoState is per-connection.
     private static readonly PacketCodec Codec = new();
 
+    //the extension dispatch table, scanning the shared library only: a shape both ends speak must be
+    //declared there, and registering a consumer-local type here would encode a frame no server can
+    //resolve — a decode error on a live connection, with nothing failing at build or startup.
+    private static readonly ExtensionCodec Extensions = new();
+
     private readonly ConcurrentQueue<IServerPacket> InboundQueue = new();
+
+    private readonly ConcurrentQueue<IExtensionServerPacket> ExtensionQueue = new();
 
     private readonly Lock SendLock = new();
     private int ConnectionGeneration;
@@ -115,6 +123,21 @@ public sealed class GameClient : IDisposable
 
     /// <summary>The dialect this connection negotiated, or null when no TLS upgrade occurred.</summary>
     public DialectResolution? Negotiated { get; private set; }
+
+    /// <summary>
+    ///     The codec bound to this connection's dialect, or null when none is engaged. Null is the
+    ///     invariant that no extension frame belongs on this connection: the retail modes carry
+    ///     <c>0xAA</c> frames, which are DALib's business.
+    /// </summary>
+    private DialectCodec? ExtensionChannel;
+
+    /// <summary>Whether an extension dialect is engaged, so extension frames may be sent.</summary>
+    /// <remarks>
+    ///     Distinct from having seen the capability marker, which only says the server family is
+    ///     capable. Gating sends on the marker would put an extension frame on a connection that
+    ///     resolved to a retail mode.
+    /// </remarks>
+    public bool DialectEngaged => ExtensionChannel is not null;
 
     /// <summary>
     ///     The version string reported to the server in the dialect negotiation, for its records.
@@ -335,7 +358,9 @@ public sealed class GameClient : IDisposable
 
         ServerCapability = null;
         Negotiated = null;
+        ExtensionChannel = null;
         PendingGreeting = null;
+        ExtensionQueue.Clear();
 
         Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
         {
@@ -540,6 +565,45 @@ public sealed class GameClient : IDisposable
     }
 
     /// <summary>
+    ///     Sends an extension packet on the negotiated dialect. Silently declined when no dialect is
+    ///     engaged — callers gate on <see cref="DialectEngaged" /> rather than relying on this.
+    /// </summary>
+    public void SendExtension(IExtensionClientPacket packet)
+    {
+        ArgumentNullException.ThrowIfNull(packet);
+
+        var writer = SendQueue?.Writer;
+
+        if (ExtensionChannel is not { } channel || !Connected || writer is null)
+        {
+            NoticeDebugLog.Write(
+                $"!!! dropped extension opcode=0x{packet.Opcode:X4}: {(ExtensionChannel is null ? "no dialect engaged" : "no live send pump")}");
+
+            return;
+        }
+
+        //shares the retail send lock: it orders the queue as well as guarding crypto ordinals, and an
+        //extension frame interleaved into the middle of a retail frame's enqueue would corrupt the stream.
+        using var scope = SendLock.EnterScope();
+
+        var wire = channel.EncodeClient(packet);
+        writer.TryWrite(wire);
+    }
+
+    /// <summary>
+    ///     Moves any received extension packets into <paramref name="buffer" />, clearing it first.
+    /// </summary>
+    public void DrainExtensionPackets(List<IExtensionServerPacket> buffer)
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+
+        buffer.Clear();
+
+        while (ExtensionQueue.TryDequeue(out var packet))
+            buffer.Add(packet);
+    }
+
+    /// <summary>
     ///     Replaces the crypto state with a fresh, unkeyed <see cref="CryptoState" />. Called before the lobby connect,
     ///     where the only packets exchanged (Version, AcceptConnection, CryptoKey) are unencrypted.
     /// </summary>
@@ -699,6 +763,12 @@ public sealed class GameClient : IDisposable
 
             Negotiated = result.Resolution;
 
+            //bound only for the engaged mode; a below-floor connection speaks retail framing inside TLS
+            //and must not acquire a codec that would let an extension frame be sent on it.
+            ExtensionChannel = result.Resolution.Mode == ConnectionMode.DialectOverTls
+                ? Extensions.ForConnection(result.Resolution)
+                : null;
+
             NoticeDebugLog.Write(
                 $"TLS established with {identity}; mode={result.Resolution.Mode} dialect={result.Resolution.Dialect} "
                 + $"offer=0x{result.Offer.MinDialect:X2}..0x{result.Offer.MaxDialect:X2}");
@@ -856,20 +926,25 @@ public sealed class GameClient : IDisposable
     {
         var offset = 0;
 
-        while (ReceiveCount - offset >= WireFrameHeaderLength)
+        while (ReceiveCount - offset > 0)
         {
             var remaining = ReceiveMemoryOwner!.Memory.Slice(offset, ReceiveCount - offset);
             var span = remaining.Span;
 
+            //route by byte 0, per the coexistence rule: retail and extension frames genuinely share one
+            //stream, because packets not yet migrated keep retail framing inside TLS. Routing on content
+            //rather than on connection state is what keeps that correct without tracking position in a
+            //sequence. A length prefix can never begin with either marker under the frame-size cap.
             if (span[0] != WireFrameMarker)
             {
-                //stream desync — the only safe recovery is to drop the buffered remainder and resynchronize on the
-                //next socket read.
-                NoticeDebugLog.Write($"!!! frame marker mismatch 0x{span[0]:X2}; dropping {ReceiveCount - offset} buffered byte(s)");
-                offset = ReceiveCount;
+                if (!TryConsumeExtensionFrame(remaining, ref offset))
+                    break;
 
-                break;
+                continue;
             }
+
+            if (ReceiveCount - offset < WireFrameHeaderLength)
+                break; //incomplete retail header; wait for more bytes
 
             var frameLength = WireFrameHeaderLength + ((span[1] << 8) | span[2]);
 
@@ -896,6 +971,49 @@ public sealed class GameClient : IDisposable
         if (ReceiveCount > 0)
             ReceiveMemoryOwner!.Memory.Slice(offset, ReceiveCount)
                               .CopyTo(ReceiveMemoryOwner.Memory);
+    }
+
+    /// <summary>
+    ///     Consumes one extension frame off the front of <paramref name="remaining" />, advancing
+    ///     <paramref name="offset" />. Returns false when the drain loop should stop — an incomplete
+    ///     frame, or an unrecoverable one whose remainder has been discarded.
+    /// </summary>
+    private bool TryConsumeExtensionFrame(ReadOnlyMemory<byte> remaining, ref int offset)
+    {
+        if (ExtensionChannel is not { } channel)
+        {
+            //no dialect engaged means no extension frame belongs here, so this is a desync rather than a
+            //packet: the only safe recovery is to drop the remainder and resynchronize on the next read.
+            NoticeDebugLog.Write(
+                $"!!! frame marker mismatch 0x{remaining.Span[0]:X2} with no dialect engaged; dropping {remaining.Length} buffered byte(s)");
+
+            offset = ReceiveCount;
+
+            return false;
+        }
+
+        try
+        {
+            if (!channel.TryDecodeServer(remaining, out var packet, out var consumed))
+                return false; //incomplete frame; wait for more bytes
+
+            offset += consumed;
+
+            if (packet is not null)
+                ExtensionQueue.Enqueue(packet);
+
+            return true;
+        } catch (Exception ex)
+        {
+            //unlike a retail frame, a malformed extension frame gives no length to skip past, so the
+            //remainder cannot be resynchronized and is dropped whole.
+            NoticeDebugLog.Write(
+                $"!!! extension decode failed: {ex.GetType().Name}: {ex.Message}; dropping {remaining.Length} buffered byte(s)");
+
+            offset = ReceiveCount;
+
+            return false;
+        }
     }
 
     private void DispatchInbound(IServerPacket packet)
