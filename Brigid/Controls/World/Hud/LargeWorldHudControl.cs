@@ -697,7 +697,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
     public void SetServerName(string name) => ServerNameLabel?.Text = name;
 
     /// <inheritdoc />
-    public void SetTransportSecure(bool secure) => SecureIcon.Visible = secure;
+    public void SetTransportSecure(bool secure) => HudSecureIcon.Apply(SecureIcon, secure);
 
     public void SetDescription(string? text)
     {

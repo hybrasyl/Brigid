@@ -622,7 +622,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
     public void SetServerName(string name) => ServerNameLabel?.Text = name;
 
     /// <inheritdoc />
-    public void SetTransportSecure(bool secure) => SecureIcon.Visible = secure;
+    public void SetTransportSecure(bool secure) => HudSecureIcon.Apply(SecureIcon, secure);
 
     /// <summary>
     ///     Shows a description text in the SZ_DESCRIPTION area (item/skill/spell name on hover). Color 0x14 = green/teal,
