@@ -65,4 +65,23 @@ internal static class HudSecureIcon
     /// </summary>
     public static void Apply(UILabel icon, bool secure)
         => icon.ForegroundColor = secure ? LegendColors.Lime : LegendColors.White;
+
+    /// <summary>
+    ///     An invisible click region covering the whole server box, so the name and the padlock are one
+    ///     target. A texture-less button draws nothing and only takes hit tests.
+    /// </summary>
+    /// <remarks>
+    ///     A region rather than making the labels clickable: the name label is populated by the server
+    ///     and the padlock is sized for a glyph, so hanging the behaviour on either would tie the click
+    ///     target to how wide the text happens to be.
+    /// </remarks>
+    public static UIButton CreateHitRegion(Rectangle serverBox)
+        => new()
+        {
+            Name = "ServerBoxButton",
+            X = serverBox.X,
+            Y = serverBox.Y,
+            Width = serverBox.Width,
+            Height = serverBox.Height
+        };
 }

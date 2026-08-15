@@ -40,6 +40,28 @@ public sealed record PendingCertificateTrust(
     bool PlatformValidated);
 
 /// <summary>
+///     A certificate a connection was accepted under, kept so the connection can be described later.
+/// </summary>
+/// <param name="Server">The server identity it was validated against.</param>
+/// <param name="Subject">The certificate subject.</param>
+/// <param name="Issuer">The certificate issuer.</param>
+/// <param name="Fingerprint">SHA-256 fingerprint, colon-separated hex.</param>
+/// <param name="NotAfter">Expiry, for display.</param>
+/// <param name="PlatformValidated">
+///     Whether the platform's own chain validation accepted it. False means it was accepted on a pin
+///     alone, which is the trust-on-first-use case and the one worth showing differently.
+/// </param>
+/// <param name="Pinned">Whether a stored pin matched, as opposed to public-CA validation alone.</param>
+public sealed record AcceptedCertificate(
+    string Server,
+    string Subject,
+    string Issuer,
+    string Fingerprint,
+    DateTime NotAfter,
+    bool PlatformValidated,
+    bool Pinned);
+
+/// <summary>
 ///     Trust-on-first-use certificate pins and TLS history, keyed by <em>server identity</em> — the
 ///     hostname a certificate is validated against — and persisted in the per-user app root. SSH
 ///     <c>known_hosts</c> semantics: an unknown certificate is refused and offered to the user, an
@@ -55,13 +77,14 @@ public sealed record PendingCertificateTrust(
 ///         still prompts, so this narrows the prompting, not the checking.
 ///     </para>
 ///     <para>
-///         This diverges from <c>EXTENSIONS.md</c> §8.4, which specifies pinning keyed by endpoint.
-///         The divergence is client-side only and invisible on the wire.
+///         Keying by host is what <c>EXTENSIONS.md</c> §8.4.1 now specifies; the spec said
+///         <c>host:port</c> until this client's three-prompts-per-session behaviour sent it back.
 ///     </para>
-/// </remarks>
-/// <remarks>
-///     Lives in the client project rather than <c>Brigid.Networking</c>: it needs
-///     <see cref="AppPaths" /> and drives UI, and the networking layer takes only a validation callback.
+///     <para>
+///         Lives in the client project rather than <c>Brigid.Networking</c>: it needs
+///         <see cref="AppPaths" /> and drives UI, and the networking layer takes only a validation
+///         callback.
+///     </para>
 /// </remarks>
 public static class CertificateTrustStore
 {
@@ -88,6 +111,22 @@ public static class CertificateTrustStore
     ///     the ordinary rules.
     /// </summary>
     private static readonly Dictionary<string, string> PrePinned = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    ///     The certificate the current connection was established under, or null when none has been
+    ///     accepted this run. Describes the live connection rather than the store's contents.
+    /// </summary>
+    public static AcceptedCertificate? Accepted
+    {
+        get
+        {
+            using var scope = Gate.EnterScope();
+
+            return AcceptedField;
+        }
+    }
+
+    private static AcceptedCertificate? AcceptedField;
 
     /// <summary>
     ///     The certificate awaiting a user decision, or null. Set by the validation callback when it
@@ -124,6 +163,7 @@ public static class CertificateTrustStore
         Entries.Clear();
         PendingField = null;
         PendingDowngradeField = null;
+        AcceptedField = null;
 
         foreach (var (endpoint, fingerprint) in PrePinned)
             Entries[endpoint] = new TrustEntry
@@ -238,6 +278,18 @@ public static class CertificateTrustStore
         if (verdict == CertificateTrustVerdict.Accept)
         {
             PendingField = null;
+
+            //kept so the connection can be described after the fact. The refusal path already captures
+            //this to build its prompt; without the same capture on the accepting path, the certificate a
+            //user is actually connected under is the one thing about it the client cannot show.
+            AcceptedField = new AcceptedCertificate(
+                server,
+                certificate.Subject,
+                certificate.Issuer,
+                presented,
+                ParseNotAfter(certificate),
+                errors == SslPolicyErrors.None,
+                entry?.Fingerprint is not null);
 
             return true;
         }
@@ -379,6 +431,19 @@ public static class CertificateTrustStore
         PendingDowngradeField = server;
 
         return true;
+    }
+
+    /// <summary>
+    ///     Forgets the certificate the last connection was accepted under. Called when a hop completes
+    ///     <em>without</em> encryption: the validation callback never runs on such a hop, so without
+    ///     this the previous encrypted server's certificate stays on hand and would be displayed as
+    ///     though it described the plaintext connection now in front of the user.
+    /// </summary>
+    public static void ClearAccepted()
+    {
+        using var scope = Gate.EnterScope();
+
+        AcceptedField = null;
     }
 
     /// <summary>

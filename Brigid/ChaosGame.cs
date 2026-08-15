@@ -747,6 +747,8 @@ public sealed class ChaosGame : Game
             return;
         }
 
+        CertificateTrustStore.ClearAccepted();
+
         if (CertificateTrustStore.FlagDowngradeIfSeen(transport.Server))
             NoticeDebugLog.Write(
                 $"!!! {transport.Server} has completed a TLS session before but did not upgrade this time");

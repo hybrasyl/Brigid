@@ -1,9 +1,12 @@
 #region
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Chaos.DarkAges.Definitions;
 using Chaos.Geometry.Abstractions.Definitions;
 using DALib.Networking.Wire;
+using Hybrasyl.Protocol.Packets;
+using Hybrasyl.Protocol.Wire;
 using Cli = DALib.Networking.Packets.Client;
 using Server = DALib.Networking.Packets.Server;
 #endregion
@@ -470,6 +473,66 @@ public sealed class ConnectionManager : IDisposable
     public void Disconnect() => Client.Disconnect();
 
     /// <summary>
+    ///     Sends an echo probe and reports the round-trip time when its reply arrives. Returns false
+    ///     when no dialect is engaged, which is the ordinary state on a retail connection.
+    /// </summary>
+    /// <remarks>
+    ///     Application-layer, and therefore a different measurement from
+    ///     <c>LatencyMonitor</c>'s kernel RTT: this one crosses the TLS record layer, both frame
+    ///     codecs, and the server's dispatch, so it reports what a packet actually costs rather than
+    ///     what the socket did. The token is a local timestamp echoed verbatim, so the reply carries
+    ///     its own start time and nothing has to be held between the halves.
+    /// </remarks>
+    public bool SendEchoProbe()
+    {
+        if (!Client.DialectEngaged)
+            return false;
+
+        Client.SendExtension(new ClientEcho((ulong)Stopwatch.GetTimestamp()));
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Raised on the game loop with the round-trip time of an echo reply.
+    /// </summary>
+    public event Action<TimeSpan>? OnEchoReply;
+
+    private readonly List<IExtensionServerPacket> ExtensionBuffer = [];
+
+    /// <summary>
+    ///     Drains extension packets. Separate from <see cref="ProcessPackets" />'s retail buffer
+    ///     because the two do not share a packet interface, but driven from the same call so both
+    ///     arrive on the game loop.
+    /// </summary>
+    private void ProcessExtensionPackets()
+    {
+        Client.DrainExtensionPackets(ExtensionBuffer);
+
+        foreach (var packet in ExtensionBuffer)
+            switch (packet)
+            {
+                case ClientEcho echo:
+                    //the token is the timestamp this client stamped; the server returns it verbatim.
+                    var roundTrip = Stopwatch.GetElapsedTime((long)echo.Token);
+
+                    //a token we never stamped cannot have started before now, so a negative elapsed time
+                    //identifies a reply that is not ours rather than a very fast one.
+                    if (roundTrip < TimeSpan.Zero)
+                        NoticeDebugLog.Write($"!!! echo reply carried a token this client never sent: 0x{echo.Token:X16}");
+                    else
+                        OnEchoReply?.Invoke(roundTrip);
+
+                    break;
+
+                default:
+                    NoticeDebugLog.Write($"unhandled extension opcode=0x{packet.Opcode:X4}");
+
+                    break;
+            }
+    }
+
+    /// <summary>
     ///     Re-arms the redirect whose connection attempt failed, so the game loop follows it again.
     ///     Returns false when there is nothing to retry.
     /// </summary>
@@ -692,6 +755,7 @@ public sealed class ConnectionManager : IDisposable
     /// </summary>
     public void ProcessPackets(List<IServerPacket> buffer)
     {
+        ProcessExtensionPackets();
         Client.DrainPackets(buffer);
 
         foreach (var pkt in buffer)

@@ -50,6 +50,11 @@ public sealed partial class WorldScreen
         {
             TransportSecure = secure;
             UpdateHuds(HudOps.SetTransportSecure, secure);
+
+            //a world transfer re-establishes the transport under a new connection; a panel left open
+            //would otherwise keep describing the hop that has already gone.
+            if (ServerInfo.Visible)
+                RefreshServerInfo();
         }
 
         //global tile animation tick — 100ms resolution (matches tile animation table format)

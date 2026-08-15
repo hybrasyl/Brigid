@@ -44,6 +44,9 @@ public interface IWorldHud
     SpellBookPanel SpellBookAlt { get; }
     StatsPanel StatsPanel { get; }
     ToolsPanel Tools { get; }
+    /// <summary>The click region over the server-name box, which opens the connection details.</summary>
+    UIButton? ServerBoxButton { get; }
+
     UIButton? TownMapButton { get; }
     UIButton? UsersButton { get; }
     Rectangle ViewportBounds { get; }

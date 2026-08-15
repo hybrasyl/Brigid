@@ -196,6 +196,7 @@ public sealed partial class WorldScreen : IScreen
     private IWorldHud WorldHud = null!;
     private WorldListControl WorldList = null!;
     private TownMapControl TownMapControl = null!;
+    private ServerInfoControl ServerInfo = null!;
     private WorldMap WorldMap = null!;
 
     /// <inheritdoc />
@@ -583,6 +584,8 @@ public sealed partial class WorldScreen : IScreen
         };
 
         TownMapControl = new TownMapControl();
+        ServerInfo = new ServerInfoControl();
+        ServerInfo.PingRequested += SendEchoProbe;
 
         MapLoading = new MapLoadingBar
         {
@@ -646,6 +649,7 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(DoorContext);
 
         Root.AddChild(TownMapControl);
+        Root.AddChild(ServerInfo);
         Root.AddChild(MapLoading);
         Root.AddChild(DisconnectPopup);
         Root.AddChild(ExitConfirmPopup);
@@ -724,6 +728,7 @@ public sealed partial class WorldScreen : IScreen
     {
         WorldState.UserOptions.SettingToggled -= HandleSettingToggled;
         Game.Connection.OnUserId -= HandleUserId;
+        Game.Connection.OnEchoReply -= HandleEchoReply;
         Game.Connection.OnMapInfo -= HandleMapInfo;
         Game.Connection.OnMapData -= HandleMapData;
         Game.Connection.OnMapLoadComplete -= HandleMapLoadComplete;

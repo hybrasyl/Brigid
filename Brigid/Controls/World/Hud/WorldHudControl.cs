@@ -41,6 +41,9 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
     private readonly UILabel? ServerNameLabel;
     private readonly UILabel SecureIcon;
 
+    /// <inheritdoc />
+    public UIButton? ServerBoxButton { get; }
+
     //tab panel system — shared center-bottom area
     private readonly UIPanel?[] TabPanels = new UIPanel?[Enum.GetValues<HudTab>()
                                                              .Length];
@@ -166,6 +169,8 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         ServerNameLabel = CreateLabel("SZ_SERVER", HorizontalAlignment.Center);
         SecureIcon = HudSecureIcon.Create(GetRect("SZ_SERVER"));
         AddChild(SecureIcon);
+        ServerBoxButton = HudSecureIcon.CreateHitRegion(GetRect("SZ_SERVER"));
+        AddChild(ServerBoxButton);
         DescriptionLabel = CreateLabel("SZ_DESCRIPTION");
 
         //ping indicator — prefab control supplies position; frames are loaded straight from _nping.spf
