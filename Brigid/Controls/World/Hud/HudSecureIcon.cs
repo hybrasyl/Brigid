@@ -30,13 +30,16 @@ internal static class HudSecureIcon
     //wide enough for the glyph's square ink at GLYPH_SIZE; the box's own text is centred and does not reach it.
     private const int WIDTH = 12;
 
+    //inset from the box's right edge, so the lock does not sit flush against the frame.
+    private const int RIGHT_PAD = 3;
+
     /// <summary>Builds the icon for a server-name box occupying <paramref name="serverBox" />.</summary>
     public static UILabel Create(Rectangle serverBox)
     {
         var icon = new UILabel
         {
             Name = "SecureIcon",
-            X = serverBox.Right - WIDTH,
+            X = serverBox.Right - WIDTH - RIGHT_PAD,
             Y = serverBox.Y,
             Width = WIDTH,
             Height = serverBox.Height,

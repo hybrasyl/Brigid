@@ -19,8 +19,8 @@ public sealed class LobbyLoginControl : PrefabPanel
     private const int CONFIG_BTN_HEIGHT = 18;
     private const int CONFIG_BTN_MARGIN = 6;
 
-    //how much wider than the version rect the connection line is; a padlock, a space and a fully
-    //qualified hostname are several times "Brigid v0.1.0". At 3x the row runs x=312..606, clear of the
+    //how much wider than the version rect the connection line is; a padlock and a fully qualified
+    //hostname are several times "Brigid v0.1.0". At 3x the row runs x=312..606, clear of the
     //logo (ends y=373) and of the config button (x<=64).
     private const int CONNECTION_WIDTH_FACTOR = 3;
 
@@ -249,7 +249,7 @@ public sealed class LobbyLoginControl : PrefabPanel
     ///     own prompt rather than a colour on this line.
     /// </remarks>
     public void SetConnection(string host, bool secure)
-        => ConnectionLabel?.Text = secure ? $"{Glyphs.PADLOCK} {host}" : host;
+        => ConnectionLabel?.Text = secure ? $"{Glyphs.PADLOCK}{host}" : host;
 }
 
 file static class ButtonExtensions
