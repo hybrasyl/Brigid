@@ -11,14 +11,14 @@ namespace Brigid.Controls.Generic;
 /// <summary>
 ///     Raised when the user accepts a server certificate.
 /// </summary>
-/// <param name="endpoint">The <c>host:port</c> being trusted.</param>
+/// <param name="server">The server identity being trusted.</param>
 /// <param name="fingerprint">The SHA-256 fingerprint to pin.</param>
 /// <param name="path">How trust was established, which also selects the revocation policy.</param>
-public delegate void CertificateTrustedHandler(string endpoint, string fingerprint, CertificateTrustPath path);
+public delegate void CertificateTrustedHandler(string server, string fingerprint, CertificateTrustPath path);
 
 /// <summary>
 ///     The trust-on-first-use prompt: shows what a server presented and asks whether to pin it. Raised
-///     when a TLS upgrade refuses a certificate — either one this endpoint has never presented, or one
+///     when a TLS upgrade refuses a certificate — either one this server has never presented, or one
 ///     that <em>differs</em> from what it presented before.
 /// </summary>
 /// <remarks>
@@ -45,7 +45,7 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
     private const int FINGERPRINT_BYTES_PER_LINE = 16;
 
     private readonly UILabel Headline;
-    private readonly UILabel EndpointRow;
+    private readonly UILabel ServerRow;
     private readonly UILabel SubjectRow;
     private readonly UILabel IssuerRow;
     private readonly UILabel ExpiryRow;
@@ -73,7 +73,7 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
         y += ROW_H;
 
         y += 4;
-        EndpointRow = AddRow(ref y);
+        ServerRow = AddRow(ref y);
         SubjectRow = AddRow(ref y);
         IssuerRow = AddRow(ref y);
         ExpiryRow = AddRow(ref y);
@@ -128,7 +128,7 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
 
         Headline.ForegroundColor = pending.IsPinMismatch ? DialogPalette.RequirementUnmet : DialogPalette.Title;
 
-        EndpointRow.Text = $"Server:  {pending.Endpoint}";
+        ServerRow.Text = $"Server:  {pending.Server}";
         SubjectRow.Text = $"Subject: {pending.Subject}";
         IssuerRow.Text = $"Issuer:  {pending.Issuer}";
 
@@ -179,7 +179,7 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
 
         Subject = null;
         Hide();
-        OnTrusted?.Invoke(pending.Endpoint, pending.Fingerprint, path);
+        OnTrusted?.Invoke(pending.Server, pending.Fingerprint, path);
     }
 
     private void Decline()

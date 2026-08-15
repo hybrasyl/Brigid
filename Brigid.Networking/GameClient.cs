@@ -96,15 +96,18 @@ public sealed class GameClient : IDisposable
     public bool UpgradeToTls { get; set; }
 
     /// <summary>
-    ///     Supplies the TLS options for one endpoint, given its host and port. Null means platform
-    ///     default (system-root) validation with no pinning.
+    ///     Supplies the TLS options for one server identity — the name the certificate is validated
+    ///     against, pinned under, and sent as SNI. Null means platform default (system-root)
+    ///     validation with no pinning.
     /// </summary>
     /// <remarks>
-    ///     A factory rather than a stored callback because trust is <em>per endpoint</em>: the lobby,
-    ///     login, and world hops are different servers, and a validator built for one would key a pin
-    ///     lookup on the wrong endpoint after a redirect. It is consulted afresh on every upgrade.
+    ///     A factory rather than a stored callback because the identity can change mid-session: a
+    ///     redirect to a server outside the lobby's identity authenticates as itself, and a validator
+    ///     built for the previous hop would validate against the wrong name. It is consulted afresh on
+    ///     every upgrade. The port is deliberately absent — a certificate is bound to a hostname, not
+    ///     to a port, and all three hops of one server present the same certificate.
     /// </remarks>
-    public Func<string, int, SslClientAuthenticationOptions>? TlsOptions { get; set; }
+    public Func<string, SslClientAuthenticationOptions>? TlsOptions { get; set; }
 
     /// <summary>The dialect this connection negotiated, or null when no TLS upgrade occurred.</summary>
     public DialectResolution? Negotiated { get; private set; }
@@ -281,7 +284,7 @@ public sealed class GameClient : IDisposable
     /// <param name="port">The server port.</param>
     /// <param name="ct">Cancellation token.</param>
     public Task ConnectAsync(string host, int port, CancellationToken ct = default)
-        => ConnectAsync(host, port, false, ct);
+        => ConnectAsync(host, port, false, null, ct);
 
     /// <summary>
     ///     Connects asynchronously and, for a server-first hop, reads the server's opening greeting
@@ -300,8 +303,20 @@ public sealed class GameClient : IDisposable
     ///     True for the lobby, which is the only server-first hop; login and world are client-first
     ///     and have no greeting to wait for.
     /// </param>
+    /// <param name="tlsHost">
+    ///     The name this connection authenticates as — validated against the certificate, pinned
+    ///     under, and sent as SNI. Null means <paramref name="host" /> is both dialled and validated.
+    ///     They differ on a redirect, which carries an IP address and no name: dialling the IP
+    ///     preserves the server's routing choice while the inherited name is what can actually be
+    ///     validated, since an IP literal matches no ordinary certificate.
+    /// </param>
     /// <param name="ct">Cancellation token.</param>
-    public async Task ConnectAsync(string host, int port, bool expectGreeting, CancellationToken ct = default)
+    public async Task ConnectAsync(
+        string host,
+        int port,
+        bool expectGreeting,
+        string? tlsHost = null,
+        CancellationToken ct = default)
     {
         if (Disposed)
             throw new ObjectDisposedException(nameof(GameClient));
@@ -328,7 +343,7 @@ public sealed class GameClient : IDisposable
                 UpgradeToTls = ServerCapability is not null;
 
             if (UpgradeToTls && carryOver.IsEmpty)
-                await UpgradeToTlsAsync(host, port, ct);
+                await UpgradeToTlsAsync(tlsHost ?? host, ct);
 
             StartPumps(carryOver.Span);
         } catch
@@ -632,7 +647,7 @@ public sealed class GameClient : IDisposable
     ///     of the peer's can survive into the encrypted session and nothing else holds the stream
     ///     during the handshake. Both properties are the caller's to preserve.
     /// </remarks>
-    private async Task UpgradeToTlsAsync(string host, int port, CancellationToken ct)
+    private async Task UpgradeToTlsAsync(string identity, CancellationToken ct)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(UpgradeTimeout);
@@ -645,7 +660,7 @@ public sealed class GameClient : IDisposable
             //options cannot express it on a platform whose stack negotiates something lower.
             tls = await TlsChannel.UpgradeAsClientAsync(
                 Transport!,
-                TlsOptions?.Invoke(host, port) ?? TlsConfig.ClientOptions(host),
+                TlsOptions?.Invoke(identity) ?? TlsConfig.ClientOptions(identity),
                 cancellationToken: deadline.Token);
         } catch (Exception ex)
         {
@@ -653,7 +668,7 @@ public sealed class GameClient : IDisposable
             //disconnect, with the reason — very often a certificate the system roots do not trust —
             //invisible in the log.
             NoticeDebugLog.Write(
-                $"!!! TLS handshake with {host} failed: {ex.GetType().Name}: {ex.Message}"
+                $"!!! TLS handshake with {identity} failed: {ex.GetType().Name}: {ex.Message}"
                 + (ex.InnerException is { } inner ? $" <- {inner.GetType().Name}: {inner.Message}" : string.Empty));
 
             throw;
@@ -662,7 +677,7 @@ public sealed class GameClient : IDisposable
         //published before negotiating so the negotiation itself travels encrypted.
         Transport = tls;
 
-        NoticeDebugLog.Write($"TLS handshake with {host} complete ({tls.SslProtocol}); negotiating dialect");
+        NoticeDebugLog.Write($"TLS handshake with {identity} complete ({tls.SslProtocol}); negotiating dialect");
 
         try
         {
@@ -671,14 +686,14 @@ public sealed class GameClient : IDisposable
             Negotiated = result.Resolution;
 
             NoticeDebugLog.Write(
-                $"TLS established with {host}; mode={result.Resolution.Mode} dialect={result.Resolution.Dialect} "
+                $"TLS established with {identity}; mode={result.Resolution.Mode} dialect={result.Resolution.Dialect} "
                 + $"offer=0x{result.Offer.MinDialect:X2}..0x{result.Offer.MaxDialect:X2}");
         } catch (Exception ex)
         {
             //a negotiation failure after a good handshake usually means the two ends disagree on the
             //negotiation wire format, which is not itself versioned by the dialect mechanism.
             NoticeDebugLog.Write(
-                $"!!! dialect negotiation with {host} failed: {ex.GetType().Name}: {ex.Message}");
+                $"!!! dialect negotiation with {identity} failed: {ex.GetType().Name}: {ex.Message}");
 
             throw;
         }

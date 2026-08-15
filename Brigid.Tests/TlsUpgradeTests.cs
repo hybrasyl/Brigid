@@ -39,7 +39,7 @@ public class TlsUpgradeTests
         using var server = new TlsLoopbackServer(certificate, CapabilityMarker.Current);
         using var client = new GameClient
         {
-            TlsOptions = (host, _) => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
+            TlsOptions = host => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
         };
 
         client.ResetCrypto();
@@ -72,7 +72,7 @@ public class TlsUpgradeTests
         using var server = new TlsLoopbackServer(certificate, marker: null);
         using var client = new GameClient
         {
-            TlsOptions = (host, _) => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
+            TlsOptions = host => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
         };
 
         client.ResetCrypto();
@@ -95,7 +95,7 @@ public class TlsUpgradeTests
         using var server = new TlsLoopbackServer(certificate, CapabilityMarker.Current);
         using var client = new GameClient
         {
-            TlsOptions = (host, _) => TlsConfig.ClientOptions(host, (_, _, _, _) => false, X509RevocationMode.NoCheck)
+            TlsOptions = host => TlsConfig.ClientOptions(host, (_, _, _, _) => false, X509RevocationMode.NoCheck)
         };
 
         client.ResetCrypto();
@@ -119,7 +119,7 @@ public class TlsUpgradeTests
         using var lobby = new TlsLoopbackServer(certificate, CapabilityMarker.Current);
         using var client = new GameClient
         {
-            TlsOptions = (host, _) => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
+            TlsOptions = host => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
         };
 
         client.ResetCrypto();
@@ -137,6 +137,67 @@ public class TlsUpgradeTests
         var negotiated = client.Negotiated;
         Assert.NotNull(negotiated);
         Assert.Equal(ConnectionMode.DialectOverTls, negotiated!.Value.Mode);
+    }
+
+    /// <summary>
+    ///     The seam the redirect scheme rests on: what reaches the TLS options factory is the server
+    ///     identity, not the address that was dialled. Without the split, a hop redirected to by address
+    ///     puts an IP literal to the certificate check and to the pin lookup, and neither can match.
+    /// </summary>
+    [Fact]
+    public async Task Upgrade_ValidatesAgainstTheIdentityRatherThanTheDialledAddress()
+    {
+        using var certificate = CreateSelfSignedCertificate();
+        using var server = new TlsLoopbackServer(certificate, CapabilityMarker.Current);
+
+        var seen = new List<string>();
+
+        using var client = new GameClient
+        {
+            TlsOptions = identity =>
+            {
+                seen.Add(identity);
+
+                return TlsConfig.ClientOptions(identity, AcceptOnly(certificate), X509RevocationMode.NoCheck);
+            }
+        };
+
+        client.ResetCrypto();
+
+        //dialled by address, authenticated as a name — the shape every redirect hop takes.
+        await client.ConnectAsync("127.0.0.1", server.Port, true, "localhost")
+                    .WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+
+        Assert.Equal(["localhost"], seen);
+        Assert.NotNull(client.Negotiated);
+    }
+
+    /// <summary>
+    ///     Omitting the identity leaves the dialled host doing both jobs, which is what the lobby hop
+    ///     wants: it is reached by the name the user configured.
+    /// </summary>
+    [Fact]
+    public async Task Upgrade_WithoutAnIdentity_ValidatesAgainstTheDialledHost()
+    {
+        using var certificate = CreateSelfSignedCertificate();
+        using var server = new TlsLoopbackServer(certificate, CapabilityMarker.Current);
+
+        var seen = new List<string>();
+
+        using var client = new GameClient
+        {
+            TlsOptions = identity =>
+            {
+                seen.Add(identity);
+
+                return TlsConfig.ClientOptions(identity, AcceptOnly(certificate), X509RevocationMode.NoCheck);
+            }
+        };
+
+        client.ResetCrypto();
+        await client.ConnectAsync("localhost", server.Port, true).WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+
+        Assert.Equal(["localhost"], seen);
     }
 
     private static async Task<IServerPacket> DrainOneAsync(GameClient client)

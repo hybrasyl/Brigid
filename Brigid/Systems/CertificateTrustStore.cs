@@ -15,13 +15,13 @@ namespace Brigid.Systems;
 ///     What a server presented that the user has not yet ruled on: enough to identify the certificate
 ///     in a prompt, plus why it was refused.
 /// </summary>
-/// <param name="Endpoint">The <c>host:port</c> the certificate was presented for.</param>
+/// <param name="Server">The server identity the certificate was presented for.</param>
 /// <param name="Subject">The certificate subject.</param>
 /// <param name="Issuer">The certificate issuer.</param>
 /// <param name="Fingerprint">SHA-256 fingerprint, colon-separated hex.</param>
 /// <param name="NotAfter">Expiry, for display.</param>
 /// <param name="IsPinMismatch">
-///     True when this endpoint was already pinned to a <em>different</em> certificate. The prompt must
+///     True when this server was already pinned to a <em>different</em> certificate. The prompt must
 ///     read differently here: a first-time certificate is unknown, a changed one contradicts something
 ///     the user already approved.
 /// </param>
@@ -31,7 +31,7 @@ namespace Brigid.Systems;
 ///     public-CA endpoint, not a trust-on-first-use one, and their revocation policies differ.
 /// </param>
 public sealed record PendingCertificateTrust(
-    string Endpoint,
+    string Server,
     string Subject,
     string Issuer,
     string Fingerprint,
@@ -40,11 +40,25 @@ public sealed record PendingCertificateTrust(
     bool PlatformValidated);
 
 /// <summary>
-///     Trust-on-first-use certificate pins and TLS history, keyed by <c>host:port</c> and persisted in
-///     the per-user app root. SSH <c>known_hosts</c> semantics: an unknown certificate is refused and
-///     offered to the user, an accepted one is pinned and never asked about again, and a changed one is
-///     refused loudly.
+///     Trust-on-first-use certificate pins and TLS history, keyed by <em>server identity</em> — the
+///     hostname a certificate is validated against — and persisted in the per-user app root. SSH
+///     <c>known_hosts</c> semantics: an unknown certificate is refused and offered to the user, an
+///     accepted one is pinned and never asked about again, and a changed one is refused loudly.
 /// </summary>
+/// <remarks>
+///     <para>
+///         The key is the host alone, not <c>host:port</c>. A certificate is bound to a hostname; the
+///         port identifies a service on that host and appears in no part of validation. Keying by port
+///         asked the user to vouch for the same certificate three times per session — once each for
+///         lobby, login and world — which trains exactly the click-through the prompt exists to
+///         prevent. A different certificate on another port of the same host still mismatches and
+///         still prompts, so this narrows the prompting, not the checking.
+///     </para>
+///     <para>
+///         This diverges from <c>EXTENSIONS.md</c> §8.4, which specifies pinning keyed by endpoint.
+///         The divergence is client-side only and invisible on the wire.
+///     </para>
+/// </remarks>
 /// <remarks>
 ///     Lives in the client project rather than <c>Brigid.Networking</c>: it needs
 ///     <see cref="AppPaths" /> and drives UI, and the networking layer takes only a validation callback.
@@ -93,8 +107,14 @@ public static class CertificateTrustStore
 
     private static string FilePath => Path.Combine(AppPaths.AppRoot, "known-servers.json");
 
-    /// <summary>Forms the store key for a server endpoint.</summary>
-    public static string KeyFor(string host, int port) => $"{host}:{port}";
+    /// <summary>
+    ///     The store's key format. Version 1 keyed entries by <c>host:port</c>; version 2 keys them by
+    ///     host alone. Version 1 entries are discarded rather than migrated: stripping the port would
+    ///     merge three keys that were free to hold different fingerprints, and picking a winner among
+    ///     them is a guess about which certificate the user vouched for. Discarding costs one re-prompt
+    ///     per server and cannot silently widen a pin to a fingerprint the user never saw.
+    /// </summary>
+    private const int STORE_VERSION = 2;
 
     /// <summary>Loads pins from disk, replacing anything held in memory.</summary>
     public static void Load()
@@ -103,6 +123,7 @@ public static class CertificateTrustStore
 
         Entries.Clear();
         PendingField = null;
+        PendingDowngradeField = null;
 
         foreach (var (endpoint, fingerprint) in PrePinned)
             Entries[endpoint] = new TrustEntry
@@ -120,11 +141,22 @@ public static class CertificateTrustStore
         if (model?.Servers is null)
             return;
 
+        if (model.Version != STORE_VERSION)
+        {
+            //loud rather than silent: the user is about to be asked to vouch for servers they already
+            //approved, and without this the re-prompt looks like a pin mismatch with no cause.
+            NoticeDebugLog.Write(
+                $"known-servers.json is version {model.Version}; this client keys pins by host (version "
+                + $"{STORE_VERSION}). {model.Servers.Count} stored pin(s) discarded — each server will be asked about once more.");
+
+            return;
+        }
+
         //a shipped pre-pin outranks a stored one: the flagship pin is a claim the client makes, not a
         //user preference, and letting a file override it would defeat the point of shipping it.
-        foreach (var (endpoint, entry) in model.Servers)
-            if (!PrePinned.ContainsKey(endpoint))
-                Entries[endpoint] = entry;
+        foreach (var (server, entry) in model.Servers)
+            if (!PrePinned.ContainsKey(server))
+                Entries[server] = entry;
     }
 
     private static Model? ReadModel()
@@ -148,6 +180,7 @@ public static class CertificateTrustStore
         using (Gate.EnterScope())
             model = new Model
             {
+                Version = STORE_VERSION,
                 Servers = new Dictionary<string, TrustEntry>(Entries, StringComparer.OrdinalIgnoreCase)
             };
 
@@ -162,34 +195,34 @@ public static class CertificateTrustStore
     }
 
     /// <summary>
-    ///     Builds the validation callback for one connection. The endpoint is captured here because the
-    ///     platform callback does not carry it.
+    ///     Builds the validation callback for one connection. The server identity is captured here
+    ///     because the platform callback does not carry it.
     /// </summary>
-    public static RemoteCertificateValidationCallback ValidatorFor(string host, int port)
-        => (_, certificate, _, errors) => Validate(KeyFor(host, port), certificate, errors);
+    public static RemoteCertificateValidationCallback ValidatorFor(string server)
+        => (_, certificate, _, errors) => Validate(server, certificate, errors);
 
     /// <summary>
-    ///     The complete TLS client options for an endpoint — validator and revocation policy together,
-    ///     since both follow from the same trust record. This is what
+    ///     The complete TLS client options for a server identity — validator and revocation policy
+    ///     together, since both follow from the same trust record. This is what
     ///     <c>GameClient.TlsOptions</c> is set to.
     /// </summary>
-    public static SslClientAuthenticationOptions OptionsFor(string host, int port)
-        => TlsConfig.ClientOptions(host, ValidatorFor(host, port), RevocationModeFor(host, port));
+    public static SslClientAuthenticationOptions OptionsFor(string server)
+        => TlsConfig.ClientOptions(server, ValidatorFor(server), RevocationModeFor(server));
 
     /// <summary>
-    ///     The revocation policy for an endpoint, from how its trust was established. See
+    ///     The revocation policy for a server, from how its trust was established. See
     ///     <see cref="CertificateTrustDecision.RevocationFor" /> for why the predicate is the trust path
     ///     rather than the presence of a pin.
     /// </summary>
-    public static X509RevocationMode RevocationModeFor(string host, int port)
+    public static X509RevocationMode RevocationModeFor(string server)
     {
         using var scope = Gate.EnterScope();
 
         return CertificateTrustDecision.RevocationFor(
-            Entries.TryGetValue(KeyFor(host, port), out var entry) ? entry.Path : null);
+            Entries.TryGetValue(server, out var entry) ? entry.Path : null);
     }
 
-    private static bool Validate(string endpoint, X509Certificate? certificate, SslPolicyErrors errors)
+    private static bool Validate(string server, X509Certificate? certificate, SslPolicyErrors errors)
     {
         if (certificate is null)
             return false;
@@ -198,7 +231,7 @@ public static class CertificateTrustStore
 
         using var scope = Gate.EnterScope();
 
-        Entries.TryGetValue(endpoint, out var entry);
+        Entries.TryGetValue(server, out var entry);
 
         var verdict = CertificateTrustDecision.Decide(entry?.Fingerprint, presented, errors);
 
@@ -210,7 +243,7 @@ public static class CertificateTrustStore
         }
 
         PendingField = new PendingCertificateTrust(
-            endpoint,
+            server,
             certificate.Subject,
             certificate.Issuer,
             presented,
@@ -221,22 +254,22 @@ public static class CertificateTrustStore
         //the fingerprint is what the user is being asked to vouch for, so it belongs in the log whether
         //or not a prompt is reachable — it is also the value needed to pin an endpoint by hand.
         NoticeDebugLog.Write(
-            $"certificate refused for {endpoint} ({(verdict == CertificateTrustVerdict.RejectPinMismatch ? "pinned to a different certificate" : "not trusted")}); "
+            $"certificate refused for {server} ({(verdict == CertificateTrustVerdict.RejectPinMismatch ? "pinned to a different certificate" : "not trusted")}); "
             + $"subject={certificate.Subject} issuer={certificate.Issuer} sha256={presented}");
 
         return false;
     }
 
     /// <summary>
-    ///     Pins <paramref name="fingerprint" /> for <paramref name="endpoint" /> after the user accepts
+    ///     Pins <paramref name="fingerprint" /> for <paramref name="server" /> after the user accepts
     ///     it, and persists. The connection must then be retried; the refusal that raised the prompt
     ///     already dropped it.
     /// </summary>
-    public static void Trust(string endpoint, string fingerprint, CertificateTrustPath path)
+    public static void Trust(string server, string fingerprint, CertificateTrustPath path)
     {
         using (Gate.EnterScope())
         {
-            Entries[endpoint] = new TrustEntry
+            Entries[server] = new TrustEntry
             {
                 Fingerprint = fingerprint,
                 TlsSeen = true,
@@ -258,33 +291,108 @@ public static class CertificateTrustStore
     }
 
     /// <summary>
-    ///     Records that <paramref name="endpoint" /> completed a TLS upgrade, so a later plaintext
-    ///     connection to it can be flagged.
+    ///     Records that <paramref name="server" /> completed a TLS upgrade, so a later plaintext
+    ///     connection to it can be flagged. Called on every successful upgrade, not only on the ones
+    ///     that prompted: a server with a publicly valid certificate is accepted silently and pins
+    ///     nothing, and it is precisely that path this history has to cover.
     /// </summary>
-    public static void RecordTlsSeen(string endpoint)
+    /// <returns>True when this is new information, so the caller can avoid a write per hop.</returns>
+    public static bool RecordTlsSeen(string server)
     {
         using (Gate.EnterScope())
         {
-            if (Entries.TryGetValue(endpoint, out var entry))
+            if (Entries.TryGetValue(server, out var entry))
+            {
+                if (entry.TlsSeen)
+                    return false;
+
                 entry.TlsSeen = true;
-            else
-                Entries[endpoint] = new TrustEntry { TlsSeen = true };
+            } else
+                Entries[server] = new TrustEntry { TlsSeen = true };
         }
 
         Save();
+
+        return true;
     }
 
     /// <summary>
-    ///     Whether <paramref name="endpoint" /> has previously spoken TLS. A connection that does not
+    ///     Whether <paramref name="server" /> has previously spoken TLS. A connection that does not
     ///     upgrade where this is true is the downgrade case worth warning about: the capability marker
     ///     rides in <em>plaintext</em>, so an active attacker can strip it, and silence is otherwise
     ///     indistinguishable from a server that stopped offering the extension.
     /// </summary>
-    public static bool HasSpokenTls(string endpoint)
+    public static bool HasSpokenTls(string server)
     {
         using var scope = Gate.EnterScope();
 
-        return Entries.TryGetValue(endpoint, out var entry) && entry.TlsSeen;
+        return Entries.TryGetValue(server, out var entry) && entry.TlsSeen;
+    }
+
+    /// <summary>
+    ///     The server that connected in plaintext despite a recorded TLS history, or null. Set when a
+    ///     connection completes without an upgrade; read by the lobby screen to raise the warning.
+    /// </summary>
+    /// <remarks>
+    ///     Mirrors <see cref="Pending" /> deliberately. Both are decisions discovered on a connect task
+    ///     and acted on by the game loop, which is the thread allowed to touch the control tree.
+    /// </remarks>
+    public static string? PendingDowngrade
+    {
+        get
+        {
+            using var scope = Gate.EnterScope();
+
+            return PendingDowngradeField;
+        }
+    }
+
+    private static string? PendingDowngradeField;
+
+    /// <summary>
+    ///     Servers the user has agreed to talk to in plaintext this run. Deliberately not persisted:
+    ///     the answer covers the session it was given in, and a stripping attacker should have to strip
+    ///     again — and be refused again — the next time the client starts.
+    /// </summary>
+    private static readonly HashSet<string> PlaintextAccepted = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    ///     Flags <paramref name="server" /> as having connected in plaintext after previously speaking
+    ///     TLS, if it has and the user has not already agreed to it this run. Returns true when the flag
+    ///     was raised.
+    /// </summary>
+    /// <remarks>
+    ///     The session exemption is what keeps one answer from being asked for again on the next hop:
+    ///     lobby, login and world are three connections to one identity, and a user who continued past
+    ///     the lobby's warning has already answered for all of them.
+    /// </remarks>
+    public static bool FlagDowngradeIfSeen(string server)
+    {
+        using var scope = Gate.EnterScope();
+
+        if (PlaintextAccepted.Contains(server))
+            return false;
+
+        if (!Entries.TryGetValue(server, out var entry) || !entry.TlsSeen)
+            return false;
+
+        PendingDowngradeField = server;
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Clears the pending downgrade warning once the user has ruled on it. When
+    ///     <paramref name="accepted" />, the server is exempt for the rest of this run.
+    /// </summary>
+    public static void ClearDowngrade(string server, bool accepted)
+    {
+        using var scope = Gate.EnterScope();
+
+        PendingDowngradeField = null;
+
+        if (accepted)
+            PlaintextAccepted.Add(server);
     }
 
     /// <summary>SHA-256 of the certificate's DER encoding, as colon-separated uppercase hex.</summary>
@@ -316,6 +424,9 @@ public static class CertificateTrustStore
 
     private sealed class Model
     {
+        /// <summary>Key format of <see cref="Servers" />. Absent (0) means the pre-versioning host:port layout.</summary>
+        public int Version { get; set; }
+
         public Dictionary<string, TrustEntry>? Servers { get; set; }
     }
 }

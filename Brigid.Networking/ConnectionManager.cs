@@ -1,5 +1,6 @@
 #region
 using System.Net;
+using System.Net.Sockets;
 using Chaos.DarkAges.Definitions;
 using Chaos.Geometry.Abstractions.Definitions;
 using DALib.Networking.Wire;
@@ -20,6 +21,23 @@ public sealed class ConnectionManager : IDisposable
     private readonly Action<IServerPacket>?[] PacketHandlers = new Action<IServerPacket>?[byte.MaxValue + 1];
     private WorldEntryState EntryState;
     private RedirectInfo? PendingRedirect;
+
+    //the redirect currently being followed, held until its connection succeeds so a hop refused over a
+    //certificate can be retried once the user has ruled on it.
+    private RedirectInfo? LastRedirect;
+
+    /// <summary>
+    ///     The host the lobby was reached by. This is the session's server identity: the later hops are
+    ///     redirected to by address, and inherit this name when the address belongs to it.
+    /// </summary>
+    private string LobbyHost = string.Empty;
+
+    /// <summary>
+    ///     How long a redirect may spend resolving the lobby host before giving up and authenticating
+    ///     the hop as its bare address. Short on purpose — it sits directly in the connect path, and
+    ///     failing it costs a certificate prompt rather than the connection.
+    /// </summary>
+    private static readonly TimeSpan RedirectResolveTimeout = TimeSpan.FromSeconds(3);
 
     //set when the client confirms a logout (ClientExit endSignal=0). A redirect that arrives while in World
     //means "go back to the login screen" only if we asked to quit; an unsolicited World-state redirect is a
@@ -74,6 +92,13 @@ public sealed class ConnectionManager : IDisposable
     ///     lobby/server-select flow on the game-loop thread); subscribers touching UI must not block.
     /// </summary>
     public event Action? ServerNameChanged;
+
+    /// <summary>
+    ///     Raised once per hop, after its connection is established, with the transport it ended up on.
+    ///     The client layer records TLS history from this and decides whether a plaintext hop against a
+    ///     server known to speak TLS warrants a warning.
+    /// </summary>
+    public event Action<TransportEstablished>? OnTransportEstablished;
 
     /// <summary>
     ///     The current phase of the connection lifecycle. Fires <see cref="StateChanged" /> on transitions.
@@ -189,12 +214,18 @@ public sealed class ConnectionManager : IDisposable
         LobbyClientVersion = clientVersion;
         PendingLobbyVersion = true;
         PendingTargetState = ConnectionState.Lobby;
+        LobbyHost = host;
+
+        //a session starting over has no hop to retry. Left set, a redirect abandoned earlier would be
+        //re-followed by the next certificate the user accepts at the lobby.
+        LastRedirect = null;
 
         try
         {
             //the lobby is the only server-first hop: its 0x7E greeting carries the capability marker,
             //and is read before the pumps start so an upgrade has a clean seam.
-            await Client.ConnectAsync(host, port, true, ct);
+            await Client.ConnectAsync(host, port, true, ct: ct);
+            ReportTransport(host, ConnectionState.Lobby);
         } catch (Exception ex)
         {
             PendingLobbyVersion = false;
@@ -302,7 +333,10 @@ public sealed class ConnectionManager : IDisposable
         if (PendingRedirect is not { } redirect)
             return;
 
+        //cleared before the await, not after: ProcessPackets re-checks this every frame and would
+        //otherwise launch a second hop while this one is still handshaking.
         PendingRedirect = null;
+        LastRedirect = redirect;
 
         State = ConnectionState.Connecting;
 
@@ -313,9 +347,15 @@ public sealed class ConnectionManager : IDisposable
         EntryState = WorldEntryState.None;
         PendingTargetState = redirect.TargetState;
 
+        var identity = await ResolveRedirectIdentityAsync(redirect.EndPoint.Address);
+
         try
         {
-            await Client.ConnectAsync(redirect.EndPoint.Address.ToString(), redirect.EndPoint.Port, false);
+            await Client.ConnectAsync(
+                redirect.EndPoint.Address.ToString(),
+                redirect.EndPoint.Port,
+                false,
+                identity);
         } catch (Exception ex)
         {
             State = ConnectionState.Disconnected;
@@ -324,6 +364,11 @@ public sealed class ConnectionManager : IDisposable
 
             return;
         }
+
+        //kept until here so a certificate refused on this hop can be trusted and the same hop retried;
+        //restarting from the lobby would cost the user their credentials a second time.
+        LastRedirect = null;
+        ReportTransport(identity, redirect.TargetState);
 
         //send clientjoin immediately after connecting.
         //not all servers send acceptconnection before expecting this packet.
@@ -340,6 +385,102 @@ public sealed class ConnectionManager : IDisposable
 
         if (State == ConnectionState.Login)
             RequestHomepage();
+    }
+
+    /// <summary>
+    ///     The name a redirect hop authenticates as: the lobby's host when the redirect address is one
+    ///     of that host's own addresses, otherwise the address itself.
+    /// </summary>
+    /// <remarks>
+    ///     <para>
+    ///         The retail <c>0x03</c> redirect carries an IP address and no name, and an IP literal
+    ///         matches no ordinary certificate — so without this every hop after the lobby falls to
+    ///         trust-on-first-use and re-prompts for a certificate the user already approved.
+    ///     </para>
+    ///     <para>
+    ///         DNS is not an authentication input here. It decides only <em>which name</em> is put to
+    ///         the certificate check; a resolver that lies produces a name the presented certificate
+    ///         does not match, or a fingerprint that does not match the pin, and the hop is refused on
+    ///         that evidence rather than on this lookup.
+    ///     </para>
+    /// </remarks>
+    private async Task<string> ResolveRedirectIdentityAsync(IPAddress target)
+    {
+        if (string.IsNullOrEmpty(LobbyHost))
+            return target.ToString();
+
+        //a lobby reached by bare address needs no resolver; it is already the comparison.
+        if (IPAddress.TryParse(LobbyHost, out var literal))
+            return ChooseRedirectIdentity(LobbyHost, [literal], target);
+
+        IPAddress[] addresses;
+
+        try
+        {
+            using var deadline = new CancellationTokenSource(RedirectResolveTimeout);
+            addresses = await Dns.GetHostAddressesAsync(LobbyHost, deadline.Token);
+        } catch (Exception ex) when (ex is SocketException or OperationCanceledException)
+        {
+            NoticeDebugLog.Write(
+                $"redirect identity: could not resolve {LobbyHost} ({ex.GetType().Name}); {target} authenticates as itself");
+
+            return target.ToString();
+        }
+
+        var identity = ChooseRedirectIdentity(LobbyHost, addresses, target);
+
+        if (identity != LobbyHost)
+            NoticeDebugLog.Write($"redirect to {target} is not an address of {LobbyHost}; it authenticates as itself");
+
+        return identity;
+    }
+
+    /// <summary>
+    ///     The decision inside <see cref="ResolveRedirectIdentityAsync" />, separated from the lookup
+    ///     that feeds it: the lobby's host when <paramref name="target" /> is one of
+    ///     <paramref name="lobbyAddresses" />, otherwise the address as its own identity.
+    /// </summary>
+    internal static string ChooseRedirectIdentity(
+        string lobbyHost,
+        IReadOnlyList<IPAddress> lobbyAddresses,
+        IPAddress target)
+    {
+        if (string.IsNullOrEmpty(lobbyHost))
+            return target.ToString();
+
+        for (var i = 0; i < lobbyAddresses.Count; i++)
+            if (lobbyAddresses[i].Equals(target))
+                return lobbyHost;
+
+        return target.ToString();
+    }
+
+    /// <summary>
+    ///     Announces what transport a completed hop ended up on, so the client layer can record TLS
+    ///     history and notice a server that has stopped upgrading.
+    /// </summary>
+    private void ReportTransport(string identity, ConnectionState target)
+        => OnTransportEstablished?.Invoke(
+            new TransportEstablished(identity, Client.Negotiated is not null, target));
+
+    /// <summary>
+    ///     Drops the current connection. For a caller that has decided not to proceed — a refused
+    ///     downgrade warning — rather than for error paths, which tear down through the client already.
+    /// </summary>
+    public void Disconnect() => Client.Disconnect();
+
+    /// <summary>
+    ///     Re-arms the redirect whose connection attempt failed, so the game loop follows it again.
+    ///     Returns false when there is nothing to retry.
+    /// </summary>
+    public bool RetryLastRedirect()
+    {
+        if (LastRedirect is not { } redirect)
+            return false;
+
+        PendingRedirect = redirect;
+
+        return true;
     }
 
     /// <summary>
@@ -1537,6 +1678,17 @@ public sealed class ConnectionManager : IDisposable
     }
     #endregion
 }
+
+/// <summary>
+///     What transport one completed hop ended up on.
+/// </summary>
+/// <param name="Server">
+///     The identity the hop authenticated as — the name a certificate was checked against and a pin
+///     looked up under, which is the lobby's host for every hop of an ordinary session.
+/// </param>
+/// <param name="Encrypted">Whether the hop upgraded to TLS and negotiated a dialect.</param>
+/// <param name="Target">The connection state this hop is entering.</param>
+public readonly record struct TransportEstablished(string Server, bool Encrypted, ConnectionState Target);
 
 /// <summary>
 ///     Contains redirect information received from the server.
