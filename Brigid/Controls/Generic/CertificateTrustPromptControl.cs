@@ -37,7 +37,10 @@ public delegate void CertificateTrustedHandler(string server, string fingerprint
 public sealed class CertificateTrustPromptControl : CenteredModalPanel
 {
     private const int PANEL_W = 396;
-    private const int PANEL_H = 208;
+
+    //tall enough for three wrapped guidance lines clear of the action bar. At 208 the guidance ran under
+    //it, and the wrap count is per-face — a face that inks larger takes a line the panel has to have.
+    private const int PANEL_H = 236;
     private const int ROW_H = 14;
     private const int TRUST_W = 64;
 
@@ -87,7 +90,7 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
         y += 4;
         Guidance = AddRow(ref y);
         Guidance.WordWrap = true;
-        Guidance.Height = ROW_H * 2;
+        Guidance.Height = ROW_H * 3;
 
         AddBottomBarButton("Trust", TRUST_W, AcceptTrust);
 

@@ -29,7 +29,10 @@ namespace Brigid.Controls.Generic;
 public sealed class InsecureConnectionPromptControl : CenteredModalPanel
 {
     private const int PANEL_W = 396;
-    private const int PANEL_H = 184;
+
+    //sized so the wrapped body and guidance clear the action bar with a line to spare: the wrap count is
+    //per-face, and the sibling trust prompt shipped a face-dependent line under the bar.
+    private const int PANEL_H = 208;
     private const int ROW_H = 14;
     private const int CONTINUE_W = 72;
     private const int DISCONNECT_W = 80;
@@ -65,18 +68,18 @@ public sealed class InsecureConnectionPromptControl : CenteredModalPanel
         y += 4;
         Explanation = AddRow(ref y);
         Explanation.WordWrap = true;
-        Explanation.Height = ROW_H * 3;
+        Explanation.Height = ROW_H * 4;
 
         Explanation.Text =
             "Your password and everything you say would travel in the clear. This can mean the server turned "
             + "encryption off, or that something on the network is stripping it out.";
 
-        y += ROW_H * 2;
+        y += ROW_H * 3;
 
         y += 4;
         Guidance = AddRow(ref y, DialogPalette.RequirementUnmet);
         Guidance.WordWrap = true;
-        Guidance.Height = ROW_H * 2;
+        Guidance.Height = ROW_H * 3;
         Guidance.Text = "Continue only if you know encryption was turned off deliberately.";
 
         //the close box is the refusal, so it says what it does. Escape reaches the same handler.

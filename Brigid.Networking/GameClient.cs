@@ -87,6 +87,10 @@ public sealed class GameClient : IDisposable
     /// </summary>
     public CapabilityMarker? ServerCapability { get; private set; }
 
+    //the parsed greeting, held between the inline read and StartPumps so it cannot be dispatched while
+    //the connection has no way to answer it. Touched only on the connect path, before any pump exists.
+    private IServerPacket? PendingGreeting;
+
     /// <summary>
     ///     Whether this server family speaks TLS. Learned once from the lobby's capability marker and
     ///     <em>deliberately not reset by <see cref="Disconnect" /></em>: login and world are
@@ -325,6 +329,7 @@ public sealed class GameClient : IDisposable
 
         ServerCapability = null;
         Negotiated = null;
+        PendingGreeting = null;
 
         Socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
         {
@@ -505,13 +510,16 @@ public sealed class GameClient : IDisposable
     /// <param name="packet">The client packet to send.</param>
     public void Send(IClientPacket packet)
     {
-        if (!Connected)
-            return;
-
         var writer = SendQueue?.Writer;
 
-        if (writer is null)
+        if (!Connected || writer is null)
+        {
+            //logged rather than dropped in silence: a packet discarded here leaves the client waiting on a
+            //reply to something it never sent, which reads on the wire as a server that stopped talking.
+            NoticeDebugLog.Write($"!!! dropped outbound opcode=0x{packet.Opcode:X2}: no live send pump");
+
             return;
+        }
 
         using (SendLock.EnterScope())
         {
@@ -701,10 +709,12 @@ public sealed class GameClient : IDisposable
 
     private void PublishGreetingCapability(ReadOnlyMemory<byte> frame, bool isClean)
     {
-        //the greeting still travels the normal path, so ConnectionManager's handler drives the
-        //client's first send exactly as before.
+        //the greeting still travels the normal path, so ConnectionManager's handler drives the client's
+        //first send exactly as before — but it is held rather than queued here. Queuing it now publishes
+        //it to the game loop, which drains on its own thread and would dispatch it mid-upgrade, when the
+        //send pump does not yet exist and the handler's reply is silently dropped. StartPumps releases it.
         if (Codec.TryGetServerPacket(frame, Crypto, out var packet, out _) && (packet is not null))
-            InboundQueue.Enqueue(packet);
+            PendingGreeting = packet;
 
         if (!CapabilityMarker.TryRead(frame.Span[WireFrameHeaderLength..], out var marker))
             return;
@@ -741,6 +751,15 @@ public sealed class GameClient : IDisposable
 
         var token = ReceiveCts.Token;
         var reader = SendQueue.Reader;
+
+        //release the greeting now that a reply can actually be sent: IsAlive and the send queue are both
+        //up, so the handler this wakes reaches the pump rather than being dropped. Ahead of the carry-over
+        //drain, so the greeting still arrives before anything that rode in behind it.
+        if (PendingGreeting is { } greeting)
+        {
+            PendingGreeting = null;
+            InboundQueue.Enqueue(greeting);
+        }
 
         //drain anything that arrived alongside the greeting; the pump only processes after a read, so
         //a complete frame already in the buffer would otherwise wait on unrelated traffic. Safe to do

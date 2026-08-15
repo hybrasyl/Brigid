@@ -140,6 +140,51 @@ public class TlsUpgradeTests
     }
 
     /// <summary>
+    ///     The greeting is not visible to the game loop until the connection can answer it. It is read
+    ///     inline, before the upgrade, and the loop drains on its own thread — so a handshake that
+    ///     outlasts a frame would otherwise let the greeting's handler run while no send pump exists,
+    ///     and its reply is discarded. The server says nothing further until the client speaks, so the
+    ///     session stalls with both ends healthy and waiting.
+    /// </summary>
+    [Fact]
+    public async Task Greeting_IsNotDispatchableUntilTheConnectionCanReply()
+    {
+        using var certificate = CreateSelfSignedCertificate();
+
+        using var server = new TlsLoopbackServer(
+            certificate,
+            CapabilityMarker.Current,
+            handshakeDelay: TimeSpan.FromMilliseconds(400));
+
+        using var client = new GameClient
+        {
+            TlsOptions = host => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck)
+        };
+
+        client.ResetCrypto();
+
+        var connect = client.ConnectAsync("localhost", server.Port, true);
+        var drained = new List<IServerPacket>();
+
+        //poll the way the game loop does while the upgrade is still in flight.
+        while (!connect.IsCompleted)
+        {
+            client.DrainPackets(drained);
+
+            Assert.Empty(drained);
+            Assert.False(client.Connected);
+
+            await Task.Delay(10);
+        }
+
+        await connect.WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+
+        //and it is not lost either — it arrives once the pump that carries the reply is up.
+        Assert.IsType<AcceptConnectionPacket>(await DrainOneAsync(client));
+        Assert.True(client.Connected);
+    }
+
+    /// <summary>
     ///     The seam the redirect scheme rests on: what reaches the TLS options factory is the server
     ///     identity, not the address that was dialled. Without the split, a hop redirected to by address
     ///     puts an IP literal to the certificate check and to the pin lookup, and neither can match.
@@ -250,19 +295,27 @@ public class TlsUpgradeTests
         private readonly TaskCompletionSource<DialectChoice> Choice = new();
         private readonly CancellationTokenSource Cts = new();
 
-        public TlsLoopbackServer(X509Certificate2 certificate, CapabilityMarker? marker, bool greetFirst = true)
+        public TlsLoopbackServer(
+            X509Certificate2 certificate,
+            CapabilityMarker? marker,
+            bool greetFirst = true,
+            TimeSpan handshakeDelay = default)
         {
             Listener = new TcpListener(IPAddress.Loopback, 0);
             Listener.Start();
 
-            _ = RunAsync(certificate, marker, greetFirst);
+            _ = RunAsync(certificate, marker, greetFirst, handshakeDelay);
         }
 
         public int Port => ((IPEndPoint)Listener.LocalEndpoint).Port;
 
         public Task<DialectChoice> ChoiceTask => Choice.Task;
 
-        private async Task RunAsync(X509Certificate2 certificate, CapabilityMarker? marker, bool greetFirst)
+        private async Task RunAsync(
+            X509Certificate2 certificate,
+            CapabilityMarker? marker,
+            bool greetFirst,
+            TimeSpan handshakeDelay)
         {
             try
             {
@@ -285,6 +338,11 @@ public class TlsUpgradeTests
 
                 if (marker is null && greetFirst)
                     return; //plaintext client; nothing further to do.
+
+                //widens the window between the greeting and a completed upgrade, which on loopback is
+                //otherwise shorter than a frame — the reason a real network found this and tests did not.
+                if (handshakeDelay > TimeSpan.Zero)
+                    await Task.Delay(handshakeDelay, Cts.Token);
 
                 await using var tls = new SslStream(stream, false);
                 await tls.AuthenticateAsServerAsync(TlsConfig.ServerOptions(certificate), Cts.Token);
