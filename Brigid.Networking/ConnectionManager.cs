@@ -510,26 +510,25 @@ public sealed class ConnectionManager : IDisposable
         Client.DrainExtensionPackets(ExtensionBuffer);
 
         foreach (var packet in ExtensionBuffer)
-            switch (packet)
-            {
-                case ClientEcho echo:
-                    //the token is the timestamp this client stamped; the server returns it verbatim.
-                    var roundTrip = Stopwatch.GetElapsedTime((long)echo.Token);
+        {
+            //mirrors the retail dispatch line so both framings read alike in one log, with the u16
+            //opcode written wide enough that extension 0x0100 cannot be mistaken for retail 0x01.
+            NoticeDebugLog.Write(
+                $"inbound extension opcode=0x{packet.Opcode:X4} handled={packet is ClientEcho} state={State}");
 
-                    //a token we never stamped cannot have started before now, so a negative elapsed time
-                    //identifies a reply that is not ours rather than a very fast one.
-                    if (roundTrip < TimeSpan.Zero)
-                        NoticeDebugLog.Write($"!!! echo reply carried a token this client never sent: 0x{echo.Token:X16}");
-                    else
-                        OnEchoReply?.Invoke(roundTrip);
+            if (packet is not ClientEcho echo)
+                continue;
 
-                    break;
+            //the token is the timestamp this client stamped; the server returns it verbatim.
+            var roundTrip = Stopwatch.GetElapsedTime((long)echo.Token);
 
-                default:
-                    NoticeDebugLog.Write($"unhandled extension opcode=0x{packet.Opcode:X4}");
-
-                    break;
-            }
+            //a token we never stamped cannot have started before now, so a negative elapsed time
+            //identifies a reply that is not ours rather than a very fast one.
+            if (roundTrip < TimeSpan.Zero)
+                NoticeDebugLog.Write($"!!! echo reply carried a token this client never sent: 0x{echo.Token:X16}");
+            else
+                OnEchoReply?.Invoke(roundTrip);
+        }
     }
 
     /// <summary>

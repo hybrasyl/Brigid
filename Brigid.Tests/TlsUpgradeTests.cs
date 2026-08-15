@@ -305,6 +305,71 @@ public class TlsUpgradeTests
         Assert.Empty(drained);
     }
 
+    /// <summary>
+    ///     The probe and its reply through <see cref="ConnectionManager" />, which is where the reply is
+    ///     turned into a round-trip time and handed to the UI. Drives ProcessPackets the way the game
+    ///     loop does: extension packets arrive on their own queue, so a drain that only pulled retail
+    ///     packets would leave the reply sitting there forever with the panel still saying "measuring".
+    /// </summary>
+    [Fact]
+    public async Task EchoProbe_ReportsARoundTripThroughTheConnectionManager()
+    {
+        using var certificate = CreateSelfSignedCertificate();
+        using var server = new TlsLoopbackServer(certificate, CapabilityMarker.Current, echo: true);
+        using var manager = new ConnectionManager();
+
+        manager.Client.TlsOptions = host
+            => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck);
+
+        manager.Client.ResetCrypto();
+
+        await manager.Client.ConnectAsync("localhost", server.Port, true, "localhost")
+                     .WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+
+        TimeSpan? measured = null;
+        manager.OnEchoReply += rtt => measured = rtt;
+
+        Assert.True(manager.SendEchoProbe());
+
+        var buffer = new List<IServerPacket>();
+        using var timeout = new CancellationTokenSource(TIMEOUT_MS);
+
+        while (measured is null)
+        {
+            timeout.Token.ThrowIfCancellationRequested();
+            manager.ProcessPackets(buffer);
+
+            if (measured is null)
+                await Task.Delay(10, timeout.Token);
+        }
+
+        //a real elapsed time, not the zero a handler that forgot to measure would report.
+        Assert.True(measured.Value > TimeSpan.Zero, $"round trip was {measured.Value}");
+        Assert.True(measured.Value < TimeSpan.FromSeconds(5), $"round trip was implausibly long: {measured.Value}");
+    }
+
+    /// <summary>
+    ///     A probe is refused outright on a retail connection rather than reported as a failed
+    ///     measurement, so the panel can say why instead of waiting for a reply that cannot come.
+    /// </summary>
+    [Fact]
+    public async Task EchoProbe_IsRefusedOnARetailConnection()
+    {
+        using var certificate = CreateSelfSignedCertificate();
+        using var server = new TlsLoopbackServer(certificate, marker: null);
+        using var manager = new ConnectionManager();
+
+        manager.Client.TlsOptions = host
+            => TlsConfig.ClientOptions(host, AcceptOnly(certificate), X509RevocationMode.NoCheck);
+
+        manager.Client.ResetCrypto();
+
+        await manager.Client.ConnectAsync("localhost", server.Port, true, "localhost")
+                     .WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+
+        Assert.False(manager.SendEchoProbe());
+    }
+
     private static async Task<IExtensionServerPacket> DrainOneExtensionAsync(GameClient client)
     {
         var buffer = new List<IExtensionServerPacket>();

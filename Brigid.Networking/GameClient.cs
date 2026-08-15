@@ -587,6 +587,13 @@ public sealed class GameClient : IDisposable
         using var scope = SendLock.EnterScope();
 
         var wire = channel.EncodeClient(packet);
+
+        //logged like its retail counterpart, with the wider opcode field spelled out: an extension
+        //opcode is a u16, so 0x0100 and retail's 0x01 are different packets that would otherwise print
+        //alike in a log where both framings appear interleaved.
+        NoticeDebugLog.Write(
+            $"outbound extension opcode=0x{packet.Opcode:X4} dialect=0x{(byte)channel.Dialect:X2} len={wire.Length} hex={HexPreview(wire)}");
+
         writer.TryWrite(wire);
     }
 
