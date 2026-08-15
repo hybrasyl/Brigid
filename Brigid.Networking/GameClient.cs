@@ -288,7 +288,7 @@ public sealed class GameClient : IDisposable
     /// <param name="port">The server port.</param>
     /// <param name="ct">Cancellation token.</param>
     public Task ConnectAsync(string host, int port, CancellationToken ct = default)
-        => ConnectAsync(host, port, false, null, ct);
+        => ConnectAsync(host, port, false, host, ct);
 
     /// <summary>
     ///     Connects asynchronously and, for a server-first hop, reads the server's opening greeting
@@ -309,17 +309,23 @@ public sealed class GameClient : IDisposable
     /// </param>
     /// <param name="tlsHost">
     ///     The name this connection authenticates as — validated against the certificate, pinned
-    ///     under, and sent as SNI. Null means <paramref name="host" /> is both dialled and validated.
-    ///     They differ on a redirect, which carries an IP address and no name: dialling the IP
-    ///     preserves the server's routing choice while the inherited name is what can actually be
-    ///     validated, since an IP literal matches no ordinary certificate.
+    ///     under, and sent as SNI. Usually <paramref name="host" />; the two differ on a redirect,
+    ///     which carries an IP address and no name, where dialling the address preserves the server's
+    ///     routing choice while the inherited name is what can actually be validated — an IP literal
+    ///     matches no ordinary certificate.
     /// </param>
+    /// <remarks>
+    ///     <paramref name="tlsHost" /> is deliberately required rather than defaulted. Omitting it is
+    ///     the failure this signature exists to prevent, and a default would make that omission
+    ///     compile and behave correctly on every hop reached by name — every hop except the redirect,
+    ///     which is the one that matters and the one no test covers end to end.
+    /// </remarks>
     /// <param name="ct">Cancellation token.</param>
     public async Task ConnectAsync(
         string host,
         int port,
         bool expectGreeting,
-        string? tlsHost = null,
+        string tlsHost,
         CancellationToken ct = default)
     {
         if (Disposed)
@@ -348,7 +354,7 @@ public sealed class GameClient : IDisposable
                 UpgradeToTls = ServerCapability is not null;
 
             if (UpgradeToTls && carryOver.IsEmpty)
-                await UpgradeToTlsAsync(tlsHost ?? host, ct);
+                await UpgradeToTlsAsync(tlsHost, ct);
 
             StartPumps(carryOver.Span);
         } catch

@@ -224,7 +224,7 @@ public sealed class ConnectionManager : IDisposable
         {
             //the lobby is the only server-first hop: its 0x7E greeting carries the capability marker,
             //and is read before the pumps start so an upgrade has a clean seam.
-            await Client.ConnectAsync(host, port, true, ct: ct);
+            await Client.ConnectAsync(host, port, true, host, ct);
             ReportTransport(host, ConnectionState.Lobby);
         } catch (Exception ex)
         {
@@ -404,7 +404,7 @@ public sealed class ConnectionManager : IDisposable
     ///         that evidence rather than on this lookup.
     ///     </para>
     /// </remarks>
-    private async Task<string> ResolveRedirectIdentityAsync(IPAddress target)
+    internal async Task<string> ResolveRedirectIdentityAsync(IPAddress target)
     {
         if (string.IsNullOrEmpty(LobbyHost))
             return target.ToString();

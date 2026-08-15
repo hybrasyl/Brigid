@@ -80,4 +80,40 @@ public class ServerIdentityTests
         => Assert.Equal(
             "10.0.0.7",
             ConnectionManager.ChooseRedirectIdentity(string.Empty, [], IPAddress.Parse("10.0.0.7")));
+
+    /// <summary>
+    ///     The whole resolver against a live one, rather than the decision alone: the lobby host has to
+    ///     have been recorded by the connect path, and the lookup has to feed the decision. Covers the
+    ///     wire between <see cref="ConnectionManager.ChooseRedirectIdentity" /> and the DNS call, which
+    ///     the pure cases above cannot reach.
+    /// </summary>
+    [Fact]
+    public async Task ResolvedLoopbackRedirect_InheritsTheLobbyName()
+    {
+        using var manager = new ConnectionManager();
+
+        //a connect that cannot succeed still records the host it was asked for, which is the state a
+        //redirect resolves against. Port 1 is reserved and refuses immediately.
+        await manager.ConnectToLobbyAsync("localhost", 1, 0);
+
+        Assert.Equal("localhost", await manager.ResolveRedirectIdentityAsync(IPAddress.Loopback));
+
+        //control: an address localhost does not resolve to must not inherit the name, or the check
+        //above would pass for a resolver that answered yes to anything.
+        Assert.Equal(
+            "203.0.113.9",
+            await manager.ResolveRedirectIdentityAsync(IPAddress.Parse("203.0.113.9")));
+    }
+
+    /// <summary>
+    ///     Before any lobby connect there is no recorded host, so a redirect stands on its own address
+    ///     rather than inheriting an empty name.
+    /// </summary>
+    [Fact]
+    public async Task RedirectBeforeAnyLobbyConnect_AuthenticatesAsItself()
+    {
+        using var manager = new ConnectionManager();
+
+        Assert.Equal("127.0.0.1", await manager.ResolveRedirectIdentityAsync(IPAddress.Loopback));
+    }
 }

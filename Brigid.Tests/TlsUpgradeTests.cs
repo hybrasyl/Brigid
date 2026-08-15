@@ -43,7 +43,7 @@ public class TlsUpgradeTests
         };
 
         client.ResetCrypto();
-        await client.ConnectAsync("localhost", server.Port, true).WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+        await client.ConnectAsync("localhost", server.Port, true, "localhost").WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
 
         Assert.NotNull(client.ServerCapability);
         Assert.True(client.UpgradeToTls);
@@ -76,7 +76,7 @@ public class TlsUpgradeTests
         };
 
         client.ResetCrypto();
-        await client.ConnectAsync("localhost", server.Port, true).WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+        await client.ConnectAsync("localhost", server.Port, true, "localhost").WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
 
         Assert.Null(client.ServerCapability);
         Assert.False(client.UpgradeToTls);
@@ -101,7 +101,7 @@ public class TlsUpgradeTests
         client.ResetCrypto();
 
         await Assert.ThrowsAnyAsync<Exception>(
-            () => client.ConnectAsync("localhost", server.Port, true)
+            () => client.ConnectAsync("localhost", server.Port, true, "localhost")
                         .WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS)));
 
         Assert.Null(client.Negotiated);
@@ -123,7 +123,7 @@ public class TlsUpgradeTests
         };
 
         client.ResetCrypto();
-        await client.ConnectAsync("localhost", lobby.Port, true).WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+        await client.ConnectAsync("localhost", lobby.Port, true, "localhost").WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
         Assert.True(client.UpgradeToTls);
 
         client.Disconnect();
@@ -163,7 +163,7 @@ public class TlsUpgradeTests
 
         client.ResetCrypto();
 
-        var connect = client.ConnectAsync("localhost", server.Port, true);
+        var connect = client.ConnectAsync("localhost", server.Port, true, "localhost");
         var drained = new List<IServerPacket>();
 
         //poll the way the game loop does while the upgrade is still in flight.
@@ -240,7 +240,7 @@ public class TlsUpgradeTests
         };
 
         client.ResetCrypto();
-        await client.ConnectAsync("localhost", server.Port, true).WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
+        await client.ConnectAsync("localhost", server.Port, true, "localhost").WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
 
         Assert.Equal(["localhost"], seen);
     }

@@ -48,7 +48,7 @@ public class CapabilityDetectionTests
 
             client.ResetCrypto();
 
-            var connect = client.ConnectAsync("127.0.0.1", listener.Port, true);
+            var connect = client.ConnectAsync("127.0.0.1", listener.Port, true, "127.0.0.1");
             var accepted = await listener.AcceptAsync();
 
             await WriteGreetingAsync(accepted, CapabilityMarker.Current);
@@ -76,7 +76,7 @@ public class CapabilityDetectionTests
 
         client.ResetCrypto();
 
-        var connect = client.ConnectAsync("127.0.0.1", listener.Port, true);
+        var connect = client.ConnectAsync("127.0.0.1", listener.Port, true, "127.0.0.1");
         var accepted = await listener.AcceptAsync();
 
         await WriteGreetingAsync(accepted, marker: null);
@@ -99,7 +99,7 @@ public class CapabilityDetectionTests
 
         client.ResetCrypto();
 
-        var connect = client.ConnectAsync("127.0.0.1", listener.Port, true);
+        var connect = client.ConnectAsync("127.0.0.1", listener.Port, true, "127.0.0.1");
         var accepted = await listener.AcceptAsync();
 
         //both frames in a single write, so they land in one read alongside the greeting.
@@ -151,7 +151,7 @@ public class CapabilityDetectionTests
 
             client.ResetCrypto();
 
-            var connect = client.ConnectAsync("127.0.0.1", listener.Port, true);
+            var connect = client.ConnectAsync("127.0.0.1", listener.Port, true, "127.0.0.1");
 
             _ = await listener.AcceptAsync();
 
