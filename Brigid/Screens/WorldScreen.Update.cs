@@ -41,6 +41,17 @@ public sealed partial class WorldScreen
         //ease the transfer loading bar while it's up across the reconnect gap (cosmetic; see MapLoadingBar)
         MapLoading.Tick(elapsedMs);
 
+        //polled rather than driven by the transport event, which fires on the connect task: this is the
+        //thread allowed to touch the control tree, and a world transfer re-establishes the transport
+        //without any other signal reaching the HUD.
+        var secure = Game.Connection.Client.Negotiated is not null;
+
+        if (secure != TransportSecure)
+        {
+            TransportSecure = secure;
+            UpdateHuds(HudOps.SetTransportSecure, secure);
+        }
+
         //global tile animation tick — 100ms resolution (matches tile animation table format)
         AnimationTick = (int)(gameTime.TotalGameTime.TotalMilliseconds / 100);
         MapRenderer.UpdatePaletteCycling(AnimationTick);

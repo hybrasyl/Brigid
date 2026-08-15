@@ -53,6 +53,13 @@ public interface IWorldHud
     void SetGroupOpen(bool groupOpen);
     void SetPlayerName(string name);
     void SetServerName(string name);
+
+    /// <summary>
+    ///     Shows or hides the padlock at the right edge of the server-name box. Present only while the
+    ///     world connection is carried over TLS; absent is the ordinary retail case and says nothing.
+    /// </summary>
+    void SetTransportSecure(bool secure);
+
     void SetWeight(int current, int max);
     void SetZoneName(string zone);
     void ShowPersistentMessage(string text);

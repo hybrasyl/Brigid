@@ -163,6 +163,9 @@ public sealed partial class WorldScreen : IScreen
     private uint? PendingDoubleClickEntityId;
     private int PendingDoubleClickTick;
     private bool PendingLoginSwitch;
+
+    //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.
+    private bool TransportSecure;
     private byte[] PlayerPortrait = [];
     private SelfProfileTextEditorControl SelfProfileTextEditor = null!;
     private Direction? QueuedWalkDirection;

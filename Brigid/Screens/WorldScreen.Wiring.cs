@@ -772,6 +772,9 @@ public sealed partial class WorldScreen
         public static readonly Action<IWorldHud, string> SetServerName =
             static (h, name) => h.SetServerName(name);
 
+        public static readonly Action<IWorldHud, bool> SetTransportSecure =
+            static (h, secure) => h.SetTransportSecure(secure);
+
         public static readonly Action<IWorldHud, string> ShowPersistentMessage =
             static (h, msg) => h.ShowPersistentMessage(msg);
 

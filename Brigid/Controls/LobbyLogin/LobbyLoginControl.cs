@@ -37,6 +37,9 @@ public sealed class LobbyLoginControl : PrefabPanel
     public LinkLabel? UpdateNotice { get; }
     public UILabel? VersionLabel { get; }
 
+    /// <summary>The line under the version: the host being talked to, and whether that is encrypted.</summary>
+    public UILabel? ConnectionLabel { get; }
+
     public LobbyLoginControl()
         : base("_nstart", false)
     {
@@ -110,6 +113,29 @@ public sealed class LobbyLoginControl : PrefabPanel
         VersionLabel = CreateLabel("Version", HorizontalAlignment.Right);
         VersionLabel?.Text = $"Brigid v{VersionInfo.Display}";
         VersionLabel?.ForegroundColor = Color.Blue;
+
+        //the version moves up a line and the connection line takes the row it vacated, so the stack
+        //keeps the prefab's right-edge anchor and the update notice still sits above the version.
+        if (VersionLabel is not null)
+        {
+            var connectionRow = VersionLabel.Y;
+            VersionLabel.Y -= VersionLabel.Height;
+
+            ConnectionLabel = new UILabel
+            {
+                Name = "ConnectionLabel",
+                X = VersionLabel.X,
+                Y = connectionRow,
+                Width = VersionLabel.Width,
+                Height = VersionLabel.Height,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                ForegroundColor = Color.Blue,
+                ShrinkToFit = false,
+                IsHitTestVisible = false
+            };
+
+            AddChild(ConnectionLabel);
+        }
 
         //update notice — stacked above the version label, populated when the startup
         //release check (UpdateChecker) finds a newer tag. Constructed as a right-edge anchor
@@ -195,6 +221,19 @@ public sealed class LobbyLoginControl : PrefabPanel
         HomepageButton?.SetEnabled(enabled);
         ExitButton?.SetEnabled(enabled);
     }
+
+    /// <summary>
+    ///     Sets the connection line: the host being talked to, prefixed with a padlock while that
+    ///     connection is encrypted.
+    /// </summary>
+    /// <remarks>
+    ///     The padlock is a positive indicator only — its absence means "not encrypted," which is the
+    ///     ordinary state for a retail server and not by itself worth alarming about. A plaintext
+    ///     connection to a server that has used TLS before is the case worth raising, and that has its
+    ///     own prompt rather than a colour on this line.
+    /// </remarks>
+    public void SetConnection(string host, bool secure)
+        => ConnectionLabel?.Text = secure ? $"{Glyphs.PADLOCK} {host}" : host;
 }
 
 file static class ButtonExtensions

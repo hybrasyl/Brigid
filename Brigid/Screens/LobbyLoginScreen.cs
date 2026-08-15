@@ -48,6 +48,11 @@ public sealed class LobbyLoginScreen : IScreen
     private OkPopupMessageControl MigrationPrompt = null!;
     private CertificateTrustPromptControl TrustPrompt = null!;
     private InsecureConnectionPromptControl InsecurePrompt = null!;
+
+    //last transport state written to the start screen's connection line, so the poll only writes on a
+    //change. Drawn tracks the first write, which has to happen even though false is the initial state.
+    private bool ConnectionLineSecure;
+    private bool ConnectionLineDrawn;
     private IList<ServerEntry> ServerList = [];
     private ServerSelectControl ServerSelectControl = null!;
 
@@ -243,6 +248,7 @@ public sealed class LobbyLoginScreen : IScreen
 
         MaybeShowTrustPrompt();
         MaybeShowInsecurePrompt();
+        RefreshConnectionLine();
 
         Game.Dispatcher.ProcessInput(Root!, gameTime);
         Root!.Update(gameTime);
@@ -260,6 +266,23 @@ public sealed class LobbyLoginScreen : IScreen
 
         Connecting = false;
         TrustPrompt.Show(pending);
+    }
+
+    /// <summary>
+    ///     Keeps the start screen's connection line current. Polled rather than driven by the transport
+    ///     event, which fires on the connect task — this loop is the thread allowed to touch the control
+    ///     tree, and the line has to survive a refused certificate and a reconnect as well.
+    /// </summary>
+    private void RefreshConnectionLine()
+    {
+        var secure = Game.Connection.Client.Negotiated is not null;
+
+        if ((secure == ConnectionLineSecure) && ConnectionLineDrawn)
+            return;
+
+        ConnectionLineSecure = secure;
+        ConnectionLineDrawn = true;
+        StartPanel.SetConnection(DataContext.LobbyHost, secure);
     }
 
     /// <summary>

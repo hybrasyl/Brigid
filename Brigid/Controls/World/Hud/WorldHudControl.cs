@@ -39,6 +39,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
     private readonly UILabel PlayerNameLabel;
 
     private readonly UILabel? ServerNameLabel;
+    private readonly UILabel SecureIcon;
 
     //tab panel system — shared center-bottom area
     private readonly UIPanel?[] TabPanels = new UIPanel?[Enum.GetValues<HudTab>()
@@ -163,6 +164,8 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         CoordsLabel = CreateLabel("SZ_XY", HorizontalAlignment.Center)!;
         CoordsLabel.ShrinkToFit = false;
         ServerNameLabel = CreateLabel("SZ_SERVER", HorizontalAlignment.Center);
+        SecureIcon = HudSecureIcon.Create(GetRect("SZ_SERVER"));
+        AddChild(SecureIcon);
         DescriptionLabel = CreateLabel("SZ_DESCRIPTION");
 
         //ping indicator — prefab control supplies position; frames are loaded straight from _nping.spf
@@ -617,6 +620,9 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
     }
 
     public void SetServerName(string name) => ServerNameLabel?.Text = name;
+
+    /// <inheritdoc />
+    public void SetTransportSecure(bool secure) => SecureIcon.Visible = secure;
 
     /// <summary>
     ///     Shows a description text in the SZ_DESCRIPTION area (item/skill/spell name on hover). Color 0x14 = green/teal,

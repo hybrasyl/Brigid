@@ -1,6 +1,8 @@
 #region
+using Brigid.Definitions;
 using Brigid.Rendering;
 using FontStashSharp;
+using FontStashSharp.Rasterizers.StbTrueTypeSharp;
 using Xunit;
 #endregion
 
@@ -48,6 +50,27 @@ public class ShippedFontsTests
         var size = system.GetFont(15).MeasureString(sample);
 
         Assert.True(size.X > 0, $"{file} measured zero width for its sample");
+    }
+
+    /// <summary>
+    ///     The padlock the connection line and the HUD's server box draw. No UI face covers it; it
+    ///     resolves through the emoji fallback added to every FontSystem, and an uncovered codepoint
+    ///     renders nothing at all rather than failing — so the absence would only ever be noticed on
+    ///     screen, by someone who did not know a padlock was meant to be there.
+    /// </summary>
+    [Fact]
+    public void EmojiFallback_CoversThePadlockGlyph()
+    {
+        //asked of the font's cmap rather than of MeasureString: an uncovered codepoint still measures a
+        //.notdef advance (16px on this face), so a width tells you a string was measured and nothing
+        //at all about whether the glyph exists.
+        var loader = new StbTrueTypeSharpLoader(new StbTrueTypeSharpSettings());
+        var source = loader.Load(File.ReadAllBytes(Path.Combine(FontsDir(), "NotoEmoji-Regular.ttf")));
+
+        Assert.NotNull(source.GetGlyphId(char.ConvertToUtf32(Glyphs.PADLOCK, 0)));
+
+        //control, so a pass means the lookup discriminates rather than answering yes to everything.
+        Assert.Null(source.GetGlyphId(0xE000));
     }
 
     [Fact]
