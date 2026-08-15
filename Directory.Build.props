@@ -1,4 +1,12 @@
 <Project>
+
+    <!-- Optional, git-ignored, per-machine overrides. Imported first so anything it sets wins over the
+         defaults below, which are all written as "only if not already set". Use it to hold a setting you
+         want on every build on one machine — co-developing against a sibling DALib or Hybrasyl.Protocol
+         checkout, say — instead of remembering the -p: flag each time. See Directory.Build.local.props.example. -->
+    <Import Project="$(MSBuildThisFileDirectory)Directory.Build.local.props"
+            Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.local.props')" />
+
     <PropertyGroup>
         <LangVersion>14</LangVersion>
         <TargetFramework>net10.0</TargetFramework>
@@ -36,6 +44,14 @@
              truth) — see Brigid.Networking/Definitions/HybrasylExtensions.cs. -->
         <UseLocalDALib Condition="'$(UseLocalDALib)' == ''">false</UseLocalDALib>
         <LocalDALibProjectPath Condition="'$(LocalDALibProjectPath)' == ''">$(MSBuildThisFileDirectory)..\dalib\DALib\DALib.csproj</LocalDALibProjectPath>
+
+        <!-- Hybrasyl.Protocol (repo: sreang) carries the extended-framing dialect shared with the
+             Hybrasyl server. Same toggle shape as DALib: -p:UseLocalProtocol=true builds the sibling
+             checkout instead of the pinned package, for co-developing the dialect alongside Brigid.
+             Both halves of a connection must run the same version — the negotiation wire format is
+             not itself versioned by the dialect mechanism, so a mismatch fails at handshake. -->
+        <UseLocalProtocol Condition="'$(UseLocalProtocol)' == ''">false</UseLocalProtocol>
+        <LocalProtocolProjectPath Condition="'$(LocalProtocolProjectPath)' == ''">$(MSBuildThisFileDirectory)..\sreang\src\Hybrasyl.Protocol\Hybrasyl.Protocol.csproj</LocalProtocolProjectPath>
     </PropertyGroup>
 
 </Project>

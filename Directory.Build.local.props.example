@@ -1,0 +1,32 @@
+<!--
+  Per-machine build overrides.
+
+  Copy to Directory.Build.local.props (git-ignored) and edit. Imported at the top of
+  Directory.Build.props, so anything set here wins over the repo defaults — they are all written to
+  apply only when the property is not already set.
+
+  The case this exists for: testing a Hybrasyl.Protocol change on the machine that runs the server,
+  before it is published to NuGet. Setting UseLocalProtocol here makes every build in this checkout —
+  dotnet build, dotnet run, dotnet test, and the IDE — use the sibling sreang checkout, with no flag
+  to remember and nothing to revert afterwards.
+
+  Both ends of a connection must run the same Hybrasyl.Protocol version: the negotiation wire format
+  is not itself versioned by the dialect mechanism, so a client on a local build and a server on the
+  published package will fail at the handshake. When testing an unpublished change, point the server
+  at its own local build too.
+-->
+<Project>
+    <PropertyGroup>
+
+        <!-- Build Hybrasyl.Protocol from the sibling sreang checkout instead of the pinned package. -->
+        <UseLocalProtocol>true</UseLocalProtocol>
+
+        <!-- Only needed when the checkout is not at ../sreang relative to this repo. -->
+        <!-- <LocalProtocolProjectPath>/path/to/sreang/src/Hybrasyl.Protocol/Hybrasyl.Protocol.csproj</LocalProtocolProjectPath> -->
+
+        <!-- The same toggle exists for DALib. -->
+        <!-- <UseLocalDALib>true</UseLocalDALib> -->
+        <!-- <LocalDALibProjectPath>/path/to/dalib/DALib/DALib.csproj</LocalDALibProjectPath> -->
+
+    </PropertyGroup>
+</Project>

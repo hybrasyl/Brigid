@@ -74,6 +74,11 @@ public sealed partial class WorldScreen
         //map transitions
         Game.Connection.OnMapChangePending += HandleMapChangePending;
 
+        //connection details panel. Only the connection half is wired here: WireServerEvents runs from
+        //Initialize, and the panel itself does not exist until LoadContent, so its own events are
+        //subscribed where it is built.
+        Game.Connection.OnEchoReply += HandleEchoReply;
+
         //logout / disconnect
         Game.Connection.OnExitResponse += HandleExitResponse;
         Game.Connection.StateChanged += HandleStateChanged;
@@ -591,6 +596,21 @@ public sealed partial class WorldScreen
                 Game.Connection.RequestSelfProfile();
             };
 
+        if (hud.ServerBoxButton is not null)
+            hud.ServerBoxButton.Clicked += () =>
+            {
+                if (ServerInfo.Visible)
+                {
+                    ServerInfo.Hide();
+
+                    return;
+                }
+
+                RefreshServerInfo();
+                ServerInfo.Show();
+                SendEchoProbe();
+            };
+
         if (hud.TownMapButton is not null)
             hud.TownMapButton.Clicked += () =>
             {
@@ -758,6 +778,43 @@ public sealed partial class WorldScreen
         op(LargeHud, arg1, arg2);
     }
 
+    /// <summary>
+    ///     Shows a completed round trip. Only while the panel is open — the probe is user-initiated, so
+    ///     a reply with nothing on screen means the panel was closed mid-flight.
+    /// </summary>
+    private void HandleEchoReply(TimeSpan roundTrip)
+    {
+        if (ServerInfo.Visible)
+            ServerInfo.SetLatency(roundTrip);
+    }
+
+    /// <summary>
+    ///     Repopulates the connection panel from the live connection and the trust store.
+    /// </summary>
+    private void RefreshServerInfo()
+        => ServerInfo.Describe(
+            Game.Connection.ServerName,
+            CertificateTrustStore.Accepted?.Server ?? GlobalSettings.LobbyHost,
+            Game.Connection.Client.Negotiated,
+            CertificateTrustStore.Accepted);
+
+    /// <summary>
+    ///     Sends an echo probe, or says why it cannot. The reply arrives on
+    ///     <see cref="ConnectionManager.OnEchoReply" />, which the panel is subscribed to.
+    /// </summary>
+    private void SendEchoProbe()
+    {
+        if (Game.Connection.SendEchoProbe())
+        {
+            ServerInfo.SetLatencyUnavailable("measuring…", true);
+
+            return;
+        }
+
+        //no dialect means no extension frame can be sent at all, so this is not a timeout to wait out.
+        ServerInfo.SetLatencyUnavailable("unavailable on a retail connection", false);
+    }
+
     private static class HudOps
     {
         public static readonly Action<IWorldHud, int, int> SetCoords =
@@ -771,6 +828,9 @@ public sealed partial class WorldScreen
 
         public static readonly Action<IWorldHud, string> SetServerName =
             static (h, name) => h.SetServerName(name);
+
+        public static readonly Action<IWorldHud, bool> SetTransportSecure =
+            static (h, secure) => h.SetTransportSecure(secure);
 
         public static readonly Action<IWorldHud, string> ShowPersistentMessage =
             static (h, msg) => h.ShowPersistentMessage(msg);

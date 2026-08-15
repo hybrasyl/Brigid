@@ -38,6 +38,10 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
     private readonly PersistentMessageControl PersistentMessage;
     private readonly UILabel PlayerNameLabel;
     private readonly UILabel? ServerNameLabel;
+    private readonly UILabel SecureIcon;
+
+    /// <inheritdoc />
+    public UIButton? ServerBoxButton { get; }
     private readonly UILabel TooltipLabel;
 
     private readonly UIPanel?[] TabPanels = new UIPanel?[Enum.GetValues<HudTab>()
@@ -150,6 +154,10 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         CoordsLabel = CreateLabel("SZ_XY", HorizontalAlignment.Center)!;
         CoordsLabel.ShrinkToFit = false;
         ServerNameLabel = CreateLabel("SZ_SERVER", HorizontalAlignment.Center);
+        SecureIcon = HudSecureIcon.Create(GetRect("SZ_SERVER"));
+        AddChild(SecureIcon);
+        ServerBoxButton = HudSecureIcon.CreateHitRegion(GetRect("SZ_SERVER"));
+        AddChild(ServerBoxButton);
         DescriptionLabel = CreateLabel("SZ_DESCRIPTION");
 
         //ping indicator — prefab control supplies position; frames are loaded straight from _nping.spf
@@ -692,6 +700,9 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         CoordsLabel.Text = $"{x}, {y}";
     }
     public void SetServerName(string name) => ServerNameLabel?.Text = name;
+
+    /// <inheritdoc />
+    public void SetTransportSecure(bool secure) => HudSecureIcon.Apply(SecureIcon, secure);
 
     public void SetDescription(string? text)
     {

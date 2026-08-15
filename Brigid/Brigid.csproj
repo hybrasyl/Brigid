@@ -25,6 +25,20 @@
         <InternalsVisibleTo Include="Brigid.Tests" />
     </ItemGroup>
 
+    <!-- On macOS, SslStream defaults to Apple's SecureTransport, which cannot go above TLS 1.2 — the
+         extension channel requires 1.3, so without this a macOS client cannot reach it. This selects
+         Network.framework instead, which supports 1.3. No effect on Linux or Windows.
+         Set through runtimeconfig rather than AppContext.SetSwitch in Main so the host applies it
+         before any code runs: the switch is only read when SslStream first initializes its backend,
+         and a call ordered after that would be silently ignored.
+         Governs client operations only. A server on macOS is separately limited to 1.2, measured by
+         a Linux client reaching only 1.2 against one while reaching 1.3 against a Linux server on
+         the same binary — so a macOS host is a viable client for this channel and not a viable
+         server. A macOS-to-macOS loopback is capped at both ends and cannot show which end binds. -->
+    <ItemGroup>
+        <RuntimeHostConfigurationOption Include="System.Net.Security.UseNetworkFramework" Value="true" />
+    </ItemGroup>
+
     <!-- Native SDL2_mixer binaries per runtime; copied to bin/.../runtimes/{rid}/native/ so the
          standard .NET native-DLL probe picks them up via [LibraryImport("SDL2_mixer")].
          SDL2.dll itself is provided by MonoGame.Framework.DesktopGL's own runtimes payload. -->

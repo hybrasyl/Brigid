@@ -198,6 +198,13 @@ public sealed class ChaosGame : Game
         InactiveSleepTime = TimeSpan.Zero;
 
         Connection = new ConnectionManager();
+
+        //trust policy is consulted per hop: the identity is usually the lobby's host for all three, but a
+        //redirect that leaves it authenticates as itself and must be looked up under its own name.
+        CertificateTrustStore.Load();
+        Connection.Client.TlsOptions = CertificateTrustStore.OptionsFor;
+        Connection.OnTransportEstablished += OnTransportEstablished;
+
         //the friendly server name drives the window-title suffix; refresh from the write itself so no caller has to remember
         Connection.ServerNameChanged += UpdateWindowTitle;
         Connection.OnMetaData += HandleMetaData;
@@ -718,6 +725,34 @@ public sealed class ChaosGame : Game
     public event MetaDataSyncCompleteHandler? OnMetaDataSyncComplete;
 
     private const int LATENCY_POLL_INTERVAL_MS = 2000;
+
+    /// <summary>
+    ///     Keeps the trust store's TLS history current, and flags a server that has stopped upgrading.
+    /// </summary>
+    /// <remarks>
+    ///     Recording is unconditional on success, not limited to hops that prompted: a server with a
+    ///     publicly valid certificate is accepted silently and pins nothing, so without this the history
+    ///     would be empty for exactly the servers most people connect to, and the downgrade warning
+    ///     would never fire for them.
+    ///     Raising the warning is left to the screen — this runs on the connect task, which must not
+    ///     touch the control tree.
+    /// </remarks>
+    private void OnTransportEstablished(TransportEstablished transport)
+    {
+        if (transport.Encrypted)
+        {
+            if (CertificateTrustStore.RecordTlsSeen(transport.Server))
+                NoticeDebugLog.Write($"recorded TLS history for {transport.Server}");
+
+            return;
+        }
+
+        CertificateTrustStore.ClearAccepted();
+
+        if (CertificateTrustStore.FlagDowngradeIfSeen(transport.Server))
+            NoticeDebugLog.Write(
+                $"!!! {transport.Server} has completed a TLS session before but did not upgrade this time");
+    }
 
     private void OnConnectionStateChanged(ConnectionState oldState, ConnectionState newState)
     {

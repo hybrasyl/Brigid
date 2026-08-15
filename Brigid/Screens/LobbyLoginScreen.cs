@@ -46,6 +46,13 @@ public sealed class LobbyLoginScreen : IScreen
     private bool PendingConfigSwitch;
     private OkPopupMessageControl LobbyLoginPopupMessage = null!;
     private OkPopupMessageControl MigrationPrompt = null!;
+    private CertificateTrustPromptControl TrustPrompt = null!;
+    private InsecureConnectionPromptControl InsecurePrompt = null!;
+
+    //last transport state written to the start screen's connection line, so the poll only writes on a
+    //change. Drawn tracks the first write, which has to happen even though false is the initial state.
+    private bool ConnectionLineSecure;
+    private bool ConnectionLineDrawn;
     private IList<ServerEntry> ServerList = [];
     private ServerSelectControl ServerSelectControl = null!;
 
@@ -153,6 +160,14 @@ public sealed class LobbyLoginScreen : IScreen
         MigrationPrompt.OnOk += OnMigrationImport;
         MigrationPrompt.OnCancel += OnMigrationSkip;
 
+        TrustPrompt = new CertificateTrustPromptControl { Name = "TrustPrompt" };
+        TrustPrompt.OnTrusted += OnCertificateTrusted;
+        TrustPrompt.OnDeclined += CertificateTrustStore.Decline;
+
+        InsecurePrompt = new InsecureConnectionPromptControl { Name = "InsecurePrompt" };
+        InsecurePrompt.OnContinued += OnInsecureConnectionAccepted;
+        InsecurePrompt.OnRefused += OnInsecureConnectionRefused;
+
         Root = new LobbyRootPanel
         {
             Name = "LobbyRoot",
@@ -167,6 +182,8 @@ public sealed class LobbyLoginScreen : IScreen
         Root.AddChild(PasswordChangeControl);
         Root.AddChild(LobbyLoginPopupMessage);
         Root.AddChild(MigrationPrompt);
+        Root.AddChild(TrustPrompt);
+        Root.AddChild(InsecurePrompt);
 
         //build ui atlas after all login controls are constructed
         UiRenderer.Instance?.BuildAtlas();
@@ -229,8 +246,86 @@ public sealed class LobbyLoginScreen : IScreen
             return;
         }
 
+        MaybeShowTrustPrompt();
+        MaybeShowInsecurePrompt();
+        RefreshConnectionLine();
+
         Game.Dispatcher.ProcessInput(Root!, gameTime);
         Root!.Update(gameTime);
+    }
+
+    /// <summary>
+    ///     Raises the certificate prompt from the game loop rather than from the connect failure that
+    ///     produced it: that failure surfaces on the connect task's thread, and building a modal there
+    ///     would mutate the control tree while this loop is drawing it.
+    /// </summary>
+    private void MaybeShowTrustPrompt()
+    {
+        if (TrustPrompt.Visible || CertificateTrustStore.Pending is not { } pending)
+            return;
+
+        Connecting = false;
+        TrustPrompt.Show(pending);
+    }
+
+    /// <summary>
+    ///     Keeps the start screen's connection line current. Polled rather than driven by the transport
+    ///     event, which fires on the connect task — this loop is the thread allowed to touch the control
+    ///     tree, and the line has to survive a refused certificate and a reconnect as well.
+    /// </summary>
+    private void RefreshConnectionLine()
+    {
+        var secure = Game.Connection.Client.Negotiated is not null;
+
+        if ((secure == ConnectionLineSecure) && ConnectionLineDrawn)
+            return;
+
+        ConnectionLineSecure = secure;
+        ConnectionLineDrawn = true;
+        StartPanel.SetConnection(DataContext.LobbyHost, secure);
+    }
+
+    /// <summary>
+    ///     Raises the downgrade warning, from the game loop for the same reason as the trust prompt. The
+    ///     trust prompt wins a tie: it is about a connection that has already been refused, while this
+    ///     one is about a connection that is live and about to be given a password.
+    /// </summary>
+    private void MaybeShowInsecurePrompt()
+    {
+        if (TrustPrompt.Visible || InsecurePrompt.Visible || CertificateTrustStore.PendingDowngrade is not { } server)
+            return;
+
+        Connecting = false;
+        InsecurePrompt.Show(server);
+    }
+
+    private void OnCertificateTrusted(string server, string fingerprint, CertificateTrustPath path)
+    {
+        CertificateTrustStore.Trust(server, fingerprint, path);
+
+        //the refusal that raised the prompt already dropped the connection, so accepting means
+        //reconnecting. A hop reached by redirect is retried as that hop — restarting at the lobby would
+        //throw away a login the user has already completed.
+        if (Game.Connection.RetryLastRedirect())
+            return;
+
+        BeginLobbyConnect();
+    }
+
+    private void OnInsecureConnectionAccepted(string server)
+    {
+        CertificateTrustStore.ClearDowngrade(server, true);
+        NoticeDebugLog.Write($"user accepted an unencrypted connection to {server}");
+    }
+
+    private void OnInsecureConnectionRefused(string server)
+    {
+        CertificateTrustStore.ClearDowngrade(server, false);
+        NoticeDebugLog.Write($"user refused an unencrypted connection to {server}");
+
+        Game.Connection.Disconnect();
+        StartPanel.SetButtonsEnabled(true);
+        LobbyLoginPopupMessage.Show("Disconnected. The server did not offer an encrypted connection.");
     }
 
     private void WireRootInputHandlers() => ((LobbyRootPanel)Root!).Screen = this;
