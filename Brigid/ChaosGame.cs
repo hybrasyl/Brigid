@@ -877,7 +877,7 @@ public sealed class ChaosGame : Game
 
     private void HandleMetaDataCheckSums(IList<ServerPackets.MetafileEntry>? collection)
     {
-        if (collection is null || (collection.Count == 0))
+        if (collection is null)
         {
             OnMetaDataSyncComplete?.Invoke();
 
@@ -896,6 +896,11 @@ public sealed class ChaosGame : Game
             else
                 NoticeDebugLog.Write($"[meta] ignored a metafile checksum with an unsafe name: \"{info.Name}\"");
         }
+
+        //the list is the server's whole catalog, so a local file that it does not name is stale. An empty list empties
+        //the cache, as the retail client does.
+        foreach (var name in MetaFileCache.PruneUnlisted(MetaFilePath, listed.Select(info => info.Name)))
+            NoticeDebugLog.Write($"[meta] deleted a metafile the server no longer lists: {name}");
 
         foreach (var info in listed)
             if (MetaFileCache.GetChecksum(MetaFilePath, info.Name) != info.Checksum)

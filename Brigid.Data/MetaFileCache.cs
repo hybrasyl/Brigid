@@ -80,4 +80,42 @@ public static class MetaFileCache
     /// <summary>Writes a metafile. Returns false when the name is refused or the write fails.</summary>
     public static bool TryWrite(string directory, string name, byte[] data)
         => IsSafeName(name) && DataDiagnostics.Try(() => File.WriteAllBytes(Path.Combine(directory, name), data), $"write metafile {name}");
+
+    /// <summary>
+    ///     Deletes each file in <paramref name="directory" /> whose name is not in <paramref name="listedNames" />, and
+    ///     returns the names it deleted. Subdirectories are not touched. A directory that cannot be read deletes nothing.
+    /// </summary>
+    /// <remarks>
+    ///     A metafile that the server no longer lists is stale, but the repository still reads it. The server splits item
+    ///     metadata across <c>ItemInfoN</c> files and the split moves when items change, so an old file can give an item
+    ///     its old class or level. The comparison here is ordinal, but the client's pending set ignores case. So on a
+    ///     case-insensitive file system, this method deletes a file whose name changed case, and the sync downloads it
+    ///     again.
+    /// </remarks>
+    public static IReadOnlyList<string> PruneUnlisted(string directory, IEnumerable<string> listedNames)
+    {
+        if (!Directory.Exists(directory))
+            return [];
+
+        string[] files = [];
+
+        if (!DataDiagnostics.Try(() => files = Directory.GetFiles(directory), "list metafiles"))
+            return [];
+
+        var listed = new HashSet<string>(listedNames, StringComparer.Ordinal);
+        var deleted = new List<string>();
+
+        foreach (var path in files)
+        {
+            var name = Path.GetFileName(path);
+
+            if (listed.Contains(name))
+                continue;
+
+            if (DataDiagnostics.Try(() => File.Delete(path), $"delete stale metafile {name}"))
+                deleted.Add(name);
+        }
+
+        return deleted;
+    }
 }

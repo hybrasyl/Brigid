@@ -6,7 +6,8 @@ using Xunit;
 namespace Brigid.Tests;
 
 // The server names each metafile and the client stores it under that name, so a name must stay a bare file name inside
-// the metafile directory.
+// the metafile directory. A file that the server no longer lists must not stay on disk, because the repository reads
+// every ItemInfo* and SEvent* file that it finds.
 public sealed class MetaFileCacheTests : IDisposable
 {
     private readonly string Root = Path.Combine(Path.GetTempPath(), "brigid-metafile-" + Guid.NewGuid().ToString("N"));
@@ -16,6 +17,8 @@ public sealed class MetaFileCacheTests : IDisposable
     public void Dispose() => Directory.Delete(Root, true);
 
     private void Touch(string name) => File.WriteAllBytes(Path.Combine(Root, name), [1]);
+
+    private string[] OnDisk() => Directory.GetFiles(Root).Select(path => Path.GetFileName(path)).Order().ToArray();
 
     private static byte[] Compress(byte[] data)
     {
@@ -108,4 +111,34 @@ public sealed class MetaFileCacheTests : IDisposable
         Assert.False(MetaFileCache.TryWrite(inner, name, [1]));
         Assert.Empty(Directory.GetFiles(Root, "*", SearchOption.AllDirectories));
     }
+
+    [Fact]
+    public void PruneUnlisted_DeletesOnlyTheFilesTheServerNoLongerLists()
+    {
+        Touch("ItemInfo0");
+        Touch("ItemInfo1");
+        Touch("ItemInfo2");
+        Touch("SEvent1");
+
+        var deleted = MetaFileCache.PruneUnlisted(Root, ["ItemInfo0", "ItemInfo1", "SEvent1", "Light"]);
+
+        Assert.Equal(["ItemInfo2"], deleted);
+        Assert.Equal(["ItemInfo0", "ItemInfo1", "SEvent1"], OnDisk());
+    }
+
+    [Fact]
+    public void PruneUnlisted_AnEmptyListEmptiesTheCacheButLeavesSubdirectories()
+    {
+        Touch("ItemInfo0");
+        Directory.CreateDirectory(Path.Combine(Root, "sub"));
+
+        MetaFileCache.PruneUnlisted(Root, []);
+
+        Assert.Empty(OnDisk());
+        Assert.True(Directory.Exists(Path.Combine(Root, "sub")));
+    }
+
+    [Fact]
+    public void PruneUnlisted_AMissingDirectoryDeletesNothing()
+        => Assert.Empty(MetaFileCache.PruneUnlisted(Path.Combine(Root, "absent"), ["ItemInfo0"]));
 }

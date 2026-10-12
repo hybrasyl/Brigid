@@ -94,7 +94,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 - **`AudioPack`** (`AssetPacks/`) -- Shared base for `MusicPack`/`SfxPack`. Entries named `{prefix}_{id}.{ext}` at the archive root; builds an extension-agnostic `id -> entry` map at construction and returns raw bytes via `TryGetAudioBytes` (no decode — the audio layer hands bytes to SDL_mixer). `MusicPack` overrides loose `{DataPath}/music/{id}.mus`; `SfxPack` overrides `legend.dat` `{id}.mp3`. A present id = replace, a new id = add.
 - **`IconPack`** (`AssetPacks/`) -- Wraps a ZipArchive of `{prefix}_{id:D4}.png` entries. `TryGetIconImage(prefix, spriteId, out SKImage?)` case-insensitive lookup; decode failures treated as "not present" so renderer falls back cleanly to legacy.
 - **`DataDiagnostics`** -- Log seam for `Brigid.Data` and `Brigid.Rendering`, which cannot reference `NoticeDebugLog`. `Program.cs` sets `Log` to `NoticeDebugLog.Write`; `Try` runs best-effort file IO and logs a failure.
-- **`MetaFileCache`** -- Static helpers for the metafile cache in `AppPaths.MetaFileDir`. `IsSafeName` refuses a server-sent name that is not a bare, cross-platform file name; `GetChecksum` and `TryWrite` apply it.
+- **`MetaFileCache`** -- Static helpers for the metafile cache in `AppPaths.MetaFileDir`. `IsSafeName` refuses a server-sent name that is not a bare, cross-platform file name; `GetChecksum`, `TryWrite` and `PruneUnlisted` (deletes the files the server no longer lists) apply it.
 
 ### Rendering Layer (`Brigid.Rendering`)
 - **`TextureConverter`** -- DALib `SKImage` -> MonoGame `Texture2D` (RGBA8888 premul). Entry points: `ConvertImage<T>()`, `ToTexture2D()`.
