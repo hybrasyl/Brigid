@@ -31,6 +31,12 @@ public class UILabel : UIElement
     public HorizontalAlignment HorizontalAlignment { get; set; } = HorizontalAlignment.Left;
 
     public bool IsSelectable { get; set; }
+
+    /// <summary>
+    ///     Raised when a left press starts a selection in this label. The press is handled here and does not bubble, so a
+    ///     host with more than one selectable label uses this to learn which one the keys belong to.
+    /// </summary>
+    public event Action? SelectionStarted;
     public bool HasSelection => IsSelectable && (SelectionAnchor != CursorPosition);
     private int SelectionStart => Math.Min(SelectionAnchor, CursorPosition);
     private int SelectionEnd => Math.Max(SelectionAnchor, CursorPosition);
@@ -336,6 +342,9 @@ public class UILabel : UIElement
         TextElement.Update(text, color);
     }
 
+    /// <summary>Drops the selection, leaving the text unchanged.</summary>
+    public void ClearSelection() => SelectionAnchor = CursorPosition;
+
     public override void ResetInteractionState()
     {
         Dragging = false;
@@ -630,6 +639,7 @@ public class UILabel : UIElement
         if (!IsSelectable || (e.Button != MouseButton.Left))
             return;
 
+        SelectionStarted?.Invoke();
         ClampPositions();
 
         var isWrapped = TextElement.WrappedLines is not null;
