@@ -258,35 +258,45 @@ public sealed class LocalPlayerSettingsRepository
     /// </summary>
     public string[] LoadMacros()
     {
-        var macros = new string[10];
+        string[] lines = [];
 
         try
         {
-            if (!File.Exists(MacroPath))
-                return macros;
-
-            var lines = File.ReadAllLines(MacroPath);
-
-            for (var i = 0; i < Math.Min(lines.Length, 10); i++)
-            {
-                var line = lines[i];
-
-                //strip 'macron: ' prefix if present
-                var colonIndex = line.IndexOf(':');
-
-                if (colonIndex >= 0)
-                    line = line[(colonIndex + 1)..]
-                        .Trim();
-
-                //strip surrounding double quotes
-                if (line is ['"', _, ..] && (line[^1] == '"'))
-                    line = line[1..^1];
-
-                macros[i] = line;
-            }
+            if (File.Exists(MacroPath))
+                lines = File.ReadAllLines(MacroPath);
         } catch
         {
-            //return whatever was parsed so far
+            //an unreadable file loads as no macros
+        }
+
+        return ParseMacros(lines);
+    }
+
+    /// <summary>
+    ///     Parses Macro.cfg lines into the 10 macro slots. A slot with no line is empty, never null: Initialize writes an
+    ///     empty Macro.cfg for a new character, and the Options macro boxes take these values as their text.
+    /// </summary>
+    internal static string[] ParseMacros(IReadOnlyList<string> lines)
+    {
+        var macros = new string[10];
+        Array.Fill(macros, string.Empty);
+
+        for (var i = 0; i < Math.Min(lines.Count, 10); i++)
+        {
+            var line = lines[i];
+
+            //strip 'macron: ' prefix if present
+            var colonIndex = line.IndexOf(':');
+
+            if (colonIndex >= 0)
+                line = line[(colonIndex + 1)..]
+                    .Trim();
+
+            //strip surrounding double quotes
+            if (line is ['"', _, ..] && (line[^1] == '"'))
+                line = line[1..^1];
+
+            macros[i] = line;
         }
 
         return macros;
@@ -401,6 +411,14 @@ public sealed class LocalPlayerSettingsRepository
     /// </summary>
     public void SaveMacros(string[] macros)
     {
+        var lines = FormatMacros(macros);
+
+        DataDiagnostics.Try(() => File.WriteAllLines(MacroPath, lines), "SaveMacros");
+    }
+
+    /// <summary>Formats the 10 macro slots as Macro.cfg lines; <see cref="ParseMacros" /> reads them back.</summary>
+    internal static string[] FormatMacros(string[] macros)
+    {
         var lines = new string[10];
 
         for (var i = 0; i < 10; i++)
@@ -410,7 +428,7 @@ public sealed class LocalPlayerSettingsRepository
             lines[i] = $"{label}: \"{value}\"";
         }
 
-        DataDiagnostics.Try(() => File.WriteAllLines(MacroPath, lines), "SaveMacros");
+        return lines;
     }
 
     public void SaveSkillChants(List<SkillChantEntry> entries) => SaveChantBook(SkillBookPath, entries);
