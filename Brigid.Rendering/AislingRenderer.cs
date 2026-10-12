@@ -1,4 +1,5 @@
 #region
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Brigid.Data;
 using Brigid.Data.Repositories;
@@ -354,8 +355,10 @@ public sealed class AislingRenderer : IDisposable
             _                        => drawTexture
         };
 
-        //dead aislings render as translucent ghosts via uniform alpha; transparent wins over dead at the call site
-        //so we never stack both modulations here.
+        //dead aislings render as translucent ghosts via uniform alpha. The caller never passes a dead aisling as
+        //transparent, so the two modulations never stack here.
+        Debug.Assert(!p.IsDead || (p.Alpha >= 1f), "a dead aisling is drawn at the ghost alpha only, never also as transparent");
+
         var effectiveAlpha = p.IsDead ? p.Alpha * GHOST_ALPHA : p.Alpha;
         batch.Draw(finalTexture, screenPos, Color.White * effectiveAlpha);
 

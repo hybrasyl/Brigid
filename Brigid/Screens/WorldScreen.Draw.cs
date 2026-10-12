@@ -720,10 +720,6 @@ public sealed partial class WorldScreen
             ? DrawingForSilhouette ? TRANSPARENT_SILHOUETTE_ALPHA : TRANSPARENT_ALPHA
             : 1f;
 
-        //transparent wins over dead — "invisible ghost" isn't a sensible visual state, and stacking both alpha
-        //modulations would produce an effectively-invisible result.
-        var isDead = entity.IsDead && !entity.IsTransparent;
-
         var drawParams = new AislingDrawParams(
             entity.Id,
             appearance,
@@ -738,7 +734,7 @@ public sealed partial class WorldScreen
             tileCenterY,
             entity.VisualOffset,
             tint,
-            isDead,
+            entity.IsDead,
             alpha);
 
         return Game.AislingRenderer.Draw(spriteBatch, Camera, in drawParams);

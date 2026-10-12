@@ -201,8 +201,12 @@ public static class WorldState
                 //form, or the Hide flag (Hybrasyl sends the normal body + flag).
                 var isInvisibleForm = bodySprite is BodySprite.MaleInvis or BodySprite.FemaleInvis;
                 entity.IsHidden = bodySprite == BodySprite.None;
-                entity.IsTransparent = !entity.IsHidden && (eq.IsHidden || isInvisibleForm);
                 entity.IsDead = bodySprite is BodySprite.MaleGhost or BodySprite.FemaleGhost;
+
+                //dead wins over transparent, as on the server, which sends the ghost body for a dead player even when
+                //the Hide flag is set. A ghost draws translucent at its own alpha. If it also drew as the invisible
+                //outline, the two alphas would multiply and the avatar would be almost invisible.
+                entity.IsTransparent = !entity.IsHidden && !entity.IsDead && (eq.IsHidden || isInvisibleForm);
                 entity.LanternSize = (LanternSize)eq.LanternSize;
                 entity.RestPosition = (RestPosition)eq.RestPosition;
 
@@ -213,7 +217,7 @@ public static class WorldState
                     //equipment drawn on top, the whole avatar translucent (IsTransparent). A visible aisling uses its
                     //normal body form.
                     BodySpriteId = entity.IsTransparent ? 3 : GetBodySpriteId(bodySprite),
-                    BodyColor = eq.BodyColor,
+                    BodyColor = entity.IsDead ? GHOST_BODY_COLOR : eq.BodyColor,
                     HeadSprite = eq.HeadSprite,
                     HeadColor = (DisplayColor)eq.HeadColor,
                     FaceSprite = eq.FaceSprite,
@@ -357,6 +361,11 @@ public static class WorldState
 
         return blocked;
     }
+
+    //a ghost's face draws with the pale ghost palette, whatever skin byte the server sends: the body is the wraith
+    //sprite with its own palette, and the face is the one layer drawn from the body palette. This keeps the older
+    //retail look on purpose; the current retail client draws the face in the sent skin color.
+    private const int GHOST_BODY_COLOR = (int)BodyColor.LightBlue;
 
     //MaleInvis/FemaleInvis are intentionally absent: an invisible aisling is forced to the mb003 outline via the
     //IsTransparent path in AddOrUpdateAisling, so this only maps visible body forms.
