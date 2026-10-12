@@ -74,12 +74,23 @@ public sealed class InputDispatcher
     {
         Instance = this;
         UITextBox.TextBoxFocusGained += OnTextBoxFocusGained;
+        UITextBox.TextBoxFocusLost += OnTextBoxFocusLost;
     }
 
     /// <summary>
     ///     Routes keyboard events to the newly focused textbox by setting it as the explicit focus target.
     /// </summary>
     private void OnTextBoxFocusGained(UITextBox textBox) => SetExplicitFocus(textBox);
+
+    /// <summary>
+    ///     Releases the explicit focus when the textbox that holds it loses focus. A hidden panel unfocuses its textboxes,
+    ///     and an explicit focus left on one of them blocked every click outside that panel.
+    /// </summary>
+    private void OnTextBoxFocusLost(UITextBox textBox)
+    {
+        if (ExplicitFocusElement == textBox)
+            ClearExplicitFocus();
+    }
 
     //── explicit focus ──
 
@@ -232,29 +243,7 @@ public sealed class InputDispatcher
         //live UI nudge tool (F11 debug layer) — grabs/moves/resizes the element under the cursor against the art
         Controls.Generic.DebugOverlay.UpdateNudge(root, mouseX, mouseY);
 
-        //mouse blocking: when a textbox has explicit focus, restrict mouse events
-        //to the panel containing the focused textbox. clicks outside are consumed.
-        var mouseBlocked = false;
-
-        if (ExplicitFocusElement is not null)
-        {
-            var containingPanel = FindContainingStackEntry(ExplicitFocusElement) ?? ExplicitFocusElement.Parent;
-
-            if (containingPanel is not null && !containingPanel.ContainsPoint(mouseX, mouseY))
-            {
-                //the chat bar is exempt from blocking: a click on it must always be deliverable
-                //so it can reclaim focus after a desync (explicit focus stuck on another visible
-                //element while the chat box still renders a caret) — otherwise the recovery
-                //click is consumed right here and the wedge is permanent
-                var chatBar = (UIElement?)ChatInputTextBox?.Parent ?? ChatInputTextBox;
-
-                var overChatBar = chatBar is not null
-                                  && IsEffectivelyVisible(chatBar)
-                                  && chatBar.ContainsPoint(mouseX, mouseY);
-
-                mouseBlocked = !overChatBar;
-            }
-        }
+        var mouseBlocked = IsMouseBlocked(mouseX, mouseY);
 
         if (!mouseBlocked)
         {
@@ -661,6 +650,41 @@ public sealed class InputDispatcher
         //phase 2: stack dispatch with bubbling
         var target = TopControl ?? root;
         DispatchBubble(target, e);
+    }
+
+    /// <summary>
+    ///     Mouse blocking: when a textbox has explicit focus, restrict mouse events to the panel containing the focused
+    ///     textbox; clicks outside are consumed. An explicit focus that is no longer visible is cleared instead, as the
+    ///     keyboard path does: ContainsPoint ignores visibility, so a hidden panel's area would keep blocking clicks.
+    /// </summary>
+    internal bool IsMouseBlocked(int mouseX, int mouseY)
+    {
+        if (ExplicitFocusElement is null)
+            return false;
+
+        if (!IsEffectivelyVisible(ExplicitFocusElement))
+        {
+            ClearExplicitFocus();
+
+            return false;
+        }
+
+        var containingPanel = FindContainingStackEntry(ExplicitFocusElement) ?? ExplicitFocusElement.Parent;
+
+        if (containingPanel is null || containingPanel.ContainsPoint(mouseX, mouseY))
+            return false;
+
+        //the chat bar is exempt from blocking: a click on it must always be deliverable
+        //so it can reclaim focus after a desync (explicit focus stuck on another visible
+        //element while the chat box still renders a caret) — otherwise the recovery
+        //click is consumed right here and the wedge is permanent
+        var chatBar = (UIElement?)ChatInputTextBox?.Parent ?? ChatInputTextBox;
+
+        var overChatBar = chatBar is not null
+                          && IsEffectivelyVisible(chatBar)
+                          && chatBar.ContainsPoint(mouseX, mouseY);
+
+        return !overChatBar;
     }
 
     private static bool IsEffectivelyVisible(UIElement element)

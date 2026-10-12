@@ -106,8 +106,13 @@ public class UITextBox : UIElement
 
                 FocusedTextBox = this;
                 TextBoxFocusGained?.Invoke(this);
-            } else if (FocusedTextBox == this)
-                FocusedTextBox = null;
+            } else
+            {
+                if (FocusedTextBox == this)
+                    FocusedTextBox = null;
+
+                TextBoxFocusLost?.Invoke(this);
+            }
         }
     }
 
@@ -116,6 +121,12 @@ public class UITextBox : UIElement
     ///     The InputDispatcher subscribes to this to keep keyboard routing in sync.
     /// </summary>
     public static event TextBoxFocusHandler? TextBoxFocusGained;
+
+    /// <summary>
+    ///     Fired when any UITextBox loses focus via IsFocused becoming false. The InputDispatcher subscribes to this so
+    ///     that it does not keep routing input to a box that no longer has focus.
+    /// </summary>
+    public static event TextBoxFocusHandler? TextBoxFocusLost;
 
     public bool IsMasked { get; set; }
     public bool IsMultiLine { get; set; }
