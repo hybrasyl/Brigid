@@ -583,7 +583,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         RegisterTab(HudTab.Tools, Tools, tabRect);
 
         var msgHistoryBounds = GetRect("ChattingRect");
-        MessageHistory = new SystemMessagePanel(msgHistoryBounds, tabRect, WorldState.Chat.GetOrangeBarHistory());
+        MessageHistory = new SystemMessagePanel(msgHistoryBounds, tabRect);
         MessageHistory.ConfigureExpand(chatExpandedTexture, ExpandedChatBounds, tabRect);
         RegisterTab(HudTab.MessageHistory, MessageHistory, tabRect);
 
