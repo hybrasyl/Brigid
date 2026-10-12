@@ -40,7 +40,7 @@ PAYLOAD="$(realpath "${1:?payload dir required}")"
 VERSION="${2:?version required}"
 OUT="$(realpath -m "${3:?out dir required}")"
 HERE="$(dirname "$(realpath "$0")")"
-ICON="$HERE/../../Brigid/BrigidIcon.png"
+ICONS="$HERE/../icon/linux"
 MIXER_REL="runtimes/linux-x64/native/libSDL2_mixer.so"
 
 MAINTAINER="Hybrasyl <sabrael@hybrasyl.com>"
@@ -86,12 +86,14 @@ fetch() {
 
 # ── .deb ──────────────────────────────────────────────────────────────────────
 DEB="$WORK/deb"
-mkdir -p "$DEB/DEBIAN" "$DEB/opt/brigid" "$DEB/usr/bin" \
-    "$DEB/usr/share/applications" "$DEB/usr/share/icons/hicolor/256x256/apps"
+mkdir -p "$DEB/DEBIAN" "$DEB/opt/brigid" "$DEB/usr/bin" "$DEB/usr/share/applications"
 cp -a "$PAYLOAD/." "$DEB/opt/brigid/"
 ln -s /opt/brigid/Brigid "$DEB/usr/bin/brigid"
 install -m 644 "$HERE/brigid.desktop" "$DEB/usr/share/applications/brigid.desktop"
-install -m 644 "$ICON" "$DEB/usr/share/icons/hicolor/256x256/apps/brigid.png"
+for icon in "$ICONS"/*.png; do
+    size="$(basename "$icon" .png)"
+    install -D -m 644 "$icon" "$DEB/usr/share/icons/hicolor/$size/apps/brigid.png"
+done
 chmod -R u+rwX,go+rX,go-w "$DEB/opt/brigid"
 
 # The first six are the bundled mixer's DT_NEEDED codecs; libicu and libssl are
@@ -131,7 +133,7 @@ cp -a "$PAYLOAD/." "$APPDIR/usr/bin/"
 cp -a "$CODECS/usr/lib/." "$APPDIR/usr/bin/$(dirname "$MIXER_REL")/"
 install -m 755 "$HERE/AppRun" "$APPDIR/AppRun"
 install -m 644 "$HERE/brigid.desktop" "$APPDIR/brigid.desktop"
-install -m 644 "$ICON" "$APPDIR/brigid.png"
+install -m 644 "$ICONS/256x256.png" "$APPDIR/brigid.png"
 ln -s brigid.png "$APPDIR/.DirIcon"
 
 echo "package-linux: AppImage bundles $(ls "$CODECS/usr/lib" | tr '\n' ' ')"

@@ -14,8 +14,9 @@
     </PropertyGroup>
 
     <!-- Window icon: decoded by SkiaSharp and applied via SDL_SetWindowIcon in ChaosGame (MonoGame's built-in
-         Icon.bmp loader can't parse it, so we set it ourselves). BrigidIcon.png is the medallion for Windows and Linux;
-         BrigidIconMac.png is the inset tile, because on macOS the window icon is the Dock icon. The .ico above is the
+         Icon.bmp loader can't parse it, so we set it ourselves). BrigidIcon.png is the medallion for Windows;
+         BrigidIconMac.png is the inset tile, because on macOS the window icon is the Dock icon; BrigidIconLinux.png is
+         the same tile full-bleed. The .ico above is the
          Windows exe/apphost icon. See Build/icon/README.md for the sources. -->
     <ItemGroup>
         <EmbeddedResource Include="BrigidIcon.png">
@@ -23,6 +24,9 @@
         </EmbeddedResource>
         <EmbeddedResource Include="BrigidIconMac.png">
             <LogicalName>BrigidIconMac.png</LogicalName>
+        </EmbeddedResource>
+        <EmbeddedResource Include="BrigidIconLinux.png">
+            <LogicalName>BrigidIconLinux.png</LogicalName>
         </EmbeddedResource>
     </ItemGroup>
 

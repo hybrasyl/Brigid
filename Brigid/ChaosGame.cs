@@ -65,7 +65,8 @@ public sealed class ChaosGame : Game
             return;
 
         using var stream = typeof(ChaosGame).Assembly.GetManifestResourceStream(
-            OperatingSystem.IsMacOS() ? "BrigidIconMac.png" : "BrigidIcon.png");
+            OperatingSystem.IsMacOS() ? "BrigidIconMac.png" :
+            OperatingSystem.IsLinux() ? "BrigidIconLinux.png" : "BrigidIcon.png");
 
         if (stream is null)
             return;
