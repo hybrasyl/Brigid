@@ -269,7 +269,7 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - **Data bag entities:** WorldEntity holds all state; AnimationSystem provides pure functions
 - **Separation:** Rendering layer has no dependency on Networking; coordination happens in Client project
 - **Global entity wiring:** ChaosGame wires entity tracking events at construction (before WorldScreen exists)
-- **Pathfinding:** Right-click A* to tile/entity, entity following with auto-assail, arrow/spacebar cancels
+- **Pathfinding:** Right-click A* to a ground tile (a single right-click on a creature or aisling does not move the player); double right-click on a creature or aisling follows it with auto-assail; arrow/spacebar cancels
 - **Casting flow:** CastingSystem coordinates targeting -> UseSpellOnTarget and chant progress
 
 ### Text Sizing & Passes
