@@ -651,6 +651,13 @@ public sealed class ChaosGame : Game
     }
 
     /// <summary>
+    ///     Brings the game window to the front and makes it the key window. An external dialog that took activation
+    ///     does not always hand it back, and on macOS SDL hides the cursor through cursor rects that only the key
+    ///     window applies.
+    /// </summary>
+    internal void RaiseWindow() => Sdl.SDL_RaiseWindow(Window.Handle);
+
+    /// <summary>
     ///     Cycles the window through integer multipliers of the virtual resolution (640×480).
     ///     Advances to the next multiplier if it fits on the current monitor, otherwise wraps to 1×.
     /// </summary>

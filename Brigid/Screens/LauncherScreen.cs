@@ -526,6 +526,11 @@ public sealed class LauncherScreen : IScreen
         //replayed as a launcher click next frame.
         InputBuffer.DiscardPending();
 
+        //osascript is the active app while its dialog is open and does not make our window key again when it exits;
+        //without this the cursor hide at Connect has no effect and the OS cursor draws over the game cursor.
+        if (OperatingSystem.IsMacOS())
+            Game.RaiseWindow();
+
         if (picked is null)
             return;
 

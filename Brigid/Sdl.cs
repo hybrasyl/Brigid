@@ -104,6 +104,10 @@ internal static partial class Sdl
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial void SDL_RestoreWindow(nint window);
 
+    [LibraryImport("SDL2")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial void SDL_RaiseWindow(nint window);
+
     //SDL_WindowFlags bits reported by SDL_GetWindowFlags (consumed by ChaosGame for maximize detection)
     public const uint SDL_WINDOW_MAXIMIZED = 0x00000080;
 
