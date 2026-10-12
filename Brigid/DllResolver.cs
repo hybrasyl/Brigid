@@ -26,19 +26,19 @@ internal static class DllResolver
 
     private static readonly Dictionary<string, List<string>> MacLibraries = new()
     {
-        { "SDL2_mixer", ["libSDL2_mixer-2.0.0.dylib", "libSDL2_mixer.dylib"] },
+        { SdlMixer.LIBRARY_NAME, ["libSDL2_mixer-2.0.0.dylib", "libSDL2_mixer.dylib"] },
         { "SDL2", ["libSDL2-2.0.0.dylib", "libSDL2.dylib"]}
     };
 
     private static readonly Dictionary<string, List<string>> LinuxLibraries = new()
     {
-        { "SDL2_mixer", ["libSDL2_mixer-2.0.so.0", "libSDL2_mixer.so.0", "libSDL2_mixer.so"] },
+        { SdlMixer.LIBRARY_NAME, ["libSDL2_mixer-2.0.so.0", "libSDL2_mixer.so.0", "libSDL2_mixer.so"] },
         { "SDL2", ["libSDL2-2.0.so.0", "libSDL2.so.0", "libSDL2.so"]}
     };
 
     private static readonly Dictionary<string, List<string>> WinLibraries = new()
     {
-        { "SDL2_mixer", ["SDL2_mixer.dll"] },
+        { SdlMixer.LIBRARY_NAME, ["SDL2_mixer.dll"] },
         { "SDL2", ["SDL2.dll"]}
     };
 
@@ -53,9 +53,8 @@ internal static class DllResolver
     {
         IntPtr handle;
 
-        var candidates = OperatingSystem.IsMacOS() ? MacLibraries :
-            OperatingSystem.IsLinux() ? LinuxLibraries : WinLibraries;
-        if (candidates.TryGetValue(libraryName, out var libs))
+        var libs = GetCandidates(libraryName);
+        if (libs is not null)
         {
             if (TryLoadLibrary(libs, out handle))
                 return handle;
@@ -69,6 +68,51 @@ internal static class DllResolver
                 $"DllResolver: {libraryName} not found! host RID {RuntimeIdentifier}, portable RID {PortableRuntimeIdentifier}, "
                 + $"probed: {string.Join(", ", (libs ?? []).SelectMany(GetProbePaths))}");
         return handle;
+    }
+
+    /// <summary>
+    ///     Loads <paramref name="libraryName" /> the way its p/invokes do: <see cref="ImportResolver" />, then the
+    ///     runtime's default search, which a p/invoke falls back to when the resolver returns zero.
+    ///     <see cref="NativeLibrary.TryLoad(string, Assembly, DllImportSearchPath?, out IntPtr)" /> alone skips the
+    ///     registered resolver, so it can miss the bundled copy. On failure, logs the loader's error for the first
+    ///     bundled candidate that exists, which names a missing dependency the probe-path list cannot.
+    /// </summary>
+    internal static bool TryResolve(string libraryName)
+    {
+        var assembly = typeof(DllResolver).Assembly;
+
+        if ((ImportResolver(libraryName, assembly, null) != IntPtr.Zero)
+            || NativeLibrary.TryLoad(libraryName, assembly, null, out _))
+            return true;
+
+        LogLoadError(libraryName);
+
+        return false;
+    }
+
+    private static List<string>? GetCandidates(string libraryName)
+    {
+        var candidates = OperatingSystem.IsMacOS() ? MacLibraries :
+            OperatingSystem.IsLinux() ? LinuxLibraries : WinLibraries;
+
+        return candidates.GetValueOrDefault(libraryName);
+    }
+
+    private static void LogLoadError(string libraryName)
+    {
+        var path = (GetCandidates(libraryName) ?? []).SelectMany(GetProbePaths).FirstOrDefault(File.Exists);
+
+        if (path is null)
+            return;
+
+        //TryLoad discards the loader's message (dlerror / LoadLibrary), and Load is the only API that surfaces it
+        try
+        {
+            NativeLibrary.Free(NativeLibrary.Load(path));
+        } catch (DllNotFoundException e)
+        {
+            NoticeDebugLog.Write($"DllResolver: {libraryName} at {path} failed to load: {e.Message}");
+        }
     }
 
     private static bool TryLoadLibrary(List<string> libraryNames, out IntPtr handle)

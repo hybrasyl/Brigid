@@ -26,6 +26,9 @@ namespace Brigid.Screens;
 
 public sealed class LobbyLoginScreen : IScreen
 {
+    //the screen is rebuilt on every return from the world; the notice shows once per process
+    private static bool AudioMissingNoticeShown;
+
     private readonly bool ReturningFromWorld;
     private bool AwaitingCharFinalize;
 
@@ -46,6 +49,7 @@ public sealed class LobbyLoginScreen : IScreen
     private bool PendingConfigSwitch;
     private OkPopupMessageControl LobbyLoginPopupMessage = null!;
     private OkPopupMessageControl MigrationPrompt = null!;
+    private AudioMissingNoticeControl AudioMissingNotice = null!;
     private CertificateTrustPromptControl TrustPrompt = null!;
     private InsecureConnectionPromptControl InsecurePrompt = null!;
 
@@ -160,11 +164,16 @@ public sealed class LobbyLoginScreen : IScreen
         MigrationPrompt.OnOk += OnMigrationImport;
         MigrationPrompt.OnCancel += OnMigrationSkip;
 
-        TrustPrompt = new CertificateTrustPromptControl { Name = "TrustPrompt" };
+        //added after MigrationPrompt at the same ZIndex, so it draws above it and tops the control stack
+        AudioMissingNotice = new AudioMissingNoticeControl(OperatingSystem.IsLinux()) { ZIndex = 2 };
+
+        //the connection prompts can open while a notice above is still up; keep them on top so the visible prompt
+        //is the one the control stack routes Enter/Escape to
+        TrustPrompt = new CertificateTrustPromptControl { Name = "TrustPrompt", ZIndex = 3 };
         TrustPrompt.OnTrusted += OnCertificateTrusted;
         TrustPrompt.OnDeclined += CertificateTrustStore.Decline;
 
-        InsecurePrompt = new InsecureConnectionPromptControl { Name = "InsecurePrompt" };
+        InsecurePrompt = new InsecureConnectionPromptControl { Name = "InsecurePrompt", ZIndex = 3 };
         InsecurePrompt.OnContinued += OnInsecureConnectionAccepted;
         InsecurePrompt.OnRefused += OnInsecureConnectionRefused;
 
@@ -182,6 +191,7 @@ public sealed class LobbyLoginScreen : IScreen
         Root.AddChild(PasswordChangeControl);
         Root.AddChild(LobbyLoginPopupMessage);
         Root.AddChild(MigrationPrompt);
+        Root.AddChild(AudioMissingNotice);
         Root.AddChild(TrustPrompt);
         Root.AddChild(InsecurePrompt);
 
@@ -191,6 +201,7 @@ public sealed class LobbyLoginScreen : IScreen
         WireRootInputHandlers();
 
         MaybeShowMigrationPrompt();
+        MaybeShowAudioMissingNotice();
 
         if (ReturningFromWorld)
         {
@@ -479,6 +490,17 @@ public sealed class LobbyLoginScreen : IScreen
     }
 
     private void OnLobbyLoginPopupMessageOk() => LobbyLoginPopupMessage.Hide();
+
+    //── once-per-process notice that the audio libraries are missing ──
+    private void MaybeShowAudioMissingNotice()
+    {
+        if (AudioMissingNoticeShown || !Game.SoundSystem.MixerLibraryMissing)
+            return;
+
+        AudioMissingNoticeShown = true;
+
+        AudioMissingNotice.Show();
+    }
 
     //── one-time legacy character-data import offer ──
 
