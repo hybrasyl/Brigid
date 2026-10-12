@@ -243,7 +243,7 @@ public static class TextRenderer
     ///     Returns true if the text at position i starts a {=x color code sequence.
     /// </summary>
     public static bool IsColorCode(string text, int i)
-        => ((i + 2) < text.Length) && (text[i] == '{') && (text[i + 1] == '=') && GetColorCode(text[i + 2]) is not null;
+        => ((i + 2) < text.Length) && (text[i] == '{') && (text[i + 1] == '=') && LegendPalette.GetTextColor(text[i + 2]).HasValue;
 
     /// <summary>
     ///     Returns the horizontal pixel advance for a single character, from the active font's metrics.
@@ -312,7 +312,8 @@ public static class TextRenderer
     #region Word Wrapping
     /// <summary>
     ///     Word-wraps text into lines that fit within maxWidth pixels. Splits on explicit newlines, then wraps each
-    ///     paragraph by character width.
+    ///     paragraph by character width. An inline {=x} color code continues onto the lines after it, as in
+    ///     <see cref="WrapText" />.
     /// </summary>
     public static List<string> WrapLines(string text, int maxWidth, int? size = null, float extraSpacing = 0f)
     {
@@ -321,25 +322,13 @@ public static class TextRenderer
         if ((maxWidth <= 0) || string.IsNullOrEmpty(text))
             return lines;
 
+        string? activeColorCode = null;
+
         foreach (var paragraph in text.Split('\n'))
-        {
-            var remaining = paragraph;
-
-            while (remaining.Length > 0)
-            {
-                var lineEnd = FindLineBreak(remaining, maxWidth, size: size, extraSpacing: extraSpacing);
-
-                lines.Add(
-                    remaining[..lineEnd]
-                        .TrimEnd());
-
-                remaining = remaining[lineEnd..]
-                    .TrimStart();
-            }
-
             if (paragraph.Length == 0)
                 lines.Add(string.Empty);
-        }
+            else
+                WrapParagraph(paragraph, maxWidth, size, extraSpacing, trimLeading: true, lines, ref activeColorCode);
 
         return lines;
     }
@@ -372,26 +361,42 @@ public static class TextRenderer
                 continue;
             }
 
-            //inherit the active color code from prior lines so inline {=x} codes persist across wraps/paragraphs
-            var remaining = activeColorCode is not null ? activeColorCode + paragraph : paragraph;
-
-            while (remaining.Length > 0)
-            {
-                var lineEnd = FindLineBreak(remaining, maxWidth, size: size, extraSpacing: extraSpacing);
-                var line = remaining[..lineEnd].TrimEnd();
-                lines.Add(line);
-                activeColorCode = FindLastColorCode(line) ?? activeColorCode;
-                remaining = remaining[lineEnd..];
-
-                //only re-prepend the active color code when the prepended length is strictly
-                //less than what we just consumed — otherwise FindLineBreak on the next iteration
-                //returns the same lineEnd and remaining never shrinks (infinite loop).
-                if (activeColorCode is not null && (remaining.Length > 0) && (activeColorCode.Length < lineEnd))
-                    remaining = activeColorCode + remaining;
-            }
+            WrapParagraph(paragraph, maxWidth, size, extraSpacing, trimLeading: false, lines, ref activeColorCode);
         }
 
         return lines;
+    }
+
+    /// <summary>
+    ///     Word-wraps one paragraph into <paramref name="lines" />. The last {=x} color code continues onto each line after
+    ///     it, and onto the next paragraph through <paramref name="activeColorCode" />. When
+    ///     <paramref name="trimLeading" /> is true, the spaces after a break are removed from the start of the next line.
+    /// </summary>
+    private static void WrapParagraph(
+        string paragraph,
+        int maxWidth,
+        int? size,
+        float extraSpacing,
+        bool trimLeading,
+        List<string> lines,
+        ref string? activeColorCode)
+    {
+        var remaining = activeColorCode is not null ? activeColorCode + paragraph : paragraph;
+
+        while (remaining.Length > 0)
+        {
+            var lineEnd = FindLineBreak(remaining, maxWidth, size: size, extraSpacing: extraSpacing);
+            var line = remaining[..lineEnd].TrimEnd();
+            lines.Add(line);
+            activeColorCode = FindLastColorCode(line) ?? activeColorCode;
+            remaining = trimLeading ? remaining[lineEnd..].TrimStart() : remaining[lineEnd..];
+
+            //only re-prepend the active color code when the prepended length is strictly
+            //less than what we just consumed — otherwise FindLineBreak on the next iteration
+            //returns the same lineEnd and remaining never shrinks (infinite loop).
+            if (activeColorCode is not null && (remaining.Length > 0) && (activeColorCode.Length < lineEnd))
+                remaining = activeColorCode + remaining;
+        }
     }
 
     private static string? FindLastColorCode(string line)
