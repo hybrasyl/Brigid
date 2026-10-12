@@ -40,6 +40,7 @@ public sealed partial class WorldScreen
 
         //ease the transfer loading bar while it's up across the reconnect gap (cosmetic; see MapLoadingBar)
         MapLoading.Tick(elapsedMs);
+        TickMapDataWatchdog(elapsedMs);
 
         //polled rather than driven by the transport event, which fires on the connect task: this is the
         //thread allowed to touch the control tree, and a world transfer re-establishes the transport
