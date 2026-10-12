@@ -1274,7 +1274,7 @@ public sealed partial class WorldScreen
     //--- health / effects / light ---
 
     private void HandleEffect(StatusBarPacket args)
-        => WorldHud.EffectBar.SetEffect((byte)args.Icon, (EffectColor)(byte)args.Color);
+        => UpdateHuds(HudOps.SetEffect, (byte)args.Icon, (EffectColor)(byte)args.Color);
 
     private void HandleHealthBar(HealthBarPacket args)
     {
