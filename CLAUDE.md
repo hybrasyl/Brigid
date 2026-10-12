@@ -15,7 +15,7 @@ dotnet run --project Brigid/Brigid.csproj
 
 The client requires a Dark Ages game-data directory (the folder containing `*.dat` archives). Point `GlobalSettings.DataPath` at that directory before running; `LobbyHost`/`LobbyPort` and `ClientVersion` also live in `GlobalSettings`.
 
-Tests live in `Brigid.Tests` (xunit): `dotnet test Brigid.slnx`. Coverage is currently a handful of targeted regression/smoke tests, not a full suite. Tests that change static state (`WorldState`, `DataDiagnostics.Log`, `FontEngine`, textbox focus) share a named collection with `DisableParallelization = true`.
+Tests live in `Brigid.Tests` (xunit): `dotnet test Brigid.slnx`. Coverage is currently a handful of targeted regression/smoke tests, not a full suite. Tests that change static state (`WorldState`, `DataDiagnostics.Log`, `FontEngine`, `DebugOverlay`, textbox focus) share a named collection with `DisableParallelization = true`.
 
 ## Solution Structure
 
