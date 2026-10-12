@@ -48,6 +48,33 @@ DALib (Dark Ages file format + networking support) comes from the pinned NuGet p
 | `../lodunity/`      | Decompile of the Unity LOD client.                                    |
 | `../Chaos-Server/`  | Chaos-Server source (Sichii). Protocol reference for compat work.     |
 
+The **docs repo** is a private sibling checkout holding the Dark Ages protocol/format reference, the
+per-project design plans, and the issue tracker. It is referred to by that name throughout this file.
+
+## Issue Tracker
+
+Issues are **not** in Jira. The tracker is git-backed — files are the database — and it lives in the
+docs repo under `tracker/`:
+
+```text
+tracker/config.yaml                        # projects, statuses, issue types, fields, people
+tracker/issues/<PREFIX>/<PREFIX>-<n>.md    # one file per issue, sharded by project prefix
+```
+
+`BRIG` is this repo's prefix, so `BRIG-64` is `tracker/issues/BRIG/BRIG-64.md`. Each issue is
+markdown with YAML frontmatter, and grep over that frontmatter is the intended query interface
+(`grep -rl "^status: in-progress" tracker/issues/BRIG`). An empty result usually means the wrong
+prefix, not a missing issue. `tracker/config.yaml` is authoritative for the status and type
+vocabularies — read it rather than trusting any summary.
+
+Design docs for a card live in the docs repo at `docs/plans/brigid/BRIG-<id>-<slug>.md` and are
+linked from the card's `docs:` frontmatter plus a `HasDesignDoc` label; see that directory's
+`README.md` before adding one.
+
+**Read-only by default** — read the tracker freely for context, mutate only when asked. Never
+hand-allocate an issue ID; the tracker has a tool for it, because the obvious `ls | sort | tail`
+recipe has produced duplicate IDs in practice.
+
 ## Key Dependencies
 
 | Package                                    | Purpose                                                                   |
@@ -79,7 +106,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 - **11 repositories** (exposed on `DataContext` by these accessor names): AislingDrawData, CreatureSprites, Effects, Fonts, LightMasks, LocalPlayerSettings, MapsFiles, MetaFiles, PanelSprites, Tiles, UserControls (the UI-component repository).
 - **`ControlPrefab`/`ControlPrefabSet`** -- Wraps DALib Control definitions + pre-rendered SKImage arrays. First control (Anchor) defines panel bounds.
 - Control file catalog in `controlFileList.txt` at solution root.
-- **`AssetPackRegistry`** (`AssetPacks/`) -- Static registry. On `Initialize()`, scans the per-user Erisco assets directory (`AppPaths.AssetsDir`) for `*.datf` files (ZIP archives with modern asset overrides), reads each one's `_manifest.json`, validates `schema_version`, and registers a single pack per `content_type`. On first launch it performs a one-time best-effort migration of legacy `{DataContext.DataPath}/hybrasyl-data/` packs (the `LEGACY_PACK_SUBFOLDER`) into the assets directory. Lookups return null when no pack is registered; the renderer/audio layer falls through to legacy. Full per-type catalog (entry naming, ID bases, manifest fields actually read, legacy fallbacks, enforced constraints) is in `assetPackList.md` at solution root; `asset-pack-format.md` in the document repo is the artist-facing format spec. Twelve content types are supported, each with a typed accessor:
+- **`AssetPackRegistry`** (`AssetPacks/`) -- Static registry. On `Initialize()`, scans the per-user Erisco assets directory (`AppPaths.AssetsDir`) for `*.datf` files (ZIP archives with modern asset overrides), reads each one's `_manifest.json`, validates `schema_version`, and registers a single pack per `content_type`. On first launch it performs a one-time best-effort migration of legacy `{DataContext.DataPath}/hybrasyl-data/` packs (the `LEGACY_PACK_SUBFOLDER`) into the assets directory. Lookups return null when no pack is registered; the renderer/audio layer falls through to legacy. Full per-type catalog (entry naming, ID bases, manifest fields actually read, legacy fallbacks, enforced constraints) is in `assetPackList.md` at solution root; `asset-pack-format.md` in the docs repo is the artist-facing format spec. Twelve content types are supported, each with a typed accessor:
   - `ability_icons` -> `IconPack` -> `GetIconPack()`
   - `item_icons` -> `ItemPack` -> `GetItemPack()`
   - `nation_badges` -> `NationBadgePack` -> `GetNationBadgePack()`
