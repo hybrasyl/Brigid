@@ -52,6 +52,11 @@ public sealed class ChaosGame : Game
     ///     loader can't parse our BMP and falls back to its default icon, so we decode a PNG with SkiaSharp and set the
     ///     icon directly via SDL. Best-effort: any missing resource/handle just leaves MonoGame's default in place.
     /// </summary>
+    /// <remarks>
+    ///     On Windows and Linux the icon is the round medallion, the house icon there. On macOS, SDL sets the window icon
+    ///     as the application's Dock icon, and MonoGame sets its own logo when it creates the window. So on macOS the
+    ///     icon is the inset tile, the same art as the bundle's <c>Brigid.icns</c>.
+    /// </remarks>
     private void SetWindowIcon()
     {
         var window = Window.Handle;
@@ -59,7 +64,8 @@ public sealed class ChaosGame : Game
         if (window == nint.Zero)
             return;
 
-        using var stream = typeof(ChaosGame).Assembly.GetManifestResourceStream("BrigidIcon.png");
+        using var stream = typeof(ChaosGame).Assembly.GetManifestResourceStream(
+            OperatingSystem.IsMacOS() ? "BrigidIconMac.png" : "BrigidIcon.png");
 
         if (stream is null)
             return;

@@ -1,18 +1,35 @@
-# App icon source
+# App icon sources
 
-`Brigid.svg` is the vector master. All raster icons are generated from it:
-this directory's `Brigid.png` (1024x1024), plus `Brigid/BrigidIcon.png`
-(256x256 window icon) and `Brigid/BrigidIcon.ico` (16-256px Windows exe
-icon). To regenerate, rasterize the SVG at 1024x1024 and Lanczos-downscale
-for the smaller sizes (direct small-size vector renders come out too thin).
+Brigid follows the house icon standard of the Erisco apps: the round medallion on Windows and Linux, and the rounded tile on macOS, which draws app icons as tiles.
 
-The macOS pipeline consumes the square **1024x1024 PNG** named exactly:
+| File | What it is | Used for |
+| --- | --- | --- |
+| `Build/icon/Brigid-medallion.webp` | The medallion master, 1024x1024 with alpha (from the house logo set, "Hyb Logo Green - Brigid") | The source of `Brigid/BrigidIcon.ico` and `Brigid/BrigidIcon.png` |
+| `Build/icon/Brigid.svg` | The tile master, vector | The source of `Build/icon/Brigid.png` |
+| `Build/icon/Brigid.png` | The tile, inset into Apple's grid: 824x824 of art centred on a 1024x1024 transparent canvas | The macOS bundle. `Build/macos/make-app.sh` turns it into `Brigid.icns`. Also the source of `Brigid/BrigidIconMac.png` |
+| `Brigid/BrigidIcon.ico` | The medallion at 16, 24, 32, 48, 64, 128 and 256 px | The Windows exe icon (`ApplicationIcon`) |
+| `Brigid/BrigidIcon.png` | The medallion at 256 px | The window icon on Windows and Linux, set at runtime by `ChaosGame.SetWindowIcon` |
+| `Brigid/BrigidIconMac.png` | The inset tile at 512 px | The window icon on macOS. There SDL sets the window icon as the Dock icon, so it must be the same art as `Brigid.icns` |
 
-    Brigid.png
+Commit every generated file. CI does not need ImageMagick.
 
-The macOS release job (`Build/macos/make-app.sh`) downsamples it into a full
-`.iconset` and runs `iconutil` to produce `Brigid.icns` inside the app
-bundle. PNG with alpha/transparency is fine.
+## Regenerate
 
-If this file is absent, the build still succeeds, the bundle just uses the
-default app icon.
+Run from the repository root. Always call `magick`, never bare `convert`: on Windows `convert` is the FAT-to-NTFS volume converter.
+
+```sh
+# Windows exe icon and the Windows/Linux window icon, from the medallion
+magick Build/icon/Brigid-medallion.webp -filter Lanczos -define icon:auto-resize=256,128,64,48,32,24,16 Brigid/BrigidIcon.ico
+magick Build/icon/Brigid-medallion.webp -filter Lanczos -resize 256x256 -strip -define png:compression-level=9 PNG32:Brigid/BrigidIcon.png
+
+# macOS tile, from the SVG. A full-bleed tile shows about 24% larger than the icons next to it in the Dock, so inset it.
+magick -background none -density 384 Build/icon/Brigid.svg -resize 1024x1024 tile-1024.png
+magick tile-1024.png -filter Lanczos -resize 824x824 -background none -gravity center -extent 1024x1024 -strip PNG32:Build/icon/Brigid.png
+
+# macOS window icon, from the inset tile
+magick Build/icon/Brigid.png -filter Lanczos -resize 512x512 -strip -define png:compression-level=9 PNG32:Brigid/BrigidIconMac.png
+```
+
+Downscale from a large raster with Lanczos. A small vector render comes out too thin.
+
+If `Build/icon/Brigid.png` is absent, the macOS build still succeeds, and the bundle uses the default app icon.
