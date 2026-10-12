@@ -787,40 +787,32 @@ public sealed partial class WorldScreen
 
     private void HandleEditableProfileRequest() => Game.Connection.SendEditableProfile(PlayerPortrait, StatusBook.GetProfileText());
 
+    //the name comes from the server, and the portrait goes back to it in the editable profile, so TryGetFilePath must
+    //refuse a name that leaves the character folder
     private static byte[] LoadPortraitFile(string name)
     {
-        if (!DataContext.LocalPlayerSettings.IsInitialized || string.IsNullOrEmpty(name))
+        if (string.IsNullOrEmpty(name))
             return [];
 
-        var jpgPath = DataContext.LocalPlayerSettings.GetFilePath($"{name}.jpg");
-
-        if (File.Exists(jpgPath))
+        if (DataContext.LocalPlayerSettings.TryGetFilePath($"{name}.jpg", out var jpgPath) && File.Exists(jpgPath))
             return File.ReadAllBytes(jpgPath);
 
-        var noExtPath = DataContext.LocalPlayerSettings.GetFilePath(name);
-
-        if (File.Exists(noExtPath))
+        if (DataContext.LocalPlayerSettings.TryGetFilePath(name, out var noExtPath) && File.Exists(noExtPath))
             return File.ReadAllBytes(noExtPath);
 
         return [];
     }
 
     private static string LoadProfileText()
-    {
-        if (!DataContext.LocalPlayerSettings.IsInitialized)
-            return string.Empty;
-
-        var profilePath = DataContext.LocalPlayerSettings.GetFilePath("profile.txt");
-
-        return File.Exists(profilePath) ? File.ReadAllText(profilePath) : string.Empty;
-    }
+        => DataContext.LocalPlayerSettings.TryGetFilePath("profile.txt", out var profilePath) && File.Exists(profilePath)
+            ? File.ReadAllText(profilePath)
+            : string.Empty;
 
     private static void SaveProfileText(string text)
     {
-        if (!DataContext.LocalPlayerSettings.IsInitialized)
+        if (!DataContext.LocalPlayerSettings.TryGetFilePath("profile.txt", out var profilePath))
             return;
 
-        var profilePath = DataContext.LocalPlayerSettings.GetFilePath("profile.txt");
         DataDiagnostics.Try(() => File.WriteAllText(profilePath, text), "SaveProfileText");
     }
 

@@ -1,4 +1,5 @@
 #region
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Brigid.Data.Models;
 #endregion
@@ -27,7 +28,20 @@ public sealed class LocalPlayerSettingsRepository
     public bool IsInitialized => PlayerDirectory is not null;
     public string MacroPath => Path.Combine(PlayerDirectory, MACRO_FILE);
 
-    public string GetFilePath(string fileName) => Path.Combine(PlayerDirectory, fileName);
+    /// <summary>
+    ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a bare,
+    ///     cross-platform file name (see <see cref="MetaFileCache.IsSafeName" />). A caller can pass a server-sent name,
+    ///     and Path.Combine follows a rooted name or ".." out of the folder.
+    /// </summary>
+    public bool TryGetFilePath(string fileName, [NotNullWhen(true)] out string? path)
+    {
+        path = IsInitialized ? CombineBareName(PlayerDirectory, fileName) : null;
+
+        return path is not null;
+    }
+
+    internal static string? CombineBareName(string directory, string fileName)
+        => MetaFileCache.IsSafeName(fileName) ? Path.Combine(directory, fileName) : null;
     public string SkillBookPath => Path.Combine(PlayerDirectory, SKILL_BOOK_FILE);
     public string SpellBookPath => Path.Combine(PlayerDirectory, SPELL_BOOK_FILE);
 
