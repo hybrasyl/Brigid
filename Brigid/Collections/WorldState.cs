@@ -493,27 +493,6 @@ public static class WorldState
     }
 
     /// <summary>
-    ///     Updates the player entity's position and starts its walk animation after the server confirms the walk.
-    /// </summary>
-    public static void HandlePlayerWalk(Direction direction, int oldX, int oldY)
-    {
-        if (!Entities.TryGetValue(PlayerEntityId, out var entity))
-            return;
-
-        (var dx, var dy) = direction.ToTileOffset();
-        entity.TileX = oldX + dx;
-        entity.TileY = oldY + dy;
-        entity.Direction = direction;
-        SortVersion++;
-
-        AnimationSystem.StartWalk(
-            entity,
-            direction,
-            entity.UsesCreatureWalkTiming,
-            true);
-    }
-
-    /// <summary>
     ///     Returns true if any blocking entity (aisling, non-WalkThrough creature) occupies the tile,
     ///     excluding the specified entity ID (typically the player).
     /// </summary>

@@ -40,6 +40,12 @@ public static class AnimationSystem
     /// <summary>
     ///     Sets up walk animation state on an entity. Call after updating tile position.
     /// </summary>
+    /// <param name="walkFrameOverride">
+    ///     The creature sprite's walk frame count. Null for a creature that the server moves means it has no sprite
+    ///     (sprite id 0), so there is no walk animation and the walk snaps to the destination. A sprite id whose sprite
+    ///     is missing gets the one-frame placeholder animation, not null. Null for the local player or a paperdoll aisling
+    ///     means the human default: the local player's walk length paces its walk input.
+    /// </param>
     public static void StartWalk(
         WorldEntity entity,
         Direction direction,
@@ -56,7 +62,12 @@ public static class AnimationSystem
         //swimming is not a form — use swim animation frame count and normal walk speed on water tiles
         var swimming = entity is { IsOnSwimmingTile: true, SwimWalkFrames: > 0 };
 
-        var frameCount = swimming ? entity.SwimWalkFrames : walkFrameOverride ?? DEFAULT_WALK_FRAMES;
+        //a creature that the server moves and that has no sprite snaps: zero frames give a zero walk offset.
+        //the local player keeps the human walk, because the walk ends before the next walk can start, and a 75 ms walk
+        //would send walks faster than the server accepts them.
+        var frameCount = swimming
+            ? entity.SwimWalkFrames
+            : walkFrameOverride ?? (isCreature && !isLocalPlayer ? 0 : DEFAULT_WALK_FRAMES);
 
         entity.AnimState = EntityAnimState.Walking;
         entity.AnimFrameIndex = 0;
@@ -70,7 +81,7 @@ public static class AnimationSystem
                 : REMOTE_AISLING_WALK_FRAME_MS;
 
         entity.WalkStartOffset = GetWalkOffset(direction);
-        entity.VisualOffset = entity.WalkStartOffset;
+        entity.VisualOffset = frameCount > 0 ? entity.WalkStartOffset : Vector2.Zero;
     }
 
     /// <summary>
@@ -213,8 +224,8 @@ public static class AnimationSystem
         var totalDuration = Math.Max(MIN_WALK_DURATION_MS, entity.AnimFrameCount * entity.AnimFrameIntervalMs);
         var progress = Math.Clamp(entity.AnimElapsedMs / totalDuration, 0f, 1f);
 
-        //some entities have no walk frames — that's valid. the walk slide still needs to play out,
-        //but there's no frame stepping to do.
+        //an entity with no walk frames has a zero offset (it snaps), but the walk state still lasts at least
+        //MIN_WALK_DURATION_MS, and there is no frame stepping to do.
         entity.AnimFrameIndex = entity.AnimFrameCount > 0
             ? Math.Clamp((int)(progress * entity.AnimFrameCount), 0, entity.AnimFrameCount - 1)
             : 0;
