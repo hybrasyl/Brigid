@@ -77,6 +77,9 @@ public sealed class LauncherScreen : IScreen
     private string AssetPath = "";
     private bool AssetPathValid;
     private bool Completed;
+
+    //Browse is armed on press and fires on release; see HandleMouse
+    private bool AssetButtonArmed;
     private double CaretTimer;
 
     //true when summoned from the in-game main menu (vs the cold-startup launcher). Surfaces a Return-to-Main-Menu
@@ -261,10 +264,26 @@ public sealed class LauncherScreen : IScreen
         //timing-dependent and diverged by platform (dead on Windows, fine on macOS).
         foreach (var evt in InputBuffer.Events)
         {
-            if ((evt.Kind != BufferedInputKind.MouseButton) || (evt.Button != MouseButton.Left) || !evt.IsPress)
+            if ((evt.Kind != BufferedInputKind.MouseButton) || (evt.Button != MouseButton.Left))
                 continue;
 
             var cursor = new Point(evt.X, evt.Y);
+
+            //the folder picker blocks the game loop until its dialog closes. Opened on the press, it blocks before SDL
+            //sees the release, and on X11 SDL's held-button pointer capture then outlives the click: no window,
+            //the picker's included, gets a click until the process dies. On the release SDL has already let go.
+            if (!evt.IsPress)
+            {
+                if (AssetButtonArmed && (CurrentMode == Mode.Main) && AssetButton.Contains(cursor))
+                    BrowseForAssetFolder();
+
+                AssetButtonArmed = false;
+
+                continue;
+            }
+
+            //a release lost to a focus change would leave a stale arm; every press starts clean
+            AssetButtonArmed = false;
 
             switch (CurrentMode)
             {
@@ -321,7 +340,7 @@ public sealed class LauncherScreen : IScreen
         //data folder is locked when summoned from the main menu — it can only change at startup
         if (!OpenedFromMainMenu && AssetButton.Contains(cursor))
         {
-            BrowseForAssetFolder();
+            AssetButtonArmed = true;
 
             return;
         }
