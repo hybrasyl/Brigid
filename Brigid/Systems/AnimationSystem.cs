@@ -592,6 +592,32 @@ public static class AnimationSystem
 
     private static (int FrameIndex, bool Flip) GetCreatureIdleFrame(WorldEntity entity, in CreatureAnimInfo info)
     {
+        (var baseIndex, var dirOffset, var frameCount) = GetCreatureIdleLoop(in info, entity.IdleOptionalActive);
+
+        //cycle through the standing frames using the entity's idle tick
+        var frameTick = frameCount > 1 ? entity.IdleAnimTick % frameCount : 0;
+
+        return ToDirectionalFrame(in info, baseIndex + frameTick, dirOffset, entity.Direction);
+    }
+
+    /// <summary>
+    ///     Returns the first idle frame index and flip flag for a creature sprite facing the given direction. Does not require
+    ///     a WorldEntity — suitable for portraits, previews, and other static rendering. Follows the same idle rules as the
+    ///     world, at the first tick of the standing loop.
+    /// </summary>
+    public static (int FrameIndex, bool Flip) GetCreatureIdleFrame(in CreatureAnimInfo info, Direction direction)
+    {
+        (var baseIndex, var dirOffset, _) = GetCreatureIdleLoop(in info, optionalActive: false);
+
+        return ToDirectionalFrame(in info, baseIndex, dirOffset, direction);
+    }
+
+    /// <summary>
+    ///     The first frame, the offset to the second facing, and the length of a creature's idle loop. The world and the
+    ///     static pickers share it, so a portrait shows the frame the creature stands on in the world.
+    /// </summary>
+    private static (int BaseIndex, int DirOffset, int FrameCount) GetCreatureIdleLoop(in CreatureAnimInfo info, bool optionalActive)
+    {
         int baseIndex;
         int dirOffset;
         int frameCount;
@@ -614,7 +640,7 @@ public static class AnimationSystem
         {
             //NormalPlusOptional: cycle length depends on which loop was picked this cycle.
             baseIndex = info.StandingFrameIndex;
-            frameCount = entity.IdleOptionalActive ? info.OptionalAnimationFrameCount : info.StandingFrameCount;
+            frameCount = optionalActive ? info.OptionalAnimationFrameCount : info.StandingFrameCount;
             dirOffset = info.OptionalAnimationFrameCount;
         }
 
@@ -622,42 +648,22 @@ public static class AnimationSystem
         if ((baseIndex + dirOffset) >= info.TotalFrameCount)
             dirOffset = 0;
 
-        //cycle through the standing frames using the entity's idle tick
-        var frameTick = frameCount > 1 ? entity.IdleAnimTick % frameCount : 0;
-
-        return entity.Direction switch
-        {
-            Direction.Up    => (baseIndex + frameTick, false),
-            Direction.Right => (baseIndex + dirOffset + frameTick, false),
-            Direction.Down  => (baseIndex + dirOffset + frameTick, true),
-            Direction.Left  => (baseIndex + frameTick, true),
-            _               => (baseIndex + frameTick, false)
-        };
+        return (baseIndex, dirOffset, frameCount);
     }
 
-    /// <summary>
-    ///     Returns the first idle frame index and flip flag for a creature sprite facing the given direction. Does not require
-    ///     a WorldEntity — suitable for portraits, previews, and other static rendering.
-    /// </summary>
-    public static (int FrameIndex, bool Flip) GetCreatureIdleFrame(in CreatureAnimInfo info, Direction direction)
+    private static (int FrameIndex, bool Flip) ToDirectionalFrame(in CreatureAnimInfo info, int frame, int dirOffset, Direction direction)
     {
-        var baseIndex = info.StandingFrameCount > 0 ? info.StandingFrameIndex : info.WalkFrameIndex;
-
-        var dirOffset = info.StandingFrameCount > 0
-            ? info.OptionalAnimationFrameCount > 0 ? info.OptionalAnimationFrameCount : info.StandingFrameCount
-            : info.WalkFrameCount;
-
-        if ((baseIndex + dirOffset) >= info.TotalFrameCount)
-            dirOffset = 0;
-
-        return direction switch
+        (var index, var flip) = direction switch
         {
-            Direction.Up    => (baseIndex, false),
-            Direction.Right => (baseIndex + dirOffset, false),
-            Direction.Down  => (baseIndex + dirOffset, true),
-            Direction.Left  => (baseIndex, true),
-            _               => (baseIndex, false)
+            Direction.Up    => (frame, false),
+            Direction.Right => (frame + dirOffset, false),
+            Direction.Down  => (frame + dirOffset, true),
+            Direction.Left  => (frame, true),
+            _               => (frame, false)
         };
+
+        //a sprite with fewer frames than its header declares holds its last frame, and never reads past the end
+        return (Math.Clamp(index, 0, Math.Max(info.TotalFrameCount - 1, 0)), flip);
     }
 
     /// <summary>
