@@ -41,6 +41,8 @@ public sealed class LauncherScreen : IScreen
     private const float HINT_SIZE = 11f;
     private const float TITLE_SIZE = 18f;
     private const int ROW_HEIGHT = 24;
+    private const int FIELD_GAP = 14;
+    private const int HINT_GAP = 4;
     private const int MAX_PORT_DIGITS = 5;
 
     private static readonly Rectangle Panel = new(110, 90, 420, 290);
@@ -57,7 +59,7 @@ public sealed class LauncherScreen : IScreen
     private static readonly Color BadColor = new(225, 130, 120);
 
     private readonly Dictionary<string, Texture2D> TextCache = new();
-    private readonly Dictionary<string, int> WidthCache = new();
+    private readonly Dictionary<string, float> WidthCache = new();
     private readonly string[] AddText = new string[3];
     private readonly Rectangle[] AddFieldBounds = new Rectangle[3];
     private readonly List<(Rectangle Row, Rectangle Remove, ServerEntry Entry)> DropdownRows = [];
@@ -70,6 +72,7 @@ public sealed class LauncherScreen : IScreen
     //virtual→native draw scale for the current frame; text is rasterized at native size and drawn back down to virtual
     private float NativeScaleX = 1f;
     private float NativeScaleY = 1f;
+    private float LastNativeScaleX = 1f;
     private float LastNativeScaleY = 1f;
 
     private Mode CurrentMode = Mode.Main;
@@ -148,12 +151,14 @@ public sealed class LauncherScreen : IScreen
     {
         //text textures are rasterized at native pixel size (see GetText/DrawText); flush the cache when the scale changes
         //(e.g. via the resolution selector) so stale-size glyphs are re-rendered crisp at the new size.
-        if (scaleY != LastNativeScaleY)
+        if ((scaleY != LastNativeScaleY) || (scaleX != LastNativeScaleX))
         {
             foreach (var texture in TextCache.Values)
                 texture.Dispose();
 
             TextCache.Clear();
+            WidthCache.Clear();
+            LastNativeScaleX = scaleX;
             LastNativeScaleY = scaleY;
         }
 
@@ -245,7 +250,11 @@ public sealed class LauncherScreen : IScreen
             for (var i = 0; i < 3; i++)
             {
                 AddFieldBounds[i] = new Rectangle(x, y, width, ROW_HEIGHT);
-                y += 38;
+                y += ROW_HEIGHT + FIELD_GAP;
+
+                //the "Name is optional" hint sits under the Name field, so the next field clears its line box
+                if (i == 0)
+                    y += HINT_GAP + SystemFontText.LineHeight(HINT_SIZE);
             }
 
             SaveButton = new Rectangle(Panel.Right - 90, Panel.Bottom - 40, 70, 26);
@@ -572,7 +581,7 @@ public sealed class LauncherScreen : IScreen
     private void DrawMain()
     {
         DrawText("Brigid", new Vector2(Panel.X + 20, Panel.Y + 16), TitleColor, TITLE_SIZE);
-        DrawText("Server", new Vector2(Panel.X + 20, DropdownButton.Y + 5), LabelColor, TEXT_SIZE);
+        DrawText("Server", new Vector2(Panel.X + 20, TextTop(DropdownButton, TEXT_SIZE)), LabelColor, TEXT_SIZE);
 
         var selected = LauncherConfig.GetSelectedServer();
         FillRect(DropdownButton, FieldFill);
@@ -602,7 +611,7 @@ public sealed class LauncherScreen : IScreen
 
     private void DrawResolutionRow()
     {
-        DrawText("Resolution", new Vector2(Panel.X + 20, ResolutionButton.Y + 5), LabelColor, TEXT_SIZE);
+        DrawText("Resolution", new Vector2(Panel.X + 20, TextTop(ResolutionButton, TEXT_SIZE)), LabelColor, TEXT_SIZE);
 
         FillRect(ResolutionButton, FieldFill);
         BorderRect(ResolutionButton, FieldBorder);
@@ -628,7 +637,7 @@ public sealed class LauncherScreen : IScreen
     private void DrawAssetRow()
     {
         var labelY = Panel.Y + 118;
-        var pathBox = new Rectangle(Panel.X + 20, labelY + 20, AssetButton.X - 8 - (Panel.X + 20), ROW_HEIGHT - 2);
+        var pathBox = new Rectangle(Panel.X + 20, AssetButton.Y, AssetButton.X - 8 - (Panel.X + 20), AssetButton.Height);
 
         //locked when summoned from the main menu — the data folder loads once at startup and can't change in-session
         if (OpenedFromMainMenu)
@@ -662,7 +671,7 @@ public sealed class LauncherScreen : IScreen
         if (LauncherConfig.SuppressLauncher)
             FillRect(new Rectangle(box.X + 3, box.Y + 3, 8, 8), OkColor);
 
-        DrawText("Skip this launcher next time", new Vector2(box.Right + 8, box.Y - 2), LabelColor, HINT_SIZE);
+        DrawText("Skip this launcher next time", new Vector2(box.Right + 8, TextTop(box, HINT_SIZE)), LabelColor, HINT_SIZE);
     }
 
     private void DrawDropdownList()
@@ -675,7 +684,7 @@ public sealed class LauncherScreen : IScreen
 
             var textBox = new Rectangle(row.X, row.Y, row.Width - ROW_HEIGHT, row.Height);
             DrawClippedEnd(entry.Display, textBox, Color.White, TEXT_SIZE);
-            DrawText("x", new Vector2(remove.X + 9, remove.Y + 5), BadColor, TEXT_SIZE);
+            DrawText("x", new Vector2(remove.X + (remove.Width - Measure("x", TEXT_SIZE)) / 2f, TextTop(remove, TEXT_SIZE)), BadColor, TEXT_SIZE);
         }
 
         FillRect(AddRow, new Color(44, 60, 50));
@@ -694,21 +703,22 @@ public sealed class LauncherScreen : IScreen
             var bounds = AddFieldBounds[i];
             var focused = (AddField)i == AddFocused;
 
-            DrawText(labels[i], new Vector2(Panel.X + 20, bounds.Y + 5), LabelColor, TEXT_SIZE);
+            DrawText(labels[i], new Vector2(Panel.X + 20, TextTop(bounds, TEXT_SIZE)), LabelColor, TEXT_SIZE);
             FillRect(bounds, focused ? FieldFocusFill : FieldFill);
             BorderRect(bounds, focused ? FocusBorder : FieldBorder);
 
             var textBox = new Rectangle(bounds.X + 6, bounds.Y, bounds.Width - 12, bounds.Height);
-            DrawClippedFront(AddText[i], textBox, Color.White, TEXT_SIZE);
+            var textEnd = DrawClippedFront(AddText[i], textBox, Color.White, TEXT_SIZE);
 
+            //one pixel past where the text actually ended, spanning the same line box the text was centred in
             if (focused && (int)(CaretTimer * 2) % 2 == 0)
             {
-                var caretX = Math.Min(bounds.X + 6 + Measure(AddText[i], TEXT_SIZE), bounds.Right - 6);
-                FillRect(new Rectangle(caretX, bounds.Y + 5, 1, 14), Color.White);
+                var caretX = MathF.Min(textEnd + 1, bounds.Right - 6);
+                FillRectSnapped(caretX, TextTop(bounds, TEXT_SIZE), 1, TextHeight(TEXT_SIZE), Color.White);
             }
         }
 
-        DrawText("Name is optional", new Vector2(AddFieldBounds[0].X, AddFieldBounds[0].Bottom + 4), LabelColor, HINT_SIZE);
+        DrawText("Name is optional", new Vector2(AddFieldBounds[0].X, AddFieldBounds[0].Bottom + HINT_GAP), LabelColor, HINT_SIZE);
 
         var canSave = !string.IsNullOrWhiteSpace(AddText[(int)AddField.Host]);
         DrawButton(SaveButton, "Save", canSave, new Color(60, 110, 70), new Color(110, 180, 120));
@@ -721,7 +731,7 @@ public sealed class LauncherScreen : IScreen
         BorderRect(rect, enabled ? border : FieldBorder);
 
         var width = Measure(label, TEXT_SIZE);
-        var pos = new Vector2(rect.X + (rect.Width - width) / 2f, rect.Y + (rect.Height - 16) / 2f);
+        var pos = new Vector2(rect.X + (rect.Width - width) / 2f, TextTop(rect, TEXT_SIZE));
         DrawText(label, pos, enabled ? Color.White : new Color(120, 128, 140), TEXT_SIZE);
     }
 
@@ -736,6 +746,17 @@ public sealed class LauncherScreen : IScreen
     }
 
     private void FillRect(Rectangle rect, Color color) => ActiveBatch.Draw(Pixel, rect, color);
+
+    //a rect in virtual coordinates snapped to the native pixel grid, so it lines up with text placed by DrawText
+    private void FillRectSnapped(float x, float y, float width, float height, Color color)
+    {
+        var left = MathF.Round(x * NativeScaleX) / NativeScaleX;
+        var top = MathF.Round(y * NativeScaleY) / NativeScaleY;
+        var right = MathF.Round((x + width) * NativeScaleX) / NativeScaleX;
+        var bottom = MathF.Round((y + height) * NativeScaleY) / NativeScaleY;
+
+        ActiveBatch.Draw(Pixel, new Vector2(left, top), null, color, 0f, Vector2.Zero, new Vector2(right - left, bottom - top), SpriteEffects.None, 0f);
+    }
 
     private void BorderRect(Rectangle rect, Color color)
     {
@@ -752,9 +773,13 @@ public sealed class LauncherScreen : IScreen
 
         //the texture is rasterized at native pixel size; cancel the pass transform per draw (scale by its inverse) so it
         //lands at the virtual size but with crisp native detail — the FontEngine native-pass trick, applied to SystemFontText.
+        //snap to the native pixel grid: centring yields fractional virtual coordinates, and a texture drawn between native
+        //pixels is resampled soft
+        var snapped = new Vector2(MathF.Round(position.X * NativeScaleX) / NativeScaleX, MathF.Round(position.Y * NativeScaleY) / NativeScaleY);
+
         ActiveBatch.Draw(
             GetText(text, color, size),
-            position,
+            snapped,
             null,
             Color.White,
             0f,
@@ -764,20 +789,33 @@ public sealed class LauncherScreen : IScreen
             0f);
     }
 
-    //left-aligned within box, trimming the FRONT so the tail (e.g. the end of a path) stays visible
-    private void DrawClippedFront(string text, Rectangle box, Color color, float size)
+    //left-aligned within box, trimming the FRONT so the tail (e.g. the end of a path) stays visible. Returns the x where
+    //the drawn text ends, so a caret can follow it.
+    private float DrawClippedFront(string text, Rectangle box, Color color, float size)
     {
+        var x = box.X + 2;
+
         if (string.IsNullOrEmpty(text))
-            return;
+            return x;
 
         var maxWidth = box.Width - 4;
-        var shown = text;
+        var drawn = text;
 
-        while (shown.Length > 1 && Measure(shown, size) > maxWidth)
-            shown = shown[1..];
+        //once trimming starts the ellipsis is part of the drawn width, so measure it with the tail
+        if (Measure(text, size) > maxWidth)
+        {
+            var shown = text;
 
-        var prefix = shown.Length < text.Length ? "..." : "";
-        DrawText(prefix + shown, new Vector2(box.X + 2, box.Y + (box.Height - 16) / 2f + 2), color, size);
+            do
+                shown = shown[1..];
+            while (shown.Length > 1 && Measure("..." + shown, size) > maxWidth);
+
+            drawn = "..." + shown;
+        }
+
+        DrawText(drawn, new Vector2(x, TextTop(box, size)), color, size);
+
+        return x + Measure(drawn, size);
     }
 
     //left-aligned within box, trimming the END to fit
@@ -795,10 +833,12 @@ public sealed class LauncherScreen : IScreen
         if (shown.Length < text.Length)
             shown += "...";
 
-        DrawText(shown, new Vector2(box.X + 6, box.Y + (box.Height - 16) / 2f + 2), color, size);
+        DrawText(shown, new Vector2(box.X + 6, TextTop(box, size)), color, size);
     }
 
-    private int Measure(string text, float size)
+    //widths and heights are taken at the native size the text is rasterized at (see GetText) and scaled back, so they
+    //match what DrawText puts on screen rather than a separately rounded measurement at the virtual size
+    private float Measure(string text, float size)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
@@ -808,11 +848,16 @@ public sealed class LauncherScreen : IScreen
         if (WidthCache.TryGetValue(key, out var width))
             return width;
 
-        width = SystemFontText.Measure(text, size);
+        width = SystemFontText.Measure(text, size * NativeScaleY) / NativeScaleX;
         WidthCache[key] = width;
 
         return width;
     }
+
+    private float TextHeight(float size) => SystemFontText.LineHeight(size * NativeScaleY) / NativeScaleY;
+
+    //top of a single line of text centred vertically in box
+    private float TextTop(Rectangle box, float size) => box.Y + (box.Height - TextHeight(size)) / 2f;
 
     private Texture2D GetText(string text, Color color, float size)
     {

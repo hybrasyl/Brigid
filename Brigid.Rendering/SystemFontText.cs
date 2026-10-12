@@ -1,4 +1,5 @@
 #region
+using System.Collections.Concurrent;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using SkiaSharp;
@@ -14,6 +15,9 @@ namespace Brigid.Rendering;
 /// </summary>
 public static class SystemFontText
 {
+    //line height depends only on the size, and layout asks for it every frame; avoid a native SKFont per call
+    private static readonly ConcurrentDictionary<float, int> LineHeights = new();
+
     /// <summary>
     ///     Renders <paramref name="text" /> at <paramref name="pixelSize" /> in <paramref name="color" /> to a tightly
     ///     sized, premultiplied-alpha texture. The colour is baked into the pixels, so draw the result with a white tint.
@@ -68,4 +72,19 @@ public static class SystemFontText
 
         return (int)MathF.Ceiling(font.MeasureText(text));
     }
+
+    /// <summary>
+    ///     Returns the height (px) of the texture <see cref="Render" /> produces at <paramref name="pixelSize" />: the
+    ///     font's ascent-to-descent line box, independent of the text. Centre text on this, not on its glyph ink.
+    /// </summary>
+    public static int LineHeight(float pixelSize)
+        => LineHeights.GetOrAdd(
+            pixelSize,
+            static size =>
+            {
+                using var font = new SKFont(SKTypeface.Default, size);
+                var metrics = font.Metrics;
+
+                return Math.Max(1, (int)MathF.Ceiling(metrics.Descent - metrics.Ascent));
+            });
 }
