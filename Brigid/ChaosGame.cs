@@ -859,29 +859,6 @@ public sealed class ChaosGame : Game
     }
 
     #region Metadata Sync
-    private uint ComputeLocalMetaCheckSum(string name)
-    {
-        var filePath = Path.Combine(MetaFilePath, name);
-
-        if (!File.Exists(filePath))
-            return 0;
-
-        try
-        {
-            using var fileStream = File.OpenRead(filePath);
-            using var zlibStream = new ZLibStream(fileStream, CompressionMode.Decompress);
-            using var memoryStream = new MemoryStream();
-
-            zlibStream.CopyTo(memoryStream);
-
-            //retail + Hybrasyl both send standard (inverted) CRC-32 — verified against the retail checksum routine
-            return CRC32.Calculate(memoryStream.ToArray());
-        } catch
-        {
-            return 0;
-        }
-    }
-
     private void HandleMetaData(ServerPackets.MetafilePacket pkt)
     {
         switch (pkt)
@@ -910,13 +887,19 @@ public sealed class ChaosGame : Game
         MetaPendingChecksums.Clear();
         MetaSyncStarted = true;
 
+        var listed = new List<ServerPackets.MetafileEntry>(collection.Count);
+
         foreach (var info in collection)
         {
-            var localCheckSum = ComputeLocalMetaCheckSum(info.Name);
-
-            if (localCheckSum != info.Checksum)
-                MetaPendingChecksums[info.Name] = info.Checksum;
+            if (MetaFileCache.IsSafeName(info.Name))
+                listed.Add(info);
+            else
+                NoticeDebugLog.Write($"[meta] ignored a metafile checksum with an unsafe name: \"{info.Name}\"");
         }
+
+        foreach (var info in listed)
+            if (MetaFileCache.GetChecksum(MetaFilePath, info.Name) != info.Checksum)
+                MetaPendingChecksums[info.Name] = info.Checksum;
 
         foreach (var name in MetaPendingChecksums.Keys)
             Connection.SendMetaDataRequest(MetaDataRequestType.DataByName, name);
@@ -927,10 +910,21 @@ public sealed class ChaosGame : Game
 
     private void HandleMetaDataFileData(ServerPackets.MetafileDataPacket info)
     {
-        if (string.IsNullOrEmpty(info.Name) || (info.Data.Length == 0))
+        if (string.IsNullOrEmpty(info.Name))
             return;
 
-        DataDiagnostics.Try(() => File.WriteAllBytes(Path.Combine(MetaFilePath, info.Name), info.Data), "write metafile");
+        //never pending: the checksum list drops an unsafe name before the client requests anything
+        if (!MetaFileCache.IsSafeName(info.Name))
+        {
+            NoticeDebugLog.Write($"[meta] ignored a metafile with an unsafe name: \"{info.Name}\"");
+
+            return;
+        }
+
+        //an empty file still completes its entry, so one bad entry cannot stop the sync
+        if (info.Data.Length > 0)
+            MetaFileCache.TryWrite(MetaFilePath, info.Name, info.Data);
+
         MetaPendingChecksums.Remove(info.Name);
 
         if (MetaSyncStarted && (MetaPendingChecksums.Count == 0))
