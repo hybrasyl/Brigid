@@ -944,6 +944,15 @@ public class UITextBox : UIElement
 
     public event TextBoxFocusHandler? OnFocused;
 
+    /// <summary>
+    ///     Removes the line breaks from pasted text for a single-line box. For a multi-line box, changes each \r\n and each
+    ///     lone \r to the one \n that Enter inserts.
+    /// </summary>
+    internal static string NormalizeLineBreaks(string text, bool isMultiLine)
+        => isMultiLine
+            ? text.Replace("\r\n", "\n").Replace('\r', '\n')
+            : text.Replace("\r", "").Replace("\n", "");
+
     private void HandlePaste()
     {
         var clipText = Clipboard.GetText();
@@ -951,9 +960,7 @@ public class UITextBox : UIElement
         if (string.IsNullOrEmpty(clipText))
             return;
 
-        //strip newlines for single-line textboxes
-        if (!IsMultiLine)
-            clipText = clipText.Replace("\r", "").Replace("\n", "");
+        clipText = NormalizeLineBreaks(clipText, IsMultiLine);
 
         //re-check after stripping — a newline-only clipboard becomes empty and must not record a no-op undo
         if (clipText.Length == 0)
