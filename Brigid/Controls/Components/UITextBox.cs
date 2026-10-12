@@ -1457,11 +1457,15 @@ public class UITextBox : UIElement
             case CommandId.Editor_Cut when HasSelection && !IsReadOnly:
             {
                 var clipboardText = IsMasked ? new string('*', SelectionLength) : StripColorCodes(SelectedText);
-                Clipboard.SetText(clipboardText);
+                e.Handled = true;
+
+                //keep the selection when the clipboard refused it, so a cut never loses text
+                if (!Clipboard.SetText(clipboardText))
+                    return true;
+
                 RecordUndo(EditKind.Cut);
                 DeleteSelection();
                 ResetCursor();
-                e.Handled = true;
 
                 return true;
             }
