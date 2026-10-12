@@ -75,7 +75,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 - **`DataContext`** -- Static singleton exposing all repositories via `Initialize()`.
 - **`DatArchives`** -- Static holder for 22 game data archives loaded at startup via memory-mapped files.
 - **`DataPathResolver`** -- Join every path to a game file in the Dark Ages data directory (archives, `npc/`, `music/`) through `Resolve(root, segments)`. Data directories do not agree on filename case (the installer writes `Legend.dat`, an unpacker can write `legend.dat`), and Linux refuses the wrong case. Brigid-owned folders there (`hybrasyl-data/`, the legacy per-character folders) still use `Path.Combine`.
-- **`RepositoryBase`** -- Abstract base with MemoryCache (15-min sliding expiration). Uses `GetOrCreate<T>(key, factory)`.
+- **`RepositoryBase`** -- Abstract base with MemoryCache (15-min sliding expiration). Uses `GetOrCreate<T>(key, factory)`, which throws on a null load; use `GetOrCreateOrNull<T>` for an asset that can be absent. Neither caches a null.
 - **11 repositories** (exposed on `DataContext` by these accessor names): AislingDrawData, CreatureSprites, Effects, Fonts, LightMasks, LocalPlayerSettings, MapsFiles, MetaFiles, PanelSprites, Tiles, UserControls (the UI-component repository).
 - **`ControlPrefab`/`ControlPrefabSet`** -- Wraps DALib Control definitions + pre-rendered SKImage arrays. First control (Anchor) defines panel bounds.
 - Control file catalog in `controlFileList.txt` at solution root.
@@ -284,7 +284,7 @@ Durable rules; violating one produces a silent visual defect rather than a failu
 ### Other
 - Case-insensitive string operations: `StartsWithI`, `ContainsI`, `EqualsI`, `ReplaceI`
 - Thread-safe cache access via `RepositoryBase.GetOrCreate<T>` (per-instance Lock)
-- Repository `Get` methods return null on failure (try-catch pattern)
+- `RepositoryBase`-cached `Get` methods return null for an absent asset through `GetOrCreateOrNull`; a catch is only for a corrupt asset
 - UI controls use `NeverRemove` cache priority; other assets use sliding expiration
 - Disposable cached objects are disposed via post-eviction callbacks
 
