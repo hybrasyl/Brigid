@@ -48,6 +48,14 @@ public class UITextBox : UIElement
     public HorizontalAlignment HorizontalAlignment { get; set; } = HorizontalAlignment.Left;
 
     /// <summary>
+    ///     Where a single-line box puts its text line inside the padded area. <see cref="VerticalAlignment.Top" /> keeps
+    ///     the line at <c>PaddingTop</c>, which the prefab text rects are built for; any other value centres it, as
+    ///     <see cref="UILabel" /> does. A box taller than one line usually wants it centred. Multi-line boxes always start
+    ///     at the top.
+    /// </summary>
+    public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Top;
+
+    /// <summary>
     ///     When true, prevents text input that would cause the content to exceed the visible area. Only applies to multiline
     ///     text boxes. Uses the computed line layout to determine whether content fits.
     /// </summary>
@@ -248,7 +256,7 @@ public class UITextBox : UIElement
 
     private void ComputeLineLayout()
     {
-        var innerWidth = Width - PaddingLeft + PaddingRight;
+        var innerWidth = Width - PaddingLeft - PaddingRight;
 
         if ((innerWidth == CachedLayoutWidth) && (Text == CachedLayoutText))
             return;
@@ -491,8 +499,12 @@ public class UITextBox : UIElement
         var displayText = IsMasked ? new string('*', Text.Length) : Text;
         var sx = ScreenX;
         var sy = ScreenY;
-        var textY = sy + PaddingTop;
+        var innerY = sy + PaddingTop;
         var textHeight = Height - PaddingTop - PaddingBottom;
+
+        var textY = VerticalAlignment == VerticalAlignment.Top
+            ? innerY
+            : innerY + Math.Max(0, (textHeight - TextRenderer.CHAR_HEIGHT) / 2);
 
         //prefix offset — non-editable text rendered before editable content
         var prefixWidth = 0;
@@ -545,8 +557,8 @@ public class UITextBox : UIElement
             {
                 var alignBounds = new Rectangle(
                     sx + PaddingLeft,
-                    textY,
-                    Width - PaddingLeft + PaddingRight,
+                    innerY,
+                    Width - PaddingLeft - PaddingRight,
                     textHeight);
 
                 var alignX = HorizontalAlignment switch
