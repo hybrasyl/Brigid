@@ -2,7 +2,7 @@ namespace Brigid.Data;
 
 /// <summary>
 ///     Resolves the per-user, writable application-data locations Brigid owns, following the house standard shared by
-///     the Erisco toolset: <c>%LOCALAPPDATA%\erisco\&lt;appname&gt;</c> on Windows and <c>~/.config/erisco/&lt;appname&gt;</c>
+///     the Erisco toolset: <c>%LOCALAPPDATA%\Erisco\&lt;appname&gt;</c> on Windows and <c>~/.config/Erisco/&lt;appname&gt;</c>
 ///     on macOS/Linux. These are deliberately <em>separate</em> from the retail Dark Ages <c>.dat</c> install
 ///     (<see cref="DataContext.DataPath" />): they hold Brigid-owned content (modern <c>.datf</c> asset packs) and the
 ///     launcher config, neither of which should be coupled to whichever game-data folder the user points at.
@@ -13,16 +13,22 @@ namespace Brigid.Data;
 /// </remarks>
 public static class AppPaths
 {
-    private const string VENDOR = "erisco";
+    //the case is part of the standard: every Electron sibling writes "Erisco", and Linux keeps "erisco" a separate folder
+    private const string VENDOR = "Erisco";
     private const string APP_NAME = "Brigid";
 
+    //the lower-case vendor folder Brigid wrote before it matched the standard; read only to migrate from
+    private const string LEGACY_VENDOR = "erisco";
+
     /// <summary>
-    ///     <c>%LOCALAPPDATA%\erisco</c> on Windows; <c>~/.config/erisco</c> on macOS/Linux. The platform split is
+    ///     <c>%LOCALAPPDATA%\Erisco</c> on Windows; <c>~/.config/Erisco</c> on macOS/Linux. The platform split is
     ///     deliberate: .NET maps <see cref="Environment.SpecialFolder.LocalApplicationData" /> to <c>~/.local/share</c>
     ///     on Unix, but the standard targets <c>~/.config</c>, which is <see cref="Environment.SpecialFolder.ApplicationData" />
     ///     there. On Windows that same enum is roaming <c>%APPDATA%</c>, so we use <c>LocalApplicationData</c> instead.
     /// </summary>
-    public static string VendorRoot
+    public static string VendorRoot => Path.Combine(VendorBaseDirectory, VENDOR);
+
+    private static string VendorBaseDirectory
     {
         get
         {
@@ -33,13 +39,108 @@ public static class AppPaths
             var baseDir = Environment.GetFolderPath(special);
 
             //GetFolderPath returns "" when the special folder is undefined (stripped-env / service contexts, or
-            //Unix with HOME unset). Path.Combine("", VENDOR) would yield a CWD-relative "erisco" that scatters
+            //Unix with HOME unset). Path.Combine("", VENDOR) would yield a CWD-relative "Erisco" that scatters
             //config and packs across whatever directory the process launched from; anchor to the install dir instead.
             if (string.IsNullOrEmpty(baseDir))
                 baseDir = AppContext.BaseDirectory;
 
-            return Path.Combine(baseDir, VENDOR);
+            return baseDir;
         }
+    }
+
+    /// <summary>
+    ///     Moves the user's data from <c>erisco/Brigid</c> to <c>Erisco/Brigid</c> on a file system that keeps the two
+    ///     names apart (Linux), so an existing user keeps their config, profiles, keybinds and packs. Call it once at
+    ///     startup, before anything reads <see cref="AppRoot" />. Writes the result to <see cref="DataDiagnostics.Log" />.
+    /// </summary>
+    public static void MigrateLegacyVendorFolder()
+    {
+        var result = MigrateLegacyVendorFolder(VendorBaseDirectory);
+
+        if (result.Moved.Count > 0)
+            DataDiagnostics.Log?.Invoke($"[paths] moved {string.Join(", ", result.Moved)} from {result.From} to {result.To}");
+
+        if (result.LeftInPlace.Count > 0)
+            DataDiagnostics.Log?.Invoke(
+                $"[paths] left {string.Join(", ", result.LeftInPlace)} in {result.From}, because {result.To} already has them or the move failed");
+    }
+
+    /// <summary>
+    ///     Moves each entry of <c>{baseDir}/erisco/Brigid</c> that <c>{baseDir}/Erisco/Brigid</c> does not already have,
+    ///     then removes the old folders when they are empty. An entry that the new folder already has stays where it is.
+    ///     The move is per entry because elatha installs the binaries in <c>Erisco/Brigid/app</c>, so the new folder can
+    ///     exist before the user's data moves.
+    /// </summary>
+    internal static VendorFolderMigration MigrateLegacyVendorFolder(string baseDir)
+    {
+        var legacyVendor = Path.Combine(baseDir, LEGACY_VENDOR);
+        var legacyApp = Path.Combine(legacyVendor, APP_NAME);
+        var app = Path.Combine(baseDir, VENDOR, APP_NAME);
+        var nothing = new VendorFolderMigration(legacyApp, app, [], []);
+
+        //no lower-case folder on disk
+        if (!HasDirectoryNamedExactly(baseDir, LEGACY_VENDOR))
+            return nothing;
+
+        //a file system that ignores case: the two names are one folder
+        if (!HasDirectoryNamedExactly(baseDir, VENDOR) && Directory.Exists(Path.Combine(baseDir, VENDOR)))
+            return nothing;
+
+        string[] entries = [];
+
+        if (!Directory.Exists(legacyApp)
+            || !DataDiagnostics.Try(() => entries = Directory.GetFileSystemEntries(legacyApp), "list the legacy Brigid folder")
+            || !DataDiagnostics.Try(() => Directory.CreateDirectory(app), "create the Brigid folder"))
+            return nothing;
+
+        var moved = new List<string>();
+        var leftInPlace = new List<string>();
+
+        foreach (var source in entries.Order(StringComparer.Ordinal))
+        {
+            var name = Path.GetFileName(source);
+            var target = Path.Combine(app, name);
+
+            if (!Path.Exists(target) && DataDiagnostics.Try(() => MoveEntry(source, target), $"move {name}"))
+                moved.Add(name);
+            else
+                leftInPlace.Add(name);
+        }
+
+        RemoveIfEmpty(legacyApp);
+        RemoveIfEmpty(legacyVendor);
+
+        return new VendorFolderMigration(legacyApp, app, moved, leftInPlace);
+    }
+
+    private static void MoveEntry(string source, string target)
+    {
+        if (Directory.Exists(source))
+            Directory.Move(source, target);
+        else
+            File.Move(source, target);
+    }
+
+    private static void RemoveIfEmpty(string directory)
+        => DataDiagnostics.Try(
+            () =>
+            {
+                if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+                    Directory.Delete(directory);
+            },
+            $"remove the empty folder {directory}");
+
+    private static bool HasDirectoryNamedExactly(string parent, string name)
+    {
+        var found = false;
+
+        DataDiagnostics.Try(
+            () => found = Directory.Exists(parent)
+                          && Directory.EnumerateDirectories(parent)
+                                      .Any(path => string.Equals(Path.GetFileName(path), name, StringComparison.Ordinal)),
+            $"list {parent}");
+
+        return found;
     }
 
     /// <summary><c>{VendorRoot}/Brigid</c> — the root of all per-user state Brigid writes.</summary>
@@ -95,3 +196,6 @@ public static class AppPaths
     /// <summary>The per-character config directory for a server profile: <c>{ProfilesDir}/{serverKey}/{character}</c>.</summary>
     public static string ProfileDir(string serverKey, string character) => Path.Combine(ProfilesDir, serverKey, character);
 }
+
+/// <summary>The result of <see cref="AppPaths.MigrateLegacyVendorFolder(string)" />.</summary>
+internal sealed record VendorFolderMigration(string From, string To, IReadOnlyList<string> Moved, IReadOnlyList<string> LeftInPlace);

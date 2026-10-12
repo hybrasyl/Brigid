@@ -43,8 +43,8 @@ and decode errors), so a corrupt entry degrades to legacy instead of breaking a 
 
 | Platform    | Path                                  |
 | ----------- | ------------------------------------- |
-| Windows     | `%LOCALAPPDATA%\erisco\Brigid\assets` |
-| macOS/Linux | `~/.config/erisco/Brigid/assets`      |
+| Windows     | `%LOCALAPPDATA%\Erisco\Brigid\assets` |
+| macOS/Linux | `~/.config/Erisco/Brigid/assets`      |
 
 The Unix split is deliberate: .NET maps `LocalApplicationData` to `~/.local/share`, but the house
 standard targets `~/.config`, which is `SpecialFolder.ApplicationData` there. If `GetFolderPath`

@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace Brigid.Data.AssetPacks;
 
 /// <summary>
-///     Discovers and registers <c>.datf</c> asset packs from the per-user erisco assets directory
+///     Discovers and registers <c>.datf</c> asset packs from the per-user Erisco assets directory
 ///     (<see cref="AppPaths.AssetsDir" />) at startup. Packs are identified by the <c>content_type</c> field in their
 ///     embedded <c>_manifest.json</c> and exposed via typed accessors (e.g. <see cref="GetIconPack" />). Missing
 ///     manifests, malformed JSON, or unsupported schema versions cause the pack to be skipped with a warning rather
@@ -22,7 +22,7 @@ public static class AssetPackRegistry
     private const int SUPPORTED_SCHEMA_VERSION = 1;
     private const string MANIFEST_ENTRY_NAME = "_manifest.json";
 
-    //the pre-erisco pack location, relative to the retail data path. Packs found here are migrated once into
+    //the pre-Erisco pack location, relative to the retail data path. Packs found here are migrated once into
     //AppPaths.AssetsDir on first launch after the move, smoothing existing manual installs.
     private const string LEGACY_PACK_SUBFOLDER = "hybrasyl-data";
 
