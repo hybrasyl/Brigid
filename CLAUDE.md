@@ -74,6 +74,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 ### Data Layer (`Brigid.Data`)
 - **`DataContext`** -- Static singleton exposing all repositories via `Initialize()`.
 - **`DatArchives`** -- Static holder for 22 game data archives loaded at startup via memory-mapped files.
+- **`DataPathResolver`** -- Join every path to a game file in the Dark Ages data directory (archives, `npc/`, `music/`) through `Resolve(root, segments)`. Data directories do not agree on filename case (the installer writes `Legend.dat`, an unpacker can write `legend.dat`), and Linux refuses the wrong case. Brigid-owned folders there (`hybrasyl-data/`, the legacy per-character folders) still use `Path.Combine`.
 - **`RepositoryBase`** -- Abstract base with MemoryCache (15-min sliding expiration). Uses `GetOrCreate<T>(key, factory)`.
 - **11 repositories** (exposed on `DataContext` by these accessor names): AislingDrawData, CreatureSprites, Effects, Fonts, LightMasks, LocalPlayerSettings, MapsFiles, MetaFiles, PanelSprites, Tiles, UserControls (the UI-component repository).
 - **`ControlPrefab`/`ControlPrefabSet`** -- Wraps DALib Control definitions + pre-rendered SKImage arrays. First control (Anchor) defines panel bounds.

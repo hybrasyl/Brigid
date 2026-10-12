@@ -461,7 +461,7 @@ public sealed class SoundSystem : IDisposable
 
         if (handle == nint.Zero)
         {
-            var path = Path.Combine(DataContext.DataPath, "music", $"{musicId}.mus");
+            var path = DataPathResolver.Resolve(DataContext.DataPath, "music", $"{musicId}.mus");
 
             if (File.Exists(path))
                 handle = SdlMixer.Mix_LoadMUS(path);
