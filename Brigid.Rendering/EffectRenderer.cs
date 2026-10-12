@@ -142,16 +142,18 @@ public sealed class EffectRenderer : IDisposable
         for (var i = 0; i < efaFile.Count; i++)
         {
             var efaFrame = efaFile[i];
-            using var skImage = Graphics.RenderImage(efaFrame, efaFile.BlendingType);
-            var texture = TextureConverter.ToTexture2D(skImage);
+            var texture = RenderTexture(() => Graphics.RenderImage(efaFrame, efaFile.BlendingType), $"effect {effectId} frame {i}");
 
             frames[i] = new SpriteFrame(
-                texture,
+                texture!,
                 efaFrame.CenterX,
                 efaFrame.CenterY,
                 efaFrame.Left,
                 efaFrame.Top);
         }
+
+        if (!HasAnyTexture(frames))
+            return null;
 
         var intervalMs = efaFile.FrameIntervalMs > 0 ? efaFile.FrameIntervalMs : DEFAULT_FRAME_INTERVAL_MS;
 
@@ -193,22 +195,21 @@ public sealed class EffectRenderer : IDisposable
                 continue;
 
             var epfFrame = epfFile[epfFrameIndex];
-            using var skImage = Graphics.RenderImage(epfFrame, palette, alphaType);
-            var texture = TextureConverter.ToTexture2D(skImage);
+            var texture = RenderTexture(() => Graphics.RenderImage(epfFrame, palette, alphaType), $"effect {effectId} frame {epfFrameIndex}");
 
             //use center point from .tbl if available, otherwise fall back to the standard tile-bottom-center anchor
             var centerX = centerPoints is not null ? centerPoints[epfFrameIndex].X : (short)28;
             var centerY = centerPoints is not null ? centerPoints[epfFrameIndex].Y : (short)70;
 
             frames[i] = new SpriteFrame(
-                texture,
+                texture!,
                 centerX,
                 centerY,
                 epfFrame.Left,
                 epfFrame.Top);
         }
 
-        return new SpriteAnimation(frames);
+        return HasAnyTexture(frames) ? new SpriteAnimation(frames) : null;
     }
 
     private SpriteAnimation? LoadMefcAnimation(int mefcId)
@@ -223,24 +224,61 @@ public sealed class EffectRenderer : IDisposable
         for (var i = 0; i < spf.Count; i++)
         {
             var spfFrame = spf[i];
-
-            using var skImage = SpfRenderer.RenderFrame(spf, i);
-
-            var texture = TextureConverter.ToTexture2D(skImage);
+            var frameIndex = i;
+            var texture = RenderTexture(() => SpfRenderer.RenderFrame(spf, frameIndex), $"projectile {mefcId} frame {i}");
 
             var centerX = spfFrame.HasCenterPoint ? spfFrame.CenterX : (short)28;
             var centerY = spfFrame.HasCenterPoint ? spfFrame.CenterY : (short)70;
 
             frames[i] = new SpriteFrame(
-                texture,
+                texture!,
                 centerX,
                 centerY,
                 (short)spfFrame.Left,
                 (short)spfFrame.Top);
         }
 
-        return new SpriteAnimation(frames);
+        return HasAnyTexture(frames) ? new SpriteAnimation(frames) : null;
     }
+
+    /// <summary>
+    ///     Renders one frame to a texture. Returns null when the frame does not render: the renderer gives no image, or
+    ///     throws on corrupt frame data. The caller keeps the frame's slot with no texture, so the indices, the center
+    ///     points and the timing of the other frames do not move, and <see cref="SpriteAnimation.GetFrame" /> holds the
+    ///     previous frame for that slot.
+    /// </summary>
+    internal static Texture2D? RenderTexture(Func<SKImage?> render, string what, Func<SKImage, Texture2D>? toTexture = null)
+    {
+        SKImage? image;
+
+        try
+        {
+            image = render();
+        }
+        //rule 6 exemption: corrupt frame data -> an empty slot (DALib has no validate-before-render path). Only the
+        //decode is inside the catch: a fault in the texture upload is a real defect and must not look like bad data.
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            DataDiagnostics.Log?.Invoke($"[effect] {what} did not render: {ex.GetType().Name}: {ex.Message}");
+
+            return null;
+        }
+
+        if (image is null)
+        {
+            DataDiagnostics.Log?.Invoke($"[effect] {what} gave no image");
+
+            return null;
+        }
+
+        using (image)
+            return (toTexture ?? TextureConverter.ToTexture2D)(image);
+    }
+
+    /// <summary>True when at least one frame has a texture. An animation with none is rejected, not cached as playable.</summary>
+    internal static bool HasAnyTexture(SpriteFrame[] frames)
+        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
+        => frames.Any(frame => frame.Texture is not null);
 
     internal SpriteAnimation? GetOrLoadMefcAnimation(int mefcId)
     {
