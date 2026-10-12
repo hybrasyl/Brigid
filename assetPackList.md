@@ -64,12 +64,13 @@ prefix. Startup is never aborted by a bad pack.
 | `ZipFile.OpenRead`                        | `failed to open pack {name}: {ExceptionType}: {message}`                 |
 | `_manifest.json` entry exists at ZIP root | `pack {name} is missing _manifest.json; skipping`                        |
 | JSON deserializes non-null                | `pack {name} has empty or invalid manifest; skipping`                    |
-| `schema_version <= 1`                     | `pack {name} declares schema_version=N which is newer than supported (1)` |
+| `schema_version` present                  | `pack {name} has no schema_version; skipping`                            |
+| `schema_version >= 1`                     | `pack {name} declares schema_version=N which is not a valid version; skipping` |
+| `schema_version <= 1`                     | `pack {name} declares schema_version=N which is newer than supported (1); skipping` |
+| `pack_id` present and not blank           | `pack {name} has no pack_id; skipping`                                   |
 | `content_type` matches a factory key      | `pack {name} has unknown content_type='...'; skipping`                   |
 
-Schema validation is **max-only** (`if (manifest.SchemaVersion > SUPPORTED_SCHEMA_VERSION)`), so a
-pack declaring `schema_version: 0` — or omitting the field entirely — is accepted. `SUPPORTED_SCHEMA_VERSION`
-is currently `1`.
+`AssetPackRegistry.GetManifestRejection` makes the manifest checks. It accepts `schema_version` from 1 through `SUPPORTED_SCHEMA_VERSION` (currently `1`). It refuses an absent, zero or negative `schema_version`, and an absent or blank `pack_id`. Creidhne and Taliesin also refuse an absent or zero `schema_version` and an absent `pack_id`, but they accept a blank `pack_id`.
 
 No checksum, no signature, no entry-name validation, no image-format validation at load. All decode
 is lazy, at first lookup.
@@ -130,8 +131,8 @@ deriving from `AssetPack` (or `AudioPack` for byte-serving types).
 
 | Field            | Type                                     | Default | Read by code                                                       |
 | ---------------- | ---------------------------------------- | ------- | ------------------------------------------------------------------ |
-| `schema_version` | int                                      | `0`     | Yes — max-only gate                                                |
-| `pack_id`        | string                                   | `""`    | Logging and conflict messages only                                 |
+| `schema_version` | int (required)                           | none    | Yes — must be 1 through the supported version                      |
+| `pack_id`        | string (required)                        | none    | Must not be blank; read only by log and conflict messages          |
 | `pack_version`   | string                                   | `""`    | **Nothing reads this.** Informational                              |
 | `content_type`   | string                                   | `""`    | Yes — factory discriminator                                        |
 | `priority`       | int                                      | `100`   | Yes — conflict resolution                                          |
@@ -573,7 +574,7 @@ are **not** supported in v1 and would clip.
 
 | Symptom                                            | Cause                                                                                              |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Pack not loading at all                            | Check stderr for `[asset-pack]` at startup. Missing/malformed `_manifest.json`, `schema_version > 1`, unknown `content_type`, or the pack is in the game-data folder instead of `AppPaths.AssetsDir` |
+| Pack not loading at all                            | Check stderr for `[asset-pack]` at startup. Missing/malformed `_manifest.json`, `schema_version` absent or not a supported version, `pack_id` absent or blank, unknown `content_type`, or the pack is in the game-data folder instead of `AppPaths.AssetsDir` |
 | Some assets legacy despite being in the pack       | Filename doesn't match the exact pattern (case-insensitive but padding matters), corrupt entry, or the file isn't at the ZIP root |
 | Two packs claim the same type                      | Higher `priority` wins; ties go to first-registered. The loser logs a warning and is disposed      |
 | Icon appears 1px off                               | Expected — 32×32 modern icons draw at `-1,-1` relative to legacy 31×31. Verify the PNG really is 32×32 |

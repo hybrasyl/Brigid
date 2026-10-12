@@ -281,9 +281,9 @@ public static class AssetPackRegistry
                 return;
             }
 
-            if (manifest.SchemaVersion > SUPPORTED_SCHEMA_VERSION)
+            if (GetManifestRejection(manifest) is { } rejection)
             {
-                LogWarning($"pack {Path.GetFileName(path)} declares schema_version={manifest.SchemaVersion} which is newer than supported ({SUPPORTED_SCHEMA_VERSION}); skipping");
+                LogWarning($"pack {Path.GetFileName(path)} {rejection}; skipping");
                 archive.Dispose();
 
                 return;
@@ -301,6 +301,29 @@ public static class AssetPackRegistry
             LogWarning($"failed to open pack {Path.GetFileName(path)}: {ex.GetType().Name}: {ex.Message}");
             archive?.Dispose();
         }
+    }
+
+    /// <summary>
+    ///     Returns why the registry refuses a manifest, or null when it accepts it. The registry accepts schema versions 1
+    ///     through <see cref="SUPPORTED_SCHEMA_VERSION" />. It refuses an absent, zero or negative <c>schema_version</c>
+    ///     and an absent <c>pack_id</c>, as Creidhne and Taliesin also do. It also refuses a blank <c>pack_id</c>, which
+    ///     the two editors accept.
+    /// </summary>
+    internal static string? GetManifestRejection(AssetPackManifest manifest)
+    {
+        if (manifest.SchemaVersion is not { } version)
+            return "has no schema_version";
+
+        if (version < 1)
+            return $"declares schema_version={version} which is not a valid version";
+
+        if (version > SUPPORTED_SCHEMA_VERSION)
+            return $"declares schema_version={version} which is newer than supported ({SUPPORTED_SCHEMA_VERSION})";
+
+        if (string.IsNullOrWhiteSpace(manifest.PackId))
+            return "has no pack_id";
+
+        return null;
     }
 
     /// <summary>
