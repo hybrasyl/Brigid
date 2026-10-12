@@ -1223,6 +1223,9 @@ public class UITextBox : UIElement
         if (!IsFocused || !Enabled)
             return;
 
+        //Update skips a hidden box, so text cleared while the box was hidden can leave the cursor past the end
+        ClampPositions();
+
         //clipboard / undo-redo / select-all / line start-end resolve through the keybind registry so they honour
         //rebindings and the per-OS primary modifier (Ctrl on Windows/Linux, Cmd on macOS). Pure caret nav and
         //text mutation below stay literal — they are not rebindable commands.
@@ -1483,6 +1486,9 @@ public class UITextBox : UIElement
     {
         if (!IsFocused || IsReadOnly || !Enabled)
             return;
+
+        //Update skips a hidden box, so text cleared while the box was hidden can leave the cursor past the end
+        ClampPositions();
 
         var c = e.Character;
 
