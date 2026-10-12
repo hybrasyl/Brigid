@@ -175,7 +175,11 @@ public static class TextRenderer
         if (colorCodesEnabled && (MeasureWidth(text, size, extraSpacing) <= maxWidth))
             return text.Length;
 
-        var width = 0;
+        //summed unrounded (MeasureWidthExact): rounding each glyph lost up to half a pixel apiece off 1x, so wrapped
+        //lines drew wider than maxWidth. Kerning is left out of the sum; it is almost always negative, so the estimate
+        //errs toward an early break, never a late one.
+        var px = size ?? FontEngine.Instance.UiSize;
+        var width = 0f;
         var lastSpace = -1;
         var glyphs = 0;
         var i = 0;
@@ -203,16 +207,10 @@ public static class TextRenderer
             //measuring one glyph at a time loses the inter-character tracking that a whole-string measurement (and
             //the draw) applies between glyphs, which over-estimated every wrapped line by ~1px per character and
             //broke lines well before they actually overflowed. Add it back for every glyph after the first.
-            width += step == 1
-                ? MeasureCharWidth(text[i], size, extraSpacing)
-                : FontEngine.Instance.MeasureWidth(
-                    text.Substring(i, 2),
-                    size ?? FontEngine.Instance.UiSize,
-                    FontStyle.Regular,
-                    extraSpacing);
+            width += FontEngine.Instance.MeasureWidthExact(step == 1 ? text[i].ToString() : text.Substring(i, 2), px, FontStyle.Regular, extraSpacing);
 
             if (glyphs > 0)
-                width += (int)(FontEngine.DEFAULT_TRACKING + extraSpacing);
+                width += FontEngine.DEFAULT_TRACKING + extraSpacing;
 
             glyphs++;
 
