@@ -226,10 +226,53 @@ jobs:
           path: Brigid-*-osx-arm64.dmg
           if-no-files-found: error
 
-  release:
+  # Hash the exact bytes that are published: each artifact is final here, after
+  # signing and after fixup-sdl-runtimes.sh. Runs on manual builds too, so the
+  # hashing is exercised without a tag. Linux has no signature, so a downloader
+  # (elatha's client install) can verify a Linux build only by this hash.
+  checksums:
     runs-on: ubuntu-latest
     needs: [build-windows, build-linux, build-mac]
+    outputs:
+      # For the CDN update manifest step, which does not exist yet.
+      sha256sums: ${{ steps.sums.outputs.sha256sums }}
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Write SHA256SUMS
+        id: sums
+        run: |
+          mkdir dist
+          find artifacts -type f \( -name '*-win-x64.zip' -o -name '*-linux-x64.tar.gz' -o -name '*-osx-arm64.dmg' \) \
+            -exec cp {} dist/ \;
+          # sha256sum writes lowercase hex in the "<hex>  <filename>" form.
+          (cd dist && sha256sum --text -- *) > SHA256SUMS
+          mv SHA256SUMS dist/
+          cat dist/SHA256SUMS
+          test "$(wc -l < dist/SHA256SUMS)" -eq 3
+          {
+            echo 'sha256sums<<SHA256SUMS_EOF'
+            cat dist/SHA256SUMS
+            echo 'SHA256SUMS_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload SHA256SUMS
+        uses: actions/upload-artifact@v4
+        with:
+          name: sha256sums
+          path: dist/SHA256SUMS
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [checksums]
     if: github.ref_type == 'tag'
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: Download all artifacts
@@ -244,15 +287,29 @@ jobs:
             artifacts/**/*-win-x64.zip
             artifacts/**/*-linux-x64.tar.gz
             artifacts/**/*-osx-arm64.dmg
+            artifacts/sha256sums/SHA256SUMS
           generate_release_notes: true
           fail_on_unmatched_files: true
+          # The release stays a draft until the check below passes, so no player
+          # can download files that do not match their hashes.
+          draft: true
+
+      # Download the draft again and check it against the hashes, so the
+      # recorded hash is proved against the uploaded file, not the local copy.
+      - name: Verify the uploaded files against SHA256SUMS
+        run: |
+          mkdir verify
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir verify
+          cmp verify/SHA256SUMS artifacts/sha256sums/SHA256SUMS
+          (cd verify && sha256sum --check --strict SHA256SUMS)
+
+      - name: Publish the release
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
 
       - name: Notify Discord
         if: success()
         run: |
-          TAG="${{ github.ref_name }}"
-          REPO="${{ github.repository }}"
-          RELEASE_URL="https://github.com/$REPO/releases/tag/$TAG"
+          RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
           curl -sf -H "Content-Type: application/json" \
             -d "{\"content\": \"**Brigid $TAG** is now available!\n$RELEASE_URL\"}" \
             "${{ secrets.DISCORD_WEBHOOK_URL }}"
