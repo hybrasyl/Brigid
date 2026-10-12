@@ -85,7 +85,10 @@ jobs:
 
   build-linux:
     needs: prepare
-    runs-on: ubuntu-latest
+    # Pinned, not -latest: the AppImage bundles the codec libraries from this
+    # host, so its release sets the glibc floor (24.04: 2.39) and must ship the
+    # libFLAC.so.12 the bundled SDL2_mixer links.
+    runs-on: ubuntu-24.04
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
@@ -108,11 +111,35 @@ jobs:
           chmod +x publish/linux-x64/Brigid
           tar -czf "Brigid-$VERSION-linux-x64.tar.gz" -C publish/linux-x64 .
 
+      # The distro SDL2_mixer package pulls the codec libraries that
+      # package-linux.sh bundles into the AppImage.
+      - name: Install the codec libraries to bundle
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libsdl2-mixer-2.0-0
+
+      - name: Package .deb and AppImage
+        run: bash Build/linux/package-linux.sh publish/linux-x64 "$VERSION" dist
+
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: linux-tarball
           path: Brigid-*-linux-x64.tar.gz
+          if-no-files-found: error
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: dist/Brigid-*-linux-x64.deb
+          if-no-files-found: error
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: dist/Brigid-*-x86_64.AppImage
           if-no-files-found: error
 
   build-mac:
@@ -246,13 +273,14 @@ jobs:
         id: sums
         run: |
           mkdir dist
-          find artifacts -type f \( -name '*-win-x64.zip' -o -name '*-linux-x64.tar.gz' -o -name '*-osx-arm64.dmg' \) \
+          find artifacts -type f \( -name '*-win-x64.zip' -o -name '*-linux-x64.tar.gz' \
+            -o -name '*-linux-x64.deb' -o -name '*-x86_64.AppImage' -o -name '*-osx-arm64.dmg' \) \
             -exec cp {} dist/ \;
           # sha256sum writes lowercase hex in the "<hex>  <filename>" form.
           (cd dist && sha256sum --text -- *) > SHA256SUMS
           mv SHA256SUMS dist/
           cat dist/SHA256SUMS
-          test "$(wc -l < dist/SHA256SUMS)" -eq 3
+          test "$(wc -l < dist/SHA256SUMS)" -eq 5
           {
             echo 'sha256sums<<SHA256SUMS_EOF'
             cat dist/SHA256SUMS
@@ -286,6 +314,8 @@ jobs:
           files: |
             artifacts/**/*-win-x64.zip
             artifacts/**/*-linux-x64.tar.gz
+            artifacts/**/*-linux-x64.deb
+            artifacts/**/*-x86_64.AppImage
             artifacts/**/*-osx-arm64.dmg
             artifacts/sha256sums/SHA256SUMS
           generate_release_notes: true
