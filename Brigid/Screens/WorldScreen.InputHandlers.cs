@@ -710,6 +710,17 @@ public sealed partial class WorldScreen
             return;
         }
 
+        //f1 — help merchant (server-side). Above the stack guard so that it also works while an NPC or vendor window is
+        //the top popup; any other popup on top still blocks it
+        if (Keybinds.Matches(e, CommandId.World_HelpMerchant)
+            && ((Game.Dispatcher.ControlStackCount == 0) || (Game.Dispatcher.TopControl == NpcSession)))
+        {
+            Game.Connection.ClickEntity(uint.MaxValue);
+            e.Handled = true;
+
+            return;
+        }
+
         //stack guard: suppress all game hotkeys when a popup is active
         if (Game.Dispatcher.ControlStackCount > 0)
             return;
@@ -831,15 +842,6 @@ public sealed partial class WorldScreen
         if (Controls.Generic.DebugOverlay.IsActive && e is { Key: Keys.M, Ctrl: true })
         {
             ShowMarkdownTestNotice();
-            e.Handled = true;
-
-            return;
-        }
-
-        //f1 — help merchant (server-side)
-        if (Keybinds.Matches(e, CommandId.World_HelpMerchant))
-        {
-            Game.Connection.ClickEntity(uint.MaxValue);
             e.Handled = true;
 
             return;
