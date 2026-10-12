@@ -158,6 +158,8 @@ public static class WorldState
 
         SortVersion++;
 
+        var wasCreatureSprite = entity.IsRenderedAsCreatureSprite;
+
         entity.Type = ClientEntityType.Aisling;
         entity.TileX = args.X;
         entity.TileY = args.Y;
@@ -237,6 +239,10 @@ public static class WorldState
         }
 
         AnimationSystem.CancelAllAnimations(entity);
+
+        //entering or leaving monster form changes the idle frames and interval, so the cycle starts again
+        if (wasCreatureSprite != entity.IsRenderedAsCreatureSprite)
+            AnimationSystem.ResetIdleCycle(entity);
     }
 
     /// <summary>

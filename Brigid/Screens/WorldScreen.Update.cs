@@ -76,8 +76,9 @@ public sealed partial class WorldScreen
             var isSmooth = (entity == player) && smoothScroll;
             AnimationSystem.Advance(entity, elapsedMs, isSmooth);
 
-            //update creature optional standing animation cycle
-            if (entity.Type == ClientEntityType.Creature)
+            //update the optional standing animation cycle of a creature sprite, including an aisling in monster form.
+            //a swimmer draws the swim sprite, whose idle keeps the default interval.
+            if (entity.IsRenderedAsCreatureSprite && !entity.IsOnSwimmingTile)
             {
                 var animInfo = Game.CreatureRenderer.GetAnimInfo(entity.SpriteId);
 

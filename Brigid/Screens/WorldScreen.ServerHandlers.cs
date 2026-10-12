@@ -1000,8 +1000,9 @@ public sealed partial class WorldScreen
 
         var bodyAnimation = (BodyAnimation)args.Animation;
 
-        //creatures use their mpffile attack frame counts; aislings use epf suffix-based frame counts
-        if (entity.Type == ClientEntityType.Creature)
+        //creature sprites (including an aisling in monster form) use their mpffile attack frame counts; paperdoll
+        //aislings use epf suffix-based frame counts
+        if (entity.IsRenderedAsCreatureSprite)
         {
             if (!AnimationSystem.HasCreatureBodyAnimation(bodyAnimation))
             {

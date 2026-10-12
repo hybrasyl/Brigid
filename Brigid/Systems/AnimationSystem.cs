@@ -186,9 +186,9 @@ public static class AnimationSystem
     public static void Advance(WorldEntity entity, float elapsedMs, bool smoothScroll = false)
     {
         //idle animation ticks independently so it survives body animations.
-        //aislings use idleanimframecount (from "04" epf); creatures always tick.
-        //swimming aislings always tick so the swim animation cycles while idle.
-        if ((entity.IdleAnimFrameCount > 0) || (entity.Type == ClientEntityType.Creature) || entity.IsOnSwimmingTile)
+        //aislings use idleanimframecount (from "04" epf); creature sprites always tick, including an aisling in
+        //monster form. swimming aislings always tick so the swim animation cycles while idle.
+        if ((entity.IdleAnimFrameCount > 0) || entity.IsRenderedAsCreatureSprite || entity.IsOnSwimmingTile)
             AdvanceIdleAnim(entity, elapsedMs);
 
         switch (entity.AnimState)
@@ -329,6 +329,22 @@ public static class AnimationSystem
         entity.AnimFrameIndex = 0;
         entity.AnimElapsedMs = 0;
         entity.VisualOffset = Vector2.Zero;
+    }
+
+    /// <summary>
+    ///     Restarts the idle cycle. Call it when an entity changes between a paperdoll aisling and a creature sprite: the
+    ///     two forms use different frame counts and intervals, so a tick or a cycle end from one form can select a frame
+    ///     that the other form does not have. It also clears the paperdoll idle frame count; the display handler that
+    ///     runs after WorldState sets that count again for a paperdoll aisling.
+    /// </summary>
+    public static void ResetIdleCycle(WorldEntity entity)
+    {
+        entity.IdleAnimTick = 0;
+        entity.IdleAnimElapsedMs = 0;
+        entity.IdleCycleEndsAt = 0;
+        entity.IdleOptionalActive = false;
+        entity.IdleFrameIntervalMs = 0;
+        entity.IdleAnimFrameCount = 0;
     }
 
     /// <summary>

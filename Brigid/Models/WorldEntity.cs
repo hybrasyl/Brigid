@@ -109,9 +109,11 @@ public sealed class WorldEntity
 
     /// <summary>
     ///     True when the entity is rendered as a creature sprite (either a native creature or an aisling in monster form).
-    ///     False for normal aislings rendered via paperdoll composition.
+    ///     False for normal aislings rendered via paperdoll composition, and for ground items, which also have a sprite id
+    ///     and no appearance.
     /// </summary>
-    public bool IsRenderedAsCreatureSprite => (Type == ClientEntityType.Creature) || (Appearance is null && (SpriteId > 0));
+    public bool IsRenderedAsCreatureSprite
+        => (Type == ClientEntityType.Creature) || ((Type == ClientEntityType.Aisling) && Appearance is null && (SpriteId > 0));
 
     public bool UsesCreatureWalkTiming => IsRenderedAsCreatureSprite;
 }
