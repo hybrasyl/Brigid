@@ -847,62 +847,12 @@ public class UITextBox : UIElement
             return 0;
 
         var displayText = IsMasked ? new string('*', Text.Length) : Text;
-        var prevWidth = 0;
 
-        for (var i = 0; i < displayText.Length;)
-        {
-            //skip color codes as atomic units — they have zero visual width
-            if (ColorCodesEnabled && TextRenderer.IsColorCode(displayText, i))
-            {
-                i += 3;
-
-                continue;
-            }
-
-            var nextI = i + 1;
-            var charWidth = prevWidth + TextElement.MeasureChar(displayText[i]);
-            var midpoint = (prevWidth + charWidth) / 2;
-
-            if (localX < midpoint)
-                return i;
-
-            prevWidth = charWidth;
-            i = nextI;
-        }
-
-        return displayText.Length;
+        return TextElement.IndexAtX(displayText, localX, ColorCodesEnabled);
     }
 
     private int HitTestCursorPosition(int targetPixelX, string lineText)
-    {
-        if ((lineText.Length == 0) || (targetPixelX <= 0))
-            return 0;
-
-        var prevWidth = 0;
-
-        for (var i = 0; i < lineText.Length;)
-        {
-            //skip color codes as atomic units
-            if (ColorCodesEnabled && TextRenderer.IsColorCode(lineText, i))
-            {
-                i += 3;
-
-                continue;
-            }
-
-            var nextI = i + 1;
-            var charWidth = prevWidth + TextElement.MeasureChar(lineText[i]);
-            var midpoint = (prevWidth + charWidth) / 2;
-
-            if (targetPixelX < midpoint)
-                return i;
-
-            prevWidth = charWidth;
-            i = nextI;
-        }
-
-        return lineText.Length;
-    }
+        => TextElement.IndexAtX(lineText, targetPixelX, ColorCodesEnabled);
 
     private int HitTestMultiLine(int mouseX, int mouseY)
     {

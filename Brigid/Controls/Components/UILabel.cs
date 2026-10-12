@@ -509,33 +509,7 @@ public class UILabel : UIElement
         var localX = mouseX - drawX;
         var text = PlainText;
 
-        if ((text.Length == 0) || (localX <= 0))
-            return 0;
-
-        var prevWidth = 0;
-
-        for (var i = 0; i < text.Length;)
-        {
-            //skip color codes as atomic units
-            if (ColorCodesEnabled && TextRenderer.IsColorCode(text, i))
-            {
-                i += 3;
-
-                continue;
-            }
-
-            var nextI = i + 1;
-            var charWidth = prevWidth + TextElement.MeasureChar(text[i]);
-            var midpoint = (prevWidth + charWidth) / 2;
-
-            if (localX < midpoint)
-                return i;
-
-            prevWidth = charWidth;
-            i = nextI;
-        }
-
-        return text.Length;
+        return TextElement.IndexAtX(text, localX, ColorCodesEnabled);
     }
 
     private int HitTestWrapped(int mouseX, int mouseY)
@@ -559,33 +533,7 @@ public class UILabel : UIElement
         var lineText = lines[clickLine];
         var localX = mouseX - ScreenX - PaddingLeft;
 
-        if ((lineText.Length == 0) || (localX <= 0))
-            return charOffset;
-
-        var prevWidth = 0;
-
-        for (var i = 0; i < lineText.Length;)
-        {
-            //skip color codes as atomic units
-            if (ColorCodesEnabled && TextRenderer.IsColorCode(lineText, i))
-            {
-                i += 3;
-
-                continue;
-            }
-
-            var nextI = i + 1;
-            var charWidth = prevWidth + TextElement.MeasureChar(lineText[i]);
-            var midpoint = (prevWidth + charWidth) / 2;
-
-            if (localX < midpoint)
-                return charOffset + i;
-
-            prevWidth = charWidth;
-            i = nextI;
-        }
-
-        return charOffset + lineText.Length;
+        return charOffset + TextElement.IndexAtX(lineText, localX, ColorCodesEnabled);
     }
 
     private int GetWrappedLineForPosition(int position)

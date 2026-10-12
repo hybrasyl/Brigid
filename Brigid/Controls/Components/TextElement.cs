@@ -60,6 +60,41 @@ public sealed class TextElement
     public int MeasureChar(char c) => TextRenderer.MeasureCharWidth(c, FontSize, CharacterSpacing);
 
     /// <summary>
+    ///     The caret index nearest to <paramref name="x" /> pixels from the start of <paramref name="text" />, for a mouse
+    ///     click. Measures each prefix whole, as the caret and the selection are drawn. A sum of <see cref="MeasureChar" />
+    ///     widths leaves out the tracking between glyphs, so it moved the caret about 1 px per character to the left of
+    ///     the click. A {=x} color code (when <paramref name="colorCodesEnabled" />) and a surrogate pair are one step.
+    /// </summary>
+    public int IndexAtX(string text, int x, bool colorCodesEnabled)
+    {
+        if ((text.Length == 0) || (x <= 0))
+            return 0;
+
+        var prevWidth = 0;
+
+        for (var i = 0; i < text.Length;)
+        {
+            if (colorCodesEnabled && TextRenderer.IsColorCode(text, i))
+            {
+                i += 3;
+
+                continue;
+            }
+
+            var next = char.IsHighSurrogate(text[i]) && (i + 1 < text.Length) && char.IsLowSurrogate(text[i + 1]) ? i + 2 : i + 1;
+            var width = Measure(text[..next]);
+
+            if (x < ((prevWidth + width) / 2))
+                return i;
+
+            prevWidth = width;
+            i = next;
+        }
+
+        return text.Length;
+    }
+
+    /// <summary>
     ///     Shadow style applied during <see cref="Draw" />; also widens/heightens the bounding box reported by
     ///     <see cref="Width" /> and <see cref="Height" />.
     /// </summary>
