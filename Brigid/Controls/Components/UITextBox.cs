@@ -51,7 +51,8 @@ public class UITextBox : UIElement
     ///     Where a single-line box puts its text line inside the padded area. <see cref="VerticalAlignment.Top" /> keeps
     ///     the line at <c>PaddingTop</c>, which the prefab text rects are built for; any other value centres it, as
     ///     <see cref="UILabel" /> does. A box taller than one line usually wants it centred. Multi-line boxes always start
-    ///     at the top.
+    ///     at the top. The default is <see cref="VerticalAlignment.Top" /> on purpose, so the prefab boxes do not move;
+    ///     <see cref="UILabel" /> defaults to <see cref="VerticalAlignment.Center" />.
     /// </summary>
     public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Top;
 
@@ -579,8 +580,8 @@ public class UITextBox : UIElement
                     _                    => alignBounds.X
                 };
 
-                var alignY = alignBounds.Y + (alignBounds.Height - TextElement.Height) / 2;
-                DrawRun(spriteBatch, new Vector2(alignX, alignY), displayText, ForegroundColor);
+                //textY, not a second centring formula: the text must not move up or down when the box gets focus
+                DrawRun(spriteBatch, new Vector2(alignX, textY), displayText, ForegroundColor);
             } else
                 DrawRun(spriteBatch, new Vector2(textStartX, textY), displayText, ForegroundColor);
         }
