@@ -648,10 +648,13 @@ public sealed class InputDispatcher : IDisposable
                 return;
         }
 
-        //phase 1: explicit focus (single target, no bubbling)
-        if (ExplicitFocusElement is not null && IsEffectivelyVisible(ExplicitFocusElement))
+        //phase 1: explicit focus (single target, no bubbling). the element is held in a local: a box that loses focus
+        //during its own dispatch clears ExplicitFocusElement, and phase 1.5 still needs its parent
+        var focused = ExplicitFocusElement;
+
+        if (focused is not null && IsEffectivelyVisible(focused))
         {
-            DispatchSingle(ExplicitFocusElement, e);
+            DispatchSingle(focused, e);
 
             if (e.Handled)
                 return;
@@ -659,14 +662,14 @@ public sealed class InputDispatcher : IDisposable
             //phase 1.5: if the focused element is not a panel, bubble to its immediate
             //parent panel. this lets parent controls handle keys their children don't
             //(e.g. dialogtextentrypanel closes on escape, chat panel unfocuses on escape).
-            if (ExplicitFocusElement is not UIPanel && ExplicitFocusElement!.Parent is { } parentPanel)
+            if (focused is not UIPanel && focused.Parent is { } parentPanel)
             {
                 DispatchSingle(parentPanel, e);
 
                 if (e.Handled)
                     return;
             }
-        } else if (ExplicitFocusElement is not null)
+        } else if (focused is not null)
 
             //explicit focus is no longer visible — clear it
             ClearExplicitFocus();
