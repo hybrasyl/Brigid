@@ -592,7 +592,12 @@ so every themed button gets the same `button.normal` art. Roles ignore case.
 
 Roles read by the primitives (`Brigid.Rendering/ThemeRoles.cs`): parts `frame.panel`,
 `button.normal`, `button.hover`, `button.pressed`, `button.disabled`, `tab.normal`, `tab.selected`;
-colours `text`, `text.disabled`, `text.selected`, `text.title`, `divider`. A button or tab state
+colours `text`, `text.disabled`, `text.selected`, `text.title`, `divider`. The main menu
+(`MainMenuControl`) also reads parts `background.mainmenu` (normally `"fit": "cover"`; it fills the
+whole window, cropped to the window's aspect ratio) and `title.mainmenu` (art in place of the title
+text), and the font `title` (the display face for the title text, in place of Uncial Antiqua). A
+`title` font with no TrueType or OpenType signature, or one the parser refuses, is logged and the
+shipped face stays. A button or tab state
 that is missing or does not decode uses the normal state.
 
 **Drawn at native resolution.** `ThemeArt` composites a part with SkiaSharp at the native pixel

@@ -1,4 +1,5 @@
 #region
+using Brigid.Data;
 using Brigid.Data.AssetPacks;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -29,6 +30,10 @@ public static class ThemeArt
         new(MAX_CACHED_TEXTURES, static () => Environment.TickCount64, static texture => texture.Dispose());
 
     private static UiThemePack? CachedPack;
+
+    //the pack whose fonts EnsureThemeFonts applied, or NoPack when it applied "no pack"; null until the first call
+    private static readonly object NoPack = new();
+    private static object? FontsAppliedFor;
 
     /// <summary>Gets the theme colour for <paramref name="role" />, for example <c>text</c>.</summary>
     public static bool TryGetColor(string role, out Color color)
@@ -93,23 +98,29 @@ public static class ThemeArt
     }
 
     /// <summary>
-    ///     Draws the part for <paramref name="role" /> into a rectangle in native pixels, with no batch transform. It is
-    ///     for a fitted part, such as the full-window background: pass the back-buffer rectangle, and the part's fit
-    ///     (normally cover) decides the crop. A nine-slice part drawn here sizes its insets for a pass scale of 1.
+    ///     Gives <see cref="FontEngine" /> the theme's <c>title</c> font as the display face, or restores the shipped face
+    ///     when the theme has none or its font does not load. Runs once for each theme pack; later calls return at once.
+    ///     Call it from an update, not from a draw: a new face bumps <see cref="FontEngine.Generation" />.
     /// </summary>
-    public static bool TryDrawNative(SpriteBatch spriteBatch, string role, Rectangle target, Color? tint = null)
+    public static void EnsureThemeFonts()
     {
-        if ((target.Width <= 0) || (target.Height <= 0))
-            return false;
+        var pack = AssetPackRegistry.GetUiThemePack();
+        var applied = (object?)pack ?? NoPack;
 
-        var texture = GetTexture(role, target.Width, target.Height, 1f, 1f);
+        if (ReferenceEquals(FontsAppliedFor, applied))
+            return;
 
-        if (texture is null)
-            return false;
+        if (pack is not null && pack.TryGetFontBytes(ThemeRoles.TitleFont, out var bytes) && bytes is not null)
+        {
+            if (!FontEngine.Instance.SetDisplayFont(bytes))
+            {
+                DataDiagnostics.Log?.Invoke($"[asset-pack] ui_theme '{pack.Manifest.PackId}': font '{ThemeRoles.TitleFont}' does not load; using the shipped face");
+                FontEngine.Instance.SetDisplayFont(null);
+            }
+        } else
+            FontEngine.Instance.SetDisplayFont(null);
 
-        spriteBatch.Draw(texture, target, tint ?? Color.White);
-
-        return true;
+        FontsAppliedFor = applied;
     }
 
     private static Texture2D? GetTexture(string role, int width, int height, float scaleX, float scaleY)
