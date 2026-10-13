@@ -33,10 +33,11 @@ public class UILabel : UIElement
     public bool IsSelectable { get; set; }
 
     /// <summary>
-    ///     Raised when a left press starts a selection in this label. The press is handled here and does not bubble, so a
-    ///     host with more than one selectable label uses this to learn which one the keys belong to.
+    ///     Raised on each left press in this selectable label, also a press that selects no text. The press is handled
+    ///     here and does not bubble, so a host with more than one selectable label uses this to learn which one the keys
+    ///     belong to.
     /// </summary>
-    public event Action? SelectionStarted;
+    public event Action? SelectionPressed;
     public bool HasSelection => IsSelectable && (SelectionAnchor != CursorPosition);
     private int SelectionStart => Math.Min(SelectionAnchor, CursorPosition);
     private int SelectionEnd => Math.Max(SelectionAnchor, CursorPosition);
@@ -587,7 +588,7 @@ public class UILabel : UIElement
         if (!IsSelectable || (e.Button != MouseButton.Left))
             return;
 
-        SelectionStarted?.Invoke();
+        SelectionPressed?.Invoke();
         ClampPositions();
 
         var isWrapped = TextElement.WrappedLines is not null;

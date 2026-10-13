@@ -88,11 +88,11 @@ public sealed class SelectableTextView : UIPanel
     /// </summary>
     public void ForwardKey(KeyDownEvent e) => Label.OnKeyDown(e);
 
-    /// <summary>Raised when a left press starts a selection in the text. See <see cref="UILabel.SelectionStarted" />.</summary>
-    public event Action? SelectionStarted
+    /// <summary>Raised on each left press in the text. See <see cref="UILabel.SelectionPressed" />.</summary>
+    public event Action? SelectionPressed
     {
-        add => Label.SelectionStarted += value;
-        remove => Label.SelectionStarted -= value;
+        add => Label.SelectionPressed += value;
+        remove => Label.SelectionPressed -= value;
     }
 
     /// <summary>Drops the selection, leaving the text and the scroll position unchanged.</summary>

@@ -52,22 +52,22 @@ internal sealed class PostReadPane : UIPanel
         SubjectLabel = AddHeader(subjectX, Math.Max(0, pane.Width - subjectX), LegendColors.White);
         SubjectLabel.IsSelectable = true;
         SubjectLabel.IsHitTestVisible = true;
-        SubjectLabel.SelectionStarted += OnSubjectSelectionStarted;
+        SubjectLabel.SelectionPressed += OnSubjectPressed;
 
         var bodyTop = HEADER_H + HEADER_GAP;
 
         Body = new SelectableTextView(new Rectangle(0, bodyTop, pane.Width, pane.Height - bodyTop));
-        Body.SelectionStarted += OnBodySelectionStarted;
+        Body.SelectionPressed += OnBodyPressed;
         AddChild(Body);
     }
 
-    private void OnSubjectSelectionStarted()
+    private void OnSubjectPressed()
     {
         SubjectHasKeys = true;
         Body.ClearSelection();
     }
 
-    private void OnBodySelectionStarted()
+    private void OnBodyPressed()
     {
         SubjectHasKeys = false;
         SubjectLabel.ClearSelection();
