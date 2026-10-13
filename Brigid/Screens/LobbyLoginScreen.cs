@@ -61,6 +61,10 @@ public sealed class LobbyLoginScreen : IScreen
     //ui panels
     private LobbyLoginControl StartPanel = null!;
 
+    //BRIG-107 preview: the new main menu over the legacy one, while BRIGID_MAIN_MENU_PREVIEW=1. Phase 4 replaces the
+    //legacy menu with it and removes this.
+    private MainMenuControl? PreviewMenu;
+
     /// <inheritdoc />
     public UIPanel? Root { get; private set; }
 
@@ -117,6 +121,17 @@ public sealed class LobbyLoginScreen : IScreen
         StartPanel.CreditButton?.Clicked += OnCreditClicked;
         StartPanel.HomepageButton?.Clicked += OnHomepageClicked;
         StartPanel.ConfigButton?.Clicked += OnConfigClicked;
+
+        if (Environment.GetEnvironmentVariable("BRIGID_MAIN_MENU_PREVIEW") == "1")
+        {
+            PreviewMenu = new MainMenuControl();
+            PreviewMenu.ContinueButton.Clicked += OnContinueClicked;
+            PreviewMenu.ExitButton.Clicked += OnExitClicked;
+            PreviewMenu.CreateButton.Clicked += OnCreateClicked;
+            PreviewMenu.PasswordButton.Clicked += OnPasswordClicked;
+            PreviewMenu.HomepageButton.Clicked += OnHomepageClicked;
+            PreviewMenu.ConfigButton.Clicked += OnConfigClicked;
+        }
 
         //track last-clicked start panel button so enter can repeat it
         foreach (var btn in (UIButton?[]) [
@@ -175,6 +190,9 @@ public sealed class LobbyLoginScreen : IScreen
             Height = ChaosGame.VIRTUAL_HEIGHT
         };
         Root.AddChild(StartPanel);
+
+        if (PreviewMenu is not null)
+            Root.AddChild(PreviewMenu);
         Root.AddChild(LoginControl);
         Root.AddChild(ServerSelectControl);
         Root.AddChild(LoginNoticeControl);
@@ -249,6 +267,11 @@ public sealed class LobbyLoginScreen : IScreen
         MaybeShowTrustPrompt();
         MaybeShowInsecurePrompt();
         RefreshConnectionLine();
+
+        //the preview follows the legacy menu, which the screen enables and disables, and the server name, which the
+        //lobby learns after the connection line is first drawn. SetConnection changes nothing when the text is the same.
+        PreviewMenu?.SetButtonsEnabled(StartPanel.ContinueButton?.Enabled == true);
+        PreviewMenu?.SetConnection(DataContext.LobbyHost, ConnectionLineSecure, Game.Connection.ServerName);
 
         Game.Dispatcher.ProcessInput(Root!, gameTime);
         Root!.Update(gameTime);

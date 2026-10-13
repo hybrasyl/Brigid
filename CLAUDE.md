@@ -171,7 +171,7 @@ Brigid/
 
 **Component Primitives (`Controls/Components/`):** UIElement, UIPanel, UIButton, UITextBox, UIImage, UILabel, UIProgressBar, TextElement, PrefabPanel (prefab-art panels), CenteredModalPanel (base for from-scratch modals: DialogPalette frame, title band, per-view bottom action bar via `SetBottomBarActions`, Escape-dismiss, control-stack push), InputSlotPane (draws slot chrome behind a form's text fields).
 
-**Login Flow (`Controls/LobbyLogin/`):** LobbyLoginControl, LoginControl, ServerSelectControl, CharacterCreationControl, LoginNoticeControl, PasswordChangeControl, LogoImage.
+**Login Flow (`Controls/LobbyLogin/`):** LobbyLoginControl, MainMenuControl (the BRIG-107 primitive main menu: themed, every child named; its About text ships as an embedded resource in `Resources/MainMenu/`; `BRIGID_MAIN_MENU_PREVIEW=1` shows it over the legacy menu until it replaces it), LoginControl, ServerSelectControl, CharacterCreationControl, LoginNoticeControl, PasswordChangeControl, LogoImage.
 
 **Generic Controls (`Controls/Generic/`):** OkPopupMessageControl, TextPopupControl, MarkdownView (near-fullscreen markdown notice for `SystemMessageType.MarkdownNotice` = 0x20, a Hybrasyl/USDA extension: title bar with close/maximize, scrollbar, Escape dismisses, non-modal; debug-test via F11 overlay + Ctrl+M), ScrollBarControl, SliderControl, DebugOverlay. Asset-free primitives shared by the from-scratch modals: DialogPalette (the one colour source), DisplayTitle (one line in the display face, or theme art in its place), TextButton, SelectableTab, TabStrip (row/column of tabs; clicked and selected are separate so a server-authoritative surface can defer selection to the reply), CheckBox.
 
