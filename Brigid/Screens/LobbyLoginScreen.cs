@@ -203,14 +203,17 @@ public sealed class LobbyLoginScreen : IScreen
         MaybeShowMigrationPrompt();
         MaybeShowAudioMissingNotice();
 
-        if (ReturningFromWorld)
+        //a logout redirect leaves the client connected to the login server. A server that closes the connection at
+        //logout leaves no connection, and a login or a create would then wait for a reply that never comes, so start
+        //again from the lobby
+        if (ReturningFromWorld && (Game.Connection.State == ConnectionState.Login))
         {
             //already connected to login server via redirect — skip lobby handshake, show login directly
             StartPanel.SetButtonsEnabled(false);
             LoginControl.Show();
         } else
 
-            //fresh start — connect to lobby
+            //fresh start, or the server closed the connection at logout — connect to lobby
             BeginLobbyConnect();
     }
 
