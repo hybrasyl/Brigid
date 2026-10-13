@@ -105,11 +105,12 @@ internal static class DllResolver
         if (path is null)
             return;
 
-        //TryLoad discards the loader's message (dlerror / LoadLibrary), and Load is the only API that surfaces it
+        //TryLoad discards the loader's message (dlerror / LoadLibrary), and Load is the only API that surfaces it. A
+        //library for the wrong architecture throws BadImageFormatException instead of DllNotFoundException
         try
         {
             NativeLibrary.Free(NativeLibrary.Load(path));
-        } catch (DllNotFoundException e)
+        } catch (Exception e) when (e is DllNotFoundException or BadImageFormatException)
         {
             NoticeDebugLog.Write($"DllResolver: {libraryName} at {path} failed to load: {e.Message}");
         }
