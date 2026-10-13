@@ -10,20 +10,21 @@ Hand-editable starting point for the Phase 1 / Stage 1 item-asset-pack test pack
    - sprite ID 482 → `item00482.png`
 2. Zip the directory contents (manifest + PNGs) at the **archive root** — not inside a subdirectory.
 3. Rename `.zip` → `.datf`.
-4. Drop the `.datf` into the Dark Ages data directory (the folder `GlobalSettings.DataPath` points at).
+4. Put the `.datf` in the per-user assets folder (`%LOCALAPPDATA%\Erisco\Brigid\assets` on Windows; `AppPaths.AssetsDir`). The game data folder is not read for packs.
 5. Restart the client.
 
 ## What the manifest declares
 
 - `content_type: item_icons` registers this pack as an `item_icons` pack (`AssetPackRegistry.ItemPacks`).
-- `covers.item_icons.dyeable` is the **opt-in list** of item IDs that participate in the runtime find-and-replace dye pass. The 45 IDs listed are the rule-passing dyeable items from sheets 1–2 per `Scripts/dump-item-palette/items-dyeable.csv` (`dyeable_loose=True`).
-- Items **not** in the `dyeable` list ignore the server's color byte and render as-is. The renderer also collapses the cache key to `color = 0` for them so a single decode is shared across every incoming color.
+- `covers.item_icons.dyeable` is an explicit list, and the client uses it as the **exact set** of dyeable items: it does not detect dyeability from the art for this pack. The 45 IDs listed are the dyeable items of sheets 1–2. They are the same 45 ids that ramp detection finds in the Unity rip.
+- Items **not** in the `dyeable` list ignore the server's color byte and render as-is.
 - Items in the `dyeable` list run the canonical-purple find-and-replace via [ItemDyePass.cs](../../../Brigid.Rendering/ItemDyePass.cs) when the server-sent color byte is non-zero.
+- A pack without a `dyeable` list (the normal case, and what Taliesin writes) lets the client detect dyeability from the art, with `no_dye` for the exceptions. See `assetPackList.md`.
 
 ## Adjusting the dyeable list
 
-If you discover an item that visually dyes but is missing from the array, add its ID. If you find an item that incorrectly tries to dye (e.g. an artist-painted purple that wasn't meant to be replaced), remove it from the list. The dump-tool CSV is a starting heuristic, not ground truth.
+If you discover an item that visually dyes but is missing from the array, add its ID. If you find an item that incorrectly tries to dye (e.g. an artist-painted purple that wasn't meant to be replaced), remove it from the list. A new pack does not need this list: remove `dyeable` to let the client detect the ramp, and list exceptions in `no_dye`.
 
 ## Note on hand-authoring vs Taliesin
 
-This scaffold exists so the Stage 1 review gate (pixel-for-pixel diff against legacy) can run before Taliesin's `.datf` build pipeline is ready. Taliesin will own authoring going forward — artists will toggle dyeability per-item in the Taliesin UI with live preview, and the manifest will be generated from those flags. This sample is a hand-editable bridge.
+This scaffold is older than Taliesin's item pipeline. Taliesin now authors item packs: it writes no `dyeable` list, so the client detects dyeability from the art, and its "No dye" box writes `covers.item_icons.no_dye` for an item that has ramp pixels but must not take the dye. Keep this scaffold only as an example of an explicit `dyeable` list.

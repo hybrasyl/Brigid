@@ -139,7 +139,7 @@ deriving from `AssetPack` (or `AudioPack` for byte-serving types).
 | `pack_version`   | string                                   | `""`    | **Nothing reads this.** Informational                              |
 | `content_type`   | string                                   | `""`    | Yes — factory discriminator                                        |
 | `priority`       | int                                      | `100`   | **No.** Read and ignored; the first registered pack wins           |
-| `covers`         | `Dictionary<string, CoverageEntry>`      | `{}`    | Only three sub-fields, below                                       |
+| `covers`         | `Dictionary<string, CoverageEntry>`      | `{}`    | Only the sub-fields below                                          |
 
 `covers` is a **capability** declaration, not a coverage range — actual coverage is emergent from
 which entries the archive ships. You never enumerate sprite IDs in the manifest.
@@ -149,7 +149,8 @@ which entries the archive ships. You never enumerate sprite IDs in the manifest.
 | Field        | Type                         | Consumed by                                          |
 | ------------ | ---------------------------- | ---------------------------------------------------- |
 | `dimensions` | `int[]` `[w, h]`             | **`NpcPortraitPack` only.** See note below           |
-| `dyeable`    | `int[]` (1-based item IDs)   | `ItemPack` only — `covers.item_icons.dyeable`        |
+| `dyeable`    | `int[]` (1-based item IDs)   | `ItemPack` only — `covers.item_icons.dyeable`; when present, the exact dyeable set |
+| `no_dye`     | `int[]` (1-based item IDs)   | `ItemPack` only — `covers.item_icons.no_dye`; the exceptions to ramp detection (Taliesin writes it) |
 | `portraits`  | `Dictionary<string, string>` | `NpcPortraitPack` only — **required**, it *is* the naming convention |
 
 **`dimensions` caveat.** Widely documented as `[32, 32]` for `ability_icons`; no code reads it there.
@@ -226,19 +227,15 @@ return TryGetImage($"item{spriteId:D5}.png", out image);
 - **Icon offset.** A pack icon draws at `floor((31 − size) / 2)` on each axis in the 31×31 slot (`IconTexture.FromPack`): a 32×32 icon at `-1,-1`, as a modern ability icon does, and a smaller icon centred. A legacy icon draws at `0,0`. On the ground, a pack PNG is centred as a tightly cropped image.
 - **Legacy dye** goes through `AislingDrawDataRepository.ApplyDye`, which leaves a palette without the canonical dye ramp unchanged.
 
-**Manifest field read: `covers.item_icons.dyeable`** — a flat array of item IDs opting into the
-runtime dye pass, loaded fail-closed into `DyeableSet` and exposed as `IsDyeable(spriteId)`.
+**Which items take the dye (BRIG-41).** `ItemPack.IsDyeable(spriteId, image)` decides, for the pack that gives the image:
 
-For a dyeable item with a non-zero server color byte, the renderer replaces pixels matching the
-canonical purple ramp (legacy palette indices 98–103:
-`#B393C7 #9B7BB7 #8F5BA3 #7F3B93 #47235F #37005B`) with the six colors from the active
-`color0.tbl` entry, preserving alpha. Items **not**
-listed ignore the color byte entirely. Both item caches key on the color byte that the server sent, so a
-cache hit asks no pack.
+1. An id of 20001 or more (`ItemSpriteIds.MODERN_FIRST`) is **never** dyed by this pass. Modern icons are painted art, and a painted color can match the ramp by chance; mask dye for them is BRIG-112.
+2. When the manifest has `covers.item_icons.dyeable`, that list is the exact set. Only the old scaffold writes it.
+3. Otherwise an id in `covers.item_icons.no_dye` is not dyeable, and any other id is dyeable when its PNG contains at least one visible pixel of the canonical purple ramp (legacy palette indices 98–103: `#B393C7 #9B7BB7 #8F5BA3 #7F3B93 #47235F #37005B`, `ItemDyeRamp`). This is the legacy rule: the sprite uses the dye slots. The client detects it on the first load of the id and keeps the answer. **Ramp pixels must be fully opaque**, as palette art is: the PNG decode rounds the color of a semi-transparent pixel, so it is not found and not dyed (a soft purple edge stays purple). Taliesin writes `no_dye` for the exceptions and never writes `dyeable`.
 
-Opt-in rather than auto-detected because scanning every pixel of every icon would waste CPU on the
-~95% of items with no dye-relevant pixels. `Scripts/dump-item-palette/` produces `items-dyeable.csv`
-as a starting list; a hand-editable scaffold lives at `Scripts/sample-packs/items-test-001-002/`.
+For a dyeable item with a non-zero server color byte, the client replaces the ramp pixels with the six colors from the active `color0.tbl` entry, preserving alpha. Other items ignore the color byte. Both item caches key on the color byte that the server sent, so a cache hit asks no pack. At startup, when an item pack is installed, the client compares the ramp with `color0.tbl` entry 0 and logs any difference.
+
+`Scripts/item-dye-compare/` checks the rule and the dye pass against legacy on real art, in both directions. The result for the Unity rip is on BRIG-41: the pack dye matches the legacy dye for every comparable dyeable icon except 15 whose palette has no dye ramp (so the legacy client does not dye them, and a pack lists them in `no_dye`: 5595, 12769–12772 and 12774–12783), and 2 icons that the legacy client dyes but whose rip art has no ramp pixel (14099 and 14104; the art must be repainted with the ramp).
 
 ---
 
@@ -627,9 +624,9 @@ In this repo:
 
 - `controlFileList.txt` — legacy control/EPF/SPF catalog (what `ui_sprite_overrides` overrides)
 - `docs/static-tiles-authoring-guide.md` — static tile art rules
-- `Scripts/sample-packs/items-test-001-002/` — hand-editable manifest scaffold
+- `Scripts/sample-packs/items-test-001-002/` — old hand-editable manifest scaffold (an explicit `dyeable` list)
 - `Scripts/dump-prefab-images.{sh,ps1}` — resolve prefab control names to EPF/SPF stems
-- `Scripts/dump-item-palette/` — item dyeability scan (`items-dyeable.csv`)
+- `Scripts/item-dye-compare/` — compares the pack dye with the legacy dye on real item art (BRIG-41)
 
 Packs are authored with **Taliesin** (`../taliesin/`), the Hybrasyl asset-management tool — the
 supported path for producing `.datf` archives.

@@ -31,7 +31,7 @@ public sealed class ItemIconSourceTests : IDisposable
         return data.ToArray();
     }
 
-    private static void RegisterItems(string packId, Dictionary<string, byte[]> entries, int[]? dyeable = null)
+    private static void RegisterItems(string packId, Dictionary<string, byte[]> entries, int[]? dyeable = null, int[]? noDye = null)
     {
         var stream = new MemoryStream();
 
@@ -51,7 +51,7 @@ public sealed class ItemIconSourceTests : IDisposable
                 SchemaVersion = 1,
                 PackId = packId,
                 ContentType = "item_icons",
-                Covers = dyeable is null ? [] : new Dictionary<string, AssetPackCoverageEntry> { ["item_icons"] = new() { Dyeable = dyeable } }
+                Covers = new Dictionary<string, AssetPackCoverageEntry> { ["item_icons"] = new() { Dyeable = dyeable, NoDye = noDye } }
             }));
     }
 
@@ -118,13 +118,14 @@ public sealed class ItemIconSourceTests : IDisposable
     [Fact]
     public void Load_TakesTheDyeDecision_FromThePackThatAnswered()
     {
-        //the broken pack would dye the item, but the pack that gives the image does not list it, so no dye runs (a dye
-        //would need the game's dye table, which these tests do not load)
-        var ramp = new SKColor(0x8F, 0x5B, 0xA3);
-        RegisterItems("broken", new() { ["item20001.png"] = "not a png"u8.ToArray() }, dyeable: [20001]);
-        RegisterItems("good", new() { ["item20001.png"] = Png(ramp) });
+        //the broken pack lists item 5 as dyeable. the good pack has ramp art but lists item 5 in no_dye, so the pack that
+        //gives the image says no dye. a dye would need the game's dye table, which these tests do not load, so a
+        //decision taken from the broken pack would throw
+        var ramp = ItemDyeRamp.Colors[2];
+        RegisterItems("broken", new() { ["item00005.png"] = "not a png"u8.ToArray() }, dyeable: [5]);
+        RegisterItems("good", new() { ["item00005.png"] = Png(ramp) }, noDye: [5]);
 
-        Assert.Equal(ramp, ColorOf(ItemIconSource.Load(20001, 5)!.Value));
+        Assert.Equal(ramp, ColorOf(ItemIconSource.Load(5, 30)!.Value));
     }
 
     [Fact]
@@ -137,9 +138,9 @@ public sealed class ItemIconSourceTests : IDisposable
     }
 
     [Fact]
-    public void Load_LeavesANonDyeableItemUndyed_WhenTheServerSendsAColor()
+    public void Load_LeavesAModernItemUndyed_EvenWithRampArt()
     {
-        RegisterItems("modern", new() { ["item20001.png"] = Png(new SKColor(0x8F, 0x5B, 0xA3)) });
+        RegisterItems("modern", new() { ["item20001.png"] = Png(new SKColor(0x8F, 0x5B, 0xA3)) }, dyeable: [20001]);
 
         var loaded = ItemIconSource.Load(20001, 5);
 

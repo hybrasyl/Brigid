@@ -52,7 +52,7 @@ public static class ItemIconSource
     //source when there is no dye
     private static SKImage DyeFromPack(ItemPack pack, int spriteId, SKImage source, byte color)
     {
-        if ((color == 0) || !pack.IsDyeable(spriteId) || !DataContext.AislingDrawData.DyeColorTable.Contains(color))
+        if ((color == 0) || !pack.IsDyeable(spriteId, source) || !DataContext.AislingDrawData.DyeColorTable.Contains(color))
             return source;
 
         var dyed = ItemDyePass.ApplyDyeFindReplace(source, DataContext.AislingDrawData.DyeColorTable[color]);
