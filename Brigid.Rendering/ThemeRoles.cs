@@ -18,6 +18,14 @@ public static class ThemeRoles
     public const string MainMenuBackground = "background.mainmenu";
     public const string MainMenuTitle = "title.mainmenu";
     public const string StoryBackground = "background.story";
+    public const string ScrollTrack = "scrollbar.track";
+    public const string ScrollThumb = "scrollbar.thumb";
+    public const string ScrollThumbHover = "scrollbar.thumb.hover";
+    public const string ScrollThumbPressed = "scrollbar.thumb.pressed";
+    public const string ScrollUp = "scrollbar.up";
+    public const string ScrollUpPressed = "scrollbar.up.pressed";
+    public const string ScrollDown = "scrollbar.down";
+    public const string ScrollDownPressed = "scrollbar.down.pressed";
 
     //colours
     public const string Text = "text";

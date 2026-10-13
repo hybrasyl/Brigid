@@ -13,6 +13,11 @@ namespace Brigid.Controls.Generic;
 ///     <b>proportional</b> thumb sized to the visible fraction of the content. 5 hit zones: decrement arrow, page
 ///     decrement, thumb (draggable), page increment, increment arrow. The public surface (Value/MaxValue/TotalItems/
 ///     VisibleItems/Orientation/OnValueChanged) is unchanged from the legacy sprite version — Value is item-granular.
+///     <para>
+///         A themed vertical bar draws the <c>ui_theme</c> parts <c>scrollbar.track</c>, <c>scrollbar.thumb</c> (with
+///         <c>.hover</c> and <c>.pressed</c>), <c>scrollbar.up</c> and <c>scrollbar.down</c> (with <c>.pressed</c>). Each
+///         piece that the theme does not have keeps its own look. A horizontal bar is not themed.
+///     </para>
 /// </summary>
 public sealed class ScrollBarControl : UIElement
 {
@@ -21,6 +26,9 @@ public sealed class ScrollBarControl : UIElement
     private const int ARROW_SIZE = 16;
     private const int MIN_THUMB = 16;
     private const int ARROW_PAD = 4;
+
+    //the themed thumb sits inside the track frame, this far from each long edge
+    private const int THEMED_THUMB_INSET = 2;
 
     //two-phase auto-repeat: a long initial delay before the fast repeat interval kicks in
     private const float REPEAT_INITIAL_MS = 400f;
@@ -90,74 +98,81 @@ public sealed class ScrollBarControl : UIElement
 
         ComputeGeometry(out var trackStart, out var trackEnd, out var usableTrack, out var thumbSize, out var thumbOffset);
 
-        if (UseSprites)
-            DrawSprites(spriteBatch, trackStart, trackEnd, usableTrack, thumbSize, thumbOffset);
-        else
-            DrawPrimitives(spriteBatch, trackStart, trackEnd, usableTrack, thumbSize, thumbOffset);
-    }
-
-    private void DrawPrimitives(SpriteBatch spriteBatch, int trackStart, int trackEnd, int usableTrack, int thumbSize, int thumbOffset)
-    {
         //track groove
         if (usableTrack > 0)
-        {
-            var trackRect = MainRect(trackStart, usableTrack);
-
-            DrawRectClipped(spriteBatch, trackRect, TrackColor);
-            DrawBorderClipped(spriteBatch, trackRect, TrackBorderColor);
-        }
+            DrawTrack(spriteBatch, MainRect(trackStart, usableTrack));
 
         //arrow buttons — decrement at the start, increment at the end
-        DrawArrow(spriteBatch, MainRect(trackStart - ARROW_SIZE, ARROW_SIZE), IsHorizontal ? ArrowDir.Left : ArrowDir.Up, ArrowColor(ScrollZone.DecArrow));
-        DrawArrow(spriteBatch, MainRect(trackEnd, ARROW_SIZE), IsHorizontal ? ArrowDir.Right : ArrowDir.Down, ArrowColor(ScrollZone.IncArrow));
+        DrawArrowButton(spriteBatch, MainRect(trackStart - ARROW_SIZE, ARROW_SIZE), ScrollZone.DecArrow);
+        DrawArrowButton(spriteBatch, MainRect(trackEnd, ARROW_SIZE), ScrollZone.IncArrow);
 
         //proportional thumb — only when there is something to scroll
         if (Scrollable && (thumbSize > 0))
-        {
-            var thumbRect = MainRect(thumbOffset, thumbSize);
-
-            DrawRectClipped(spriteBatch, thumbRect, ThumbColor());
-            DrawBorderClipped(spriteBatch, thumbRect, TrackBorderColor);
-        }
+            DrawThumb(spriteBatch, MainRect(thumbOffset, thumbSize));
     }
 
-    //legacy scroll.epf art over the primitive scaffold: sprite arrows + a stretched sprite thumb, primitive track behind
-    private void DrawSprites(SpriteBatch spriteBatch, int trackStart, int trackEnd, int usableTrack, int thumbSize, int thumbOffset)
+    //the theme parts apply to a vertical bar only; the art is drawn upright
+    private bool TryDrawPart(SpriteBatch spriteBatch, string role, Rectangle bounds, string? fallbackRole = null)
+        => !IsHorizontal && TryDrawThemePart(spriteBatch, role, bounds, fallbackRole);
+
+    private void DrawTrack(SpriteBatch spriteBatch, Rectangle trackRect)
     {
-        //keep the primitive track groove behind the sprite arrows/thumb
-        if (usableTrack > 0)
-        {
-            var trackRect = MainRect(trackStart, usableTrack);
+        if (TryDrawPart(spriteBatch, ThemeRoles.ScrollTrack, trackRect))
+            return;
 
-            DrawRectClipped(spriteBatch, trackRect, TrackColor);
-            DrawBorderClipped(spriteBatch, trackRect, TrackBorderColor);
+        DrawRectClipped(spriteBatch, trackRect, TrackColor);
+        DrawBorderClipped(spriteBatch, trackRect, TrackBorderColor);
+    }
+
+    private void DrawThumb(SpriteBatch spriteBatch, Rectangle thumbRect)
+    {
+        var role = (ActiveZone == ScrollZone.Thumb) || Dragging
+            ? ThemeRoles.ScrollThumbPressed
+            : HoveredZone == ScrollZone.Thumb ? ThemeRoles.ScrollThumbHover : ThemeRoles.ScrollThumb;
+
+        var inset = new Rectangle(thumbRect.X + THEMED_THUMB_INSET, thumbRect.Y, thumbRect.Width - 2 * THEMED_THUMB_INSET, thumbRect.Height);
+
+        if (TryDrawPart(spriteBatch, role, inset, ThemeRoles.ScrollThumb))
+            return;
+
+        //primitive proportional bar (a fixed grip sprite can't scale cleanly); shares the wood outline
+        DrawRectClipped(spriteBatch, thumbRect, ThumbColor());
+        DrawBorderClipped(spriteBatch, thumbRect, TrackBorderColor);
+    }
+
+    //depressed art only on an actual press; a disabled (non-scrollable) bar keeps the normal art so it doesn't read as
+    //permanently pushed in
+    private void DrawArrowButton(SpriteBatch spriteBatch, Rectangle button, ScrollZone zone)
+    {
+        var decrement = zone == ScrollZone.DecArrow;
+        var pressed = ActiveZone == zone;
+
+        var role = decrement
+            ? (pressed ? ThemeRoles.ScrollUpPressed : ThemeRoles.ScrollUp)
+            : (pressed ? ThemeRoles.ScrollDownPressed : ThemeRoles.ScrollDown);
+
+        if (TryDrawPart(spriteBatch, role, button, decrement ? ThemeRoles.ScrollUp : ThemeRoles.ScrollDown))
+            return;
+
+        if (!UseSprites)
+        {
+            var dir = IsHorizontal ? (decrement ? ArrowDir.Left : ArrowDir.Right) : (decrement ? ArrowDir.Up : ArrowDir.Down);
+
+            DrawArrow(spriteBatch, button, dir, ArrowColor(zone));
+
+            return;
         }
 
-        //arrow buttons — depressed frame only on an actual press; a disabled (non-scrollable) bar keeps the normal
-        //frame so it doesn't read as permanently pushed in
-        var decRect = MainRect(trackStart - ARROW_SIZE, ARROW_SIZE);
-        var incRect = MainRect(trackEnd, ARROW_SIZE);
-        var decPressed = ActiveZone == ScrollZone.DecArrow;
-        var incPressed = ActiveZone == ScrollZone.IncArrow;
-
-        var decFrame = IsHorizontal
-            ? (decPressed ? FRAME_LEFT_ACTIVE : FRAME_LEFT_NORMAL)
-            : (decPressed ? FRAME_UP_ACTIVE : FRAME_UP_NORMAL);
-        var incFrame = IsHorizontal
-            ? (incPressed ? FRAME_RIGHT_ACTIVE : FRAME_RIGHT_NORMAL)
-            : (incPressed ? FRAME_DOWN_ACTIVE : FRAME_DOWN_NORMAL);
-
-        DrawTexture(spriteBatch, GetFrame(decFrame), new Vector2(decRect.X, decRect.Y), Color.White);
-        DrawTexture(spriteBatch, GetFrame(incFrame), new Vector2(incRect.X, incRect.Y), Color.White);
-
-        //thumb — primitive proportional bar (a fixed grip sprite can't scale cleanly); shares the wood outline
-        if (Scrollable && (thumbSize > 0))
+        //legacy scroll.epf arrow over the primitive scaffold
+        var frame = (IsHorizontal, decrement) switch
         {
-            var thumbRect = MainRect(thumbOffset, thumbSize);
+            (true, true) => pressed ? FRAME_LEFT_ACTIVE : FRAME_LEFT_NORMAL,
+            (true, false) => pressed ? FRAME_RIGHT_ACTIVE : FRAME_RIGHT_NORMAL,
+            (false, true) => pressed ? FRAME_UP_ACTIVE : FRAME_UP_NORMAL,
+            (false, false) => pressed ? FRAME_DOWN_ACTIVE : FRAME_DOWN_NORMAL
+        };
 
-            DrawRectClipped(spriteBatch, thumbRect, ThumbColor());
-            DrawBorderClipped(spriteBatch, thumbRect, TrackBorderColor);
-        }
+        DrawTexture(spriteBatch, GetFrame(frame), new Vector2(button.X, button.Y), Color.White);
     }
 
     private static Texture2D GetFrame(int index) => UiRenderer.Instance!.GetEpfTexture(SCROLL_EPF, index);

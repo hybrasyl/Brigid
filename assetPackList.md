@@ -600,7 +600,12 @@ text), and the font `title` (the display face for the title text, in place of Un
 shipped face stays. The Story view (`StoryView`) reads each slide's `image` from `story.json` as a
 part name (`story.01` and so on; cover fit), and `background.story` behind its text and cutscene
 pages (else `background.mainmenu`). A slide with no part shows a placeholder frame with the part
-name. A button or tab state that is missing or does not decode uses the normal state.
+name. A themed vertical scroll bar (`ScrollBarControl`) reads `scrollbar.track` (normally sliced),
+`scrollbar.thumb` (drawn 2 px in from the track's long edges), `scrollbar.thumb.hover`,
+`scrollbar.thumb.pressed`, `scrollbar.up`, `scrollbar.up.pressed`, `scrollbar.down` and
+`scrollbar.down.pressed`; a piece the theme does not have keeps its legacy look, and a horizontal
+bar is not themed. A button, tab, thumb or arrow state that is missing or does not decode uses the
+normal state.
 
 **Drawn at native resolution.** `ThemeArt` composites a part with SkiaSharp at the native pixel
 size of its rectangle and draws it with the inverse of the UI pass scale, as `FontEngine` draws
