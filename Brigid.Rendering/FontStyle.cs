@@ -8,6 +8,8 @@ namespace Brigid.Rendering;
 ///     present; it composes with the other flags (e.g. bold code), subject to the same variant fallback. <see cref="Icon" />
 ///     redirects to the dedicated symbol face for UI glyphs (e.g. the ↺ reset glyph) the other faces lack, falling back to
 ///     the active face if that face is absent; it takes precedence over <see cref="Mono" /> when both are set.
+///     <see cref="Display" /> redirects to the display face for titles (Uncial Antiqua, or the font a <c>ui_theme</c> pack
+///     supplies); it is never one of the selectable faces, and it takes precedence over the other two redirects.
 /// </summary>
 [Flags]
 public enum FontStyle
@@ -17,5 +19,6 @@ public enum FontStyle
     Italic = 2,
     BoldItalic = Bold | Italic,
     Mono = 4,
-    Icon = 8
+    Icon = 8,
+    Display = 16
 }

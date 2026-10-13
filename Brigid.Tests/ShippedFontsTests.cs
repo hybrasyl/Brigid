@@ -41,6 +41,7 @@ public class ShippedFontsTests
     [InlineData("AnonymousPro-BoldItalic.ttf", "The quick brown fox")]
     [InlineData("IosevkaCharonMono-Regular.ttf", "The quick brown fox")]
     [InlineData("ComicShannsMono-Regular.ttf", "The quick brown fox")]
+    [InlineData("UncialAntiqua-Regular.ttf", "The quick brown fox")]
     [InlineData("NotoEmoji-Regular.ttf", "😀🎉👍🔥")]
     public void ShippedFont_LoadsAndMeasuresSample(string file, string sample)
     {
