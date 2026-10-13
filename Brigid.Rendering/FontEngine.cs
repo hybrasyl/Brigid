@@ -354,6 +354,9 @@ public sealed class FontEngine : ITextMeasurer
         NativeScaleY = scaleY;
     }
 
+    /// <summary>The virtual→native scale of the active draw pass. <see cref="ThemeArt" /> draws art at this scale.</summary>
+    internal (float X, float Y) NativeScale => (NativeScaleX, NativeScaleY);
+
     /// <summary>
     ///     Draws one line of text. <paramref name="clip" /> (when non-null) clips each glyph against the rectangle,
     ///     preserving the legacy per-glyph clipping used by scrolling labels and text-box selection.
