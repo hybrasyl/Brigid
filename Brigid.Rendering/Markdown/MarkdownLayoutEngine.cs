@@ -17,7 +17,7 @@ namespace Brigid.Rendering.Markdown;
 /// </summary>
 public static class MarkdownLayoutEngine
 {
-    /// <summary>Body text pixel size — matches the UI's standard render size.</summary>
+    /// <summary>The default body text pixel size — the UI's standard render size.</summary>
     public const int BODY_SIZE = FontEngine.RENDER_SIZE;
 
     private const int H1_SIZE = 26;
@@ -36,16 +36,18 @@ public static class MarkdownLayoutEngine
     /// <summary>
     ///     Parses and lays out <paramref name="markdown" /> at <paramref name="width" /> px. When
     ///     <paramref name="extractTitle" /> is set and the document opens with a level-1 heading, that heading is
-    ///     returned as <see cref="MarkdownLayout.Title" /> instead of being laid out.
+    ///     returned as <see cref="MarkdownLayout.Title" /> instead of being laid out. <paramref name="bodySize" /> is the
+    ///     pixel size of body text; headings scale with it.
     /// </summary>
     public static MarkdownLayout Layout(
         string markdown,
         int width,
         ITextMeasurer measurer,
-        bool extractTitle = false)
+        bool extractTitle = false,
+        int bodySize = BODY_SIZE)
     {
         markdown ??= string.Empty;
-        var builder = new Builder(Math.Max(1, width), measurer);
+        var builder = new Builder(Math.Max(1, width), measurer, Math.Max(1, bodySize));
         MarkdownDocument document;
 
         try
@@ -62,15 +64,6 @@ public static class MarkdownLayoutEngine
         return builder.Run(document, extractTitle);
     }
 
-    private static int GetHeadingSize(int level)
-        => level switch
-        {
-            1 => H1_SIZE,
-            2 => H2_SIZE,
-            3 => H3_SIZE,
-            _ => BODY_SIZE
-        };
-
     private enum TokenKind
     {
         Word,
@@ -80,7 +73,7 @@ public static class MarkdownLayoutEngine
 
     private readonly record struct Token(TokenKind Kind, string Text, FontStyle Style, bool IsCode);
 
-    private sealed class Builder(int width, ITextMeasurer measurer)
+    private sealed class Builder(int width, ITextMeasurer measurer, int bodySize)
     {
         private readonly List<Rectangle> CodeBackgrounds = [];
         private readonly Dictionary<char, int> MonoCharWidths = [];
@@ -88,7 +81,21 @@ public static class MarkdownLayoutEngine
         private readonly List<MarkdownSpan> Spans = [];
         private int Y;
 
-        private int BlockGap => measurer.GetLineHeight(BODY_SIZE) / 2;
+        private int BlockGap => measurer.GetLineHeight(bodySize) / 2;
+
+        //a heading keeps its ratio to the default body size, and is never smaller than the body
+        private int GetHeadingSize(int level)
+        {
+            var size = level switch
+            {
+                1 => H1_SIZE,
+                2 => H2_SIZE,
+                3 => H3_SIZE,
+                _ => BODY_SIZE
+            };
+
+            return Math.Max(bodySize, (int)Math.Round((double)size * bodySize / BODY_SIZE));
+        }
 
         public MarkdownLayout Run(MarkdownDocument document, bool extractTitle)
         {
@@ -121,7 +128,7 @@ public static class MarkdownLayoutEngine
                 AddWords(line, FontStyle.Regular, false, tokens);
             }
 
-            LayoutTokens(tokens, BODY_SIZE, MarkdownSpanKind.Body, 0);
+            LayoutTokens(tokens, bodySize, MarkdownSpanKind.Body, 0);
 
             return BuildResult(null);
         }
@@ -161,7 +168,7 @@ public static class MarkdownLayoutEngine
                     break;
 
                 case ParagraphBlock p:
-                    LayoutTokens(Tokenize(p, FontStyle.Regular), BODY_SIZE, MarkdownSpanKind.Body, indent);
+                    LayoutTokens(Tokenize(p, FontStyle.Regular), bodySize, MarkdownSpanKind.Body, indent);
 
                     break;
 
@@ -193,7 +200,7 @@ public static class MarkdownLayoutEngine
 
                 case LeafBlock leaf:
                     //unknown leaf (e.g. raw HTML block) — degrade to its raw lines as body text
-                    LayoutTokens(Tokenize(leaf, FontStyle.Regular), BODY_SIZE, MarkdownSpanKind.Body, indent);
+                    LayoutTokens(Tokenize(leaf, FontStyle.Regular), bodySize, MarkdownSpanKind.Body, indent);
 
                     break;
             }
@@ -216,12 +223,12 @@ public static class MarkdownLayoutEngine
                 first = false;
 
                 var marker = ordered ? $"{number}." : "•";
-                Spans.Add(new MarkdownSpan(marker, indent, Y, BODY_SIZE, FontStyle.Regular, MarkdownSpanKind.ListMarker));
+                Spans.Add(new MarkdownSpan(marker, indent, Y, bodySize, FontStyle.Regular, MarkdownSpanKind.ListMarker));
                 number++;
 
                 //content clears the measured marker — multi-digit ordered markers ('10.', '999.') exceed the
                 //fixed indent and would otherwise draw under the item's first words
-                var contentIndent = indent + Math.Max(LIST_INDENT, measurer.MeasureWidth(marker, BODY_SIZE) + MARKER_GAP);
+                var contentIndent = indent + Math.Max(LIST_INDENT, measurer.MeasureWidth(marker, bodySize) + MARKER_GAP);
 
                 //item content starts on the marker's line; nested blocks (incl. nested lists) indent further
                 var itemTop = Y;
@@ -231,7 +238,7 @@ public static class MarkdownLayoutEngine
                 //advance past the marker's own line: the next marker must not overlap it, and a trailing empty
                 //item's marker must stay inside ContentHeight
                 if (Y == itemTop)
-                    Y += measurer.GetLineHeight(BODY_SIZE);
+                    Y += measurer.GetLineHeight(bodySize);
             }
         }
 
@@ -242,7 +249,7 @@ public static class MarkdownLayoutEngine
 
             var textX = indent + CODE_PAD;
             var available = Math.Max(1, width - textX - CODE_PAD);
-            var lineHeight = measurer.GetLineHeight(BODY_SIZE, FontStyle.Mono);
+            var lineHeight = measurer.GetLineHeight(bodySize, FontStyle.Mono);
 
             for (var i = 0; i < code.Lines.Count; i++)
             {
@@ -262,7 +269,7 @@ public static class MarkdownLayoutEngine
                 while (pos < line.Length)
                 {
                     var fit = FitChars(line, pos, available);
-                    Spans.Add(new MarkdownSpan(line.Substring(pos, fit), textX, Y, BODY_SIZE, FontStyle.Mono, MarkdownSpanKind.Code));
+                    Spans.Add(new MarkdownSpan(line.Substring(pos, fit), textX, Y, bodySize, FontStyle.Mono, MarkdownSpanKind.Code));
                     Y += lineHeight;
                     pos += fit;
                 }
@@ -314,7 +321,7 @@ public static class MarkdownLayoutEngine
 
                 if (!MonoCharWidths.TryGetValue(c, out var width))
                 {
-                    width = measurer.MeasureWidth(text.Substring(index, 1), BODY_SIZE, FontStyle.Mono);
+                    width = measurer.MeasureWidth(text.Substring(index, 1), bodySize, FontStyle.Mono);
                     MonoCharWidths[c] = width;
                 }
 
@@ -322,7 +329,7 @@ public static class MarkdownLayoutEngine
             }
 
             //surrogate pair — rare enough that an uncached measure is fine
-            return measurer.MeasureWidth(text.Substring(index, length), BODY_SIZE, FontStyle.Mono);
+            return measurer.MeasureWidth(text.Substring(index, length), bodySize, FontStyle.Mono);
         }
 
         /// <summary>
