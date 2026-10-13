@@ -56,31 +56,39 @@ public sealed class ServerGreetingControl : CenteredModalPanel
         CancelButton = AddBottomBarButton("Cancel", ACTION_W, Decline, "cancel");
         OkButton = AddBottomBarButton("OK", ACTION_W, Accept, "ok");
 
-        var content = ContentBounds;
-
-        BodyScroll = new ScrollView
-        {
-            Name = "body",
-            X = content.X,
-            Y = content.Y + PADDING,
-            Width = content.Width,
-            Height = content.Height - 2 * PADDING
-        };
+        BodyScroll = new ScrollView { Name = "body" };
 
         Body = new UILabel
         {
             Name = "text",
             X = 0,
             Y = 0,
-            Width = BodyScroll.ContentWidth - PADDING,
-            Height = BodyScroll.Height,
             WordWrap = true,
             IsHitTestVisible = false
         };
 
         BodyScroll.AddChild(Body);
         AddChild(BodyScroll);
+        LayoutContent();
         BodyScroll.SetSource(new LabelScrollSource(Body));
+    }
+
+    //the text fills the content area; a themed frame makes the area smaller
+    protected override void LayoutContent()
+    {
+        var content = ContentBounds;
+
+        BodyScroll.X = content.X;
+        BodyScroll.Y = content.Y + PADDING;
+        BodyScroll.Width = content.Width;
+        BodyScroll.Height = content.Height - 2 * PADDING;
+
+        Body.Width = BodyScroll.ContentWidth - PADDING;
+        Body.Height = BodyScroll.Height;
+
+        //a new width wraps the text again, and the scroll range follows
+        Body.Text = Body.Text;
+        BodyScroll.Sync();
     }
 
     /// <summary>Shows the greeting with the notice text, scrolled to the top.</summary>

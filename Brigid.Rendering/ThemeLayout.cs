@@ -33,6 +33,10 @@ internal static class ThemeLayout
     ///     Scales a nine-slice inset from art pixels to output pixels and rounds it to whole pixels, so that the seams
     ///     between pieces fall on pixel edges.
     /// </summary>
+    /// <summary>The widest inset of a nine-slice in logical pixels: the widest art inset divided by the density, rounded up.</summary>
+    public static int SliceBorder(SKRectI slice, float density)
+        => (int)Math.Ceiling(Math.Max(Math.Max(slice.Left, slice.Top), Math.Max(slice.Right, slice.Bottom)) / density);
+
     public static SKRectI ScaleInsets(SKRectI insets, float scaleX, float scaleY)
         => new(
             (int)MathF.Round(insets.Left * scaleX),

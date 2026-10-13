@@ -47,14 +47,26 @@ public abstract class CenteredModalPanel : FramePanel
     //the viewport the panel centers within; defaults to the full virtual screen until SetViewportBounds runs.
     private Rectangle Viewport = new(0, 0, ChaosGame.VIRTUAL_WIDTH, ChaosGame.VIRTUAL_HEIGHT);
 
+    //the inset the title, the dividers and the bottom bar were last placed for; the constructor places them flat
+    private int LaidOutInset = PADDING;
+
+    /// <summary>
+    ///     The distance from the panel edge to the content: <see cref="PADDING" />, or more inside a themed frame whose border
+    ///     art is wider. The title band and the bottom bar move in by the same extra amount.
+    /// </summary>
+    protected int Inset => InsetFor(PADDING);
+
+    //how far the title band and the bottom bar sit from the top and bottom edges: 0 for the flat frame
+    private int ChromeOffset => Inset - PADDING;
+
     /// <summary>Top of the content area (below the title band and its divider).</summary>
-    protected int ContentTop => TITLE_H + 1;
+    protected int ContentTop => ChromeOffset + TITLE_H + 1;
 
     /// <summary>Top of the bottom action bar.</summary>
-    protected int BottomBarTop => Height - BOTTOM_H;
+    protected int BottomBarTop => Height - ChromeOffset - BOTTOM_H;
 
     /// <summary>The content region between the title band and the bottom bar, in panel-local coordinates.</summary>
-    protected Rectangle ContentBounds => new(PADDING, ContentTop, Width - 2 * PADDING, BottomBarTop - ContentTop);
+    protected Rectangle ContentBounds => new(Inset, ContentTop, Width - 2 * Inset, BottomBarTop - ContentTop);
 
     /// <summary>The Close button. Hang teardown off <see cref="OnClose" /> (not this) so Escape is covered too.</summary>
     protected TextButton CloseButton { get; }
@@ -129,7 +141,9 @@ public abstract class CenteredModalPanel : FramePanel
     /// </summary>
     protected void RelayoutBottomBar()
     {
-        var right = Width - PADDING;
+        //the bar shares the bottom row with the frame's corner art, which is wider than its edge, so it moves in by the
+        //same extra amount as the title band moves down (nothing for the flat frame)
+        var right = Width - Inset - ChromeOffset;
 
         foreach (var button in BottomBarButtons)
         {
@@ -156,12 +170,46 @@ public abstract class CenteredModalPanel : FramePanel
         Y = Viewport.Y + (Viewport.Height - Height) / 2;
     }
 
+    /// <summary>
+    ///     Places the title, the bottom bar and the content again when <see cref="Inset" /> changed: a panel becomes themed
+    ///     when it is added under a themed parent, after its constructor laid it out flat.
+    /// </summary>
+    private void EnsureFrameLayout()
+    {
+        if (Inset == LaidOutInset)
+            return;
+
+        LaidOutInset = Inset;
+        TitleLabel.Y = ChromeOffset + (TITLE_H - TextRenderer.CHAR_HEIGHT) / 2;
+
+        foreach (var button in BottomBarButtons)
+            button.Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2;
+
+        RelayoutBottomBar();
+        LayoutContent();
+    }
+
+    /// <summary>
+    ///     Called when <see cref="ContentBounds" /> changed after the constructor, because the frame border changed. A
+    ///     subclass whose content is placed from <see cref="ContentBounds" /> places it again here.
+    /// </summary>
+    protected virtual void LayoutContent() { }
+
+    public override void Update(GameTime gameTime)
+    {
+        if (Visible)
+            EnsureFrameLayout();
+
+        base.Update(gameTime);
+    }
+
     /// <summary>Pushes the panel onto the control stack and reveals it. Idempotent.</summary>
     public virtual void Show()
     {
         if (Visible)
             return;
 
+        EnsureFrameLayout();
         CenterInViewport();
         InputDispatcher.Instance?.PushControl(this);
         Visible = true;
@@ -189,14 +237,14 @@ public abstract class CenteredModalPanel : FramePanel
 
         //dividers framing the title band and the bottom action bar (drawn over the fill, inset by PADDING like
         //the sibling modals).
-        DrawDivider(spriteBatch, TITLE_H);
+        DrawDivider(spriteBatch, ChromeOffset + TITLE_H);
         DrawDivider(spriteBatch, BottomBarTop);
     }
 
     private void DrawDivider(SpriteBatch spriteBatch, int localY)
         => DrawRectClipped(
             spriteBatch,
-            new Rectangle(ScreenX + PADDING, ScreenY + localY, Width - 2 * PADDING, 1),
+            new Rectangle(ScreenX + Inset, ScreenY + localY, Width - 2 * Inset, 1),
             ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
 
     public override void OnKeyDown(KeyDownEvent e)

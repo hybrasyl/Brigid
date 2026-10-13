@@ -368,6 +368,17 @@ public abstract class UIElement : IDisposable
     protected bool HasThemePart(string role) => IsThemed && ThemeArt.HasPart(role);
 
     /// <summary>
+    ///     Gets the logical width of the border art of a sliced theme part, when the element is themed and the theme slices
+    ///     that part. A framed control lays its content inside it.
+    /// </summary>
+    protected bool TryGetThemeBorder(string role, out int border)
+    {
+        border = 0;
+
+        return IsThemed && ThemeArt.TryGetSliceBorder(role, out border);
+    }
+
+    /// <summary>
     ///     The theme colour for <paramref name="role" /> when the element is themed and the theme has it; otherwise
     ///     <paramref name="fallback" />.
     /// </summary>

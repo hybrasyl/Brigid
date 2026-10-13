@@ -295,4 +295,25 @@ public class ThemeLayoutTests
 
         return SKImage.FromBitmap(bitmap);
     }
+
+    [Theory]
+    //the icy-steel frame: a 44 art px slice at density 4
+    [InlineData(44, 44, 44, 44, 4f, 11)]
+    //the widest side counts, and a part pixel rounds up
+    [InlineData(10, 24, 10, 24, 4f, 6)]
+    [InlineData(9, 9, 9, 9, 4f, 3)]
+    [InlineData(0, 0, 0, 0, 2f, 0)]
+    public void ASliceBorderIsItsWidestInsetInLogicalPixels(int left, int top, int right, int bottom, float density, int expected)
+        => Assert.Equal(expected, ThemeLayout.SliceBorder(new SKRectI(left, top, right, bottom), density));
+
+    [Theory]
+    //the flat 1 px frame keeps the panel's own padding
+    [InlineData(6, 1, 6)]
+    [InlineData(8, 1, 8)]
+    //the icy-steel border is 11 px, so the content sits 14 px in
+    [InlineData(6, 11, 14)]
+    [InlineData(10, 11, 14)]
+    [InlineData(20, 11, 20)]
+    public void ContentKeepsClearOfAWideFrameBorder(int padding, int border, int expected)
+        => Assert.Equal(expected, Controls.Generic.FramePanel.ComputeInset(padding, border));
 }

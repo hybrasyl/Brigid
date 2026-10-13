@@ -48,6 +48,25 @@ public static class ThemeArt
         return true;
     }
 
+    /// <summary>
+    ///     Gets the widest nine-slice inset of a part in logical pixels: the art inset divided by the theme density, rounded
+    ///     up. A frame's border art is that wide, so content inside the frame keeps clear of it. False for a part with no
+    ///     slice, or with no theme.
+    /// </summary>
+    public static bool TryGetSliceBorder(string role, out int border)
+    {
+        border = 0;
+
+        if (AssetPackRegistry.GetUiThemePack()?.Theme is not { } theme
+            || !theme.Parts.TryGetValue(role, out var part)
+            || part.Slice is not { } slice)
+            return false;
+
+        border = ThemeLayout.SliceBorder(slice, theme.Density);
+
+        return true;
+    }
+
     /// <summary>True when the installed theme lists a part for <paramref name="role" />.</summary>
     public static bool HasPart(string role) => AssetPackRegistry.GetUiThemePack()?.Theme.Parts.ContainsKey(role) == true;
 

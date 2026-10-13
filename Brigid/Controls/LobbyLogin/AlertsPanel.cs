@@ -41,8 +41,6 @@ public sealed class AlertsPanel : FramePanel
     //smaller than the reading size of MarkdownView: the panel is small and sits beside the menu
     private const int TEXT_SIZE = 10;
 
-    //the space that the body does not use: the tab row above it and the action row below it
-    private const int CHROME_HEIGHT = BODY_TOP + PADDING / 2 + ACTION_HEIGHT + PADDING;
 
     private static readonly MenuAlertAction DefaultAction = new("Dismiss");
 
@@ -59,6 +57,9 @@ public sealed class AlertsPanel : FramePanel
 
     //the index of the first tab in the row
     private int WindowStart;
+
+    //the edge the body and the action row were last placed for
+    private int LaidOutEdge = -1;
 
     /// <summary>The alerts, in the order they were added.</summary>
     public IReadOnlyList<MenuAlert> Alerts => Items;
@@ -117,7 +118,7 @@ public sealed class AlertsPanel : FramePanel
             X = PADDING,
             Y = BODY_TOP,
             Width = Width - 2 * PADDING,
-            Height = MIN_HEIGHT - CHROME_HEIGHT,
+            Height = MIN_HEIGHT - BODY_TOP - PADDING / 2 - ACTION_HEIGHT - PADDING,
             HeadingColor = DialogPalette.Title,
             TextSize = TEXT_SIZE,
             IsHitTestVisible = false
@@ -225,6 +226,27 @@ public sealed class AlertsPanel : FramePanel
 
     private int MaxScroll => Math.Max(0, Body.ContentHeight - Body.Height);
 
+    //the distance from the panel edge to the body and the action row: more inside a themed frame whose border is wider
+    private int Edge => InsetFor(PADDING);
+
+    //the space that the body does not use: the tab row above it and the action row below it
+    private int ChromeHeight => BODY_TOP + PADDING / 2 + ACTION_HEIGHT + Edge;
+
+    //a panel becomes themed when it is added to the menu, after its constructor, so the edge is checked on each change
+    private bool ApplyEdge()
+    {
+        if (Edge == LaidOutEdge)
+            return false;
+
+        LaidOutEdge = Edge;
+        Body.X = Edge;
+        Body.Width = Width - 2 * Edge;
+        Actions.X = Edge;
+        Actions.Width = Width - 2 * Edge;
+
+        return true;
+    }
+
     private void Refresh()
     {
         Visible = (Items.Count > 0) && !Covered;
@@ -243,6 +265,7 @@ public sealed class AlertsPanel : FramePanel
         RefreshTabs(capacity);
 
         var selected = SelectedIndex >= 0 ? Items[SelectedIndex] : null;
+        var edgeChanged = ApplyEdge();
 
         if (!ReferenceEquals(selected, ActionsFor))
         {
@@ -250,6 +273,10 @@ public sealed class AlertsPanel : FramePanel
             RebuildActions(selected);
             Body.ScrollY = 0;
             Body.SetMarkdown(selected?.Body);
+        } else if (edgeChanged)
+        {
+            RebuildActions(selected);
+            Body.EnsureLayout();
         }
     }
 
@@ -316,9 +343,9 @@ public sealed class AlertsPanel : FramePanel
     //each new layout of the body sets the panel height, so a long alert is not cut off
     private void FitToBody()
     {
-        Height = Math.Clamp(Body.ContentHeight + CHROME_HEIGHT, MIN_HEIGHT, MAX_HEIGHT);
-        Body.Height = Height - CHROME_HEIGHT;
-        Actions.Y = Height - PADDING - ACTION_HEIGHT;
+        Height = Math.Clamp(Body.ContentHeight + ChromeHeight, MIN_HEIGHT, MAX_HEIGHT);
+        Body.Height = Height - ChromeHeight;
+        Actions.Y = Height - Edge - ACTION_HEIGHT;
         Y = Bottom - Height;
         Body.ScrollY = Math.Min(Body.ScrollY, MaxScroll);
     }

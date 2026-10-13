@@ -220,7 +220,11 @@ public sealed class StoryView : UIPanel
         else
             TextFrame.Width = Width - 2 * MARGIN;
 
-        Text.Width = TextFrame.Width - 2 * FRAME_PADDING;
+        var inset = TextFrame.InsetFor(FRAME_PADDING);
+
+        Text.X = inset;
+        Text.Y = inset;
+        Text.Width = TextFrame.Width - 2 * inset;
         Text.SetMarkdown(page.Text);
 
         RefreshPlaceholder();
@@ -240,11 +244,11 @@ public sealed class StoryView : UIPanel
         } else
         {
             TextFrame.X = MARGIN;
-            TextFrame.Height = Math.Clamp(Text.ContentHeight + 2 * FRAME_PADDING, CAPTION_MIN_HEIGHT, CAPTION_MAX_HEIGHT);
+            TextFrame.Height = Math.Clamp(Text.ContentHeight + 2 * Text.Y, CAPTION_MIN_HEIGHT, CAPTION_MAX_HEIGHT);
             TextFrame.Y = NavTop - NAV_BOTTOM - TextFrame.Height;
         }
 
-        Text.Height = TextFrame.Height - 2 * FRAME_PADDING;
+        Text.Height = TextFrame.Height - 2 * Text.Y;
 
         //the frame clips text that does not fit; the log tells the author to shorten the page
         if (Text.ContentHeight > Text.Height)
