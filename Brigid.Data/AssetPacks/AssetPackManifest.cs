@@ -1,4 +1,5 @@
 #region
+using System.Text.Json;
 using System.Text.Json.Serialization;
 #endregion
 
@@ -33,7 +34,7 @@ public sealed class AssetPackManifest
     /// <summary>
     ///     Enum discriminator selecting which typed pack accessor this pack registers with. The registry's
     ///     <c>Factories</c> dictionary lists every recognized value; manifests declaring an unknown content type are
-    ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>nation_badges</c>,
+    ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>ambient_sounds</c>, <c>nation_badges</c>,
     ///     <c>item_icons</c>, <c>npc_portraits</c>, <c>static_tiles</c>, <c>legend_mark_icons</c>,
     ///     <c>ui_sprite_overrides</c>, <c>creature_sprites</c>, <c>music</c>, <c>sound_effects</c>, <c>world_maps</c>.
     ///     Future content types land as additions to that dictionary.
@@ -88,4 +89,12 @@ public sealed class AssetPackCoverageEntry
     /// </summary>
     [JsonPropertyName("portraits")]
     public Dictionary<string, string>? Portraits { get; init; }
+
+    /// <summary>
+    ///     The members that this class does not name. For <c>ambient_sounds</c>, each member name is an ambient id and
+    ///     its value is the entry for that id (for example <c>"1": { "loop": false }</c>). Other content types do not
+    ///     read these members.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, JsonElement>? OtherMembers { get; init; }
 }

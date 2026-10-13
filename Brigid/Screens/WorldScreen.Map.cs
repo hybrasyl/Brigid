@@ -92,14 +92,14 @@ public sealed partial class WorldScreen
         UpdateHuds(HudOps.ShowPersistentMessage, string.Empty);
     }
 
-    //rain maps get a looping ambient bed; any other weather nibble stops it. StartAmbientLoop's same-id
-    //no-op keeps rain-to-rain transitions seamless, and the id only resolves from a .datf sfx pack
+    //a rain map gets the rain bed; any other weather nibble stops it. StartAmbient does nothing for the id that
+    //is already the bed, so a rain-to-rain change has no gap. the id resolves only from an ambient_sounds pack
     private void UpdateWeatherAmbience()
     {
         if (WeatherRenderer.IsRain(CurrentMapFlags))
-            Game.SoundSystem.StartAmbientLoop(RAIN_AMBIENT_SOUND_ID);
+            Game.SoundSystem.StartAmbient(RAIN_AMBIENT_ID);
         else
-            Game.SoundSystem.StopAmbientLoop();
+            Game.SoundSystem.StopAmbient();
     }
 
     private void ClearTransientState()

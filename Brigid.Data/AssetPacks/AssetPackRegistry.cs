@@ -46,6 +46,7 @@ public static class AssetPackRegistry
         ["creature_sprites"]    = static (a, m) => new CreaturePack(a, m),
         ["music"]               = static (a, m) => new MusicPack(a, m),
         ["sound_effects"]       = static (a, m) => new SfxPack(a, m),
+        ["ambient_sounds"]      = static (a, m) => new AmbientPack(a, m),
         ["world_maps"]          = static (a, m) => new WorldMapPack(a, m),
         ["town_maps"]           = static (a, m) => new TownMapPack(a, m)
     };
@@ -237,6 +238,12 @@ public static class AssetPackRegistry
     ///     is present.
     /// </summary>
     public static SfxPack? GetSfxPack() => Packs.GetValueOrDefault("sound_effects") as SfxPack;
+
+    /// <summary>
+    ///     Returns the currently-registered ambient-sound pack, or null if no pack of
+    ///     <c>content_type: ambient_sounds</c> is present.
+    /// </summary>
+    public static AmbientPack? GetAmbientPack() => Packs.GetValueOrDefault("ambient_sounds") as AmbientPack;
 
     /// <summary>
     ///     Returns the currently-registered world-map pack, or null if no pack of <c>content_type: world_maps</c> is

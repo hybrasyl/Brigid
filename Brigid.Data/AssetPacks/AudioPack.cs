@@ -6,7 +6,7 @@ using System.IO.Compression;
 namespace Brigid.Data.AssetPacks;
 
 /// <summary>
-///     Common base for audio <c>.datf</c> packs (music, sound effects). Entries live at the archive root named
+///     Common base for audio <c>.datf</c> packs (music, sound effects, ambient sounds). Entries live at the archive root named
 ///     <c>{prefix}_{id}.{ext}</c>, where <c>{id}</c> is the integer audio id the server references (the value carried
 ///     in <c>SoundArgs.Sound</c>) and <c>{ext}</c> is any of the pack type's allowed audio extensions. Because the
 ///     extension varies per entry, the lookup cannot be a direct name probe; at construction the pack scans entry
