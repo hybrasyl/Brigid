@@ -17,7 +17,7 @@ The client requires a Dark Ages game-data directory (the folder containing `*.da
 
 Release packaging lives in `Build/`: `fixup-sdl-runtimes.sh`, `macos/`, and `linux/package-linux.sh`, which builds the `.deb` (declares the bundled SDL2_mixer's six codec libraries by soname) and the AppImage (bundles them beside the mixer with `$ORIGIN` runpaths, so it needs the ubuntu-24.04 runner's glibc 2.39 or newer). The Linux tarball does neither and relies on the system's codecs.
 
-Tests live in `Brigid.Tests` (xunit): `dotnet test Brigid.slnx`. Coverage is currently a handful of targeted regression/smoke tests, not a full suite. Tests that change static state (`WorldState`, `DataDiagnostics.Log`, `FontEngine`, `DebugOverlay`, textbox focus) share a named collection with `DisableParallelization = true`.
+Tests live in `Brigid.Tests` (xunit): `dotnet test Brigid.slnx`. Coverage is currently a handful of targeted regression/smoke tests, not a full suite. Tests that change static state (`WorldState`, `DataDiagnostics.Log`, `FontEngine`, `DebugOverlay`, textbox focus) share a named collection with `DisableParallelization = true`. The test assembly replaces the SDL backend of `Utilities/Clipboard` with the in-memory `TestClipboard`.
 
 ## Solution Structure
 
@@ -50,32 +50,22 @@ DALib (Dark Ages file format + networking support) comes from the pinned NuGet p
 | `../lodunity/`      | Decompile of the Unity LOD client.                                    |
 | `../Chaos-Server/`  | Chaos-Server source (Sichii). Protocol reference for compat work.     |
 
-The **docs repo** is a private sibling checkout holding the Dark Ages protocol/format reference, the
-per-project design plans, and the issue tracker. It is referred to by that name throughout this file.
+The **docs repo** is a private sibling checkout holding the Dark Ages protocol/format reference, the per-project design plans, and the issue tracker. It is referred to by that name throughout this file.
 
 ## Issue Tracker
 
-Issues are **not** in Jira. The tracker is git-backed — files are the database — and it lives in the
-docs repo under `tracker/`:
+Issues are **not** in Jira. The tracker is git-backed — files are the database — and it lives in the docs repo under `tracker/`:
 
 ```text
 tracker/config.yaml                        # projects, statuses, issue types, fields, people
 tracker/issues/<PREFIX>/<PREFIX>-<n>.md    # one file per issue, sharded by project prefix
 ```
 
-`BRIG` is this repo's prefix, so `BRIG-64` is `tracker/issues/BRIG/BRIG-64.md`. Each issue is
-markdown with YAML frontmatter, and grep over that frontmatter is the intended query interface
-(`grep -rl "^status: in-progress" tracker/issues/BRIG`). An empty result usually means the wrong
-prefix, not a missing issue. `tracker/config.yaml` is authoritative for the status and type
-vocabularies — read it rather than trusting any summary.
+`BRIG` is this repo's prefix, so `BRIG-64` is `tracker/issues/BRIG/BRIG-64.md`. Each issue is markdown with YAML frontmatter, and grep over that frontmatter is the intended query interface (`grep -rl "^status: in-progress" tracker/issues/BRIG`). An empty result usually means the wrong prefix, not a missing issue. `tracker/config.yaml` is authoritative for the status and type vocabularies — read it rather than trusting any summary.
 
-Design docs for a card live in the docs repo at `docs/plans/brigid/BRIG-<id>-<slug>.md` and are
-linked from the card's `docs:` frontmatter plus a `HasDesignDoc` label; see that directory's
-`README.md` before adding one.
+Design docs for a card live in the docs repo at `docs/plans/brigid/BRIG-<id>-<slug>.md` and are linked from the card's `docs:` frontmatter plus a `HasDesignDoc` label; see that directory's `README.md` before adding one.
 
-**Read-only by default** — read the tracker freely for context, mutate only when asked. Never
-hand-allocate an issue ID; the tracker has a tool for it, because the obvious `ls | sort | tail`
-recipe has produced duplicate IDs in practice.
+**Read-only by default** — read the tracker freely for context, mutate only when asked. Never hand-allocate an issue ID; the tracker has a tool for it, because the obvious `ls | sort | tail` recipe has produced duplicate IDs in practice.
 
 ## Key Dependencies
 
@@ -168,7 +158,7 @@ Brigid/
 ├── GlobalSettings.cs         — Static config (ClientVersion, DataPath, LobbyHost/Port)
 ├── InputBuffer.cs            — Event-driven input capture and buffering
 ├── InputDispatcher.cs        — UI event dispatch: hit-test, bubble, drag, click synthesis, control stack
-├── Sdl.cs                    — Centralized SDL2 P/Invoke declarations (keyboard, text, mouse button, mouse wheel event constants consumed by InputBuffer; audio subsystem init/quit, SDL_GetError, SDL_RWFromConstMem consumed by SoundSystem; SDL_GetClipboardText/SDL_SetClipboardText/SDL_free consumed by Utilities/Clipboard)
+├── Sdl.cs                    — Centralized SDL2 P/Invoke declarations (keyboard, text, mouse button, mouse wheel event constants consumed by InputBuffer; audio subsystem init/quit, SDL_GetError, SDL_RWFromConstMem consumed by SoundSystem; SDL_GetClipboardText/SDL_SetClipboardText/SDL_free/SDL_ClearError consumed by Utilities/Clipboard; SDL_RaiseWindow consumed by ChaosGame.RaiseWindow)
 ├── SdlMixer.cs               — SDL2_mixer P/Invoke wrapper (Mix_* functions and constants, consumed by SoundSystem)
 ├── Collections/              — WorldState, CircularBuffer
 ├── Models/                   — WorldEntity, Animation, EntityRemovalAnimation, WorldFrameState, SlotDragPayload, PathfindingState, etc.
