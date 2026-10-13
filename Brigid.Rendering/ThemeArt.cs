@@ -48,6 +48,9 @@ public static class ThemeArt
         return true;
     }
 
+    /// <summary>True when the installed theme lists a part for <paramref name="role" />.</summary>
+    public static bool HasPart(string role) => AssetPackRegistry.GetUiThemePack()?.Theme.Parts.ContainsKey(role) == true;
+
     /// <summary>
     ///     Draws the part for <paramref name="role" /> into a logical rectangle, clipped to <paramref name="clip" />. When
     ///     the theme has no usable part for the role, it draws <paramref name="fallbackRole" /> instead (for example

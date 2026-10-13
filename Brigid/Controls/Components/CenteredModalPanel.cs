@@ -25,7 +25,7 @@ namespace Brigid.Controls.Components;
 ///         <see cref="OnMouseScroll" /> to route the wheel to a scroll model.
 ///     </para>
 /// </summary>
-public abstract class CenteredModalPanel : UIPanel
+public abstract class CenteredModalPanel : FramePanel
 {
     protected const int PADDING = 6;
 
@@ -68,8 +68,6 @@ public abstract class CenteredModalPanel : UIPanel
         UsesControlStack = true;
         Width = width;
         Height = height;
-        BackgroundColor = DialogPalette.FrameFill;
-        BorderColor = DialogPalette.FrameBorder;
         CenterInViewport();
 
         TitleLabel = new UILabel
@@ -187,15 +185,6 @@ public abstract class CenteredModalPanel : UIPanel
         //the sibling modals).
         DrawDivider(spriteBatch, TITLE_H);
         DrawDivider(spriteBatch, BottomBarTop);
-    }
-
-    //the frame.panel art in place of the flat fill and border; the title and bottom-bar buttons inherit the theme
-    protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
-    {
-        if (TryDrawThemePart(spriteBatch, ThemeRoles.FramePanel, bounds))
-            return;
-
-        base.DrawChrome(spriteBatch, bounds);
     }
 
     private void DrawDivider(SpriteBatch spriteBatch, int localY)
