@@ -24,8 +24,9 @@ namespace Brigid.Data.AssetPacks;
 ///     decodes the image and asks the next pack when the decode fails. For a key with several values that must come
 ///     from one pack (a creature: its frames, its pair count and its bounding box), the first pack that covers the
 ///     key owns it (<see cref="GetCreaturePackFor" />), and an entry of that pack that does not decode shows the
-///     placeholder. When only the caller can tell whether an entry works (audio, which SDL decodes), the caller goes
-///     through the ordered <c>…Packs</c> sequence itself.
+///     placeholder. When only the caller can tell whether an entry works, or must keep a second decision with the pack
+///     that answered, the caller goes through the ordered <c>…Packs</c> sequence itself: audio, which SDL decodes, and
+///     items, whose dye the pack that gives the image decides (<c>ItemIconSource</c>).
 ///     </para>
 ///     <para>
 ///     Adding a new pack type is one factory entry in <see cref="Factories" /> plus its typed accessors.
@@ -273,22 +274,6 @@ public static class AssetPackRegistry
     /// <summary>The first <c>town_maps</c> pack that decodes the town map. The caller owns the image.</summary>
     public static bool TryGetTownMapImage(short mapId, out SKImage? image)
         => TryFirstImage("town_maps", mapId, static (TownMapPack pack, short key, out SKImage? img) => pack.TryGetTownMapImage(key, out img), out image);
-
-    /// <summary>
-    ///     The first <c>item_icons</c> pack that has an entry for <paramref name="spriteId" />, or null. Use it when the
-    ///     caller asks the same pack more than one question about one item (the entry, then the dye).
-    /// </summary>
-    public static ItemPack? GetItemPackFor(int spriteId)
-    {
-        if (!Packs.TryGetValue("item_icons", out var list))
-            return null;
-
-        foreach (var pack in list)
-            if (pack is ItemPack items && items.HasItem(spriteId))
-                return items;
-
-        return null;
-    }
 
     /// <summary>
     ///     The first <c>creature_sprites</c> pack that covers <paramref name="spriteId" />, or null. That pack owns the

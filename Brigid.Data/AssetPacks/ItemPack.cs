@@ -27,7 +27,7 @@ public sealed class ItemPack : AssetPack
 
     /// <summary>
     ///     Returns true if this pack contains a PNG entry for the given <paramref name="spriteId" />. Cheap (dictionary
-    ///     lookup, no decode); intended for the renderer's pre-decode cache-key normalization path.
+    ///     lookup, no decode); the item resolver asks it before it decodes.
     /// </summary>
     public bool HasItem(int spriteId)
     {

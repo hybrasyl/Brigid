@@ -235,6 +235,7 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
             }
 
             visual.Image.Texture = visual.PlaceholderTexture;
+            visual.Image.TextureOffset = Vector2.Zero;
         }
     }
 
@@ -253,6 +254,7 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
         }
 
         visual.Image.Texture = visual.PlaceholderTexture;
+        visual.Image.TextureOffset = Vector2.Zero;
     }
 
     /// <summary>
@@ -399,9 +401,10 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
 
         visual.ItemName = itemName ?? string.Empty;
 
-        var texture = UiRenderer.Instance!.GetItemIcon(sprite, color);
-        visual.ItemTexture = texture;
-        visual.Image.Texture = texture;
+        var icon = UiRenderer.Instance!.GetItemIcon(sprite, color);
+        visual.ItemTexture = icon.Texture;
+        visual.Image.Texture = icon.Texture;
+        visual.Image.TextureOffset = icon.Offset;
     }
 
     /// <summary>

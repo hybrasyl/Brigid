@@ -159,17 +159,6 @@ public sealed class AssetPackRegistryTests : IDisposable
     }
 
     [Fact]
-    public void GetItemPackFor_GivesTheFirstPackThatHasTheItem()
-    {
-        Register("item_icons", "low", new() { ["item00001.png"] = Png(First) });
-        Register("item_icons", "modern", new() { ["item20001.png"] = Png(Second), ["item00001.png"] = Png(Second) });
-
-        Assert.Equal("low", AssetPackRegistry.GetItemPackFor(1)?.Manifest.PackId);
-        Assert.Equal("modern", AssetPackRegistry.GetItemPackFor(20001)?.Manifest.PackId);
-        Assert.Null(AssetPackRegistry.GetItemPackFor(21001));
-    }
-
-    [Fact]
     public void GetCreaturePackFor_GivesTheFirstPackThatCoversTheSprite()
     {
         Register("creature_sprites", "a", new() { ["creature_sprites/creature_00007/stand/n_001.png"] = Png(First) });

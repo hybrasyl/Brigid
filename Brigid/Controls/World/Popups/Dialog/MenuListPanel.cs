@@ -114,7 +114,7 @@ public sealed class MenuListPanel : FramedDialogPanelBase
         AddChild(ScrollBar);
     }
 
-    private void AddEntry(string name, byte slot, Texture2D? icon)
+    private void AddEntry(string name, byte slot, IconTexture? icon)
     {
         var displayName = TextRenderer.Truncate(name, 23);
 
@@ -242,7 +242,7 @@ public sealed class MenuListPanel : FramedDialogPanelBase
             if (!slotData.IsOccupied)
                 continue;
 
-            var icon = renderer.GetSkillIcon(slotData.Sprite).Texture;
+            var icon = renderer.GetSkillIcon(slotData.Sprite);
             AddEntry(slotData.Name ?? string.Empty, slot, icon);
         }
     }
@@ -258,7 +258,7 @@ public sealed class MenuListPanel : FramedDialogPanelBase
             if (!slotData.IsOccupied)
                 continue;
 
-            var icon = renderer.GetSpellIcon(slotData.Sprite).Texture;
+            var icon = renderer.GetSpellIcon(slotData.Sprite);
             AddEntry(slotData.Name ?? string.Empty, slot, icon);
         }
     }
@@ -273,7 +273,7 @@ public sealed class MenuListPanel : FramedDialogPanelBase
 
         foreach (var skill in menu.Skills)
         {
-            var icon = renderer.GetSkillIcon(skill.Icon).Texture;
+            var icon = renderer.GetSkillIcon(skill.Icon);
             AddEntry(skill.Name, index++, icon);
         }
     }
@@ -288,7 +288,7 @@ public sealed class MenuListPanel : FramedDialogPanelBase
 
         foreach (var spell in menu.Spells)
         {
-            var icon = renderer.GetSpellIcon(spell.Icon).Texture;
+            var icon = renderer.GetSpellIcon(spell.Icon);
             AddEntry(spell.Name, index++, icon);
         }
     }
@@ -470,10 +470,11 @@ public sealed class MenuListPanel : FramedDialogPanelBase
             NameLabel.Text = string.Empty;
         }
 
-        public void SetEntry(int entryIndex, Texture2D? icon, string name, bool selected)
+        public void SetEntry(int entryIndex, IconTexture? icon, string name, bool selected)
         {
             EntryIndex = entryIndex;
-            IconImage.Texture = icon;
+            IconImage.Texture = icon?.Texture;
+            IconImage.TextureOffset = icon?.Offset ?? Vector2.Zero;
             IconImage.Visible = icon is not null;
             NameLabel.Text = name;
             NameLabel.ForegroundColor = selected ? SELECTED_TEXT_COLOR : LegendColors.White;
@@ -504,5 +505,5 @@ public sealed class MenuListPanel : FramedDialogPanelBase
         string OriginalName,
         string DisplayName,
         byte Slot,
-        Texture2D? Icon);
+        IconTexture? Icon);
 }

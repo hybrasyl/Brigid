@@ -86,8 +86,8 @@ What a pack does with a bad entry depends on the type:
 | `ability_icons`, `nation_badges`, `npc_portraits`, `static_tiles`, `legend_mark_icons`, `world_maps`, `town_maps` | one image (for `npc_portraits`, the portrait key) | the next pack is asked, then legacy art |
 | `ui_sprite_overrides` | one frame of one file (`{file.ext}/{frame}`), so one file can take frames from two packs | the next pack is asked, then legacy art |
 | `music`, `sound_effects` | the id | the next pack is asked, then the legacy sound |
+| `item_icons` | the sprite id; the pack that gives the image also decides the dye | the next pack is asked, then the legacy EPF |
 | `creature_sprites` | the sprite id; the first pack that covers it owns the whole creature (frames, pair count, bounding box) | the placeholder |
-| `item_icons` | the sprite id; the first pack that has the entry owns the item (image and dye) | the placeholder |
 
 At registration the registry compares the new pack's keys with the packs already registered for its type, and logs one warning for each pair that shares keys: both `pack_id`s, the count, the first five keys, and which pack wins. A key is a `.png` entry name for the image types (other files, such as the manifest or a README, are not keys), the id for `music` and `sound_effects` (`sfx_1.wav` and `sfx_0001.mp3` are the same key), the sprite id for `creature_sprites`, and the portrait key for `npc_portraits`. The registry writes its messages through `DataDiagnostics.Log`, so they are in `notice-debug.log`.
 
@@ -166,7 +166,7 @@ behavioral difference.
 | `content_type`        | Entry pattern                                        | ID base            | Lookup                      | Legacy fallback                                   |
 | --------------------- | ---------------------------------------------------- | ------------------ | --------------------------- | ------------------------------------------------- |
 | `ability_icons`       | `{skill\|spell}{id:D4}.png`                          | 1                  | `TryGetIconImage`           | `skill001.epf` / `spell001.epf`                   |
-| `item_icons`          | `item{id:D5}.png`                                    | 1                  | `GetItemPackFor`            | item EPF sheets in `legend.dat`                   |
+| `item_icons`          | `item{id:D5}.png`                                    | 1, to 32767        | `ItemIconSource.Load`       | item EPF sheets in `legend.dat`                   |
 | `nation_badges`       | `nation{id:D4}.png`                                  | 1                  | `TryGetBadgeImage`          | `_nui_nat.spf` frame `id - 1`                     |
 | `npc_portraits`       | manifest-declared filenames                          | n/a (keyed)        | `TryGetNpcIllustration`     | `npcbase.dat` SPF frame 0                         |
 | `static_tiles`        | `floor{id:D5}.png` / `wall{id:D5}.png`               | raw map tile id    | `TryGetFloor/WallImage`     | tileset / `stc{id:D5}.hpf`                        |
@@ -212,16 +212,19 @@ per ID; the client tints at render time (`CornflowerBlue` learnable, `DimGray` l
 
 ## `item_icons`
 
-`Brigid.Data/AssetPacks/ItemPack.cs` — inventory, ground, vendor, and bank item sprites.
+`Brigid.Data/AssetPacks/ItemPack.cs` — every item surface: ground items, the dialog item portrait, the inventory, bank, shop, item menu, exchange, and both equipment tabs.
 
 ```csharp
-return HasEntry($"item{spriteId:D5}.png");                     // ItemPack.cs:37
-return TryGetImage($"item{spriteId:D5}.png", out image);       // ItemPack.cs:59
+return HasEntry($"item{spriteId:D5}.png");
+return TryGetImage($"item{spriteId:D5}.png", out image);
 ```
 
-- Regex: `^item\d{5}\.png$`. **5 digits** — legacy IDs reach 15,965+.
+- Regex: `^item\d{5}\.png$`. **5 digits** — legacy IDs reach 15,965+, and modern icons use 20001–32767 (BRIG-77).
 - **1-based**. Guard: `spriteId <= 0` → miss.
-- Overrides `ItemRenderer.LoadSpriteFromLegacy` (legacy EPF + palette pipeline).
+- **The ceiling is 32767.** The server sends an item sprite as `sprite + 0x8000` in a `u16`, so the client removes the flag with `& 0x7FFF`. A sprite above 32767 wraps on the wire.
+- **One resolver for every surface:** `Brigid.Rendering/ItemIconSource.cs`. It removes the flag, asks the `item_icons` packs in registration order (a bad entry passes to the next pack), then reads the legacy EPF + palette. `ItemRenderer` (ground items, dialog portrait) and `UiRenderer.GetItemIcon` (the other surfaces) both call it.
+- **Icon offset.** A pack icon draws at `floor((31 − size) / 2)` on each axis in the 31×31 slot (`IconTexture.FromPack`): a 32×32 icon at `-1,-1`, as a modern ability icon does, and a smaller icon centred. A legacy icon draws at `0,0`. On the ground, a pack PNG is centred as a tightly cropped image.
+- **Legacy dye** goes through `AislingDrawDataRepository.ApplyDye`, which leaves a palette without the canonical dye ramp unchanged.
 
 **Manifest field read: `covers.item_icons.dyeable`** — a flat array of item IDs opting into the
 runtime dye pass, loaded fail-closed into `DyeableSet` and exposed as `IsDyeable(spriteId)`.
@@ -230,8 +233,8 @@ For a dyeable item with a non-zero server color byte, the renderer replaces pixe
 canonical purple ramp (legacy palette indices 98–103:
 `#B393C7 #9B7BB7 #8F5BA3 #7F3B93 #47235F #37005B`) with the six colors from the active
 `color0.tbl` entry, preserving alpha. Items **not**
-listed ignore the color byte entirely, and `ItemRenderer.GetSprite` collapses their cache key to
-`color = 0` so one decoded texture serves every incoming color.
+listed ignore the color byte entirely. Both item caches key on the color byte that the server sent, so a
+cache hit asks no pack.
 
 Opt-in rather than auto-detected because scanning every pixel of every icon would waste CPU on the
 ~95% of items with no dye-relevant pixels. `Scripts/dump-item-palette/` produces `items-dyeable.csv`
@@ -580,7 +583,7 @@ are **not** supported in v1 and would clip.
 | Pack not loading at all                            | Check `notice-debug.log` for `[asset-pack]` at startup. Missing/malformed `_manifest.json`, `schema_version > 1`, unknown `content_type`, or the pack is in the game-data folder instead of `AppPaths.AssetsDir` |
 | Some assets legacy despite being in the pack       | Filename doesn't match the exact pattern (case-insensitive but padding matters), corrupt entry, or the file isn't at the ZIP root |
 | Two packs cover the same key                       | The pack whose file name sorts first wins that key. Startup logs a warning that names both packs and the shared keys |
-| Icon appears 1px off                               | Expected — 32×32 modern icons draw at `-1,-1` relative to legacy 31×31. Verify the PNG really is 32×32 |
+| Icon appears 1px off                               | Expected — a pack icon is centred in the legacy 31×31 slot by its size, so a 32×32 icon draws at `-1,-1` (an ability icon always does). Check the PNG size |
 | `ui_sprite_overrides` frame ignored                | Folder name must include the legacy extension (`butt001.epf/`, not `butt001/`); PNG name must be 4-digit padded (`0000.png`, not `0.png`); frames ≥ the legacy frame count are silently dropped |
 | `npc_portraits` serves nothing                     | `dimensions` missing or non-square → the pack registers but is inert. Check stderr                 |
 | A water/lava tile stays legacy                     | Palette-cycled tiles are deliberately excluded from `static_tiles` lookup                          |
