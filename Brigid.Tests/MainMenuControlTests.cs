@@ -1,6 +1,7 @@
 #region
 using System.Text.RegularExpressions;
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Controls.LobbyLogin;
 using Brigid.Definitions;
 using Brigid.Rendering;
@@ -25,20 +26,7 @@ public class MainMenuControlTests
         var menu = new MainMenuControl();
 
         Assert.Equal("mainmenu", menu.Name);
-        AssertNamed(menu);
-
-        static void AssertNamed(UIPanel panel)
-        {
-            var names = panel.Children.Select(child => child.Name).ToList();
-
-            //the id rule of the ui_panels layout plan; a dot is the path separator, so it is never part of a name
-            Assert.All(names, name => Assert.Matches(new Regex("^[a-z0-9_]+$"), name));
-            Assert.Equal(names.Count, names.Distinct().Count());
-
-            //a TextButton is a panel too; its label is the button's own detail, not a separate target
-            foreach (var child in panel.Children.OfType<UIPanel>().Where(child => child is not Controls.Generic.TextButton))
-                AssertNamed(child);
-        }
+        AssertNamedTree(menu);
     }
 
     [Fact]
@@ -63,6 +51,7 @@ public class MainMenuControlTests
         Assert.False(menu.PasswordButton.Enabled);
         Assert.False(menu.HomepageButton.Enabled);
         Assert.True(menu.AboutButton.Enabled);
+        Assert.True(menu.StoryButton.Enabled);
         Assert.True(menu.ConfigButton.Enabled);
         Assert.True(menu.ExitButton.Enabled);
 
@@ -70,14 +59,136 @@ public class MainMenuControlTests
 
         Assert.True(menu.ContinueButton.Enabled);
         Assert.True(menu.HomepageButton.Enabled);
-        //Story waits for StoryView, not for the lobby
-        Assert.False(menu.StoryButton.Enabled);
 
         menu.SetButtonsEnabled(false);
 
         Assert.False(menu.ContinueButton.Enabled);
         Assert.True(menu.AboutButton.Enabled);
+        Assert.True(menu.StoryButton.Enabled);
         Assert.True(menu.ExitButton.Enabled);
+    }
+
+    [Fact]
+    public void EveryChildOfTheOpenPanelsHasAUniqueName()
+    {
+        var menu = new MainMenuControl();
+
+        //the alert tabs and actions, and the Story view, are made when they are needed
+        menu.Alerts.Add(MenuAlerts.NoSound(true));
+        menu.Alerts.Add(MenuAlerts.LegacyImport(() => { }, () => { }));
+        Click(menu.StoryButton);
+
+        AssertNamedTree(menu);
+    }
+
+    [Fact]
+    public void TheAlertsShowOnlyWhileThereIsAnAlert()
+    {
+        var menu = new MainMenuControl();
+
+        Assert.False(menu.Alerts.Visible);
+
+        menu.Alerts.Add(MenuAlerts.NoSound(false));
+        Assert.True(menu.Alerts.Visible);
+
+        menu.Alerts.RunAction(0);
+        Assert.False(menu.Alerts.Visible);
+    }
+
+    [Fact]
+    public void APopupCoversTheButtonsAndTheAlerts()
+    {
+        var menu = new MainMenuControl();
+        menu.Alerts.Add(MenuAlerts.NoSound(false));
+
+        menu.SetCovered(true);
+
+        Assert.False(menu.FindChild<UIPanel>("buttons")!.Visible);
+        Assert.False(menu.Alerts.Visible);
+        Assert.True(menu.FindChild<UIPanel>("status")!.Visible);
+
+        //an alert that arrives while the menu is covered waits
+        menu.Alerts.Add(MenuAlerts.LegacyImport(() => { }, () => { }));
+        Assert.False(menu.Alerts.Visible);
+
+        menu.SetCovered(false);
+
+        Assert.True(menu.FindChild<UIPanel>("buttons")!.Visible);
+        Assert.True(menu.Alerts.Visible);
+    }
+
+    [Fact]
+    public void TheMenuWaitsForTheGreetingThenGivesUp()
+    {
+        var menu = new MainMenuControl();
+        var buttons = menu.FindChild<UIPanel>("buttons")!;
+
+        menu.CoverUntilGreeting(5000);
+        menu.Update(Elapsed(4000));
+
+        Assert.False(buttons.Visible);
+        Assert.True(menu.IsWaitingForGreeting);
+
+        menu.Update(Elapsed(1500));
+
+        Assert.True(buttons.Visible);
+        Assert.False(menu.IsWaitingForGreeting);
+    }
+
+    [Fact]
+    public void AGreetingInTimeKeepsTheMenuCovered()
+    {
+        var menu = new MainMenuControl();
+        var buttons = menu.FindChild<UIPanel>("buttons")!;
+
+        menu.CoverUntilGreeting(5000);
+
+        //the greeting opens: the screen covers the menu, and the timeout no longer applies
+        menu.SetCovered(true);
+        menu.Update(Elapsed(10000));
+
+        Assert.False(buttons.Visible);
+
+        menu.SetCovered(false);
+
+        Assert.True(buttons.Visible);
+    }
+
+    [Fact]
+    public void EnabledButtonsEndTheWait()
+    {
+        var menu = new MainMenuControl();
+
+        menu.CoverUntilGreeting(5000);
+        menu.EnableButtons();
+
+        Assert.True(menu.FindChild<UIPanel>("buttons")!.Visible);
+        Assert.False(menu.IsWaitingForGreeting);
+    }
+
+    [Fact]
+    public void DisabledButtonsDoNotEndTheWait()
+    {
+        var menu = new MainMenuControl();
+
+        menu.CoverUntilGreeting(5000);
+        menu.SetButtonsEnabled(false);
+
+        Assert.True(menu.IsWaitingForGreeting);
+    }
+
+    [Fact]
+    public void StoryOpensTheShippedStory()
+    {
+        var menu = new MainMenuControl();
+
+        Click(menu.StoryButton);
+
+        var story = menu.FindChild<StoryView>("storyview")!;
+
+        Assert.True(story.Visible);
+        Assert.True(story.IsModal);
+        Assert.Equal(0, story.PageIndex);
     }
 
     [Fact]
@@ -145,4 +256,21 @@ public class MainMenuControlTests
     [Fact]
     public void TheAboutTextShips()
         => Assert.StartsWith("# About Hybrasyl", MainMenuControl.ReadText("about.md"));
+
+    private static void AssertNamedTree(UIPanel panel)
+    {
+        var names = panel.Children.Select(child => child.Name).ToList();
+
+        //the id rule of the ui_panels layout plan; a dot is the path separator, so it is never part of a name
+        Assert.All(names, name => Assert.Matches(new Regex("^[a-z0-9_]+$"), name));
+        Assert.Equal(names.Count, names.Distinct().Count());
+
+        //a TextButton or a tab is a panel too; its label is its own detail, not a separate target
+        foreach (var child in panel.Children.OfType<UIPanel>().Where(child => child is not (TextButton or SelectableTab)))
+            AssertNamedTree(child);
+    }
+
+    private static void Click(TextButton button) => button.OnClick(new ClickEvent { Button = MouseButton.Left });
+
+    private static GameTime Elapsed(double ms) => new(TimeSpan.Zero, TimeSpan.FromMilliseconds(ms));
 }

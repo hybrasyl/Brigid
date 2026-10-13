@@ -20,7 +20,8 @@ namespace Brigid.Controls.LobbyLogin;
 ///     and keeps the flat <see cref="DialogPalette" /> look where it does not.
 ///     <para>
 ///         The control raises no events of its own. The screen wires each button's <c>Clicked</c>, as it does for the
-///         legacy <see cref="LobbyLoginControl" />. About opens its own <see cref="MarkdownView" />.
+///         legacy <see cref="LobbyLoginControl" />, and adds local alerts to <see cref="Alerts" />. About opens its own
+///         <see cref="MarkdownView" />, and Story opens its own <see cref="StoryView" />.
 ///     </para>
 /// </summary>
 public sealed class MainMenuControl : UIPanel
@@ -42,21 +43,33 @@ public sealed class MainMenuControl : UIPanel
     //is this much taller, centred on the row, as the legacy connection line is
     private const int PADLOCK_HEADROOM = 4;
 
+    //the alerts grow up from just above the status line
+    private const int ALERTS_LEFT = 36;
+    private const int ALERTS_BOTTOM = 438;
+
     private static readonly Rectangle TitleBounds = new(100, 40, 440, 90);
 
+    private readonly UIPanel Buttons;
     private readonly UIPanel Status;
     private readonly UILabel VersionLabel;
     private readonly UILabel ServerLabel;
     private readonly LinkLabel UpdateNotice;
 
-    //the buttons that need a lobby connection. Config, About and Exit work without one; Story waits for StoryView.
+    //the buttons that need a lobby connection. About, Story, Config and Exit work without one.
     private readonly TextButton[] ConnectionButtons;
+
+    //the story that ships in the client; Story is disabled when it has no pages
+    private readonly StoryScript Story;
 
     //made on the first click, so the menu needs no game data until About opens
     private MarkdownView? AboutView;
+    private StoryView? StoryView;
 
     //the FontEngine generation the status line was measured at; a resize or a face change measures it again
     private int StatusLayoutGeneration = -1;
+
+    //while above zero, the menu waits for the server greeting with its buttons and alerts hidden
+    private double GreetingWaitMs;
 
     public TextButton CreateButton { get; }
     public TextButton ContinueButton { get; }
@@ -66,6 +79,9 @@ public sealed class MainMenuControl : UIPanel
     public TextButton StoryButton { get; }
     public TextButton ConfigButton { get; }
     public TextButton ExitButton { get; }
+
+    /// <summary>The local alerts. The panel shows while it has an alert.</summary>
+    public AlertsPanel Alerts { get; }
 
     public MainMenuControl()
     {
@@ -90,7 +106,7 @@ public sealed class MainMenuControl : UIPanel
                 IsHitTestVisible = false
             });
 
-        var buttons = new UIPanel
+        Buttons = new UIPanel
         {
             Name = "buttons",
             X = Width - BUTTON_COLUMN_RIGHT_MARGIN - BUTTON_WIDTH,
@@ -100,21 +116,29 @@ public sealed class MainMenuControl : UIPanel
             IsPassThrough = true
         };
 
-        AddChild(buttons);
+        AddChild(Buttons);
 
-        CreateButton = AddMenuButton(buttons, "create", "Create", 0);
-        ContinueButton = AddMenuButton(buttons, "continue", "Continue", 1);
-        PasswordButton = AddMenuButton(buttons, "password", "Password", 2);
-        AboutButton = AddMenuButton(buttons, "about", "About", 3);
-        HomepageButton = AddMenuButton(buttons, "homepage", "Homepage", 4);
-        StoryButton = AddMenuButton(buttons, "story", "Story", 5);
-        ConfigButton = AddMenuButton(buttons, "config", "Config", 6);
-        ExitButton = AddMenuButton(buttons, "exit", "Exit", 7);
+        CreateButton = AddMenuButton(Buttons, "create", "Create", 0);
+        ContinueButton = AddMenuButton(Buttons, "continue", "Continue", 1);
+        PasswordButton = AddMenuButton(Buttons, "password", "Password", 2);
+        AboutButton = AddMenuButton(Buttons, "about", "About", 3);
+        HomepageButton = AddMenuButton(Buttons, "homepage", "Homepage", 4);
+        StoryButton = AddMenuButton(Buttons, "story", "Story", 5);
+        ConfigButton = AddMenuButton(Buttons, "config", "Config", 6);
+        ExitButton = AddMenuButton(Buttons, "exit", "Exit", 7);
 
         ConnectionButtons = [CreateButton, ContinueButton, PasswordButton, HomepageButton];
 
-        //Story opens StoryView, which BRIG-107 phase 3 adds
-        StoryButton.SetEnabled(false);
+        Story = StoryScript.Parse(ReadText("story.json"), warning => NoticeDebugLog.Write($"[menu] {warning}"));
+        StoryButton.SetEnabled(Story.Pages.Count > 0);
+
+        Alerts = new AlertsPanel
+        {
+            X = ALERTS_LEFT,
+            Bottom = ALERTS_BOTTOM
+        };
+
+        AddChild(Alerts);
 
         //one row at the bottom left; LayoutStatusLine places the three labels inside it
         Status = new UIPanel
@@ -166,21 +190,53 @@ public sealed class MainMenuControl : UIPanel
         AddChild(Status);
 
         AboutButton.Clicked += ShowAbout;
+        StoryButton.Clicked += ShowStory;
 
         SetButtonsEnabled(false);
     }
+
+    /// <summary>
+    ///     Hides the button column and the alerts while a popup covers the menu, so that the server greeting is the only
+    ///     thing to answer. The title, the background and the status line stay. Call it again with false when the popup
+    ///     closes.
+    /// </summary>
+    public void SetCovered(bool covered)
+    {
+        GreetingWaitMs = 0;
+        Buttons.Visible = !covered;
+        Alerts.Covered = covered;
+    }
+
+    /// <summary>
+    ///     Hides the button column and the alerts while the lobby waits for the server greeting, so that they do not show
+    ///     and then go away when the greeting opens. The wait ends when the screen calls <see cref="SetCovered" />, when the
+    ///     connection buttons are enabled (a server that sends no greeting), or after <paramref name="timeoutMs" />, so that
+    ///     Config and Exit come back when the server does not answer.
+    /// </summary>
+    public void CoverUntilGreeting(double timeoutMs = 5000)
+    {
+        SetCovered(true);
+        GreetingWaitMs = timeoutMs;
+    }
+
+    /// <summary>True while the menu waits for the server greeting.</summary>
+    public bool IsWaitingForGreeting => GreetingWaitMs > 0;
 
     /// <summary>Enables the buttons that need a lobby connection, after the server greeting.</summary>
     public void EnableButtons() => SetButtonsEnabled(true);
 
     /// <summary>
     ///     Enables or disables the buttons that need a lobby connection: Create, Continue, Password and Homepage. About,
-    ///     Config and Exit stay enabled. Story stays disabled until StoryView exists.
+    ///     Story, Config and Exit do not change.
     /// </summary>
     public void SetButtonsEnabled(bool enabled)
     {
         foreach (var button in ConnectionButtons)
             button.SetEnabled(enabled);
+
+        //the lobby is ready without a greeting, for example when the player accepted this notice before
+        if (enabled && IsWaitingForGreeting)
+            SetCovered(false);
     }
 
     /// <summary>
@@ -204,6 +260,14 @@ public sealed class MainMenuControl : UIPanel
     {
         //the theme title font is applied here, in the update, not in the middle of a draw
         ThemeArt.EnsureThemeFonts();
+
+        if (IsWaitingForGreeting)
+        {
+            GreetingWaitMs -= gameTime.ElapsedGameTime.TotalMilliseconds;
+
+            if (GreetingWaitMs <= 0)
+                SetCovered(false);
+        }
 
         base.Update(gameTime);
 
@@ -247,6 +311,17 @@ public sealed class MainMenuControl : UIPanel
         }
 
         AboutView.Show(ReadText("about.md"));
+    }
+
+    private void ShowStory()
+    {
+        if (StoryView is null)
+        {
+            StoryView = new StoryView { ZIndex = 1 };
+            AddChild(StoryView);
+        }
+
+        StoryView.Show(Story);
     }
 
     private static TextButton AddMenuButton(UIPanel column, string name, string text, int index)
