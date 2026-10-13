@@ -18,12 +18,12 @@ public class AudioMissingNoticeTests
             AudioMissingNoticeControl.InstallCommands.Select(c => c.Command.Split(' ')[1]));
 
     [Fact]
-    public void DebianCommand_NamesTheMixerPackage()
+    public void InstallCommands_Debian_NamesTheMixerPackage()
         => Assert.Contains(
             AudioMissingNoticeControl.InstallCommands,
             c => c.Command == "sudo apt install libsdl2-mixer-2.0-0");
 
     [Fact]
-    public void OtherPlatforms_AskForAReinstall()
+    public void OtherGuidance_AsksForAReinstall()
         => Assert.Contains("Reinstall Brigid", AudioMissingNoticeControl.OTHER_GUIDANCE);
 }
