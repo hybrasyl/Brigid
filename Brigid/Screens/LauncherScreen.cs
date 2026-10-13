@@ -489,10 +489,10 @@ public sealed class LauncherScreen : IScreen
         //replayed as a launcher click next frame.
         InputBuffer.DiscardPending();
 
-        //osascript is the active app while its dialog is open and does not make our window key again when it exits;
-        //without this the cursor hide at Connect has no effect and the OS cursor draws over the game cursor.
-        if (OperatingSystem.IsMacOS())
-            Game.RaiseWindow();
+        //the picker is another process on macOS (osascript) and on Linux (zenity or kdialog), and it can keep the
+        //activation when it closes. On macOS the cursor hide at Connect then has no effect, and the OS cursor draws over
+        //the game cursor. Raising the window when it is already in front does nothing, so raise it on every platform
+        Game.RaiseWindow();
 
         if (picked is null)
             return;
