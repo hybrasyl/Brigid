@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework.Input;
 
 namespace Brigid;
 
-public sealed class InputDispatcher
+public sealed class InputDispatcher : IDisposable
 {
     private const float DOUBLE_CLICK_MS = 500f;
     private const int DRAG_THRESHOLD_SQ = 16; //4px squared
@@ -71,10 +71,32 @@ public sealed class InputDispatcher
     public static InputDispatcher? Instance { get; private set; }
 
     public InputDispatcher()
+        : this(true) { }
+
+    /// <summary>
+    ///     With <paramref name="registerAsInstance" /> false, the dispatcher does not replace <see cref="Instance" />, so a
+    ///     test can make one without changing the dispatcher that other tests see.
+    /// </summary>
+    internal InputDispatcher(bool registerAsInstance)
     {
-        Instance = this;
+        if (registerAsInstance)
+            Instance = this;
+
         UITextBox.TextBoxFocusGained += OnTextBoxFocusGained;
         UITextBox.TextBoxFocusLost += OnTextBoxFocusLost;
+    }
+
+    /// <summary>
+    ///     Removes the subscriptions to the static <see cref="UITextBox" /> focus events, and clears
+    ///     <see cref="Instance" /> when it is this dispatcher.
+    /// </summary>
+    public void Dispose()
+    {
+        UITextBox.TextBoxFocusGained -= OnTextBoxFocusGained;
+        UITextBox.TextBoxFocusLost -= OnTextBoxFocusLost;
+
+        if (Instance == this)
+            Instance = null;
     }
 
     /// <summary>
@@ -242,6 +264,8 @@ public sealed class InputDispatcher
 
         //live UI nudge tool (F11 debug layer) — grabs/moves/resizes the element under the cursor against the art
         Controls.Generic.DebugOverlay.UpdateNudge(root, mouseX, mouseY);
+
+        ReleaseHiddenExplicitFocus();
 
         var mouseBlocked = IsMouseBlocked(mouseX, mouseY);
 
@@ -653,21 +677,24 @@ public sealed class InputDispatcher
     }
 
     /// <summary>
-    ///     Mouse blocking: when a textbox has explicit focus, restrict mouse events to the panel containing the focused
-    ///     textbox; clicks outside are consumed. An explicit focus that is no longer visible is cleared instead, as the
-    ///     keyboard path does: ContainsPoint ignores visibility, so a hidden panel's area would keep blocking clicks.
+    ///     Clears an explicit focus that is no longer visible. ContainsPoint ignores visibility, so the area of a hidden
+    ///     panel would keep blocking clicks outside it. Runs at the start of each frame; the keyboard path also checks
+    ///     each event, because a key can hide the focused element during the frame.
+    /// </summary>
+    internal void ReleaseHiddenExplicitFocus()
+    {
+        if (ExplicitFocusElement is not null && !IsEffectivelyVisible(ExplicitFocusElement))
+            ClearExplicitFocus();
+    }
+
+    /// <summary>
+    ///     Mouse blocking: when a visible textbox has explicit focus, restrict mouse events to the panel containing the
+    ///     focused textbox; clicks outside are consumed.
     /// </summary>
     internal bool IsMouseBlocked(int mouseX, int mouseY)
     {
-        if (ExplicitFocusElement is null)
+        if (ExplicitFocusElement is null || !IsEffectivelyVisible(ExplicitFocusElement))
             return false;
-
-        if (!IsEffectivelyVisible(ExplicitFocusElement))
-        {
-            ClearExplicitFocus();
-
-            return false;
-        }
 
         var containingPanel = FindContainingStackEntry(ExplicitFocusElement) ?? ExplicitFocusElement.Parent;
 

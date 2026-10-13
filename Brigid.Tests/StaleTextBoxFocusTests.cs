@@ -11,7 +11,8 @@ public class StaleTextBoxFocusTests
 {
     private static (InputDispatcher Dispatcher, UIPanel Panel, UITextBox Box) FocusedLoginBox()
     {
-        var dispatcher = new InputDispatcher();
+        //not registered as InputDispatcher.Instance, so the game's static dispatcher stays as other tests expect it
+        var dispatcher = new InputDispatcher(registerAsInstance: false);
         var panel = new UIPanel { X = 100, Y = 100, Width = 200, Height = 100 };
         var box = new UITextBox { X = 10, Y = 10, Width = 100, Height = 14 };
         panel.AddChild(box);
@@ -24,6 +25,7 @@ public class StaleTextBoxFocusTests
     public void IsMouseBlocked_BlocksAClickOutsideTheFocusedPanel()
     {
         var (dispatcher, _, box) = FocusedLoginBox();
+        using var _ = dispatcher;
 
         //ContainsPoint uses the clip rect from the last Draw; with no Draw in a test, every point is outside the panel
         Assert.Same(box, dispatcher.ExplicitFocus);
@@ -34,6 +36,7 @@ public class StaleTextBoxFocusTests
     public void IsFocused_LosingFocusReleasesTheExplicitFocus()
     {
         var (dispatcher, _, box) = FocusedLoginBox();
+        using var _ = dispatcher;
 
         box.IsFocused = false;
 
@@ -42,15 +45,19 @@ public class StaleTextBoxFocusTests
     }
 
     [Fact]
-    public void IsMouseBlocked_ClearsAnExplicitFocusThatIsHidden()
+    public void ReleaseHiddenExplicitFocus_ClearsAnExplicitFocusThatIsHidden()
     {
         var (dispatcher, panel, box) = FocusedLoginBox();
+        using var _ = dispatcher;
 
         //a popup can restore a stashed focus without the box gaining focus again
         dispatcher.SetExplicitFocus(box);
         panel.Visible = false;
 
         Assert.False(dispatcher.IsMouseBlocked(10, 10));
+
+        dispatcher.ReleaseHiddenExplicitFocus();
+
         Assert.Null(dispatcher.ExplicitFocus);
     }
 }
