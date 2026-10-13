@@ -242,6 +242,7 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 
 ### UI Patterns
 - UI panels derive from `PrefabPanel` (legacy prefab-art layouts), `CenteredModalPanel` (from-scratch/asset-free modals -- the direction new panels go), or `UIPanel` (manual layouts)
+- Theme art: `TextButton`, `SelectableTab` and `CenteredModalPanel` draw the `ui_theme` pack's parts when `UIElement.IsThemed` is true, and keep their flat `DialogPalette` look for a role the pack does not supply. `UseTheme` is a `bool?`: null inherits from the parent, so one switch on a panel themes everything in it. A panel draws its own fill, border and `Background` in `UIPanel.DrawChrome`; a themed control overrides it and calls the base only when `UIElement.TryDrawThemePart` returns false. Draw theme art only through `TryDrawThemePart` and colours through `ThemeColor`, so the later per-control `ui_panels` layer has one place to go.
 - `PrefabPanel` provides `CreateButton`/`CreateImage`/`CreateLabel`/`CreateTextBox`/`CreateProgressBar` to selectively create controls from prefab data. Panels explicitly create only the controls they need (no auto-populate).
 - Popup panels use `Show()`/`Hide()` for visibility and are children of the WorldScreen Root panel
 - HUD has two implementations behind `IWorldHud`: `WorldHudControl` (classic compact) and `LargeWorldHudControl` (expanded)

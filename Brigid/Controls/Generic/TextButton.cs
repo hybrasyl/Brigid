@@ -67,6 +67,9 @@ public sealed class TextButton : UIPanel
 
     public override void Draw(SpriteBatch spriteBatch)
     {
+        //the theme can come from a parent, which can change after construction, so the colours are resolved per draw
+        RefreshVisual();
+
         base.Draw(spriteBatch);
 
         if (LabelStyle == FontStyle.Regular)
@@ -88,6 +91,20 @@ public sealed class TextButton : UIPanel
         FontEngine.Instance.DrawLine(spriteBatch, text, new Vector2(x, y), color, ClipRect, style: LabelStyle);
     }
 
+    //a state that the theme leaves out uses button.normal; with no theme the button keeps its flat look
+    protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+    {
+        if (TryDrawThemePart(spriteBatch, StateRole, bounds, ThemeRoles.ButtonNormal))
+            return;
+
+        base.DrawChrome(spriteBatch, bounds);
+    }
+
+    private string StateRole
+        => !Enabled ? ThemeRoles.ButtonDisabled
+            : Pressed ? ThemeRoles.ButtonPressed
+            : Hovered ? ThemeRoles.ButtonHover : ThemeRoles.ButtonNormal;
+
     //Enabled has no change hook on UIElement, so callers flip state through here to refresh the visual
     public void SetEnabled(bool value)
     {
@@ -107,7 +124,9 @@ public sealed class TextButton : UIPanel
     private void RefreshVisual()
     {
         BackgroundColor = Enabled ? Pressed ? PressFill : Hovered ? HoverFill : IdleFill : IdleFill;
-        Label.ForegroundColor = Enabled ? TextColorOverride ?? LegendColors.White : DisabledText;
+        Label.ForegroundColor = Enabled
+            ? TextColorOverride ?? ThemeColor(ThemeRoles.Text, LegendColors.White)
+            : ThemeColor(ThemeRoles.TextDisabled, DisabledText);
         BorderColor = Enabled ? EdgeColor : DisabledEdge;
     }
 

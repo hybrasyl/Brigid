@@ -176,6 +176,8 @@ public abstract class CenteredModalPanel : UIPanel
 
     public override void Draw(SpriteBatch spriteBatch)
     {
+        TitleLabel.ForegroundColor = ThemeColor(ThemeRoles.TextTitle, DialogPalette.Title);
+
         base.Draw(spriteBatch);
 
         if (!Visible)
@@ -187,8 +189,20 @@ public abstract class CenteredModalPanel : UIPanel
         DrawDivider(spriteBatch, BottomBarTop);
     }
 
+    //the frame.panel art in place of the flat fill and border; the title and bottom-bar buttons inherit the theme
+    protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+    {
+        if (TryDrawThemePart(spriteBatch, ThemeRoles.FramePanel, bounds))
+            return;
+
+        base.DrawChrome(spriteBatch, bounds);
+    }
+
     private void DrawDivider(SpriteBatch spriteBatch, int localY)
-        => DrawRectClipped(spriteBatch, new Rectangle(ScreenX + PADDING, ScreenY + localY, Width - 2 * PADDING, 1), DialogPalette.Divider);
+        => DrawRectClipped(
+            spriteBatch,
+            new Rectangle(ScreenX + PADDING, ScreenY + localY, Width - 2 * PADDING, 1),
+            ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
 
     public override void OnKeyDown(KeyDownEvent e)
     {
