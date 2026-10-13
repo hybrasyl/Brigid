@@ -23,9 +23,9 @@ doesn't surface "a zip full of PNGs"; it is not a security boundary.
 A pack ships modern assets the client prefers over the legacy `.dat`/`.epf`/`.spf` sheets.
 Resolution is **per asset**, not per pack:
 
-1. Renderer probes the registered pack for this content type.
+1. The lookup asks each registered pack of this content type, in registration order (file-name order).
 2. Hit → modern asset used.
-3. Miss, or decode failure → falls through to the legacy asset for that ID alone.
+3. Miss, or decode failure → the next pack is asked; after the last pack, the legacy asset for that ID alone. A creature is the exception: the first pack that covers it owns it, and a bad entry shows the placeholder (see "Several packs of one type, and conflicts").
 
 Decode failure is deliberately indistinguishable from absence (`AssetPack.TryGetImage` swallows read
 and decode errors), so a corrupt entry degrades to legacy instead of breaking a surface.
@@ -52,12 +52,13 @@ returns `""` (stripped env, `HOME` unset), the base falls back to `AppContext.Ba
 packs never scatter into the CWD.
 
 Scan is `Directory.EnumerateFiles(packDir, "*.datf", SearchOption.TopDirectoryOnly)` — extension
-`.datf` only, top level only, no recursion.
+`.datf` only, top level only, no recursion — sorted by file name (`InRegistrationOrder`, ordinal, case
+ignored), which is the registration order.
 
 ### Validation ladder
 
-Per file, in order; any failure skips **that pack only** and logs to stderr with the `[asset-pack]`
-prefix. Startup is never aborted by a bad pack.
+Per file, in order; any failure skips **that pack only** and logs to `notice-debug.log` (through
+`DataDiagnostics.Log`) with the `[asset-pack]` prefix. Startup is never aborted by a bad pack.
 
 | Check                                     | Message on failure                                                       |
 | ----------------------------------------- | ------------------------------------------------------------------------ |
@@ -74,20 +75,23 @@ is currently `1`.
 No checksum, no signature, no entry-name validation, no image-format validation at load. All decode
 is lazy, at first lookup.
 
-### Conflict resolution
+### Several packs of one type, and conflicts
 
-One registered pack per `content_type`. **Strictly greater `priority` wins; ties go to
-first-registered** (`AssetPackRegistry.cs:316`):
+A content type can have several packs (BRIG-15). The registry keeps them in **registration order**, and it registers the `*.datf` files in **file-name order** (ordinal, case ignored), so the order is the same on every OS. A lookup asks for a key and tries each pack of the type in that order. So **the pack that registered first wins** a key that two packs cover.
 
-```csharp
-if (Packs.TryGetValue(manifest.ContentType, out var existing) && (manifest.Priority <= existing.Manifest.Priority))
-{ /* log, dispose the loser's archive, keep existing */ }
-existing?.Dispose();
-Packs[manifest.ContentType] = factory(archive, manifest);
-```
+What a pack does with a bad entry depends on the type:
 
-A superseded pack is disposed by the registry. Multi-pack-per-type (per-ID dispatch across several
-archives) is not implemented.
+| Types | Key | Bad entry (does not decode) |
+| --- | --- | --- |
+| `ability_icons`, `nation_badges`, `npc_portraits`, `static_tiles`, `legend_mark_icons`, `world_maps`, `town_maps` | one image (for `npc_portraits`, the portrait key) | the next pack is asked, then legacy art |
+| `ui_sprite_overrides` | one frame of one file (`{file.ext}/{frame}`), so one file can take frames from two packs | the next pack is asked, then legacy art |
+| `music`, `sound_effects` | the id | the next pack is asked, then the legacy sound |
+| `creature_sprites` | the sprite id; the first pack that covers it owns the whole creature (frames, pair count, bounding box) | the placeholder |
+| `item_icons` | the sprite id; the first pack that has the entry owns the item (image and dye) | the placeholder |
+
+At registration the registry compares the new pack's keys with the packs already registered for its type, and logs one warning for each pair that shares keys: both `pack_id`s, the count, the first five keys, and which pack wins. A key is a `.png` entry name for the image types (other files, such as the manifest or a README, are not keys), the id for `music` and `sound_effects` (`sfx_1.wav` and `sfx_0001.mp3` are the same key), the sprite id for `creature_sprites`, and the portrait key for `npc_portraits`. The registry writes its messages through `DataDiagnostics.Log`, so they are in `notice-debug.log`.
+
+The manifest `priority` field is read and **not used**. To make one pack win, give it a file name that sorts first. The sort compares characters, not numbers: `items_9001.datf` sorts after `items_20001.datf`. Zero-pad the numbers in file names (`items_09001`) when the order matters. A convention for chunked content, for example `items_20001-21000.datf` and `items_21001-22000.datf`, is to cover separate keys so that no pack overlaps another.
 
 ### Legacy migration
 
@@ -134,7 +138,7 @@ deriving from `AssetPack` (or `AudioPack` for byte-serving types).
 | `pack_id`        | string                                   | `""`    | Logging and conflict messages only                                 |
 | `pack_version`   | string                                   | `""`    | **Nothing reads this.** Informational                              |
 | `content_type`   | string                                   | `""`    | Yes — factory discriminator                                        |
-| `priority`       | int                                      | `100`   | Yes — conflict resolution                                          |
+| `priority`       | int                                      | `100`   | **No.** Read and ignored; the first registered pack wins           |
 | `covers`         | `Dictionary<string, CoverageEntry>`      | `{}`    | Only three sub-fields, below                                       |
 
 `covers` is a **capability** declaration, not a coverage range — actual coverage is emergent from
@@ -159,20 +163,20 @@ behavioral difference.
 
 ## Content types at a glance
 
-| `content_type`        | Entry pattern                                        | ID base            | Accessor                    | Legacy fallback                                   |
+| `content_type`        | Entry pattern                                        | ID base            | Lookup                      | Legacy fallback                                   |
 | --------------------- | ---------------------------------------------------- | ------------------ | --------------------------- | ------------------------------------------------- |
-| `ability_icons`       | `{skill\|spell}{id:D4}.png`                          | 1                  | `GetIconPack()`             | `skill001.epf` / `spell001.epf`                   |
-| `item_icons`          | `item{id:D5}.png`                                    | 1                  | `GetItemPack()`             | item EPF sheets in `legend.dat`                   |
-| `nation_badges`       | `nation{id:D4}.png`                                  | 1                  | `GetNationBadgePack()`      | `_nui_nat.spf` frame `id - 1`                     |
-| `npc_portraits`       | manifest-declared filenames                          | n/a (keyed)        | `GetNpcPortraitPack()`      | `npcbase.dat` SPF frame 0                         |
-| `static_tiles`        | `floor{id:D5}.png` / `wall{id:D5}.png`               | raw map tile id    | `GetStaticTilePack()`       | tileset / `stc{id:D5}.hpf`                        |
-| `legend_mark_icons`   | `legend{id:D4}.png`                                  | **0**              | `GetLegendMarkIconPack()`   | `legends.epf` frame `id`                          |
-| `ui_sprite_overrides` | `{file.ext}/{frame:D4}.png`                          | frame 0            | `GetUiSpriteOverridePack()` | any `setoa.dat` / `cious.dat` EPF/SPF frame       |
-| `creature_sprites`    | `creature_sprites/creature_{id:D5}/stand/{n\|e}_001.png` | 1              | `GetCreaturePack()`         | creature MPF                                      |
-| `music`               | `music_{id}.{ext}`                                   | raw server id      | `GetMusicPack()`            | `{DataPath}/music/{id}.mus`                       |
-| `sound_effects`       | `sfx_{id}.{ext}`                                     | raw server id      | `GetSfxPack()`              | `legend.dat` `{id}.mp3`                           |
-| `world_maps`          | `{fieldName}.png`                                    | named, not numeric | `GetWorldMapPack()`         | `{field}.epf` + `{field}.pal` in `setoa.dat`      |
-| `town_maps`           | `town_{mapId:D5}.png`                                | raw map id         | `GetTownMapPack()`          | `national.dat` `_t*` five-layer composite         |
+| `ability_icons`       | `{skill\|spell}{id:D4}.png`                          | 1                  | `TryGetIconImage`           | `skill001.epf` / `spell001.epf`                   |
+| `item_icons`          | `item{id:D5}.png`                                    | 1                  | `GetItemPackFor`            | item EPF sheets in `legend.dat`                   |
+| `nation_badges`       | `nation{id:D4}.png`                                  | 1                  | `TryGetBadgeImage`          | `_nui_nat.spf` frame `id - 1`                     |
+| `npc_portraits`       | manifest-declared filenames                          | n/a (keyed)        | `TryGetNpcIllustration`     | `npcbase.dat` SPF frame 0                         |
+| `static_tiles`        | `floor{id:D5}.png` / `wall{id:D5}.png`               | raw map tile id    | `TryGetFloor/WallImage`     | tileset / `stc{id:D5}.hpf`                        |
+| `legend_mark_icons`   | `legend{id:D4}.png`                                  | **0**              | `TryGetLegendMarkImage`     | `legends.epf` frame `id`                          |
+| `ui_sprite_overrides` | `{file.ext}/{frame:D4}.png`                          | frame 0            | `TryGetUiSprite`            | any `setoa.dat` / `cious.dat` EPF/SPF frame       |
+| `creature_sprites`    | `creature_sprites/creature_{id:D5}/stand/{n\|e}_001.png` | 1              | `GetCreaturePackFor`        | creature MPF                                      |
+| `music`               | `music_{id}.{ext}`                                   | raw server id      | `MusicPacks`                | `{DataPath}/music/{id}.mus`                       |
+| `sound_effects`       | `sfx_{id}.{ext}`                                     | raw server id      | `SfxPacks`                  | `legend.dat` `{id}.mp3`                           |
+| `world_maps`          | `{fieldName}.png`                                    | named, not numeric | `TryGetFieldImage`          | `{field}.epf` + `{field}.pal` in `setoa.dat`      |
+| `town_maps`           | `town_{mapId:D5}.png`                                | raw map id         | `TryGetTownMapImage`        | `national.dat` `_t*` five-layer composite         |
 
 All lookups are case-insensitive. Unless a section says otherwise, entries live at the ZIP root and
 subfolders are ignored.
@@ -562,7 +566,7 @@ are **not** supported in v1 and would clip.
   and corrupt/non-image data are both reported as "not present". Nothing verifies PNG magic — any
   Skia-decodable format would in fact work despite the `.png` naming convention. Don't rely on that.
 - **Disposal.** The caller owns the returned `SKImage`. `AssetPack.Dispose()` disposes the
-  `ZipArchive`; the registry disposes a superseded pack when a higher-priority one replaces it.
+  `ZipArchive`. The registry keeps every registered pack for the life of the process.
 - **Zip root.** Some Windows ZIP tools wrap contents in a folder named after the archive. If
   `_manifest.json` isn't at the top level immediately, the pack is skipped. Rebuild with contents at
   root.
@@ -573,9 +577,9 @@ are **not** supported in v1 and would clip.
 
 | Symptom                                            | Cause                                                                                              |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Pack not loading at all                            | Check stderr for `[asset-pack]` at startup. Missing/malformed `_manifest.json`, `schema_version > 1`, unknown `content_type`, or the pack is in the game-data folder instead of `AppPaths.AssetsDir` |
+| Pack not loading at all                            | Check `notice-debug.log` for `[asset-pack]` at startup. Missing/malformed `_manifest.json`, `schema_version > 1`, unknown `content_type`, or the pack is in the game-data folder instead of `AppPaths.AssetsDir` |
 | Some assets legacy despite being in the pack       | Filename doesn't match the exact pattern (case-insensitive but padding matters), corrupt entry, or the file isn't at the ZIP root |
-| Two packs claim the same type                      | Higher `priority` wins; ties go to first-registered. The loser logs a warning and is disposed      |
+| Two packs cover the same key                       | The pack whose file name sorts first wins that key. Startup logs a warning that names both packs and the shared keys |
 | Icon appears 1px off                               | Expected — 32×32 modern icons draw at `-1,-1` relative to legacy 31×31. Verify the PNG really is 32×32 |
 | `ui_sprite_overrides` frame ignored                | Folder name must include the legacy extension (`butt001.epf/`, not `butt001/`); PNG name must be 4-digit padded (`0000.png`, not `0.png`); frames ≥ the legacy frame count are silently dropped |
 | `npc_portraits` serves nothing                     | `dimensions` missing or non-square → the pack registers but is inert. Check stderr                 |

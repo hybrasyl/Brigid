@@ -208,9 +208,7 @@ public sealed class UiRenderer : IDisposable
         //modern path: world_maps .datf pack PNG decoded via SkiaSharp. Reuse the same Convert + Cache flow as the
         //legacy path so the cached texture's ownership/disposal contract is identical (WorldMap.ClearBackground
         //disposes whatever is cached here).
-        var pack = AssetPackRegistry.GetWorldMapPack();
-
-        if ((pack is not null) && pack.TryGetFieldImage(fieldName, out var modern) && (modern is not null))
+        if (AssetPackRegistry.TryGetFieldImage(fieldName, out var modern) && (modern is not null))
             using (modern)
             {
                 var modernTexture = Convert(modern);
@@ -244,9 +242,7 @@ public sealed class UiRenderer : IDisposable
         if (Cache.TryGetValue(key, out var cached))
             return cached;
 
-        var pack = AssetPackRegistry.GetTownMapPack();
-
-        if ((pack is not null) && pack.TryGetTownMapImage(mapId, out var modern) && (modern is not null))
+        if (AssetPackRegistry.TryGetTownMapImage(mapId, out var modern) && (modern is not null))
             using (modern)
             {
                 var texture = Convert(modern);
@@ -276,9 +272,7 @@ public sealed class UiRenderer : IDisposable
         var ownedSource = false;
 
         //modern path: pack PNG decoded via SkiaSharp
-        var pack = AssetPackRegistry.GetIconPack();
-
-        if ((pack is not null) && pack.TryGetIconImage("spell", iconId, out var modern) && (modern is not null))
+        if (AssetPackRegistry.TryGetIconImage("spell", iconId, out var modern) && (modern is not null))
         {
             sourceImage = modern;
             ownedSource = true;
@@ -446,9 +440,7 @@ public sealed class UiRenderer : IDisposable
             return cached;
 
         //modern path: pack PNG decoded via SkiaSharp
-        var pack = AssetPackRegistry.GetNationBadgePack();
-
-        if ((pack is not null) && pack.TryGetBadgeImage(nationId, out var modernImage) && (modernImage is not null))
+        if (AssetPackRegistry.TryGetBadgeImage(nationId, out var modernImage) && (modernImage is not null))
             try
             {
                 var modernTex = Convert(modernImage);
@@ -488,9 +480,7 @@ public sealed class UiRenderer : IDisposable
             return cached;
 
         //modern path: pack PNG decoded via SkiaSharp
-        var pack = AssetPackRegistry.GetLegendMarkIconPack();
-
-        if ((pack is not null) && pack.TryGetLegendMarkImage(iconId, out var modernImage) && (modernImage is not null))
+        if (AssetPackRegistry.TryGetLegendMarkImage(iconId, out var modernImage) && (modernImage is not null))
             try
             {
                 var modernTex = Convert(modernImage);
@@ -567,7 +557,7 @@ public sealed class UiRenderer : IDisposable
 
     /// <summary>
     ///     Shared modern-first dispatch for skill and spell icons. Legacy EPF lookup goes through the provided
-    ///     delegate; modern PNG lookup goes through <see cref="AssetPackRegistry.GetIconPack" />.
+    ///     delegate; modern PNG lookup goes through <see cref="AssetPackRegistry.TryGetIconImage" />.
     /// </summary>
     private IconTexture GetAbilityIcon(string prefix, ushort spriteId, Func<int, Palettized<EpfFrame>?> legacyLookup)
     {
@@ -576,9 +566,7 @@ public sealed class UiRenderer : IDisposable
         if (Cache.TryGetValue(key, out var cached))
             return ModernIconKeys.Contains(key) ? IconTexture.Modern(cached) : IconTexture.Legacy(cached);
 
-        var pack = AssetPackRegistry.GetIconPack();
-
-        if ((pack is not null) && pack.TryGetIconImage(prefix, spriteId, out var skImage) && (skImage is not null))
+        if (AssetPackRegistry.TryGetIconImage(prefix, spriteId, out var skImage) && (skImage is not null))
             try
             {
                 var modernTex = Convert(skImage);

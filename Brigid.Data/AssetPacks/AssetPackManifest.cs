@@ -42,7 +42,8 @@ public sealed class AssetPackManifest
     public string ContentType { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Higher wins when multiple packs cover the same asset ID. Default 100 when absent.
+    ///     Read, and not used. When two packs of one content type cover the same key, the pack that registered first
+    ///     wins (registration is in file-name order); see <see cref="AssetPackRegistry" />. Default 100 when absent.
     /// </summary>
     [JsonPropertyName("priority")]
     public int Priority { get; init; } = 100;

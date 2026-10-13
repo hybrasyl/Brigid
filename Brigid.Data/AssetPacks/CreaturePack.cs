@@ -1,4 +1,5 @@
 #region
+using System.Globalization;
 using System.IO.Compression;
 using SkiaSharp;
 #endregion
@@ -60,6 +61,11 @@ public sealed class CreaturePack : AssetPack
                 creature.NEntry = entry.FullName;
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>A creature pack covers sprite ids.</remarks>
+    public override IEnumerable<string> CoverageKeys
+        => Coverage.Where(pair => pair.Value.PairCount > 0).Select(pair => pair.Key.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>
     ///     True if this pack contains at least one pair-master PNG for the given <paramref name="spriteId" />.

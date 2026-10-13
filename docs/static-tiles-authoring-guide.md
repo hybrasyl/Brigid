@@ -97,7 +97,7 @@ Create `_manifest.json`:
 
 - `pack_id` lowercase, unique. E.g., `hybrasyl-mileth-tiles` or `studio-grass-set`.
 - `pack_version` is informational — bump on updates.
-- `priority` only matters if multiple `static_tiles` packs are installed simultaneously; higher wins.
+- `priority` is not used. If several `static_tiles` packs are installed and two have the same tile, the pack whose file name sorts first wins, and the client logs a warning.
 - `covers` is a capability declaration — leave the inner object empty. Coverage is emergent from which PNGs you ship.
 
 ### 4. Assemble the pack
@@ -122,7 +122,7 @@ Rename `.zip` to `.datf`.
 
 1. Drop the `.datf` into the per-user assets folder — `%LOCALAPPDATA%\erisco\Brigid\assets` on Windows, `~/.config/erisco/Brigid/assets` on macOS/Linux. This is deliberately *not* the Dark Ages data folder where the legacy `*.dat` archives live.
 2. Start the client.
-3. Check stderr for `[asset-pack]` warnings at startup. No warnings = pack registered.
+3. Check `notice-debug.log` for `[asset-pack]` warnings at startup. No warnings = pack registered.
 4. Load a map that contains your target tile IDs. Floor PNGs render in place of legacy floor tiles for those IDs; same for walls.
 5. **The map atlas is rebuilt only on map load**, so to iterate on tile art, transition between maps to see updated PNGs (not just tweak the file in-place).
 
@@ -150,7 +150,7 @@ Before shipping:
 - [ ] `pack_id` is unique and lowercase.
 - [ ] `content_type` is exactly `static_tiles`.
 - [ ] Filenames match `floor{id:D5}.png` / `wall{id:D5}.png`.
-- [ ] Pack loads with no `[asset-pack]` stderr warnings.
+- [ ] Pack loads with no `[asset-pack]` warnings in `notice-debug.log`.
 - [ ] On a map with cycled water (e.g., Mileth river), shipping a `floor{cycledId}.png` is silently skipped — animation continues unaffected.
 - [ ] On a map with animated tiles, shipping a `floor{animatedId}.png` is silently skipped — animation continues with all-legacy frames.
 - [ ] Removing the pack restores legacy tiles exactly — confirms no state pollution.
@@ -158,7 +158,7 @@ Before shipping:
 
 ## Troubleshooting
 
-- **Pack doesn't load** — check stderr for `[asset-pack]` warnings. Most common: missing `_manifest.json`, files nested inside a folder, wrong `content_type`, malformed JSON.
+- **Pack doesn't load** — check `notice-debug.log` for `[asset-pack]` warnings. Most common: missing `_manifest.json`, files nested inside a folder, wrong `content_type`, malformed JSON.
 - **Floor PNG appears with wrong colors / palette artifacts** — modern packs are RGBA, not palettized. Your art tool may be exporting indexed-color PNGs; switch to RGBA8888.
 - **Floor PNG appears at wrong position / overlaps neighbors** — dimensions must be exactly 56 × 27. Larger sizes get downscaled or cropped by the atlas builder.
 - **Wall PNG appears too tall / floats above the floor** — height doesn't match legacy. Walls are positioned bottom-aligned to a fixed origin; taller PNGs extend upward. Match the legacy height.

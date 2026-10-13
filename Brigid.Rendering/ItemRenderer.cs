@@ -126,8 +126,8 @@ public sealed class ItemRenderer : IDisposable
     /// </summary>
     public ItemSprite? GetSprite(int spriteId, byte color = 0)
     {
-        var pack = AssetPackRegistry.GetItemPack();
-        var packCovers = (pack is not null) && pack.HasItem(spriteId);
+        var pack = AssetPackRegistry.GetItemPackFor(spriteId);
+        var packCovers = pack is not null;
 
         if (packCovers && !pack!.IsDyeable(spriteId))
             color = 0;
