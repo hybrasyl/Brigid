@@ -53,6 +53,9 @@ public sealed class InsecureConnectionPromptControl : CenteredModalPanel
     public InsecureConnectionPromptControl()
         : base("Connection Is Not Encrypted", PANEL_W, PANEL_H)
     {
+        //the prompt gates a connection in progress, so nothing behind it takes input while it is open
+        IsModal = true;
+
         var y = ContentTop + 4;
 
         Headline = AddRow(ref y, DialogPalette.RequirementUnmet);

@@ -15,8 +15,9 @@ public class UIPanel : UIElement
     public Texture2D? Background { get; set; }
 
     /// <summary>
-    ///     When true, this panel captures all input while visible — other controls receive suppressed input (no keys, no mouse
-    ///     events) so their animations/timers still tick.
+    ///     Marks a panel that must have the input while it is visible: nothing behind it takes a click or a key. The flag is
+    ///     a marker that a screen reads; the dispatcher does not enforce it yet. <c>WorldScreen</c> reads it to hide the item
+    ///     tooltip, and the lobby will block clicks outside the modal at the top of the control stack (BRIG-107 phase 4).
     /// </summary>
     public bool IsModal { get; set; }
 

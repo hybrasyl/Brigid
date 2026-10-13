@@ -68,6 +68,9 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
     public CertificateTrustPromptControl()
         : base("Unrecognized Server Certificate", PANEL_W, PANEL_H)
     {
+        //the prompt gates a connection in progress, so nothing behind it takes input while it is open
+        IsModal = true;
+
         var y = ContentTop + 4;
 
         Headline = AddRow(ref y, DialogPalette.Title);
