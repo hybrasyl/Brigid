@@ -6,9 +6,8 @@ using Brigid.Networking;
 namespace Brigid.Utilities;
 
 /// <summary>
-///     System clipboard access through SDL2, which the client already loads. SDL serves X11, Wayland, Windows and macOS
-///     with no external tool; the TextCopy package it replaced shelled out to <c>xsel</c> on Linux, which Linux Mint
-///     does not install, so copy and paste failed there with no sign. Call from the game thread.
+///     System clipboard access through SDL2, which the client already loads. SDL supports X11, Wayland, Windows and
+///     macOS with no external tool. Call it from the game thread.
 /// </summary>
 /// <remarks>
 ///     On X11 the client window owns the selection, so text copied from Brigid stays pasteable only while Brigid runs,

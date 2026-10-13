@@ -241,9 +241,9 @@ public sealed class LauncherScreen : IScreen
 
             var cursor = new Point(evt.X, evt.Y);
 
-            //the folder picker blocks the game loop until its dialog closes. Opened on the press, it blocks before SDL
-            //sees the release, and on X11 SDL's held-button pointer capture then outlives the click: no window,
-            //the picker's included, gets a click until the process dies. On the release SDL has already let go.
+            //open the folder picker on the release. The picker stops the game loop until its dialog closes. If it opens on
+            //the press, SDL does not see the release, and on X11 SDL keeps the pointer capture of the held button. Then no
+            //window, the picker included, gets a click until the process stops.
             if (!evt.IsPress)
             {
                 if (AssetButtonArmed && (CurrentMode == Mode.Main) && AssetButton.Contains(cursor))
@@ -254,7 +254,7 @@ public sealed class LauncherScreen : IScreen
                 continue;
             }
 
-            //a release lost to a focus change would leave a stale arm; every press starts clean
+            //each press clears an old arm, because a focus change can lose a release
             AssetButtonArmed = false;
 
             switch (CurrentMode)

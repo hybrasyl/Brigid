@@ -58,10 +58,10 @@ public sealed class TextElement
 
     /// <summary>
     ///     The caret index nearest to <paramref name="x" /> pixels from the start of <paramref name="text" />, for a mouse
-    ///     click. Measures each candidate prefix whole, as the caret and the selection are drawn: a sum of single-glyph
-    ///     widths leaves out the tracking between glyphs, so it moved the caret about 1 px per character to the left of
-    ///     the click. A {=x} color code (when <paramref name="colorCodesEnabled" />) and a surrogate pair are one step.
-    ///     Prefix widths only grow, so a binary search finds the glyph with log n measurements; a drag-select calls this
+    ///     click. Measures each candidate prefix whole, as the caret and the selection are drawn. Do not add up
+    ///     single-glyph widths: a single glyph has no tracking to the next glyph, so the sum is wider than the drawn
+    ///     text. A {=x} color code (when <paramref name="colorCodesEnabled" />) and a surrogate pair are one step.
+    ///     Prefix widths only grow, so a binary search finds the glyph with log n measurements. A drag-select calls this
     ///     on each mouse move.
     /// </summary>
     public int IndexAtX(string text, int x, bool colorCodesEnabled)

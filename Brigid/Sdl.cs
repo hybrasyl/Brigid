@@ -182,9 +182,9 @@ internal static partial class Sdl
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial void SDL_FreeSurface(nint surface);
 
-    //SDL_GetClipboardText returns a UTF-8 copy that SDL allocates: an empty string when there is no text or the read
-    //fails (SDL_GetError then says why), NULL only when that allocation fails. Release it with SDL_free. Both clipboard
-    //calls need the video subsystem, so call them on the game thread.
+    //SDL_GetClipboardText returns a UTF-8 copy that SDL allocates. Release it with SDL_free. The copy is empty when the
+    //clipboard has no text or the read fails, and SDL_GetError then gives the reason. It is NULL only when the
+    //allocation fails. Both clipboard calls need the video subsystem, so call them on the game thread.
     [LibraryImport("SDL2")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial nint SDL_GetClipboardText();
