@@ -56,12 +56,9 @@ public sealed class TextElement
     /// </summary>
     public int Measure(string text) => TextRenderer.MeasureWidth(text, FontSize, CharacterSpacing);
 
-    /// <summary>Advance of a single glyph at this element's size and spacing; see <see cref="Measure" />.</summary>
-    public int MeasureChar(char c) => TextRenderer.MeasureCharWidth(c, FontSize, CharacterSpacing);
-
     /// <summary>
     ///     The caret index nearest to <paramref name="x" /> pixels from the start of <paramref name="text" />, for a mouse
-    ///     click. Measures each prefix whole, as the caret and the selection are drawn. A sum of <see cref="MeasureChar" />
+    ///     click. Measures each prefix whole, as the caret and the selection are drawn. A sum of single-glyph
     ///     widths leaves out the tracking between glyphs, so it moved the caret about 1 px per character to the left of
     ///     the click. A {=x} color code (when <paramref name="colorCodesEnabled" />) and a surrogate pair are one step.
     /// </summary>

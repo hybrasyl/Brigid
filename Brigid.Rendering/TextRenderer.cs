@@ -244,16 +244,6 @@ public static class TextRenderer
         => ((i + 2) < text.Length) && (text[i] == '{') && (text[i + 1] == '=') && LegendPalette.GetTextColor(text[i + 2]).HasValue;
 
     /// <summary>
-    ///     Returns the horizontal pixel advance for a single character, from the active font's metrics.
-    /// </summary>
-    public static int MeasureCharWidth(char c, int? size = null, float extraSpacing = 0f)
-        => FontEngine.Instance.MeasureWidth(
-            c.ToString(),
-            size ?? FontEngine.Instance.UiSize,
-            FontStyle.Regular,
-            extraSpacing);
-
-    /// <summary>
     ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Sums per color run so
     ///     the result matches the cursor advance used while drawing.
     /// </summary>
