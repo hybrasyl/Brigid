@@ -597,8 +597,10 @@ colours `text`, `text.disabled`, `text.selected`, `text.title`, `divider`. The m
 whole window, cropped to the window's aspect ratio) and `title.mainmenu` (art in place of the title
 text), and the font `title` (the display face for the title text, in place of Uncial Antiqua). A
 `title` font with no TrueType or OpenType signature, or one the parser refuses, is logged and the
-shipped face stays. A button or tab state
-that is missing or does not decode uses the normal state.
+shipped face stays. The Story view (`StoryView`) reads each slide's `image` from `story.json` as a
+part name (`story.01` and so on; cover fit), and `background.story` behind its text and cutscene
+pages (else `background.mainmenu`). A slide with no part shows a placeholder frame with the part
+name. A button or tab state that is missing or does not decode uses the normal state.
 
 **Drawn at native resolution.** `ThemeArt` composites a part with SkiaSharp at the native pixel
 size of its rectangle and draws it with the inverse of the UI pass scale, as `FontEngine` draws

@@ -17,6 +17,7 @@ public static class ThemeRoles
     public const string TabSelected = "tab.selected";
     public const string MainMenuBackground = "background.mainmenu";
     public const string MainMenuTitle = "title.mainmenu";
+    public const string StoryBackground = "background.story";
 
     //colours
     public const string Text = "text";
