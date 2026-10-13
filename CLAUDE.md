@@ -15,7 +15,7 @@ dotnet run --project Brigid/Brigid.csproj
 
 The client requires a Dark Ages game-data directory (the folder containing `*.dat` archives). Point `GlobalSettings.DataPath` at that directory before running; `LobbyHost`/`LobbyPort` and `ClientVersion` also live in `GlobalSettings`.
 
-Release packaging lives in `Build/`: `fixup-sdl-runtimes.sh`, `macos/`, and `linux/package-linux.sh`, which builds the `.deb` (declares the bundled SDL2_mixer's six codec libraries by soname) and the AppImage (bundles them beside the mixer with `$ORIGIN` runpaths, so it needs the ubuntu-24.04 runner's glibc 2.39 or newer). The Linux tarball does neither and relies on the system's codecs.
+Release packaging lives in `Build/`: `fixup-sdl-runtimes.sh`, `macos/`, and `linux/package-linux.sh`, which builds the `.deb` (declares the bundled SDL2_mixer's six codec libraries by soname) and the AppImage (bundles them beside the mixer with `$ORIGIN` runpaths, so it needs the ubuntu-24.04 runner's glibc 2.39 or newer). The Linux tarball does neither and relies on the system's codecs. Write local package outputs (`make-app.sh --output`, the `package-linux.sh` `<out-dir>`) to `dist/`, which git ignores. `Build/icon/` holds the icon sources for each platform; see its `README.md`.
 
 Tests live in `Brigid.Tests` (xunit): `dotnet test Brigid.slnx`. Coverage is currently a handful of targeted regression/smoke tests, not a full suite. Tests that change static state (`WorldState`, `DataDiagnostics.Log`, `FontEngine`, `DebugOverlay`, textbox focus) share a named collection with `DisableParallelization = true`. The test assembly replaces the SDL backend of `Utilities/Clipboard` with the in-memory `TestClipboard`.
 
