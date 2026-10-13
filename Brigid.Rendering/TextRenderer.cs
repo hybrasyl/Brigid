@@ -141,7 +141,7 @@ public static class TextRenderer
             {
                 var run = text[runStart..i];
                 engine.DrawLine(spriteBatch, run, new Vector2(cursorX, y), activeColor, clip, characterSpacing, size: px);
-                cursorX += engine.MeasureWidth(run, px) + characterSpacing * run.Length;
+                cursorX += RunAdvance(engine, run, px, characterSpacing);
             }
 
             var codeColor = GetColorCode(text[i + 2])!.Value;
@@ -244,8 +244,9 @@ public static class TextRenderer
         => ((i + 2) < text.Length) && (text[i] == '{') && (text[i + 1] == '=') && LegendPalette.GetTextColor(text[i + 2]).HasValue;
 
     /// <summary>
-    ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Sums per color run so
-    ///     the result matches the cursor advance used while drawing.
+    ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Adds the same
+    ///     <see cref="RunAdvance" /> for each color run that the draw moves the pen by, so a caret placed with this width
+    ///     sits where the text is drawn. The sum is rounded once: a rounded width per run loses up to 0.5 px off 1x.
     /// </summary>
     public static int MeasureWidth(string text, int? size = null, float extraSpacing = 0f)
     {
@@ -254,7 +255,7 @@ public static class TextRenderer
 
         var engine = FontEngine.Instance;
         var px = size ?? FontEngine.Instance.UiSize;
-        var width = 0;
+        var width = 0f;
         var runStart = 0;
 
         for (var i = 0; i < text.Length; i++)
@@ -263,17 +264,24 @@ public static class TextRenderer
                 continue;
 
             if (i > runStart)
-                width += engine.MeasureWidth(text[runStart..i], px, FontStyle.Regular, extraSpacing);
+                width += RunAdvance(engine, text[runStart..i], px, extraSpacing);
 
             i += 2;
             runStart = i + 1;
         }
 
         if (runStart < text.Length)
-            width += engine.MeasureWidth(text[runStart..], px, FontStyle.Regular, extraSpacing);
+            width += RunAdvance(engine, text[runStart..], px, extraSpacing);
 
-        return width;
+        return (int)MathF.Round(width);
     }
+
+    /// <summary>
+    ///     How far the pen moves for one color run, drawn at <paramref name="extraSpacing" /> on top of the default
+    ///     tracking. The draw and <see cref="MeasureWidth(string, int?, float)" /> both use it, so they cannot disagree.
+    /// </summary>
+    private static float RunAdvance(FontEngine engine, string run, int px, float extraSpacing)
+        => engine.MeasureWidthExact(run, px, FontStyle.Regular, extraSpacing);
 
     /// <summary>
     ///     Pixel width of a single-run string in an explicit font style, matching the styled <see cref="DrawText(
