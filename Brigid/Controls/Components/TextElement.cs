@@ -58,16 +58,18 @@ public sealed class TextElement
 
     /// <summary>
     ///     The caret index nearest to <paramref name="x" /> pixels from the start of <paramref name="text" />, for a mouse
-    ///     click. Measures each prefix whole, as the caret and the selection are drawn. A sum of single-glyph
+    ///     click. Measures each candidate prefix whole, as the caret and the selection are drawn: a sum of single-glyph
     ///     widths leaves out the tracking between glyphs, so it moved the caret about 1 px per character to the left of
     ///     the click. A {=x} color code (when <paramref name="colorCodesEnabled" />) and a surrogate pair are one step.
+    ///     Prefix widths only grow, so a binary search finds the glyph with log n measurements; a drag-select calls this
+    ///     on each mouse move.
     /// </summary>
     public int IndexAtX(string text, int x, bool colorCodesEnabled)
     {
         if ((text.Length == 0) || (x <= 0))
             return 0;
 
-        var prevWidth = 0;
+        var glyphs = new List<(int Start, int End)>();
 
         for (var i = 0; i < text.Length;)
         {
@@ -78,17 +80,28 @@ public sealed class TextElement
                 continue;
             }
 
-            var next = char.IsHighSurrogate(text[i]) && (i + 1 < text.Length) && char.IsLowSurrogate(text[i + 1]) ? i + 2 : i + 1;
-            var width = Measure(text[..next]);
-
-            if (x < ((prevWidth + width) / 2))
-                return i;
-
-            prevWidth = width;
-            i = next;
+            var end = char.IsHighSurrogate(text[i]) && (i + 1 < text.Length) && char.IsLowSurrogate(text[i + 1]) ? i + 2 : i + 1;
+            glyphs.Add((i, end));
+            i = end;
         }
 
-        return text.Length;
+        //the caret goes before the first glyph whose midpoint is right of x
+        var low = 0;
+        var high = glyphs.Count;
+
+        while (low < high)
+        {
+            var mid = (low + high) / 2;
+            var (start, end) = glyphs[mid];
+            var midpoint = (Measure(text[..start]) + Measure(text[..end])) / 2;
+
+            if (x < midpoint)
+                high = mid;
+            else
+                low = mid + 1;
+        }
+
+        return low < glyphs.Count ? glyphs[low].Start : text.Length;
     }
 
     /// <summary>
