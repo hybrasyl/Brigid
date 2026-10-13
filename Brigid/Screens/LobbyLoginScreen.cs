@@ -64,6 +64,7 @@ public sealed class LobbyLoginScreen : IScreen
     //BRIG-107 preview: the new main menu over the legacy one, while BRIGID_MAIN_MENU_PREVIEW=1. Phase 4 replaces the
     //legacy menu with it and removes this.
     private MainMenuControl? PreviewMenu;
+    private ServerGreetingControl? PreviewGreeting;
 
     /// <inheritdoc />
     public UIPanel? Root { get; private set; }
@@ -131,6 +132,22 @@ public sealed class LobbyLoginScreen : IScreen
             PreviewMenu.PasswordButton.Clicked += OnPasswordClicked;
             PreviewMenu.HomepageButton.Clicked += OnHomepageClicked;
             PreviewMenu.ConfigButton.Clicked += OnConfigClicked;
+
+            //sample alerts, to see the panel; the preview import alert records no decision
+            PreviewMenu.Alerts.Add(MenuAlerts.NoSound(OperatingSystem.IsLinux()));
+            PreviewMenu.Alerts.Add(MenuAlerts.LegacyImport(static () => { }, static () => { }));
+
+            PreviewGreeting = new ServerGreetingControl();
+            PreviewGreeting.Accepted += OnLoginAccepted;
+            PreviewGreeting.Declined += OnLoginCancelled;
+
+            //the greeting covers the menu buttons and the alerts until the player answers it. A fresh start waits for it with
+            //them hidden; a return from the world gets no greeting
+            var menu = PreviewMenu;
+            PreviewGreeting.VisibilityChanged += visible => menu.SetCovered(visible);
+
+            if (!ReturningFromWorld)
+                PreviewMenu.CoverUntilGreeting();
         }
 
         //track last-clicked start panel button so enter can repeat it
@@ -193,6 +210,9 @@ public sealed class LobbyLoginScreen : IScreen
 
         if (PreviewMenu is not null)
             Root.AddChild(PreviewMenu);
+
+        if (PreviewGreeting is not null)
+            Root.AddChild(PreviewGreeting);
         Root.AddChild(LoginControl);
         Root.AddChild(ServerSelectControl);
         Root.AddChild(LoginNoticeControl);
@@ -772,9 +792,12 @@ public sealed class LobbyLoginScreen : IScreen
             throw;
         }
 
-        NoticeDebugLog.Write($"  calling Show, prior Visible={LoginNoticeControl.Visible}");
-        LoginNoticeControl.Show(noticeText);
-        NoticeDebugLog.Write($"  after Show, Visible={LoginNoticeControl.Visible}");
+        NoticeDebugLog.Write($"  calling Show, prior Visible={PreviewGreeting?.Visible ?? LoginNoticeControl.Visible}");
+        if (PreviewGreeting is not null)
+            PreviewGreeting.Show(noticeText);
+        else
+            LoginNoticeControl.Show(noticeText);
+        NoticeDebugLog.Write($"  after Show, Visible={PreviewGreeting?.Visible ?? LoginNoticeControl.Visible}");
     }
 
     private void OnLoginAccepted()
