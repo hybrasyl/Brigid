@@ -72,6 +72,7 @@ public abstract class CenteredModalPanel : FramePanel
 
         TitleLabel = new UILabel
         {
+            Name = "title",
             X = 0,
             Y = (TITLE_H - TextRenderer.CHAR_HEIGHT) / 2,
             Width = width,
@@ -83,16 +84,21 @@ public abstract class CenteredModalPanel : FramePanel
         };
         AddChild(TitleLabel);
 
-        CloseButton = AddBottomBarButton("Close", CLOSE_W, Hide);
+        CloseButton = AddBottomBarButton("Close", CLOSE_W, Hide, "close");
     }
 
     /// <summary>
     ///     Adds a button to the bottom action bar, stacked right-to-left after Close. Returns it so subclasses
-    ///     can keep a reference (e.g. to enable/disable per tab).
+    ///     can keep a reference (e.g. to enable/disable per tab). Give a <paramref name="name" /> of <c>[a-z0-9_]</c> so
+    ///     that a later <c>ui_panels</c> pack can address the button.
     /// </summary>
-    protected TextButton AddBottomBarButton(string text, int width, ClickedHandler onClick)
+    protected TextButton AddBottomBarButton(string text, int width, ClickedHandler onClick, string? name = null)
     {
-        var button = new TextButton(text, width, BUTTON_H) { Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2 };
+        var button = new TextButton(text, width, BUTTON_H)
+        {
+            Name = name ?? string.Empty,
+            Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2
+        };
         button.Clicked += onClick;
         BottomBarButtons.Add(button);
         AddChild(button);
