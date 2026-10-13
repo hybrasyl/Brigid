@@ -260,14 +260,9 @@ public sealed class LocalPlayerSettingsRepository
     {
         string[] lines = [];
 
-        try
-        {
-            if (File.Exists(MacroPath))
-                lines = File.ReadAllLines(MacroPath);
-        } catch
-        {
-            //an unreadable file loads as no macros
-        }
+        //an unreadable file loads as no macros, and the failure is logged
+        if (File.Exists(MacroPath))
+            DataDiagnostics.Try(() => lines = File.ReadAllLines(MacroPath), "LoadMacros");
 
         return ParseMacros(lines);
     }
