@@ -62,19 +62,56 @@ public static class MetaFileCache
         try
         {
             using var file = File.OpenRead(path);
-            using var zlib = new ZLibStream(file, CompressionMode.Decompress);
-            using var data = new MemoryStream();
 
-            zlib.CopyTo(data);
-
-            //retail + Hybrasyl both send standard (inverted) CRC-32 — verified against the retail checksum routine
-            return CRC32.Calculate(data.ToArray());
+            return GetDecompressedChecksum(file);
         }
         //rule 6 exemption: a corrupt or locked cache file reads as absent, and the sync downloads it again
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             return 0;
         }
+    }
+
+    /// <summary>
+    ///     Returns how the client accepts a metafile payload that it requested. The payload is valid when its decompressed
+    ///     CRC-32 is <paramref name="expectedChecksum" />. An invalid payload, an empty one included, is requested again
+    ///     until the client has sent <paramref name="maxRequests" /> requests for it.
+    /// </summary>
+    /// <remarks>Retail decompresses the payload, compares its CRC-32 with the sent checksum, and requests it again on a
+    /// mismatch. The limit stops a server that always sends bad data from holding the sync open.</remarks>
+    public static MetaFileReceipt CheckReceived(byte[] payload, uint expectedChecksum, int requestsSent, int maxRequests)
+    {
+        if ((payload.Length > 0) && (GetPayloadChecksum(payload) == expectedChecksum))
+            return MetaFileReceipt.Valid;
+
+        return requestsSent < maxRequests ? MetaFileReceipt.Retry : MetaFileReceipt.GiveUp;
+    }
+
+    //null when the payload is not valid zlib data
+    private static uint? GetPayloadChecksum(byte[] payload)
+    {
+        try
+        {
+            using var stream = new MemoryStream(payload, false);
+
+            return GetDecompressedChecksum(stream);
+        }
+        //rule 6 exemption: zlib reports bad data only by an exception, and bad data is a payload to request again
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    private static uint GetDecompressedChecksum(Stream compressed)
+    {
+        using var zlib = new ZLibStream(compressed, CompressionMode.Decompress);
+        using var data = new MemoryStream();
+
+        zlib.CopyTo(data);
+
+        //retail + Hybrasyl both send standard (inverted) CRC-32 — verified against the retail checksum routine
+        return CRC32.Calculate(data.ToArray());
     }
 
     /// <summary>Writes a metafile. Returns false when the name is refused or the write fails.</summary>
@@ -118,4 +155,17 @@ public static class MetaFileCache
 
         return deleted;
     }
+}
+
+/// <summary>What the client does with a metafile payload that it requested.</summary>
+public enum MetaFileReceipt
+{
+    /// <summary>The payload matches its checksum. Write it.</summary>
+    Valid,
+
+    /// <summary>The payload does not match its checksum. Request it again.</summary>
+    Retry,
+
+    /// <summary>The payload does not match its checksum, and the request limit is reached. Keep the cached file.</summary>
+    GiveUp
 }

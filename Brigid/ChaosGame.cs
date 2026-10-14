@@ -114,6 +114,7 @@ public sealed class ChaosGame : Game
     private readonly GraphicsDeviceManager Graphics;
     private static string MetaFilePath => AppPaths.MetaFileDir;
     private readonly Dictionary<string, uint> MetaPendingChecksums = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> MetaRequestCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<IServerPacket> PacketBuffer = [];
     private int CursorOffsetX;
     private int CursorOffsetY;
@@ -873,6 +874,8 @@ public sealed class ChaosGame : Game
     }
 
     #region Metadata Sync
+    private const int MAX_METAFILE_REQUESTS = 3;
+
     private void HandleMetaData(ServerPackets.MetafilePacket pkt)
     {
         switch (pkt)
@@ -899,6 +902,7 @@ public sealed class ChaosGame : Game
         }
 
         MetaPendingChecksums.Clear();
+        MetaRequestCounts.Clear();
         MetaSyncStarted = true;
 
         var listed = new List<ServerPackets.MetafileEntry>(collection.Count);
@@ -912,7 +916,8 @@ public sealed class ChaosGame : Game
         }
 
         //the list is the server's whole catalog, so a local file that it does not name is stale. An empty list empties
-        //the cache, as the retail client does.
+        //the cache. Retail clears only its store in memory, but MetaFileRepository reads every file in the folder, so a
+        //file left on disk stays in use.
         foreach (var name in MetaFileCache.PruneUnlisted(MetaFilePath, listed.Select(info => info.Name)))
             NoticeDebugLog.Write($"[meta] deleted a metafile the server no longer lists: {name}");
 
@@ -921,7 +926,10 @@ public sealed class ChaosGame : Game
                 MetaPendingChecksums[info.Name] = info.Checksum;
 
         foreach (var name in MetaPendingChecksums.Keys)
+        {
+            MetaRequestCounts[name] = 1;
             Connection.SendMetaDataRequest(MetaDataRequestType.DataByName, name);
+        }
 
         if (MetaPendingChecksums.Count == 0)
             OnMetaDataSyncComplete?.Invoke();
@@ -940,11 +948,37 @@ public sealed class ChaosGame : Game
             return;
         }
 
-        //an empty file still completes its entry, so one bad entry cannot stop the sync
-        if (info.Data.Length > 0)
+        if (MetaPendingChecksums.TryGetValue(info.Name, out var expected))
+        {
+            var requests = MetaRequestCounts.GetValueOrDefault(info.Name);
+
+            switch (MetaFileCache.CheckReceived(info.Data, expected, requests, MAX_METAFILE_REQUESTS))
+            {
+                case MetaFileReceipt.Valid:
+                    MetaFileCache.TryWrite(MetaFilePath, info.Name, info.Data);
+
+                    break;
+
+                case MetaFileReceipt.Retry:
+                    NoticeDebugLog.Write($"[meta] {info.Name} does not match its checksum. Requesting it again ({requests + 1} of {MAX_METAFILE_REQUESTS}).");
+                    MetaRequestCounts[info.Name] = requests + 1;
+                    Connection.SendMetaDataRequest(MetaDataRequestType.DataByName, info.Name);
+
+                    return;
+
+                //a bad entry completes after the last request, so one bad entry cannot stop the sync
+                case MetaFileReceipt.GiveUp:
+                    NoticeDebugLog.Write($"[meta] {info.Name} does not match its checksum after {requests} requests. The cache keeps its old copy, if it has one.");
+
+                    break;
+            }
+        }
+        //a file that the client did not request has no checksum to compare, so it is written unchecked
+        else if (info.Data.Length > 0)
             MetaFileCache.TryWrite(MetaFilePath, info.Name, info.Data);
 
         MetaPendingChecksums.Remove(info.Name);
+        MetaRequestCounts.Remove(info.Name);
 
         if (MetaSyncStarted && (MetaPendingChecksums.Count == 0))
             OnMetaDataSyncComplete?.Invoke();

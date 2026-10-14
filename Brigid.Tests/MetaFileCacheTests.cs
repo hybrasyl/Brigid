@@ -93,6 +93,32 @@ public sealed class MetaFileCacheTests : IDisposable
     }
 
     [Fact]
+    public void CheckReceived_AcceptsAPayloadThatMatchesItsChecksum()
+    {
+        byte[] content = [1, 2, 3, 4, 5];
+
+        Assert.Equal(MetaFileReceipt.Valid, MetaFileCache.CheckReceived(Compress(content), CRC32.Calculate(content), 1, 3));
+    }
+
+    //an empty payload, a payload that is not zlib, and a payload whose data does not match all ask for the file again
+    public static TheoryData<byte[]> BadPayloads => new() { Array.Empty<byte>(), new byte[] { 1, 2, 3 }, Compress([9, 9]) };
+
+    [Theory]
+    [MemberData(nameof(BadPayloads))]
+    public void CheckReceived_RequestsABadPayloadAgainBelowTheLimit(byte[] payload)
+        => Assert.Equal(MetaFileReceipt.Retry, MetaFileCache.CheckReceived(payload, CRC32.Calculate([1, 2, 3, 4, 5]), 2, 3));
+
+    [Theory]
+    [MemberData(nameof(BadPayloads))]
+    public void CheckReceived_GivesUpOnABadPayloadAtTheLimit(byte[] payload)
+        => Assert.Equal(MetaFileReceipt.GiveUp, MetaFileCache.CheckReceived(payload, CRC32.Calculate([1, 2, 3, 4, 5]), 3, 3));
+
+    //the CRC-32 of no data is 0, so an empty payload must not match a checksum of 0
+    [Fact]
+    public void CheckReceived_RefusesAnEmptyPayloadForAZeroChecksum()
+        => Assert.Equal(MetaFileReceipt.Retry, MetaFileCache.CheckReceived([], 0, 1, 3));
+
+    [Fact]
     public void TryWrite_WritesABareName()
     {
         Assert.True(MetaFileCache.TryWrite(Root, "Light", [7, 8]));
