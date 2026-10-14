@@ -504,7 +504,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
         //message history (shift+f) — displays orange bar messages in a tab panel
         var msgHistoryBounds = GetRect("ChattingRect");
 
-        MessageHistory = new SystemMessagePanel(msgHistoryBounds, tabRect, WorldState.Chat.GetOrangeBarHistory());
+        MessageHistory = new SystemMessagePanel(msgHistoryBounds, tabRect);
         RegisterTab(HudTab.MessageHistory, MessageHistory, tabRect);
 
         //wire tab button clicks: btn_inv0=a, btn_inv1=s, btn_inv2=d, btn_inv3=f, btn_inv4=g, btn_inv5=h

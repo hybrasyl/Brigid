@@ -145,6 +145,7 @@ public sealed class CastablePopupControl : CenteredModalPanel
                 Visible = false,
                 ForegroundColor = LegendColors.White,
                 FocusedBackgroundColor = DialogPalette.RowHoverFill,
+                VerticalAlignment = VerticalAlignment.Center,
                 //lets Tab/Shift+Tab traverse the lines through the panel's own tab-stop walk; without it the
                 //focused box swallows Tab outright.
                 IsTabStop = true

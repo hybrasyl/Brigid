@@ -219,6 +219,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 MaxLength = MACRO_MAX_LENGTH,
                 ForegroundColor = LegendColors.White,
                 FocusedBackgroundColor = DialogPalette.RowHoverFill,
+                VerticalAlignment = VerticalAlignment.Center,
                 IsTabStop = true
             };
 
@@ -246,6 +247,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 MaxLength = FRIEND_MAX_LENGTH,
                 ForegroundColor = LegendColors.White,
                 FocusedBackgroundColor = DialogPalette.RowHoverFill,
+                VerticalAlignment = VerticalAlignment.Center,
                 IsTabStop = true
             };
 
@@ -259,6 +261,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 MaxLength = FRIEND_MAX_LENGTH,
                 ForegroundColor = LegendColors.White,
                 FocusedBackgroundColor = DialogPalette.RowHoverFill,
+                VerticalAlignment = VerticalAlignment.Center,
                 IsTabStop = true
             };
 

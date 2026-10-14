@@ -40,6 +40,12 @@ public static class AnimationSystem
     /// <summary>
     ///     Sets up walk animation state on an entity. Call after updating tile position.
     /// </summary>
+    /// <param name="walkFrameOverride">
+    ///     The creature sprite's walk frame count. Null for a creature that the server moves means it has no sprite
+    ///     (sprite id 0), so there is no walk animation and the walk snaps to the destination. A sprite id whose sprite
+    ///     is missing gets the one-frame placeholder animation, not null. Null for the local player or a paperdoll aisling
+    ///     means the human default: the local player's walk length paces its walk input.
+    /// </param>
     public static void StartWalk(
         WorldEntity entity,
         Direction direction,
@@ -56,7 +62,12 @@ public static class AnimationSystem
         //swimming is not a form — use swim animation frame count and normal walk speed on water tiles
         var swimming = entity is { IsOnSwimmingTile: true, SwimWalkFrames: > 0 };
 
-        var frameCount = swimming ? entity.SwimWalkFrames : walkFrameOverride ?? DEFAULT_WALK_FRAMES;
+        //a creature that the server moves and that has no sprite snaps: zero frames give a zero walk offset.
+        //the local player keeps the human walk, because the walk ends before the next walk can start, and a 75 ms walk
+        //would send walks faster than the server accepts them.
+        var frameCount = swimming
+            ? entity.SwimWalkFrames
+            : walkFrameOverride ?? (isCreature && !isLocalPlayer ? 0 : DEFAULT_WALK_FRAMES);
 
         entity.AnimState = EntityAnimState.Walking;
         entity.AnimFrameIndex = 0;
@@ -70,7 +81,7 @@ public static class AnimationSystem
                 : REMOTE_AISLING_WALK_FRAME_MS;
 
         entity.WalkStartOffset = GetWalkOffset(direction);
-        entity.VisualOffset = entity.WalkStartOffset;
+        entity.VisualOffset = frameCount > 0 ? entity.WalkStartOffset : Vector2.Zero;
     }
 
     /// <summary>
@@ -186,9 +197,9 @@ public static class AnimationSystem
     public static void Advance(WorldEntity entity, float elapsedMs, bool smoothScroll = false)
     {
         //idle animation ticks independently so it survives body animations.
-        //aislings use idleanimframecount (from "04" epf); creatures always tick.
-        //swimming aislings always tick so the swim animation cycles while idle.
-        if ((entity.IdleAnimFrameCount > 0) || (entity.Type == ClientEntityType.Creature) || entity.IsOnSwimmingTile)
+        //aislings use idleanimframecount (from "04" epf); creature sprites always tick, including an aisling in
+        //monster form. swimming aislings always tick so the swim animation cycles while idle.
+        if ((entity.IdleAnimFrameCount > 0) || entity.IsRenderedAsCreatureSprite || entity.IsOnSwimmingTile)
             AdvanceIdleAnim(entity, elapsedMs);
 
         switch (entity.AnimState)
@@ -213,8 +224,8 @@ public static class AnimationSystem
         var totalDuration = Math.Max(MIN_WALK_DURATION_MS, entity.AnimFrameCount * entity.AnimFrameIntervalMs);
         var progress = Math.Clamp(entity.AnimElapsedMs / totalDuration, 0f, 1f);
 
-        //some entities have no walk frames — that's valid. the walk slide still needs to play out,
-        //but there's no frame stepping to do.
+        //an entity with no walk frames has a zero offset (it snaps), but the walk state still lasts at least
+        //MIN_WALK_DURATION_MS, and there is no frame stepping to do.
         entity.AnimFrameIndex = entity.AnimFrameCount > 0
             ? Math.Clamp((int)(progress * entity.AnimFrameCount), 0, entity.AnimFrameCount - 1)
             : 0;
@@ -329,6 +340,22 @@ public static class AnimationSystem
         entity.AnimFrameIndex = 0;
         entity.AnimElapsedMs = 0;
         entity.VisualOffset = Vector2.Zero;
+    }
+
+    /// <summary>
+    ///     Restarts the idle cycle. Call it when an entity changes between a paperdoll aisling and a creature sprite: the
+    ///     two forms use different frame counts and intervals, so a tick or a cycle end from one form can select a frame
+    ///     that the other form does not have. It also clears the paperdoll idle frame count; the display handler that
+    ///     runs after WorldState sets that count again for a paperdoll aisling.
+    /// </summary>
+    public static void ResetIdleCycle(WorldEntity entity)
+    {
+        entity.IdleAnimTick = 0;
+        entity.IdleAnimElapsedMs = 0;
+        entity.IdleCycleEndsAt = 0;
+        entity.IdleOptionalActive = false;
+        entity.IdleFrameIntervalMs = 0;
+        entity.IdleAnimFrameCount = 0;
     }
 
     /// <summary>
@@ -576,6 +603,32 @@ public static class AnimationSystem
 
     private static (int FrameIndex, bool Flip) GetCreatureIdleFrame(WorldEntity entity, in CreatureAnimInfo info)
     {
+        (var baseIndex, var dirOffset, var frameCount) = GetCreatureIdleLoop(in info, entity.IdleOptionalActive);
+
+        //cycle through the standing frames using the entity's idle tick
+        var frameTick = frameCount > 1 ? entity.IdleAnimTick % frameCount : 0;
+
+        return ToDirectionalFrame(in info, baseIndex + frameTick, dirOffset, entity.Direction);
+    }
+
+    /// <summary>
+    ///     Returns the first idle frame index and flip flag for a creature sprite facing the given direction. Does not require
+    ///     a WorldEntity — suitable for portraits, previews, and other static rendering. Follows the same idle rules as the
+    ///     world, at the first tick of the standing loop.
+    /// </summary>
+    public static (int FrameIndex, bool Flip) GetCreatureIdleFrame(in CreatureAnimInfo info, Direction direction)
+    {
+        (var baseIndex, var dirOffset, _) = GetCreatureIdleLoop(in info, optionalActive: false);
+
+        return ToDirectionalFrame(in info, baseIndex, dirOffset, direction);
+    }
+
+    /// <summary>
+    ///     The first frame, the offset to the second facing, and the length of a creature's idle loop. The world and the
+    ///     static pickers share it, so a portrait shows the frame the creature stands on in the world.
+    /// </summary>
+    private static (int BaseIndex, int DirOffset, int FrameCount) GetCreatureIdleLoop(in CreatureAnimInfo info, bool optionalActive)
+    {
         int baseIndex;
         int dirOffset;
         int frameCount;
@@ -598,7 +651,7 @@ public static class AnimationSystem
         {
             //NormalPlusOptional: cycle length depends on which loop was picked this cycle.
             baseIndex = info.StandingFrameIndex;
-            frameCount = entity.IdleOptionalActive ? info.OptionalAnimationFrameCount : info.StandingFrameCount;
+            frameCount = optionalActive ? info.OptionalAnimationFrameCount : info.StandingFrameCount;
             dirOffset = info.OptionalAnimationFrameCount;
         }
 
@@ -606,42 +659,22 @@ public static class AnimationSystem
         if ((baseIndex + dirOffset) >= info.TotalFrameCount)
             dirOffset = 0;
 
-        //cycle through the standing frames using the entity's idle tick
-        var frameTick = frameCount > 1 ? entity.IdleAnimTick % frameCount : 0;
-
-        return entity.Direction switch
-        {
-            Direction.Up    => (baseIndex + frameTick, false),
-            Direction.Right => (baseIndex + dirOffset + frameTick, false),
-            Direction.Down  => (baseIndex + dirOffset + frameTick, true),
-            Direction.Left  => (baseIndex + frameTick, true),
-            _               => (baseIndex + frameTick, false)
-        };
+        return (baseIndex, dirOffset, frameCount);
     }
 
-    /// <summary>
-    ///     Returns the first idle frame index and flip flag for a creature sprite facing the given direction. Does not require
-    ///     a WorldEntity — suitable for portraits, previews, and other static rendering.
-    /// </summary>
-    public static (int FrameIndex, bool Flip) GetCreatureIdleFrame(in CreatureAnimInfo info, Direction direction)
+    private static (int FrameIndex, bool Flip) ToDirectionalFrame(in CreatureAnimInfo info, int frame, int dirOffset, Direction direction)
     {
-        var baseIndex = info.StandingFrameCount > 0 ? info.StandingFrameIndex : info.WalkFrameIndex;
-
-        var dirOffset = info.StandingFrameCount > 0
-            ? info.OptionalAnimationFrameCount > 0 ? info.OptionalAnimationFrameCount : info.StandingFrameCount
-            : info.WalkFrameCount;
-
-        if ((baseIndex + dirOffset) >= info.TotalFrameCount)
-            dirOffset = 0;
-
-        return direction switch
+        (var index, var flip) = direction switch
         {
-            Direction.Up    => (baseIndex, false),
-            Direction.Right => (baseIndex + dirOffset, false),
-            Direction.Down  => (baseIndex + dirOffset, true),
-            Direction.Left  => (baseIndex, true),
-            _               => (baseIndex, false)
+            Direction.Up    => (frame, false),
+            Direction.Right => (frame + dirOffset, false),
+            Direction.Down  => (frame + dirOffset, true),
+            Direction.Left  => (frame, true),
+            _               => (frame, false)
         };
+
+        //a sprite with fewer frames than its header declares holds its last frame, and never reads past the end
+        return (Math.Clamp(index, 0, Math.Max(info.TotalFrameCount - 1, 0)), flip);
     }
 
     /// <summary>

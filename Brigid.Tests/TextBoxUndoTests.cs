@@ -193,6 +193,36 @@ public class TextBoxUndoTests
     }
 
     [Fact]
+    public void Cut_PutsTheSelectionOnTheClipboard()
+    {
+        var box = FocusedBox();
+        Type(box, "abc");
+        Key(box, Keys.A, KeyModifiers.Ctrl);
+        Key(box, Keys.X, KeyModifiers.Ctrl);
+
+        Assert.Equal("abc", TestClipboard.Instance.Text);
+    }
+
+    [Fact]
+    public void Cut_RefusedByTheClipboard_KeepsTheText()
+    {
+        var box = FocusedBox();
+        Type(box, "abc");
+        Key(box, Keys.A, KeyModifiers.Ctrl);
+        TestClipboard.Instance.RefuseWrites = true;
+
+        try
+        {
+            Key(box, Keys.X, KeyModifiers.Ctrl);
+        } finally
+        {
+            TestClipboard.Instance.RefuseWrites = false;
+        }
+
+        Assert.Equal("abc", box.Text);
+    }
+
+    [Fact]
     public void ReadOnlyBox_DoesNotUndo()
     {
         var box = FocusedBox();
