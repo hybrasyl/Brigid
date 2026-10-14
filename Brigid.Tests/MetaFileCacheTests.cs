@@ -38,6 +38,8 @@ public sealed class MetaFileCacheTests : IDisposable
     [InlineData("Light")]
     [InlineData("a..b")]
     [InlineData("CONSOLE")]
+    [InlineData("COM10")]
+    [InlineData("COM⁴")]
     public void IsSafeName_AcceptsBareFileNames(string name) => Assert.True(MetaFileCache.IsSafeName(name));
 
     [Theory]
@@ -62,6 +64,14 @@ public sealed class MetaFileCacheTests : IDisposable
     [InlineData("NUL")]
     [InlineData("con.txt")]
     [InlineData("Com1")]
+    [InlineData("COM0")]
+    [InlineData("LPT0.txt")]
+    [InlineData("COM¹")]
+    [InlineData("com².dat")]
+    [InlineData("LPT³")]
+    [InlineData("lpt¹.txt")]
+    [InlineData("CON .txt")]
+    [InlineData("nul  .dat")]
     public void IsSafeName_RejectsAnythingThatIsNotTheSameBareFileOnEveryPlatform(string? name)
         => Assert.False(MetaFileCache.IsSafeName(name));
 

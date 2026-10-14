@@ -18,12 +18,15 @@ public static class MetaFileCache
     //a name that one platform accepts, every platform accepts.
     private static readonly char[] InvalidChars = ['"', '<', '>', '|', ':', '*', '?', '\\', '/', .. Enumerable.Range(0, 32).Select(i => (char)i)];
 
-    //Windows opens a device, not a file, for these names, with or without an extension
+    //Windows opens a device, not a file, for these names, with or without an extension. The superscript digits are
+    //reserved too.
     private static readonly FrozenSet<string> ReservedNames = new[]
     {
         "CON", "PRN", "AUX", "NUL",
-        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "COM¹", "COM²", "COM³",
+        "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        "LPT¹", "LPT²", "LPT³"
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -42,7 +45,8 @@ public static class MetaFileCache
         if (Path.IsPathRooted(name) || (Path.GetFileName(name) != name))
             return false;
 
-        return !ReservedNames.Contains(name.Split('.')[0]);
+        //Windows also removes the spaces before the extension, so "CON .txt" opens the device
+        return !ReservedNames.Contains(name.Split('.')[0].TrimEnd(' '));
     }
 
     /// <summary>
