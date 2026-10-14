@@ -66,7 +66,7 @@ internal static class DllResolver
         if (!NativeLibrary.TryLoad(libraryName, out handle))
             NoticeDebugLog.Write(
                 $"DllResolver: {libraryName} not found! host RID {RuntimeIdentifier}, portable RID {PortableRuntimeIdentifier}, "
-                + $"probed: {string.Join(", ", (libs ?? []).SelectMany(GetProbePaths))}");
+                + $"probed: {string.Join(", ", GetLoadCandidates(libs ?? [], GetProbePaths))}");
         return handle;
     }
 
@@ -119,16 +119,29 @@ internal static class DllResolver
     private static bool TryLoadLibrary(List<string> libraryNames, out IntPtr handle)
     {
         handle = IntPtr.Zero;
-        foreach (var libraryName in libraryNames)
+        foreach (var candidate in GetLoadCandidates(libraryNames, GetProbePaths))
         {
-            foreach (var candidate in GetProbePaths(libraryName))
-            {
-                if (NativeLibrary.TryLoad(candidate, out handle))
-                    return true;
-            }
+            if (NativeLibrary.TryLoad(candidate, out handle))
+                return true;
         }
         return false;
     }
+
+    /// <summary>
+    ///     The load order for a library: every bundled path of every name, then each name alone, which the system loader
+    ///     searches for.
+    /// </summary>
+    /// <remarks>
+    ///     A Linux distribution package installs only the versioned name (<c>libSDL2_mixer-2.0.so.0</c>). The unversioned
+    ///     <c>libSDL2_mixer.so</c> is in the <c>-dev</c> package, and the last-chance load of the bare library name never
+    ///     finds the versioned file. Without the bare names, a system mixer does not load when the bundled mixer cannot
+    ///     load its codecs (Ubuntu 22.04, Fedora). The bundled paths come first, so a bundled copy that loads is always the
+    ///     copy in use.
+    /// </remarks>
+    internal static IEnumerable<string> GetLoadCandidates(
+        IReadOnlyList<string> libraryNames,
+        Func<string, IEnumerable<string>> getProbePaths)
+        => libraryNames.SelectMany(getProbePaths).Concat(libraryNames);
 
     private static IEnumerable<string> GetProbePaths(string libraryName)
     {

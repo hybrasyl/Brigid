@@ -553,10 +553,12 @@ dotnet run --project Brigid/Brigid.csproj
 >
 > - **`.deb`** declares them: `sudo apt install ./Brigid-<version>-linux-x64.deb` installs the codecs. It targets
 >   Ubuntu 24.04+ and Debian 12; apt refuses it on a release whose codec versions differ (Ubuntu 22.04, for example),
->   so use the AppImage there.
+>   so use the `.tar.gz` there.
 > - **AppImage** bundles them, so it needs nothing installed. Its bundled libraries come from Ubuntu 24.04, so it
 >   needs glibc 2.39 or newer.
-> - **`.tar.gz`** and source builds (`dotnet run`) use the system's, so install the distro package:
+> - **`.tar.gz`** and source builds (`dotnet run`) use the system's, so install the distro package. If the bundled
+>   mixer cannot load the system's codecs (Ubuntu 22.04 and Fedora ship other codec versions), the client loads the
+>   distro's own mixer instead:
 >
 >   ```bash
 >   sudo apt install libsdl2-mixer-2.0-0       # Debian/Ubuntu
