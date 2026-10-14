@@ -135,7 +135,7 @@ deriving from `AssetPack` (or `AudioPack` for byte-serving types).
 | `pack_version`   | string                                   | `""`    | **Nothing reads this.** Informational                              |
 | `content_type`   | string                                   | `""`    | Yes — factory discriminator                                        |
 | `priority`       | int                                      | `100`   | Yes — conflict resolution                                          |
-| `covers`         | `Dictionary<string, CoverageEntry>`      | `{}`    | Only three sub-fields, below                                       |
+| `covers`         | `Dictionary<string, CoverageEntry>`      | `{}`    | Only the sub-fields below                                          |
 
 `covers` is a **capability** declaration, not a coverage range — actual coverage is emergent from
 which entries the archive ships. You never enumerate sprite IDs in the manifest.
@@ -147,6 +147,7 @@ which entries the archive ships. You never enumerate sprite IDs in the manifest.
 | `dimensions` | `int[]` `[w, h]`             | **`NpcPortraitPack` only.** See note below           |
 | `dyeable`    | `int[]` (1-based item IDs)   | `ItemPack` only — `covers.item_icons.dyeable`        |
 | `portraits`  | `Dictionary<string, string>` | `NpcPortraitPack` only — **required**, it *is* the naming convention |
+| `"<id>"`     | object, one for each id      | `AmbientPack` only — `covers.ambient_sounds["<id>"].loop`. See `ambient_sounds` |
 
 **`dimensions` caveat.** Widely documented as `[32, 32]` for `ability_icons`; no code reads it there.
 The 31→32 icon offset is applied unconditionally by `IconTexture.Modern` regardless of what the
@@ -171,6 +172,7 @@ behavioral difference.
 | `creature_sprites`    | `creature_sprites/creature_{id:D5}/stand/{n\|e}_001.png` | 1              | `GetCreaturePack()`         | creature MPF                                      |
 | `music`               | `music_{id}.{ext}`                                   | raw server id      | `GetMusicPack()`            | `{DataPath}/music/{id}.mus`                       |
 | `sound_effects`       | `sfx_{id}.{ext}`                                     | raw server id      | `GetSfxPack()`              | `legend.dat` `{id}.mp3`                           |
+| `ambient_sounds`      | `amb_{id}.{ext}`                                     | ambient id, 1–255  | `GetAmbientPack()`          | none — no pack entry means no bed                 |
 | `world_maps`          | `{fieldName}.png`                                    | named, not numeric | `GetWorldMapPack()`         | `{field}.epf` + `{field}.pal` in `setoa.dat`      |
 | `town_maps`           | `town_{mapId:D5}.png`                                | raw map id         | `GetTownMapPack()`          | `national.dat` `_t*` five-layer composite         |
 
@@ -471,21 +473,43 @@ sfx_{id}.{ext}
   entry `{soundId}.mp3`. A present-but-undecodable entry falls through to legacy.
 - Manifest fields read: **none**.
 
-**Reserved ambient IDs.** Some IDs above the legacy range are reserved by the client for looping
-ambient beds. They have **no legacy fallback** — shipping the entry is what enables the sound.
+---
 
-| ID    | Use                | Notes                                                                                                                                                       |
-| ----- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 10000 | Rain ambience loop | Loops while the player is on a rain-flagged map. Author loopable end-to-start and **short** (decodes fully to PCM on the game thread). Prefer **`wav`** — MP3 encoder padding bakes a silent gap into the loop seam. |
+## `ambient_sounds`
 
-### Audio notes (both types)
+`Brigid.Data/AssetPacks/AmbientPack.cs`, base `AudioPack.cs` — ambient beds (for example rain), **fully decoded and cached** like SFX. A bed plays on one mixer channel beside the single music stream, at the **Ambience** volume.
+
+```text
+amb_{id}.{ext}
+```
+
+- Regex: `^amb_\d+\.(wav|ogg|mp3|flac)$`. Same root-only + plain-digit ID parsing as `music`. Taliesin writes `amb_{id:D4}`, for example `amb_0001.wav`.
+- `{id}` is an **ambient id**, a separate number space from the SFX id. `0` means no ambient, so ids are 1–255 (a byte, to agree with the planned per-map server field).
+- API `TryGetAmbientBytes(int ambientId, out byte[]?)` and `Loops(int ambientId)`.
+- Consumed by `SoundSystem.StartAmbient`. **No legacy fallback:** an id with no entry is a silent no-op, and an entry that does not decode is silent too (the client writes one line to `notice-debug.log`). An entry outside 1–255 is ignored.
+- Manifest field read: `covers.ambient_sounds`, keyed by ambient id. Only `{ "loop": false }` changes the default.
+
+| `covers.ambient_sounds["<id>"]`          | Client behaviour                  |
+| ---------------------------------------- | --------------------------------- |
+| absent                                   | loop                              |
+| `{ "loop": true }`                       | loop                              |
+| `{ "loop": false }`                      | play one time, then free the channel |
+| any other value (for example `"no"`)     | loop                              |
+
+A one-shot bed does not play again while the same id stays the bed, also across a map change. A different id, or a stop, resets it. The interval fields (`mode`, `play`, `silence`) are legal to write, and the client ignores them.
+
+**Ids that the client uses.**
+
+| ID | Use  | Notes |
+| -- | ---- | ----- |
+| 1  | Rain | Plays while the player is on a rain-flagged map (low nibble of the map flags is 2). Make it loop end-to-start and keep it **short**, because it decodes fully to PCM on the game thread. Use **`wav`**: MP3 encoder padding puts a silent gap into the loop seam. |
+
+### Audio notes (all audio types)
 
 - The mixer runs at **22050 Hz / stereo / signed 16-bit**. Other rates work (the client resamples),
   but matching saves a resample.
-- Keep SFX short — they decode into a small (64-entry) LRU cache. Anything long or looping belongs
-  in `music`, which streams.
-- Malformed entries (corrupt file, non-integer/negative ID, wrong extension, file in a subfolder)
-  are "not present" and fall back to legacy. A bad file never breaks playback.
+- Keep SFX and ambient beds short — they decode into a small (64-entry) LRU cache. A long track belongs in `music`, which streams.
+- Malformed entries (corrupt file, non-integer/negative ID, wrong extension, file in a subfolder) are "not present". `music` and `sound_effects` then fall back to legacy; `ambient_sounds` has no legacy source, so the bed is silent. A bad file never breaks playback.
 
 ---
 
