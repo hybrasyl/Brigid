@@ -3,6 +3,7 @@ using Brigid.Collections;
 using Brigid.Controls.World.Hud.Panel.Slots;
 using Brigid.Data.Models;
 using Brigid.ViewModel;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
 
@@ -40,13 +41,16 @@ public sealed class InventoryPanel : PanelBase
         ConfigureExpand(expandedBackground ?? UiRenderer.Instance!.GetSpfTexture("_ninv5.spf"), EXPANDED_SLOTS);
 
         //gold bag occupies the last visible grid cell, overlaying the slot at that index
+        var goldIcon = RenderIcon(GOLD_SPRITE);
+
         GoldSlot = new PanelSlot
         {
             Name = "GoldBag",
             Slot = 0,
             Width = ICON_SIZE,
             Height = ICON_SIZE,
-            NormalTexture = RenderIcon(GOLD_SPRITE).Texture,
+            NormalTexture = goldIcon.Texture,
+            TextureOffset = goldIcon.Offset,
             ZIndex = 1
         };
 
@@ -106,8 +110,10 @@ public sealed class InventoryPanel : PanelBase
 
         if (data.IsOccupied)
         {
+            var icon = UiRenderer.Instance!.GetItemIcon(data.Sprite, data.Color);
             control.NormalTexture?.Dispose();
-            control.NormalTexture = UiRenderer.Instance!.GetItemIcon(data.Sprite, data.Color);
+            control.NormalTexture = icon.Texture;
+            control.TextureOffset = icon.Offset;
             control.SlotName = data.Name;
             control.CurrentDurability = data.CurrentDurability;
             control.MaxDurability = data.MaxDurability;
@@ -115,6 +121,7 @@ public sealed class InventoryPanel : PanelBase
         {
             control.NormalTexture?.Dispose();
             control.NormalTexture = null;
+            control.TextureOffset = Vector2.Zero;
             control.SlotName = null;
             control.CooldownPercent = 0;
             control.CurrentDurability = 0;
@@ -148,8 +155,8 @@ public sealed class InventoryPanel : PanelBase
             Slots[gridIndex].Visible = false;
     }
 
-    //Item icons are legacy-sourced (ItemXXX.epf). No modern pack path exists for items yet, so always legacy offset.
-    protected override IconTexture RenderIcon(ushort spriteId) => IconTexture.Legacy(UiRenderer.Instance!.GetItemIcon(spriteId));
+    //GetItemIcon gives the slot offset: none for a legacy EPF icon, the centring offset for a pack icon
+    protected override IconTexture RenderIcon(ushort spriteId) => UiRenderer.Instance!.GetItemIcon(spriteId);
 
     public override void SetExpanded(bool expanded)
     {

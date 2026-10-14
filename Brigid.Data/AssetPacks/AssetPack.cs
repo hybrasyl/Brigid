@@ -43,6 +43,15 @@ public abstract class AssetPack : IAssetPack
     /// </summary>
     protected IReadOnlyCollection<string> EntryNames => EntryIndex.Keys;
 
+    /// <inheritdoc />
+    /// <remarks>
+    ///     By default the keys are the names of the <c>.png</c> entries. Other files (the manifest, a README, a
+    ///     <c>Thumbs.db</c> or <c>__MACOSX/</c> entry that a ZIP tool adds) are not keys, so they give no false overlap.
+    /// </remarks>
+    public virtual IEnumerable<string> CoverageKeys
+        => EntryIndex.Keys.Where(name => name.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                                         && !name.StartsWith("__MACOSX/", StringComparison.OrdinalIgnoreCase));
+
     /// <summary>
     ///     Reads the raw, undecoded bytes of the entry with the given name. Swallows read failures (treats them as
     ///     "not present") so callers can fall back to legacy content cleanly. For non-image content (e.g. audio handed

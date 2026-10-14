@@ -694,7 +694,7 @@ public sealed class BankShopPanel : UIPanel
 
     private sealed record MerchantEntry(
         string Name,
-        Texture2D? Icon,
+        IconTexture? Icon,
         int Count,
         string Category = "",
         string Description = "",
@@ -772,9 +772,10 @@ public sealed class BankShopPanel : UIPanel
             AddChild(CountLabel);
         }
 
-        public void SetEntry(Texture2D? icon, string name, int count)
+        public void SetEntry(IconTexture? icon, string name, int count)
         {
-            IconImage.Texture = icon;
+            IconImage.Texture = icon?.Texture;
+            IconImage.TextureOffset = icon?.Offset ?? Vector2.Zero;
             IconImage.Visible = icon is not null;
 
             var newline = name.IndexOf('\n');

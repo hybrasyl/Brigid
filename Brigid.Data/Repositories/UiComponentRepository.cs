@@ -102,15 +102,12 @@ public sealed class UiComponentRepository : RepositoryBase
         for (var i = 0; i < epf.Count; i++)
             images[i] = Graphics.RenderImage(epf[i], palette);
 
-        var pack = AssetPackRegistry.GetUiSpriteOverridePack();
-
-        if (pack is not null)
-            for (var i = 0; i < images.Length; i++)
-                if (pack.TryGetSprite(fileName, i, out var overrideImage) && (overrideImage is not null))
-                {
-                    images[i].Dispose();
-                    images[i] = overrideImage;
-                }
+        for (var i = 0; i < images.Length; i++)
+            if (AssetPackRegistry.TryGetUiSprite(fileName, i, out var overrideImage) && (overrideImage is not null))
+            {
+                images[i].Dispose();
+                images[i] = overrideImage;
+            }
 
         return images;
     }
@@ -293,9 +290,7 @@ public sealed class UiComponentRepository : RepositoryBase
     /// </summary>
     public SKImage? GetSpfImage(string fileName, int frameIndex = 0)
     {
-        var pack = AssetPackRegistry.GetUiSpriteOverridePack();
-
-        if ((pack is not null) && pack.TryGetSprite(fileName, frameIndex, out var overrideImage) && (overrideImage is not null))
+        if (AssetPackRegistry.TryGetUiSprite(fileName, frameIndex, out var overrideImage) && (overrideImage is not null))
             return overrideImage;
 
         var spf = GetOrCreate($"SPF_{fileName}", () => LoadSpfFile(fileName));
@@ -375,17 +370,13 @@ public sealed class UiComponentRepository : RepositoryBase
 
         //ui_sprite_overrides pack wins over legacy art for prefab-resolved images. Probe both extensions
         //since the prefab control file references images by stem only — whichever extension the artist
-        //packaged determines the lookup.
-        var pack = AssetPackRegistry.GetUiSpriteOverridePack();
+        //packaged determines the lookup. every pack is asked for the .epf name before any pack is asked for the
+        //.spf name, the same order as the legacy lookup below
+        if (AssetPackRegistry.TryGetUiSprite(epfName, frameIndex, out var overrideImage) && (overrideImage is not null))
+            return overrideImage;
 
-        if (pack is not null)
-        {
-            if (pack.TryGetSprite(epfName, frameIndex, out var overrideImage) && (overrideImage is not null))
-                return overrideImage;
-
-            if (pack.TryGetSprite(spfName, frameIndex, out overrideImage) && (overrideImage is not null))
-                return overrideImage;
-        }
+        if (AssetPackRegistry.TryGetUiSprite(spfName, frameIndex, out overrideImage) && (overrideImage is not null))
+            return overrideImage;
 
         //legacy: try epf first, then spf
         if (DatArchives.Setoa.TryGetValue(epfName, out var entry) || DatArchives.Cious.TryGetValue(epfName, out entry))

@@ -42,7 +42,8 @@ public sealed class AssetPackManifest
     public string ContentType { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Higher wins when multiple packs cover the same asset ID. Default 100 when absent.
+    ///     Read, and not used. When two packs of one content type cover the same key, the pack that registered first
+    ///     wins (registration is in file-name order); see <see cref="AssetPackRegistry" />. Default 100 when absent.
     /// </summary>
     [JsonPropertyName("priority")]
     public int Priority { get; init; } = 100;
@@ -71,12 +72,20 @@ public sealed class AssetPackCoverageEntry
     public int[]? Dimensions { get; init; }
 
     /// <summary>
-    ///     Optional list of 1-based item IDs that participate in the runtime find-and-replace dye pass. Only meaningful
-    ///     for <c>item_icons</c> content. Items outside this list ignore the server's color byte and render as-is —
-    ///     the renderer also collapses the cache key to <c>color = 0</c> for them.
+    ///     Optional list of 1-based item IDs that take the runtime find-and-replace dye pass. Only meaningful for
+    ///     <c>item_icons</c> content. When a pack has this list, it is the exact set of dyeable items, and the client does
+    ///     not detect dyeability from the art. Older scaffold packs write it; Taliesin does not.
     /// </summary>
     [JsonPropertyName("dyeable")]
     public int[]? Dyeable { get; init; }
+
+    /// <summary>
+    ///     Optional list of 1-based item IDs that do not take the dye, although their art contains the canonical dye ramp.
+    ///     Only meaningful for <c>item_icons</c> content, and only when the pack has no <see cref="Dyeable" /> list.
+    ///     Taliesin writes this list.
+    /// </summary>
+    [JsonPropertyName("no_dye")]
+    public int[]? NoDye { get; init; }
 
     /// <summary>
     ///     For <c>npc_portraits</c>, a flat <c>(portrait key → PNG filename)</c> lookup. The key is the literal

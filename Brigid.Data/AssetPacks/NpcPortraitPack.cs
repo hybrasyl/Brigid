@@ -63,6 +63,10 @@ public sealed class NpcPortraitPack : AssetPack
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>A portrait pack covers the portrait keys of its manifest, not its file names.</remarks>
+    public override IEnumerable<string> CoverageKeys => Lookup.Keys;
+
     /// <summary>
     ///     Attempts to decode the portrait PNG for the given <paramref name="portraitKey" />. The key is the literal
     ///     value pulled from NPCIllust at runtime — e.g. <c>"inn.spf"</c> for Cotilde, <c>"Gobalt"</c> for Gobalt.
