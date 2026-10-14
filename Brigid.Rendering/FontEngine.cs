@@ -1,5 +1,6 @@
 #region
 using System.Diagnostics;
+using Brigid.Data;
 using FontStashSharp;
 using FontStashSharp.Interfaces;
 using Microsoft.Xna.Framework;
@@ -41,6 +42,9 @@ public sealed class FontEngine : ITextMeasurer
     public const float DEFAULT_TRACKING = -1f;
 
     private const string FONTS_DIR = "Content/Fonts";
+
+    //the display face for titles, selected by FontStyle.Display. Not in FaceDefs: it is never a selectable UI face.
+    internal const string DISPLAY_FONT_FILE = "UncialAntiqua-Regular.ttf";
 
     //representative glyphs spanning the real ink extent (tall caps/ascenders + deep descenders), measured once
     //per face to center its ink in the layout band. Content-independent; only the vertical extent is used.
@@ -88,6 +92,18 @@ public sealed class FontEngine : ITextMeasurer
 
     //index of the FontStyle.Icon face in Faces, or -1 when not loaded (Icon then falls back to the active face)
     private readonly int IconIndex;
+
+    private readonly FontSystemSettings Settings;
+    private readonly byte[][] FallbackBytes;
+
+    //the shipped display face, and the one in use: the shipped face, or a theme's replacement. Null when the shipped
+    //file is absent and no theme supplies one; FontStyle.Display then falls back to the active face.
+    private readonly Face? ShippedDisplayFace;
+    private Face? DisplayFace;
+
+    //the font system of the theme's display face, and of the one it replaced; see RetireThemeDisplay
+    private FontSystem? ThemeDisplaySystem;
+    private FontSystem? RetiredThemeDisplay;
     private int ActiveIndex;
 
     //virtual→native scale of the active draw pass. When both are 1 (the default), text is drawn into the 640×480
@@ -219,7 +235,102 @@ public sealed class FontEngine : ITextMeasurer
         MonoIndex = monoIndex;
         IconIndex = iconIndex;
         ActiveIndex = Math.Clamp(initialIndex, 0, Faces.Length - 1);
+        Settings = settings;
+        FallbackBytes = [.. fallbackBytes];
+
+        var displayPath = Path.Combine(dir, DISPLAY_FONT_FILE);
+        ShippedDisplayFace = File.Exists(displayPath) ? new Face("Display", LoadSystem(displayPath)) : null;
+        DisplayFace = ShippedDisplayFace;
     }
+
+    /// <summary>
+    ///     Replaces the display face (<see cref="FontStyle.Display" />) with a font from a theme pack, or restores the
+    ///     shipped face when <paramref name="fontBytes" /> is null. Returns false, and keeps the current face, when the
+    ///     bytes are not a font that can draw. Bumps <see cref="Generation" /> when the face changes.
+    /// </summary>
+    public bool SetDisplayFont(byte[]? fontBytes)
+    {
+        if (fontBytes is null)
+        {
+            if (ReferenceEquals(DisplayFace, ShippedDisplayFace))
+                return true;
+
+            DisplayFace = ShippedDisplayFace;
+            RetireThemeDisplay(null);
+            Generation++;
+
+            return true;
+        }
+
+        if (!HasFontSignature(fontBytes))
+        {
+            DataDiagnostics.Log?.Invoke("[font] theme display font refused: the file has no TrueType or OpenType signature");
+
+            return false;
+        }
+
+        //the parser reads the table directory through unsafe pointers, so a damaged file could read past the buffer and end
+        //the process; the managed check refuses it first
+        if (!FontFileCheck.TryValidate(fontBytes, out var problem))
+        {
+            DataDiagnostics.Log?.Invoke($"[font] theme display font refused: {problem}");
+
+            return false;
+        }
+
+        var system = new FontSystem(Settings);
+
+        //the bytes come from a pack, not from the client. The parser reports a damaged table only as a plain
+        //Exception ("stbtt_InitFont failed"), so that is what is caught, around the parse alone.
+        try
+        {
+            system.AddFont(fontBytes);
+        } catch (Exception ex)
+        {
+            system.Dispose();
+            DataDiagnostics.Log?.Invoke($"[font] theme display font refused: {ex.Message}");
+
+            return false;
+        }
+
+        //measured before the fallback faces are added, so the probe uses the theme font's own glyphs
+        if (system.GetFont(RENDER_SIZE).MeasureString("Hy").X <= 0)
+        {
+            system.Dispose();
+            DataDiagnostics.Log?.Invoke("[font] theme display font refused: it has no width for Latin text");
+
+            return false;
+        }
+
+        foreach (var bytes in FallbackBytes)
+            system.AddFont(bytes);
+
+        DisplayFace = new Face("Theme display", system);
+        RetireThemeDisplay(system);
+        Generation++;
+
+        return true;
+    }
+
+    //a replaced theme face keeps its glyph atlas until the next replacement, because a deferred sprite batch in this
+    //frame can still draw from it. Themes change rarely, so at most one old face waits.
+    private void RetireThemeDisplay(FontSystem? current)
+    {
+        RetiredThemeDisplay?.Dispose();
+        RetiredThemeDisplay = ThemeDisplaySystem;
+        ThemeDisplaySystem = current;
+    }
+
+    /// <summary>
+    ///     True when <paramref name="bytes" /> start with a TrueType, OpenType or font-collection signature. A cheap check
+    ///     before the parser, so a pack entry that is plainly not a font is refused without an exception.
+    /// </summary>
+    internal static bool HasFontSignature(ReadOnlySpan<byte> bytes)
+        => (bytes.Length >= 4)
+           && (bytes[..4].SequenceEqual((ReadOnlySpan<byte>)[0x00, 0x01, 0x00, 0x00])
+               || bytes[..4].SequenceEqual("true"u8)
+               || bytes[..4].SequenceEqual("OTTO"u8)
+               || bytes[..4].SequenceEqual("ttcf"u8));
 
     public static void Initialize(int initialFontIndex = 0) => Instance = new FontEngine(initialFontIndex);
 
@@ -354,6 +465,9 @@ public sealed class FontEngine : ITextMeasurer
         NativeScaleY = scaleY;
     }
 
+    /// <summary>The virtual→native scale of the active draw pass. <see cref="ThemeArt" /> draws art at this scale.</summary>
+    internal (float X, float Y) NativeScale => (NativeScaleX, NativeScaleY);
+
     /// <summary>
     ///     Draws one line of text. <paramref name="clip" /> (when non-null) clips each glyph against the rectangle,
     ///     preserving the legacy per-glyph clipping used by scrolling labels and text-box selection.
@@ -475,14 +589,16 @@ public sealed class FontEngine : ITextMeasurer
     {
         Face face;
 
-        if (((style & FontStyle.Icon) != 0) && (IconIndex >= 0))
+        if (((style & FontStyle.Display) != 0) && DisplayFace is not null)
+            face = DisplayFace;
+        else if (((style & FontStyle.Icon) != 0) && (IconIndex >= 0))
             face = Faces[IconIndex];
         else if (((style & FontStyle.Mono) != 0) && (MonoIndex >= 0))
             face = Faces[MonoIndex];
         else
             face = Faces[ActiveIndex];
 
-        return (face, style & ~(FontStyle.Mono | FontStyle.Icon));
+        return (face, style & ~(FontStyle.Mono | FontStyle.Icon | FontStyle.Display));
     }
 
     /// <summary>

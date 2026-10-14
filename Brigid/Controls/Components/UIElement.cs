@@ -1,4 +1,5 @@
 #region
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -41,6 +42,16 @@ public abstract class UIElement : IDisposable
     public int PaddingRight { get; set; }
     public int PaddingTop { get; set; }
     public UIPanel? Parent { get; internal set; }
+
+    /// <summary>
+    ///     Whether this element draws the art and colours of the installed <c>ui_theme</c> pack. Null (the default) takes
+    ///     the value from the parent, so one switch on a panel themes everything in it; true or false here overrides the
+    ///     parent. With no theme pack, or for a role the pack does not supply, a themed element keeps its flat look.
+    /// </summary>
+    public bool? UseTheme { get; set; }
+
+    /// <summary>True when <see cref="UseTheme" />, here or on the nearest parent that sets it, is true.</summary>
+    public bool IsThemed => UseTheme ?? Parent?.IsThemed ?? false;
 
     public bool Visible
     {
@@ -339,6 +350,39 @@ public abstract class UIElement : IDisposable
         if (ClipTextureRect(ref position, ref resolvedSrc, in ClipRect))
             spriteBatch.Draw(actualTexture, position, resolvedSrc, color);
     }
+
+    /// <summary>
+    ///     Draws the theme part for <paramref name="role" /> (or <paramref name="fallbackRole" /> when the theme has no usable
+    ///     part for it) into <paramref name="bounds" />, clipped to this element's ClipRect. Returns false, and draws nothing,
+    ///     when the element is not themed or the theme has neither part; the caller then draws its flat look. Every themed
+    ///     control draws its art through here, so a later per-control layer (BRIG-54 <c>ui_panels</c>) has one place to go.
+    /// </summary>
+    protected bool TryDrawThemePart(SpriteBatch spriteBatch, string role, Rectangle bounds, string? fallbackRole = null)
+        => IsThemed && ThemeArt.TryDraw(spriteBatch, role, bounds, ClipRect, fallbackRole);
+
+    /// <summary>
+    ///     True when the element is themed and the theme lists a part for <paramref name="role" />. A control uses it to
+    ///     decide its layout before the draw, for example to show a placeholder where art is absent. A part that is listed
+    ///     but does not decode still gives true; <see cref="TryDrawThemePart" /> then draws nothing.
+    /// </summary>
+    protected bool HasThemePart(string role) => IsThemed && ThemeArt.HasPart(role);
+
+    /// <summary>
+    ///     Gets the logical width of the border art of a sliced theme part, when the element is themed and the theme slices
+    ///     that part. A framed control lays its content inside it.
+    /// </summary>
+    protected bool TryGetThemeBorder(string role, out int border)
+    {
+        border = 0;
+
+        return IsThemed && ThemeArt.TryGetSliceBorder(role, out border);
+    }
+
+    /// <summary>
+    ///     The theme colour for <paramref name="role" /> when the element is themed and the theme has it; otherwise
+    ///     <paramref name="fallback" />.
+    /// </summary>
+    protected Color ThemeColor(string role, Color fallback) => IsThemed && ThemeArt.TryGetColor(role, out var color) ? color : fallback;
 
     /// <summary>
     ///     Draws a filled rectangle clipped to this element's ClipRect.

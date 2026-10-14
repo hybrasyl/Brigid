@@ -173,6 +173,7 @@ behavioral difference.
 | `sound_effects`       | `sfx_{id}.{ext}`                                     | raw server id      | `GetSfxPack()`              | `legend.dat` `{id}.mp3`                           |
 | `world_maps`          | `{fieldName}.png`                                    | named, not numeric | `GetWorldMapPack()`         | `{field}.epf` + `{field}.pal` in `setoa.dat`      |
 | `town_maps`           | `town_{mapId:D5}.png`                                | raw map id         | `GetTownMapPack()`          | `national.dat` `_t*` five-layer composite         |
+| `ui_theme`            | `theme.json` + the files it names                    | role, not numeric  | `GetUiThemePack()`          | the flat `DialogPalette` look of the primitive    |
 
 All lookups are case-insensitive. Unless a section says otherwise, entries live at the ZIP root and
 subfolders are ignored.
@@ -553,6 +554,70 @@ are **not** supported in v1 and would clip.
 
 ---
 
+## `ui_theme`
+
+`Brigid.Data/AssetPacks/UiThemePack.cs` and `UiTheme.cs` — art and colours for the asset-free
+primitives (`TextButton`, `SelectableTab`, `CenteredModalPanel`). It does not replace legacy art: a
+primitive with no theme part keeps its flat `DialogPalette` look. A control uses the theme only when
+`UIElement.UseTheme` is true on it or on the nearest parent that sets it.
+
+`theme.json` at the ZIP root names each part, colour and font by **role**, not by panel or control,
+so every themed button gets the same `button.normal` art. Roles ignore case.
+
+```json
+{
+  "density": 4,
+  "parts": {
+    "frame.panel":   { "file": "frame_panel.png", "slice": [96, 96, 96, 96] },
+    "button.normal": { "file": "button_normal.png", "slice": [48, 40, 48, 40], "tile": false },
+    "background.mainmenu": { "file": "mainmenu_bg.webp", "fit": "cover" }
+  },
+  "colors": { "text": "#E8E4D8", "text.disabled": "#7A7A80" },
+  "fonts": { "title": "title.ttf" }
+}
+```
+
+- `density` — art pixels for each logical (640×480) pixel, from `0.25` to `16`. Default `1`.
+- `filter` — `linear` (default) or `nearest`: how a part is sampled where it is enlarged. Use
+  `nearest` for pixel art at 1× density. A part can set its own `filter`.
+- `parts.*.file` — the image entry (PNG or WebP). `slice` — nine-slice insets in art pixels,
+  `[left, top, right, bottom]`, each from 0 to 16384; the corners keep their shape and the edges
+  and centre stretch, or repeat when `tile` is `true`. `fit` — `stretch` (default), `cover` or
+  `contain`, for a part with no `slice`.
+- `colors.*` — exactly `#RRGGBB` or `#AARRGGBB` (alpha first, unlike CSS `#RRGGBBAA`).
+- `fonts.*` — a TTF or OTF entry.
+- A part, colour or font that is not valid is skipped and logged through `DataDiagnostics.Log`;
+  the rest of the theme still loads. An unknown `fit` or `filter` keeps the part with the default.
+  Unknown keys are ignored. A pack with no `theme.json` registers with an empty theme.
+
+Roles read by the primitives (`Brigid.Rendering/ThemeRoles.cs`): parts `frame.panel`,
+`button.normal`, `button.hover`, `button.pressed`, `button.disabled`, `tab.normal`, `tab.selected`;
+colours `text`, `text.disabled`, `text.selected`, `text.title`, `divider`. The main menu
+(`MainMenuControl`) also reads parts `background.mainmenu` (normally `"fit": "cover"`; it fills the
+whole window, cropped to the window's aspect ratio) and `title.mainmenu` (art in place of the title
+text), and the font `title` (the display face for the title text, in place of Uncial Antiqua). A
+`title` font with no TrueType or OpenType signature, or one the parser refuses, is logged and the
+shipped face stays. The Story view (`StoryView`) reads each slide's `image` from `story.json` as a
+part name (`story.01` and so on; cover fit), and `background.story` behind its text and cutscene
+pages (else `background.mainmenu`). A slide with no part shows a placeholder frame with the part
+name. A themed vertical scroll bar (`ScrollBarControl`) reads `scrollbar.track` (normally sliced),
+`scrollbar.thumb` (drawn 2 px in from the track's long edges), `scrollbar.thumb.hover`,
+`scrollbar.thumb.pressed`, `scrollbar.up`, `scrollbar.up.pressed`, `scrollbar.down` and
+`scrollbar.down.pressed`; a piece the theme does not have keeps its legacy look, and a horizontal
+bar is not themed. A button, tab, thumb or arrow state that is missing or does not decode uses the
+normal state.
+
+**Drawn at native resolution.** `ThemeArt` composites a part with SkiaSharp at the native pixel
+size of its rectangle and draws it with the inverse of the UI pass scale, as `FontEngine` draws
+glyphs, so 4× art stays sharp at every window size. A large reduction is filtered by halving the
+image first, and each nine-slice piece is drawn from its own sub-image so no seam shows. Textures
+are cached per role, native size and pass scale; above 256 entries the least recently used go, and
+an evicted texture is disposed a second later, never in the frame that may still draw it.
+
+Manifest fields read: **none** beyond the common ones.
+
+---
+
 ## Cross-cutting behavior
 
 - **Entry index.** `AssetPack`'s constructor indexes every `entry.FullName` into a
@@ -591,7 +656,7 @@ The format is extensible; a new type is one `Factories` entry plus a pack class.
 | `content_type` | Covers                                                     | Expected manifest additions                            |
 | -------------- | ----------------------------------------------------------- | ------------------------------------------------------ |
 | `tiles`        | Animated/palette-cycled map tiles `static_tiles` can't express | Per-tile frame array + timings                      |
-| `ui_panels`    | Pack-controlled panel layouts (replaces prefab `.txt`)       | `panel_ids` coverage list; schema bump to `2`          |
+| `ui_panels`    | Pack-controlled panel layouts (replaces prefab `.txt`); per-control art above the `ui_theme` roles | `panel_ids` coverage list; schema bump to `2` |
 | `effects`      | Spell/combat effects (replaces EFA)                          | Frame timings, blend mode (additive), anchor           |
 | `bundle`       | Multi-type pack (one archive, several categories)            | `covers` enumerates multiple categories                |
 

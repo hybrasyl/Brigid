@@ -331,4 +331,19 @@ public class MarkdownLayoutEngineTests
 
         Assert.Equal(line, string.Concat(codeSpans.Select(s => s.Text)));
     }
+
+    [Fact]
+    public void ASmallerBodySizeScalesTheHeadings()
+    {
+        var full = MarkdownLayoutEngine.Layout("# Title\n\nbody", 1000, new FakeMeasurer());
+        var half = MarkdownLayoutEngine.Layout("# Title\n\nbody", 1000, new FakeMeasurer(), bodySize: 8);
+
+        var fullHeading = full.Spans.First(span => span.Kind == MarkdownSpanKind.Heading).Size;
+        var halfHeading = half.Spans.First(span => span.Kind == MarkdownSpanKind.Heading).Size;
+
+        Assert.Equal(8, half.Spans.First(span => span.Kind == MarkdownSpanKind.Body).Size);
+        Assert.True(halfHeading > 8);
+        Assert.True(halfHeading < fullHeading);
+        Assert.True(half.ContentHeight < full.ContentHeight);
+    }
 }

@@ -48,6 +48,23 @@ public static class DebugOverlay
     private static TextElement? FocusReadout;
     private static TextElement? NudgeReadout;
 
+    //every visible element under the grab point, topmost first; NumPad+ and NumPad- move the grab through it
+    private static List<UIElement> NudgeStack = [];
+    private static int NudgeStackIndex;
+
+    //the shortcut list under the readouts; NumPad/ opens and closes it
+    private static bool ShowHelp;
+    private static TextElement[]? HelpLines;
+
+    private static readonly string[] HelpText =
+    [
+        "F11 overlay   num1 boxes   num2 names   num3 world   num4 perf   num0 all on",
+        "num5 grab what a click hits, or drop   ctrl+num5 grab any element (labels, titles)",
+        "num+ / num-   next / previous element under the grab point",
+        "arrows move   shift+arrows resize   the change prints to the console",
+        "num/ hide these shortcuts"
+    ];
+
     private static readonly float[] FrameTimeHistory = new float[FRAME_TIME_HISTORY];
     private static readonly Stopwatch FrameStopwatch = new();
     private static readonly Dictionary<UIElement, TextElement> TextElementCache = [];
@@ -132,33 +149,102 @@ public static class DebugOverlay
 
     /// <summary>
     ///     Live UI nudge tool. While the overlay is up, NumPad5 grabs/releases the element under the cursor; arrow keys then
-    ///     move it (X/Y) and Shift+arrows resize it (W/H), one virtual px per press. The cumulative (dx, dy, dw, dh) prints
+    ///     move it (X/Y) and Shift+arrows resize it (W/H), one virtual px per press. NumPad5 grabs what a click would hit.
+    ///     Ctrl+NumPad5 grabs the topmost visible element of any kind, also a label or a title that takes no clicks.
+    ///     NumPad+ and NumPad- then step through every element under the grab point. NumPad/ shows the shortcut list. The cumulative (dx, dy, dw, dh) prints
     ///     to the console as a paste-ready <c>Rectangle</c> so a baked prefab rect can be corrected without a rebuild loop.
     ///     Driven per-frame from <see cref="InputDispatcher.ProcessInput" />, which supplies the active screen's root + mouse.
     /// </summary>
+    private static bool IsCtrlHeld() => InputBuffer.IsKeyHeld(Keys.LeftControl) || InputBuffer.IsKeyHeld(Keys.RightControl);
+
+    //every visible element under the point, topmost first: an element's children come before the element, and a higher
+    //ZIndex before a lower one. Unlike InputDispatcher.HitTest it keeps the elements that take no clicks.
+    private static void CollectAt(UIPanel panel, int x, int y, List<UIElement> found)
+    {
+        panel.EnsureChildOrder();
+
+        for (var i = panel.Children.Count - 1; i >= 0; i--)
+        {
+            var child = panel.Children[i];
+
+            if (!child.Visible || !child.ContainsPoint(x, y))
+                continue;
+
+            if (child is UIPanel childPanel)
+                CollectAt(childPanel, x, y, found);
+
+            found.Add(child);
+        }
+    }
+
+    private static void Grab(UIElement element)
+    {
+        NudgeTarget = element;
+        NudgeOrigX = element.X;
+        NudgeOrigY = element.Y;
+        NudgeOrigW = element.Width;
+        NudgeOrigH = element.Height;
+        NudgeLastPrint = "";
+    }
+
+    //the dotted path of names from the screen root, as a ui_panels pack addresses the element; a child with no name
+    //shows its type
+    private static string PathOf(UIElement element)
+    {
+        var parts = new List<string>();
+
+        for (var current = element; current?.Parent is not null; current = current.Parent)
+            parts.Add(current.Name.Length > 0 ? current.Name : current.GetType().Name);
+
+        parts.Reverse();
+
+        return string.Join('.', parts);
+    }
+
     public static void UpdateNudge(UIPanel root, int mouseX, int mouseY)
     {
         if (!IsActive)
             return;
 
-        //NumPad5 toggles the grab: release if holding one, else grab the deepest element under the cursor.
+        if (InputBuffer.WasKeyPressed(Keys.Divide))
+            ShowHelp ^= true;
+
+        //NumPad5 toggles the grab: release if holding one, else grab what a click would hit (Ctrl: the topmost element of
+        //any kind). The stack under the cursor is kept, so NumPad+ and NumPad- can step to the elements above and below.
         if (InputBuffer.WasKeyPressed(Keys.NumPad5))
         {
             if (NudgeTarget is not null)
                 NudgeTarget = null;
-            else if (InputDispatcher.HitTest(root, mouseX, mouseY) is { } hit)
+            else
             {
-                NudgeTarget = hit;
-                NudgeOrigX = hit.X;
-                NudgeOrigY = hit.Y;
-                NudgeOrigW = hit.Width;
-                NudgeOrigH = hit.Height;
-                NudgeLastPrint = "";
+                var stack = new List<UIElement>();
+                CollectAt(root, mouseX, mouseY, stack);
+
+                var hit = IsCtrlHeld() ? stack.FirstOrDefault() : InputDispatcher.HitTest(root, mouseX, mouseY);
+
+                if (hit is not null)
+                {
+                    if (!stack.Contains(hit))
+                        stack.Insert(0, hit);
+
+                    NudgeStack = stack;
+                    NudgeStackIndex = stack.IndexOf(hit);
+                    Grab(hit);
+                }
             }
         }
 
         if (NudgeTarget is null)
             return;
+
+        //step through the stack; each element reports its own change from the moment it is grabbed
+        var step = InputBuffer.WasKeyPressed(Keys.Add) ? 1 : InputBuffer.WasKeyPressed(Keys.Subtract) ? -1 : 0;
+
+        if ((step != 0) && (NudgeStack.Count > 1))
+        {
+            NudgeStackIndex = (NudgeStackIndex + step + NudgeStack.Count) % NudgeStack.Count;
+            Grab(NudgeStack[NudgeStackIndex]);
+        }
 
         //drop the grab if the element went away (panel hidden, relayout, screen switch)
         if (!NudgeTarget.Visible)
@@ -183,7 +269,7 @@ public static class DebugOverlay
         if (InputBuffer.WasKeyPressed(Keys.Up))
             if (resize) NudgeTarget.Height--; else NudgeTarget.Y--;
 
-        var name = NudgeTarget.Name.Length > 0 ? NudgeTarget.Name : NudgeTarget.GetType().Name;
+        var name = PathOf(NudgeTarget);
         var print = $"[\"{name}\"] = new Rectangle({NudgeTarget.X - NudgeOrigX}, {NudgeTarget.Y - NudgeOrigY}, "
                   + $"{NudgeTarget.Width - NudgeOrigW}, {NudgeTarget.Height - NudgeOrigH})";
 
@@ -538,50 +624,83 @@ public static class DebugOverlay
             DrawPerformanceStatsText(spriteBatch);
         }
 
+        //the readouts stack under the stats block (or at the top when perf is off), one line each
+        var readoutY = (int)(ShowPerf ? StatsY + STATS_BG_HEIGHT + 4 : GraphY);
+
         //nudge readout draws whenever something is grabbed, independent of the perf sub-toggle
-        DrawNudgeReadout(spriteBatch);
+        readoutY = DrawNudgeReadout(spriteBatch, readoutY);
 
         //dispatcher focus state — names the culprit when keyboard focus wedges
-        DrawFocusReadout(spriteBatch);
+        readoutY = DrawFocusReadout(spriteBatch, readoutY);
+
+        DrawHelp(spriteBatch, readoutY);
 
         spriteBatch.End();
 
         DebugDrawCount = ChaosGame.Device.Metrics.DrawCount - SnappedDrawCount;
     }
 
-    //paste-ready (dx, dy, dw, dh) readout for the grabbed element, plus the key legend. Drawn under the stats block.
-    private static void DrawNudgeReadout(SpriteBatch spriteBatch)
+    //paste-ready (dx, dy, dw, dh) readout for the grabbed element: its path, its type and its place in the stack
+    private static int DrawNudgeReadout(SpriteBatch spriteBatch, int y)
     {
         if (NudgeTarget is null)
-            return;
+            return y;
 
-        var name = NudgeTarget.Name.Length > 0 ? NudgeTarget.Name : NudgeTarget.GetType().Name;
-        var text = $"NUDGE {name}  d({NudgeTarget.X - NudgeOrigX},{NudgeTarget.Y - NudgeOrigY},"
-                 + $"{NudgeTarget.Width - NudgeOrigW},{NudgeTarget.Height - NudgeOrigH})  arrows=move shift=size num5=drop";
+        var text = $"NUDGE {PathOf(NudgeTarget)} ({NudgeTarget.GetType().Name}) {NudgeStackIndex + 1}/{NudgeStack.Count}"
+                 + $"  d({NudgeTarget.X - NudgeOrigX},{NudgeTarget.Y - NudgeOrigY},"
+                 + $"{NudgeTarget.Width - NudgeOrigW},{NudgeTarget.Height - NudgeOrigH})";
 
         NudgeReadout ??= new TextElement();
         NudgeReadout.Update(text, Color.Yellow);
 
-        if (!NudgeReadout.HasContent)
+        return DrawReadoutLine(spriteBatch, NudgeReadout, y);
+    }
+
+    //one readout line on a dark band; returns the y of the next line
+    private static int DrawReadoutLine(SpriteBatch spriteBatch, TextElement line, int y)
+    {
+        if (!line.HasContent)
+            return y;
+
+        UIElement.DrawRect(spriteBatch, new Rectangle((int)StatsX - 2, y - 1, line.Width + 4, line.Height + 2), Color.Black * 0.66f);
+        line.Draw(spriteBatch, new Vector2(StatsX, y));
+
+        return y + line.Height + 4;
+    }
+
+    //the shortcut list, or a one-line hint while it is closed
+    private static void DrawHelp(SpriteBatch spriteBatch, int y)
+    {
+        if (HelpLines is null)
+        {
+            HelpLines = new TextElement[HelpText.Length + 1];
+
+            for (var i = 0; i < HelpLines.Length; i++)
+                HelpLines[i] = new TextElement();
+        }
+
+        if (!ShowHelp)
+        {
+            HelpLines[^1].Update("num/ shortcuts", Color.LightGray);
+            DrawReadoutLine(spriteBatch, HelpLines[^1], y);
+
             return;
+        }
 
-        var ry = (int)(ShowPerf ? StatsY + STATS_BG_HEIGHT + 4 : GraphY);
-
-        UIElement.DrawRect(
-            spriteBatch,
-            new Rectangle((int)StatsX - 2, ry - 1, NudgeReadout.Width + 4, NudgeReadout.Height + 2),
-            Color.Black * 0.66f);
-
-        NudgeReadout.Draw(spriteBatch, new Vector2(StatsX, ry));
+        for (var i = 0; i < HelpText.Length; i++)
+        {
+            HelpLines[i].Update(HelpText[i], Color.White);
+            y = DrawReadoutLine(spriteBatch, HelpLines[i], y);
+        }
     }
 
     //live keyboard-routing state: the dispatcher's explicit-focus target, the chat box's own focus
     //flag, and the control-stack top. When focus wedges (caret blinking but keys going elsewhere),
     //this line names which element is holding the routing.
-    private static void DrawFocusReadout(SpriteBatch spriteBatch)
+    private static int DrawFocusReadout(SpriteBatch spriteBatch, int y)
     {
         if (InputDispatcher.Instance is not { } dispatcher)
-            return;
+            return y;
 
         var explicitEl = dispatcher.ExplicitFocus;
 
@@ -607,17 +726,7 @@ public static class DebugOverlay
         FocusReadout ??= new TextElement();
         FocusReadout.Update(text, Color.Cyan);
 
-        if (!FocusReadout.HasContent)
-            return;
-
-        var ry = (int)(ShowPerf ? StatsY + STATS_BG_HEIGHT + 4 : GraphY) + (NudgeTarget is not null ? FocusReadout.Height + 4 : 0);
-
-        UIElement.DrawRect(
-            spriteBatch,
-            new Rectangle((int)StatsX - 2, ry - 1, FocusReadout.Width + 4, FocusReadout.Height + 2),
-            Color.Black * 0.66f);
-
-        FocusReadout.Draw(spriteBatch, new Vector2(StatsX, ry));
+        return DrawReadoutLine(spriteBatch, FocusReadout, y);
     }
 
     /// <summary>

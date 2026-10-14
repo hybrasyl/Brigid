@@ -16,6 +16,7 @@
     <!-- Window icon: decoded by SkiaSharp and applied via SDL_SetWindowIcon in ChaosGame (MonoGame's built-in
          Icon.bmp loader can't parse it, so we set it ourselves). The .ico above is the Windows exe/apphost icon. -->
     <ItemGroup>
+        <EmbeddedResource Include="Resources\MainMenu\*.md;Resources\MainMenu\*.json" LogicalName="Brigid.MainMenu.%(Filename)%(Extension)" />
         <EmbeddedResource Include="BrigidIcon.png">
             <LogicalName>BrigidIcon.png</LogicalName>
         </EmbeddedResource>

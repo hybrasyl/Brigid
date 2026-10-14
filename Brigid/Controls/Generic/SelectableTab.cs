@@ -1,6 +1,8 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 #endregion
 
 namespace Brigid.Controls.Generic;
@@ -32,9 +34,7 @@ public sealed class SelectableTab : UIPanel
         set
         {
             field = value;
-            BackgroundColor = value ? DialogPalette.TabSelectedFill : DialogPalette.TabIdleFill;
-            BorderColor = value ? DialogPalette.TabSelectedBorder : DialogPalette.TabIdleBorder;
-            Label.ForegroundColor = value ? DialogPalette.SelectedText : LegendColors.White;
+            RefreshVisual();
         }
     }
 
@@ -63,6 +63,34 @@ public sealed class SelectableTab : UIPanel
     }
 
     public void SetText(string text) => Label.Text = text;
+
+    public override void Draw(SpriteBatch spriteBatch)
+    {
+        //the theme can come from a parent, which can change after construction, so the colours are resolved per draw
+        RefreshVisual();
+
+        base.Draw(spriteBatch);
+    }
+
+    //a selected tab with no tab.selected part uses tab.normal; with no theme the tab keeps its flat look
+    protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+    {
+        var role = IsSelected ? ThemeRoles.TabSelected : ThemeRoles.TabNormal;
+
+        if (TryDrawThemePart(spriteBatch, role, bounds, ThemeRoles.TabNormal))
+            return;
+
+        base.DrawChrome(spriteBatch, bounds);
+    }
+
+    private void RefreshVisual()
+    {
+        BackgroundColor = IsSelected ? DialogPalette.TabSelectedFill : DialogPalette.TabIdleFill;
+        BorderColor = IsSelected ? DialogPalette.TabSelectedBorder : DialogPalette.TabIdleBorder;
+        Label.ForegroundColor = IsSelected
+            ? ThemeColor(ThemeRoles.TextSelected, DialogPalette.SelectedText)
+            : ThemeColor(ThemeRoles.Text, LegendColors.White);
+    }
 
     public override void OnMouseEnter() => Hovered?.Invoke();
 

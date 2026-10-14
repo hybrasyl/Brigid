@@ -61,6 +61,11 @@ public sealed class LobbyLoginScreen : IScreen
     //ui panels
     private LobbyLoginControl StartPanel = null!;
 
+    //BRIG-107 preview: the new main menu over the legacy one, while BRIGID_MAIN_MENU_PREVIEW=1. Phase 4 replaces the
+    //legacy menu with it and removes this.
+    private MainMenuControl? PreviewMenu;
+    private ServerGreetingControl? PreviewGreeting;
+
     /// <inheritdoc />
     public UIPanel? Root { get; private set; }
 
@@ -117,6 +122,33 @@ public sealed class LobbyLoginScreen : IScreen
         StartPanel.CreditButton?.Clicked += OnCreditClicked;
         StartPanel.HomepageButton?.Clicked += OnHomepageClicked;
         StartPanel.ConfigButton?.Clicked += OnConfigClicked;
+
+        if (Environment.GetEnvironmentVariable("BRIGID_MAIN_MENU_PREVIEW") == "1")
+        {
+            PreviewMenu = new MainMenuControl();
+            PreviewMenu.ContinueButton.Clicked += OnContinueClicked;
+            PreviewMenu.ExitButton.Clicked += OnExitClicked;
+            PreviewMenu.CreateButton.Clicked += OnCreateClicked;
+            PreviewMenu.PasswordButton.Clicked += OnPasswordClicked;
+            PreviewMenu.HomepageButton.Clicked += OnHomepageClicked;
+            PreviewMenu.ConfigButton.Clicked += OnConfigClicked;
+
+            //sample alerts, to see the panel; the preview import alert records no decision
+            PreviewMenu.Alerts.Add(MenuAlerts.NoSound(OperatingSystem.IsLinux()));
+            PreviewMenu.Alerts.Add(MenuAlerts.LegacyImport(static () => { }, static () => { }));
+
+            PreviewGreeting = new ServerGreetingControl();
+            PreviewGreeting.Accepted += OnLoginAccepted;
+            PreviewGreeting.Declined += OnLoginCancelled;
+
+            //the greeting covers the menu buttons and the alerts until the player answers it. A fresh start waits for it with
+            //them hidden; a return from the world gets no greeting
+            var menu = PreviewMenu;
+            PreviewGreeting.VisibilityChanged += visible => menu.SetCovered(visible);
+
+            if (!ReturningFromWorld)
+                PreviewMenu.CoverUntilGreeting();
+        }
 
         //track last-clicked start panel button so enter can repeat it
         foreach (var btn in (UIButton?[]) [
@@ -175,6 +207,12 @@ public sealed class LobbyLoginScreen : IScreen
             Height = ChaosGame.VIRTUAL_HEIGHT
         };
         Root.AddChild(StartPanel);
+
+        if (PreviewMenu is not null)
+            Root.AddChild(PreviewMenu);
+
+        if (PreviewGreeting is not null)
+            Root.AddChild(PreviewGreeting);
         Root.AddChild(LoginControl);
         Root.AddChild(ServerSelectControl);
         Root.AddChild(LoginNoticeControl);
@@ -249,6 +287,11 @@ public sealed class LobbyLoginScreen : IScreen
         MaybeShowTrustPrompt();
         MaybeShowInsecurePrompt();
         RefreshConnectionLine();
+
+        //the preview follows the legacy menu, which the screen enables and disables, and the server name, which the
+        //lobby learns after the connection line is first drawn. SetConnection changes nothing when the text is the same.
+        PreviewMenu?.SetButtonsEnabled(StartPanel.ContinueButton?.Enabled == true);
+        PreviewMenu?.SetConnection(DataContext.LobbyHost, ConnectionLineSecure, Game.Connection.ServerName);
 
         Game.Dispatcher.ProcessInput(Root!, gameTime);
         Root!.Update(gameTime);
@@ -749,9 +792,12 @@ public sealed class LobbyLoginScreen : IScreen
             throw;
         }
 
-        NoticeDebugLog.Write($"  calling Show, prior Visible={LoginNoticeControl.Visible}");
-        LoginNoticeControl.Show(noticeText);
-        NoticeDebugLog.Write($"  after Show, Visible={LoginNoticeControl.Visible}");
+        NoticeDebugLog.Write($"  calling Show, prior Visible={PreviewGreeting?.Visible ?? LoginNoticeControl.Visible}");
+        if (PreviewGreeting is not null)
+            PreviewGreeting.Show(noticeText);
+        else
+            LoginNoticeControl.Show(noticeText);
+        NoticeDebugLog.Write($"  after Show, Visible={PreviewGreeting?.Visible ?? LoginNoticeControl.Visible}");
     }
 
     private void OnLoginAccepted()

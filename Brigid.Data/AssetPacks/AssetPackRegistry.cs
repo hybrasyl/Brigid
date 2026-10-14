@@ -47,7 +47,8 @@ public static class AssetPackRegistry
         ["music"]               = static (a, m) => new MusicPack(a, m),
         ["sound_effects"]       = static (a, m) => new SfxPack(a, m),
         ["world_maps"]          = static (a, m) => new WorldMapPack(a, m),
-        ["town_maps"]           = static (a, m) => new TownMapPack(a, m)
+        ["town_maps"]           = static (a, m) => new TownMapPack(a, m),
+        ["ui_theme"]            = static (a, m) => new UiThemePack(a, m)
     };
 
     //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
@@ -249,6 +250,12 @@ public static class AssetPackRegistry
     ///     present.
     /// </summary>
     public static TownMapPack? GetTownMapPack() => Packs.GetValueOrDefault("town_maps") as TownMapPack;
+
+    /// <summary>
+    ///     Returns the currently-registered UI theme pack, or null if no pack of <c>content_type: ui_theme</c> is
+    ///     present.
+    /// </summary>
+    public static UiThemePack? GetUiThemePack() => Packs.GetValueOrDefault("ui_theme") as UiThemePack;
 
     private static void TryRegisterPack(string path)
     {
