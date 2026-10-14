@@ -96,16 +96,19 @@ for icon in "$ICONS"/*.png; do
 done
 chmod -R u+rwX,go+rX,go-w "$DEB/opt/brigid"
 
-# The first six are the bundled mixer's DT_NEEDED codecs; libicu and libssl are
-# for the .NET runtime (globalization, TLS). Package names carry the soname, and
-# Ubuntu 24.04 renamed some for the 64-bit time_t transition, hence the pairs.
+# The first six are the bundled mixer's DT_NEEDED codecs. The rest are the .NET
+# runtime's dependencies: libicu (globalization), libssl and ca-certificates (TLS;
+# without the CA store, TLS to a server with a public certificate fails), tzdata
+# (time zones) and libgssapi-krb5-2 (Negotiate authentication). Package names carry
+# the soname, and Ubuntu 24.04 renamed some for the 64-bit time_t transition, hence
+# the pairs.
 cat > "$DEB/DEBIAN/control" <<EOF
 Package: brigid
 Version: $DEB_VERSION
 Architecture: amd64
 Maintainer: $MAINTAINER
 Installed-Size: $(du -sk --exclude=DEBIAN "$DEB" | cut -f1)
-Depends: libflac12t64 | libflac12, libmodplug1, libfluidsynth3, libmpg123-0t64 | libmpg123-0, libopusfile0, libvorbisfile3, libc6 (>= 2.34), libgcc-s1, libstdc++6, libssl3t64 | libssl3, libicu78 | libicu77 | libicu76 | libicu74 | libicu72 | libicu70
+Depends: libflac12t64 | libflac12, libmodplug1, libfluidsynth3, libmpg123-0t64 | libmpg123-0, libopusfile0, libvorbisfile3, libc6 (>= 2.34), libgcc-s1, libstdc++6, libssl3t64 | libssl3, ca-certificates, tzdata, libgssapi-krb5-2, libicu78 | libicu77 | libicu76 | libicu74 | libicu72 | libicu70
 Section: games
 Priority: optional
 Homepage: https://github.com/hybrasyl/Brigid
