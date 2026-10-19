@@ -47,8 +47,8 @@ public abstract class CenteredModalPanel : FramePanel
     //the viewport the panel centers within; defaults to the full virtual screen until SetViewportBounds runs.
     private Rectangle Viewport = new(0, 0, ChaosGame.VIRTUAL_WIDTH, ChaosGame.VIRTUAL_HEIGHT);
 
-    //the inset the title, the dividers and the bottom bar were last placed for; the constructor places them flat
-    private int LaidOutInset = PADDING;
+    //the inset the title, the dividers and the bottom bar were last placed for
+    private int LaidOutInset;
 
     /// <summary>
     ///     The distance from the panel edge to the content: <see cref="PADDING" />, or more inside a themed frame whose border
@@ -62,32 +62,57 @@ public abstract class CenteredModalPanel : FramePanel
     /// <summary>Top of the content area (below the title band and its divider).</summary>
     protected int ContentTop => ChromeOffset + TITLE_H + 1;
 
-    /// <summary>Top of the bottom action bar.</summary>
-    protected int BottomBarTop => Height - ChromeOffset - BOTTOM_H;
+    /// <summary>Top of the bottom action bar. Internal for the layout tests.</summary>
+    protected internal int BottomBarTop => Height - ChromeOffset - BOTTOM_H;
 
-    /// <summary>The content region between the title band and the bottom bar, in panel-local coordinates.</summary>
-    protected Rectangle ContentBounds => new(Inset, ContentTop, Width - 2 * Inset, BottomBarTop - ContentTop);
+    /// <summary>
+    ///     The content region between the title band and the bottom bar, in panel-local coordinates. Internal for the layout
+    ///     tests.
+    /// </summary>
+    protected internal Rectangle ContentBounds => new(Inset, ContentTop, Width - 2 * Inset, BottomBarTop - ContentTop);
 
     /// <summary>The Close button. Hang teardown off <see cref="OnClose" /> (not this) so Escape is covered too.</summary>
     protected TextButton CloseButton { get; }
 
     public event CloseHandler? OnClose;
 
-    protected CenteredModalPanel(string title, int width, int height)
+    /// <param name="title">The text of the title band.</param>
+    /// <param name="width">The panel width.</param>
+    /// <param name="height">The panel height.</param>
+    /// <param name="useTheme">
+    ///     True for a modal that takes the theme itself. The title band, the bottom bar and <see cref="ContentBounds" /> are
+    ///     then inside the themed frame from the start, so a subclass can lay out its content in its constructor. A themed
+    ///     frame can be wider than the flat one; the panel then grows by the difference, so that
+    ///     <see cref="ContentBounds" /> has the same size with and without the theme. Construct such a modal after the asset
+    ///     packs load, or it lays out flat. False for a modal that is flat or that takes the theme from a parent; it lays out
+    ///     again in <see cref="LayoutContent" />, and its content area becomes smaller.
+    /// </param>
+    protected CenteredModalPanel(string title, int width, int height, bool useTheme = false)
     {
         Name = GetType().Name;
         Visible = false;
         UsesControlStack = true;
         Width = width;
         Height = height;
+
+        if (useTheme)
+        {
+            UseTheme = true;
+
+            var extra = Inset - PADDING;
+            Width += 2 * extra;
+            Height += 2 * extra;
+        }
+
+        LaidOutInset = Inset;
         CenterInViewport();
 
         TitleLabel = new UILabel
         {
             Name = "title",
             X = 0,
-            Y = (TITLE_H - TextRenderer.CHAR_HEIGHT) / 2,
-            Width = width,
+            Y = ChromeOffset + (TITLE_H - TextRenderer.CHAR_HEIGHT) / 2,
+            Width = Width,
             Height = TextRenderer.CHAR_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Center,
             Text = title,

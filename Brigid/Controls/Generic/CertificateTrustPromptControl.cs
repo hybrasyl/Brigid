@@ -66,14 +66,14 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
     public event Action? OnDeclined;
 
     public CertificateTrustPromptControl()
-        : base("Unrecognized Server Certificate", PANEL_W, PANEL_H)
+        : base("Unrecognized Server Certificate", PANEL_W, PANEL_H, useTheme: true)
     {
         //the prompt gates a connection in progress, so nothing behind it takes input while it is open
         IsModal = true;
 
         var y = ContentTop + 4;
 
-        Headline = AddRow(ref y, DialogPalette.Title);
+        Headline = AddRow(ref y);
         Headline.WordWrap = true;
         Headline.Height = ROW_H * 2;
         y += ROW_H;
@@ -100,18 +100,25 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
         OnClose += Decline;
     }
 
+    //a row with no colour is plain text, in the theme's text colour; a colour passed here carries meaning
     private UILabel AddRow(ref int y, Color? color = null)
     {
+        var content = ContentBounds;
+
         var label = new UILabel
         {
-            X = PADDING,
+            X = content.X,
             Y = y,
-            Width = Width - 2 * PADDING,
+            Width = content.Width,
             Height = ROW_H,
-            ForegroundColor = color ?? DialogPalette.Title,
             IsHitTestVisible = false,
             ShrinkToFit = false
         };
+
+        if (color is { } literal)
+            label.ForegroundColor = literal;
+        else
+            label.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
 
         AddChild(label);
         y += ROW_H;
@@ -132,7 +139,11 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
             ? "This server is presenting a DIFFERENT certificate from the one you previously trusted."
             : "Brigid does not recognize this server's certificate.";
 
-        Headline.ForegroundColor = pending.IsPinMismatch ? DialogPalette.RequirementUnmet : DialogPalette.Title;
+        //a changed certificate is a warning, so its colour is literal
+        if (pending.IsPinMismatch)
+            Headline.ForegroundColor = DialogPalette.RequirementUnmet;
+        else
+            Headline.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
 
         ServerRow.Text = $"Server:  {pending.Server}";
         SubjectRow.Text = $"Subject: {pending.Subject}";
@@ -150,7 +161,10 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
             ? "Only continue if you know the server's certificate was replaced. Otherwise the connection may be intercepted."
             : "Trust this only if the fingerprint matches the one published by the server's operator.";
 
-        Guidance.ForegroundColor = pending.IsPinMismatch ? DialogPalette.RequirementUnmet : DialogPalette.Title;
+        if (pending.IsPinMismatch)
+            Guidance.ForegroundColor = DialogPalette.RequirementUnmet;
+        else
+            Guidance.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
 
         base.Show();
     }

@@ -42,13 +42,11 @@ public sealed class ServerGreetingControl : CenteredModalPanel
     public event Action? Declined;
 
     public ServerGreetingControl()
-        : base("Notification", PANEL_W, PANEL_H)
+        //the greeting is a child of the lobby root, not of the menu, so it sets the theme itself
+        : base("Notification", PANEL_W, PANEL_H, useTheme: true)
     {
         Name = "servergreeting";
         IsModal = true;
-
-        //the greeting is a child of the lobby root, not of the menu, so it sets the theme itself
-        UseTheme = true;
 
         //the greeting has no Close: the player accepts or declines
         CloseButton.Visible = false;
@@ -73,7 +71,7 @@ public sealed class ServerGreetingControl : CenteredModalPanel
         BodyScroll.SetSource(new LabelScrollSource(Body));
     }
 
-    //the text fills the content area; a themed frame makes the area smaller
+    //the text fills the content area
     protected override void LayoutContent()
     {
         var content = ContentBounds;

@@ -68,7 +68,7 @@ internal sealed class CastableDetailsPane : UIPanel
 
         DescriptionHeader = AddRow(0, descriptionY, pane.Width);
         DescriptionHeader.Text = "Description:";
-        DescriptionHeader.ForegroundColor = DialogPalette.DisabledText;
+        DescriptionHeader.SetForegroundRole(ThemeRoles.TextDisabled, DialogPalette.DisabledText);
 
         var bodyY = descriptionY + ROW_H;
 
@@ -90,10 +90,10 @@ internal sealed class CastableDetailsPane : UIPanel
             PaddingTop = 0,
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Center,
-            ForegroundColor = LegendColors.White,
             IsHitTestVisible = false
         };
 
+        label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
         AddChild(label);
 
         return label;
@@ -127,10 +127,12 @@ internal sealed class CastableDetailsPane : UIPanel
         AbilityMetadataEntry? entry = null;
         WorldState.AbilityMetadata?.TryGet(name, isSpell, out entry);
 
+        //the text view takes a colour with each text, so the pane reads the theme colour when it binds; the pane has its
+        //themed parent from its constructor
         if (string.IsNullOrWhiteSpace(entry?.Description))
-            Description.SetText("No metadata available for this ability.", DialogPalette.DisabledText);
+            Description.SetText("No metadata available for this ability.", ThemeColor(ThemeRoles.TextDisabled, DialogPalette.DisabledText));
         else
-            Description.SetText(entry.Description, TextColors.Default);
+            Description.SetText(entry.Description, ThemeColor(ThemeRoles.Text, TextColors.Default));
     }
 
     /// <summary>
@@ -154,7 +156,7 @@ internal sealed class CastableDetailsPane : UIPanel
         if (remainingMs <= 0)
         {
             Cooldown.Text = "Cooldown: ready";
-            Cooldown.ForegroundColor = LegendColors.White;
+            Cooldown.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
 
             return;
         }

@@ -48,7 +48,7 @@ public sealed class LoginFormControl : LobbyFormPanel
         LayoutContent();
     }
 
-    //the fields at the top of the content and the status line at its bottom; a themed frame makes the content area smaller
+    //the fields at the top of the content and the status line at its bottom
     protected override void LayoutContent()
     {
         var content = ContentBounds;

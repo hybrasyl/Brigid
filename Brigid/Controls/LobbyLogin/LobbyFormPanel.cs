@@ -70,14 +70,12 @@ public abstract class LobbyFormPanel : CenteredModalPanel
         string busyText,
         int width,
         int height)
-        : base(title, width, height)
+        //a form is a child of the lobby root, not of the menu, so it sets the theme itself
+        : base(title, width, height, useTheme: true)
     {
         Name = name;
         IsModal = true;
         BusyText = busyText;
-
-        //a form is a child of the lobby root, not of the menu, so it sets the theme itself
-        UseTheme = true;
 
         //Cancel takes the place of Close, so that a cancel always reaches the screen
         CloseButton.Visible = false;
@@ -105,11 +103,11 @@ public abstract class LobbyFormPanel : CenteredModalPanel
             Height = ROW_H,
             MaxLength = maxLength,
             IsMasked = masked,
-            ForegroundColor = LegendColors.White,
             FocusedBackgroundColor = DialogPalette.RowHoverFill,
             IsTabStop = true
         };
 
+        box.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
         TextFields.Add(box);
         pane.AddChild(box);
 

@@ -108,7 +108,7 @@ public sealed class BoardsModalControl : CenteredModalPanel
     public bool IsListing(ushort boardId) => Visible && (View == BoardView.List) && ListPane.IsShowing(boardId);
 
     public BoardsModalControl()
-        : base("Boards", PANEL_W, PANEL_H)
+        : base("Boards", PANEL_W, PANEL_H, useTheme: true)
     {
         Name = "BoardsModal";
 

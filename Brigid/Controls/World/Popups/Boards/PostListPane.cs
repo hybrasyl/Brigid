@@ -4,6 +4,7 @@ using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
 using Brigid.Models;
 using Brigid.Networking;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 #endregion
 
@@ -84,9 +85,9 @@ internal sealed class PostListPane : UIPanel
             PaddingLeft = 0,
             PaddingTop = 0,
             VerticalAlignment = VerticalAlignment.Center,
-            ForegroundColor = DialogPalette.Title,
             IsHitTestVisible = false
         };
+        HeaderLabel.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
         AddChild(HeaderLabel);
 
         ListView = new VirtualizedListView<MailEntry, PostRowView>(
@@ -263,6 +264,11 @@ internal sealed class PostListPane : UIPanel
         private readonly UILabel DateLabel;
         private readonly UILabel SubjectLabel;
 
+        //the selected fill is part of the look; the blue text stays literal, to keep the row apart from the yellow
+        //unread row
+        protected internal override Color? DrawnBackgroundColor
+            => BackgroundColor is { } fill ? ThemeColor(ThemeRoles.RowSelected, fill) : null;
+
         public PostRowView(int width)
         {
             Width = width;
@@ -327,17 +333,22 @@ internal sealed class PostListPane : UIPanel
             SubjectLabel.Text = entry.Subject;
 
             //the wire Highlight bit is dual-purpose: the GM "Hilight" affordance on public boards and the
-            //"unread" marker on personal mail. Both render yellow. Selected wins and shows light blue.
-            var color = selected
-                ? BoardPalette.SelectedText
-                : entry.IsHighlighted
-                    ? Color.Yellow
-                    : TextColors.Default;
+            //"unread" marker on personal mail. Both render yellow. Selected wins and shows light blue. Both carry
+            //meaning, so they stay literal; a plain row takes the theme's text colour.
+            Paint(IdLabel);
+            Paint(AuthorLabel);
+            Paint(DateLabel);
+            Paint(SubjectLabel);
 
-            IdLabel.ForegroundColor = color;
-            AuthorLabel.ForegroundColor = color;
-            DateLabel.ForegroundColor = color;
-            SubjectLabel.ForegroundColor = color;
+            void Paint(UILabel label)
+            {
+                if (selected)
+                    label.ForegroundColor = BoardPalette.SelectedText;
+                else if (entry.IsHighlighted)
+                    label.ForegroundColor = Color.Yellow;
+                else
+                    label.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+            }
 
             BackgroundColor = selected ? BoardPalette.RowSelectedFill : null;
         }

@@ -210,7 +210,7 @@ public sealed class CharacterCreatorControl : LobbyFormPanel
         return new Color(shade.Red, shade.Green, shade.Blue);
     }
 
-    //the preview fills the left column and the form the right; a themed frame makes the content area smaller
+    //the preview fills the left column and the form the right
     protected override void LayoutContent()
     {
         var content = ContentBounds;

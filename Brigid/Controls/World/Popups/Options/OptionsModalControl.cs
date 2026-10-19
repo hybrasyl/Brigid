@@ -99,7 +99,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
     private static UserOptions Options => WorldState.UserOptions;
 
     public OptionsModalControl()
-        : base("Options", PANEL_W, PANEL_H)
+        : base("Options", PANEL_W, PANEL_H, useTheme: true)
     {
         var content = ContentBounds;
         PaneX = content.X + TAB_W + PANE_GAP;
@@ -158,8 +158,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 PaddingLeft = 0,
                 PaddingTop = 0,
                 HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Center,
-                ForegroundColor = TextColors.Default
+                VerticalAlignment = VerticalAlignment.Center
             };
 
             SettingLabels[i] = label;
@@ -195,19 +194,19 @@ public sealed class OptionsModalControl : CenteredModalPanel
             var rowY = i * ROW_STRIDE;
 
             //the leading number is the slot's chat-window shortcut key: 1-9 for the first nine, 0 for the tenth.
-            content.AddChild(
-                new UILabel
-                {
-                    X = 0,
-                    Y = rowY,
-                    Width = MACRO_LABEL_W,
-                    Height = BOX_HEIGHT,
-                    Text = i < 9 ? (i + 1).ToString() : "0",
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    ForegroundColor = DialogPalette.SelectedText,
-                    IsHitTestVisible = false
-                });
+            var number = new UILabel
+            {
+                X = 0,
+                Y = rowY,
+                Width = MACRO_LABEL_W,
+                Height = BOX_HEIGHT,
+                Text = i < 9 ? (i + 1).ToString() : "0",
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false
+            };
+            number.SetForegroundRole(ThemeRoles.TextSelected, DialogPalette.SelectedText);
+            content.AddChild(number);
 
             MacroBoxes[i] = new UITextBox
             {
@@ -217,11 +216,11 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 Width = pane.Width - MACRO_LABEL_W - 4,
                 Height = BOX_HEIGHT,
                 MaxLength = MACRO_MAX_LENGTH,
-                ForegroundColor = LegendColors.White,
                 FocusedBackgroundColor = DialogPalette.RowHoverFill,
                 IsTabStop = true
             };
 
+            MacroBoxes[i].SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
             content.AddChild(MacroBoxes[i]);
         }
 
@@ -244,7 +243,6 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 Width = colWidth,
                 Height = BOX_HEIGHT,
                 MaxLength = FRIEND_MAX_LENGTH,
-                ForegroundColor = LegendColors.White,
                 FocusedBackgroundColor = DialogPalette.RowHoverFill,
                 IsTabStop = true
             };
@@ -257,11 +255,12 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 Width = colWidth,
                 Height = BOX_HEIGHT,
                 MaxLength = FRIEND_MAX_LENGTH,
-                ForegroundColor = LegendColors.White,
                 FocusedBackgroundColor = DialogPalette.RowHoverFill,
                 IsTabStop = true
             };
 
+            FriendCol1[i].SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+            FriendCol2[i].SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
             content.AddChild(FriendCol1[i]);
             content.AddChild(FriendCol2[i]);
         }
@@ -408,7 +407,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
             };
         }
 
-        SettingLabels[index].ForegroundColor = TextColors.Default;
+        SettingLabels[index].SetForegroundRole(ThemeRoles.Text, TextColors.Default);
         SettingLabels[index].Text = text;
     }
 
@@ -511,6 +510,6 @@ public sealed class OptionsModalControl : CenteredModalPanel
             return;
 
         //vertical divider between the tab column and the content pane.
-        DrawRectClipped(spriteBatch, new Rectangle(ScreenX + PaneX - PANE_GAP / 2, ScreenY + ContentTop, 1, ContentBounds.Height), DialogPalette.Divider);
+        DrawRectClipped(spriteBatch, new Rectangle(ScreenX + PaneX - PANE_GAP / 2, ScreenY + ContentTop, 1, ContentBounds.Height), ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
     }
 }

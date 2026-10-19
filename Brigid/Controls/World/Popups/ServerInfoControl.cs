@@ -46,7 +46,7 @@ public sealed class ServerInfoControl : CenteredModalPanel
     public event Action? PingRequested;
 
     public ServerInfoControl()
-        : base("Connection", PANEL_W, PANEL_H)
+        : base("Connection", PANEL_W, PANEL_H, useTheme: true)
     {
         var y = ContentTop + 4;
 
@@ -73,18 +73,25 @@ public sealed class ServerInfoControl : CenteredModalPanel
         PingButton = AddBottomBarButton("Ping", PING_W, () => PingRequested?.Invoke());
     }
 
+    //a row with no colour is plain text, in the theme's text colour; a colour passed here carries meaning
     private UILabel AddRow(ref int y, Color? color = null)
     {
+        var content = ContentBounds;
+
         var label = new UILabel
         {
-            X = PADDING,
+            X = content.X,
             Y = y,
-            Width = Width - 2 * PADDING,
+            Width = content.Width,
             Height = ROW_H,
-            ForegroundColor = color ?? DialogPalette.Title,
             IsHitTestVisible = false,
             ShrinkToFit = false
         };
+
+        if (color is { } literal)
+            label.ForegroundColor = literal;
+        else
+            label.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
 
         AddChild(label);
         y += ROW_H;
@@ -104,7 +111,11 @@ public sealed class ServerInfoControl : CenteredModalPanel
         var secure = negotiated is not null;
 
         TransportRow.Text = secure ? $"Transport:  {Glyphs.PADLOCK} TLS 1.3" : "Transport:  plaintext";
-        TransportRow.ForegroundColor = secure ? LegendColors.Lime : LegendColors.White;
+        //green carries meaning; plaintext is plain text
+        if (secure)
+            TransportRow.ForegroundColor = LegendColors.Lime;
+        else
+            TransportRow.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
 
         DialectRow.Text = negotiated is { } resolution
             ? $"Dialect:    {resolution.Dialect} ({resolution.Mode})"
@@ -118,7 +129,7 @@ public sealed class ServerInfoControl : CenteredModalPanel
         if (certificate is null)
         {
             TrustRow.Text = "Certificate: none — this connection is not encrypted.";
-            TrustRow.ForegroundColor = DialogPalette.Title;
+            TrustRow.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
 
             SubjectRow.Text = string.Empty;
             IssuerRow.Text = string.Empty;
@@ -153,7 +164,7 @@ public sealed class ServerInfoControl : CenteredModalPanel
     public void SetLatency(TimeSpan roundTrip)
     {
         LatencyRow.Text = $"Round trip: {roundTrip.TotalMilliseconds:0.0} ms";
-        LatencyRow.ForegroundColor = DialogPalette.Title;
+        LatencyRow.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
         PingButton.SetEnabled(true);
     }
 
@@ -165,7 +176,7 @@ public sealed class ServerInfoControl : CenteredModalPanel
     public void SetLatencyUnavailable(string reason, bool canRetry)
     {
         LatencyRow.Text = $"Round trip: {reason}";
-        LatencyRow.ForegroundColor = DialogPalette.Title;
+        LatencyRow.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
         PingButton.SetEnabled(canRetry);
     }
 }
