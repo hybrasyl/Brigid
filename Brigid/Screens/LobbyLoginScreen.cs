@@ -66,6 +66,10 @@ public sealed class LobbyLoginScreen : IScreen
     private MainMenuControl? PreviewMenu;
     private ServerGreetingControl? PreviewGreeting;
 
+    //BRIG-116 preview: the primitive creator in place of the legacy one, while BRIGID_MAIN_MENU_PREVIEW=1. The Creator*
+    //helpers pick it; phase 4 deletes the legacy creator and their legacy branch.
+    private CharacterCreatorControl? PreviewCreator;
+
     /// <inheritdoc />
     public UIPanel? Root { get; private set; }
 
@@ -148,6 +152,10 @@ public sealed class LobbyLoginScreen : IScreen
 
             if (!ReturningFromWorld)
                 PreviewMenu.CoverUntilGreeting();
+
+            PreviewCreator = new CharacterCreatorControl(Game.AislingRenderer, CharacterCreatorControl.DyeSwatchColor);
+            PreviewCreator.OnOk += OnCharCreateOkClicked;
+            PreviewCreator.OnCancel += OnCharCreateCancelClicked;
         }
 
         //track last-clicked start panel button so enter can repeat it
@@ -217,6 +225,9 @@ public sealed class LobbyLoginScreen : IScreen
         Root.AddChild(ServerSelectControl);
         Root.AddChild(LoginNoticeControl);
         Root.AddChild(CharCreateControl);
+
+        if (PreviewCreator is not null)
+            Root.AddChild(PreviewCreator);
         Root.AddChild(PasswordChangeControl);
         Root.AddChild(LobbyLoginPopupMessage);
         Root.AddChild(MigrationPrompt);
@@ -392,30 +403,38 @@ public sealed class LobbyLoginScreen : IScreen
 
     private void OnCreateClicked()
     {
-        if (Connecting || LoginControl.Visible || PasswordChangeControl.Visible)
+        if (Connecting || LoginControl.Visible || PasswordChangeControl.Visible || CreatorVisible)
             return;
 
-        CharCreateControl.Show();
+        ShowCreator();
     }
 
     private void OnCharCreateOkClicked()
     {
-        var name = CharCreateControl.NameField?.Text;
-        var password = CharCreateControl.PasswordField?.Text;
-        var passwordConfirm = CharCreateControl.PasswordConfirmField?.Text;
+        //a second Create before the server answers the first would start a second creation
+        if (CreatingCharacter)
+            return;
+
+        if (Game.Connection.State != ConnectionState.Login)
+        {
+            ShowCreatorMessage("The client is not connected to the server.");
+
+            return;
+        }
+
+        var (name, password, passwordConfirm) = ReadCreatorFields();
 
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(password))
         {
-            LobbyLoginPopupMessage.Show("Name and password are required.");
+            ShowCreatorMessage("Name and password are required.");
 
             return;
         }
 
         if (password != passwordConfirm)
         {
-            LobbyLoginPopupMessage.Show("Passwords do not match.");
-            CharCreateControl.PasswordField?.Text = string.Empty;
-            CharCreateControl.PasswordConfirmField?.Text = string.Empty;
+            ShowCreatorMessage("Passwords do not match.");
+            ClearCreatorField(CharCreateFailureField.Password);
 
             return;
         }
@@ -423,12 +442,17 @@ public sealed class LobbyLoginScreen : IScreen
         Connecting = true;
         CreatingCharacter = true;
         AwaitingCharFinalize = false;
+        PreviewCreator?.SetBusy(true);
         Game.Connection.CreateCharInitial(name, password);
     }
 
     private void OnCharCreateCancelClicked()
     {
-        CharCreateControl.Hide();
+        //a cancel while the server has not answered leaves the menu usable; the answer, if it comes, is not waited for
+        if (CreatingCharacter)
+            Connecting = false;
+
+        HideCreator();
         CreatingCharacter = false;
         AwaitingCharFinalize = false;
     }
@@ -604,12 +628,33 @@ public sealed class LobbyLoginScreen : IScreen
 
             case ConnectionState.Disconnected when Connecting:
                 Connecting = false;
+                StopCreationOnConnectionLoss();
 
                 break;
         }
     }
 
-    private void OnConnectionError(string error) => Connecting = false;
+    private void OnConnectionError(string error)
+    {
+        Connecting = false;
+        StopCreationOnConnectionLoss();
+    }
+
+    //a creation that waits for the server cannot finish without the connection
+    private void StopCreationOnConnectionLoss()
+    {
+        if (!CreatingCharacter)
+            return;
+
+        CreatingCharacter = false;
+        AwaitingCharFinalize = false;
+
+        if (PreviewCreator is null)
+            return;
+
+        PreviewCreator.SetBusy(false);
+        PreviewCreator.ShowError("The connection to the server was lost.");
+    }
 
     private void OnServerTableReceived(IList<ServerEntry> servers)
     {
@@ -681,17 +726,15 @@ public sealed class LobbyLoginScreen : IScreen
                 //initial step confirmed — send finalize with appearance (setting appearance...)
                 AwaitingCharFinalize = true;
 
-                Game.Connection.CreateCharFinalize(
-                    CharCreateControl.SelectedHairStyle,
-                    CharCreateControl.SelectedGender,
-                    CharCreateControl.SelectedHairColor);
+                var (hairStyle, gender, hairColor) = ReadCreatorAppearance();
+                Game.Connection.CreateCharFinalize(hairStyle, gender, hairColor);
             } else
             {
                 //finalize confirmed — character created, show popup
                 Connecting = false;
                 CreatingCharacter = false;
                 AwaitingCharFinalize = false;
-                CharCreateControl.Hide();
+                HideCreator();
                 LobbyLoginPopupMessage.Show("Character has been created. Choose \"CONTINUE\".");
             }
 
@@ -705,10 +748,64 @@ public sealed class LobbyLoginScreen : IScreen
         if (!CharCreateFailure.IsDocumented(pkt.Type))
             NoticeDebugLog.Write($"char-create: undocumented 0x02 result code 0x{pkt.Type:X2} — \"{pkt.Message}\"");
 
-        switch (CharCreateFailure.FieldFor(pkt.Type))
+        CreatingCharacter = false;
+        PreviewCreator?.SetBusy(false);
+        ClearCreatorField(CharCreateFailure.FieldFor(pkt.Type));
+        ShowCreatorMessage(pkt.Message ?? "Character creation failed.");
+    }
+
+    //BRIG-116: the creator that the Create button opens is the primitive one under the preview switch, else the legacy one
+    private bool CreatorVisible => PreviewCreator?.Visible ?? CharCreateControl.Visible;
+
+    private void ShowCreator()
+    {
+        if (PreviewCreator is not null)
+            PreviewCreator.Show();
+        else
+            CharCreateControl.Show();
+    }
+
+    private void HideCreator()
+    {
+        if (PreviewCreator is not null)
+            PreviewCreator.Hide();
+        else
+            CharCreateControl.Hide();
+    }
+
+    private (string? Name, string? Password, string? Confirm) ReadCreatorFields()
+        => PreviewCreator is not null
+            ? (PreviewCreator.NameField.Text, PreviewCreator.PasswordField.Text, PreviewCreator.PasswordConfirmField.Text)
+            : (CharCreateControl.NameField?.Text, CharCreateControl.PasswordField?.Text, CharCreateControl.PasswordConfirmField?.Text);
+
+    private (byte HairStyle, Gender Gender, DisplayColor HairColor) ReadCreatorAppearance()
+        => PreviewCreator is not null
+            ? (PreviewCreator.SelectedHairStyle, PreviewCreator.SelectedGender, PreviewCreator.SelectedHairColor)
+            : (CharCreateControl.SelectedHairStyle, CharCreateControl.SelectedGender, CharCreateControl.SelectedHairColor);
+
+    //the primitive creator shows a message in its status line; the legacy one has none, so the popup shows it
+    private void ShowCreatorMessage(string message)
+    {
+        if (PreviewCreator is not null)
+            PreviewCreator.ShowError(message);
+        else
+            LobbyLoginPopupMessage.Show(message);
+    }
+
+    private void ClearCreatorField(CharCreateFailureField field)
+    {
+        switch (field)
         {
+            case CharCreateFailureField.Name when PreviewCreator is not null:
+                PreviewCreator.ClearName();
+
+                break;
             case CharCreateFailureField.Name:
                 CharCreateControl.NameField?.Text = string.Empty;
+
+                break;
+            case CharCreateFailureField.Password when PreviewCreator is not null:
+                PreviewCreator.ClearPasswords();
 
                 break;
             case CharCreateFailureField.Password:
@@ -719,8 +816,6 @@ public sealed class LobbyLoginScreen : IScreen
             case CharCreateFailureField.None:
                 break;
         }
-
-        LobbyLoginPopupMessage.Show(pkt.Message ?? "Character creation failed.");
     }
 
     private void HandlePasswordChangeMessage(LoginMessagePacket pkt)
@@ -894,7 +989,7 @@ public sealed class LobbyLoginScreen : IScreen
                 && Screen.LastClickedButton is { Enabled: true }
                 && !Screen.LoginControl.Visible
                 && !Screen.ServerSelectControl.Visible
-                && !Screen.CharCreateControl.Visible
+                && !Screen.CreatorVisible
                 && !Screen.PasswordChangeControl.Visible)
             {
                 Screen.LastClickedButton.PerformClick();

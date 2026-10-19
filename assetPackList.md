@@ -591,9 +591,12 @@ so every themed button gets the same `button.normal` art. Roles ignore case.
   Unknown keys are ignored. A pack with no `theme.json` registers with an empty theme.
 
 Roles read by the primitives (`Brigid.Rendering/ThemeRoles.cs`): parts `frame.panel`,
-`button.normal`, `button.hover`, `button.pressed`, `button.disabled`, `tab.normal`, `tab.selected`;
-colours `text`, `text.disabled`, `text.selected`, `text.title`, `divider`. The main menu
-(`MainMenuControl`) also reads parts `background.mainmenu` (normally `"fit": "cover"`; it fills the
+`button.normal`, `button.hover`, `button.pressed`, `button.disabled`, `tab.normal`, `tab.selected`,
+`dropdown.list`; colours `text`, `text.disabled`, `text.selected`, `text.title`, `text.error`,
+`divider`. The `DropDown` primitive draws its box with the button parts and its open list with
+`dropdown.list` (a list of 18 px rows, so a thin border; with no part it has the flat look). The
+character creator (`CharacterCreatorControl`) draws an error in its status line in `text.error`.
+The main menu (`MainMenuControl`) also reads parts `background.mainmenu` (normally `"fit": "cover"`; it fills the
 whole window, cropped to the window's aspect ratio) and `title.mainmenu` (art in place of the title
 text), and the font `title` (the display face for the title text, in place of Uncial Antiqua). A
 `title` font with no TrueType or OpenType signature, or one the parser refuses, is logged and the
