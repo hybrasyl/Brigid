@@ -20,6 +20,18 @@ public abstract class UIElement : IDisposable
     /// </summary>
     public Color? BorderColor { get; set; }
 
+    /// <summary>
+    ///     The fill that <see cref="Draw" /> draws: <see cref="BackgroundColor" />. A control whose fill is part of the look
+    ///     overrides it to take the theme colour, so that it does not change <see cref="BackgroundColor" /> at draw time.
+    /// </summary>
+    protected internal virtual Color? DrawnBackgroundColor => BackgroundColor;
+
+    /// <summary>
+    ///     The border that <see cref="Draw" /> draws: <see cref="BorderColor" />. A control whose border is part of the look
+    ///     overrides it to take the theme colour.
+    /// </summary>
+    protected internal virtual Color? DrawnBorderColor => BorderColor;
+
     public bool Enabled { get; set; } = true;
     public int Height { get; set; }
 
@@ -137,15 +149,18 @@ public abstract class UIElement : IDisposable
         if ((ClipRect.Width <= 0) || (ClipRect.Height <= 0))
             return;
 
-        if (BackgroundColor.HasValue || BorderColor.HasValue)
+        var fill = DrawnBackgroundColor;
+        var border = DrawnBorderColor;
+
+        if (fill.HasValue || border.HasValue)
         {
             var bounds = new Rectangle(ScreenX, ScreenY, Width, Height);
 
-            if (BackgroundColor.HasValue)
-                DrawRectClipped(spriteBatch, bounds, BackgroundColor.Value);
+            if (fill.HasValue)
+                DrawRectClipped(spriteBatch, bounds, fill.Value);
 
-            if (BorderColor.HasValue)
-                DrawBorderClipped(spriteBatch, bounds, BorderColor.Value);
+            if (border.HasValue)
+                DrawBorderClipped(spriteBatch, bounds, border.Value);
         }
     }
 
@@ -383,6 +398,20 @@ public abstract class UIElement : IDisposable
     ///     <paramref name="fallback" />.
     /// </summary>
     protected Color ThemeColor(string role, Color fallback) => IsThemed && ThemeArt.TryGetColor(role, out var color) ? color : fallback;
+
+    /// <summary>Gets the theme colour for <paramref name="role" />. False when the element is not themed or the theme has none.</summary>
+    protected bool TryGetThemeColor(string role, out Color color)
+    {
+        color = default;
+
+        return IsThemed && ThemeArt.TryGetColor(role, out color);
+    }
+
+    /// <summary>
+    ///     The colour of <paramref name="role" />, or <paramref name="fallback" />: the colour of a control that can take a
+    ///     colour role. A null role gives the fallback.
+    /// </summary>
+    protected Color RoleColor(string? role, Color fallback) => role is null ? fallback : ThemeColor(role, fallback);
 
     /// <summary>
     ///     Draws a filled rectangle clipped to this element's ClipRect.

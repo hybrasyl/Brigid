@@ -1,9 +1,8 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Scrolling;
-using Brigid.Data;
+using Brigid.Rendering;
 using Brigid.Rendering.Markdown;
-using Brigid.Rendering.Utility;
 using Brigid.Utilities;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -29,69 +28,48 @@ public sealed class MarkdownView : UIPanel
     private const int SCROLL_STEP = 36;
     private const string DEFAULT_TITLE = "Notice";
 
-    //butt001.epf frame indices for the close button (same art as TextPopupControl)
-    private const int CLOSE_NORMAL = 3;
-    private const int CLOSE_PRESSED = 4;
+    //the title bar buttons: square text buttons, so that a theme gives them its button art
+    private const int TITLE_BUTTON_SIZE = 16;
+    private const string MAXIMIZE_TEXT = "+";
+    private const string RESTORE_TEXT = "-";
 
     private static readonly Color TitleColor = LegendColors.Gold;
     private static readonly SKColor FrameBackgroundColor = new(10, 10, 14, 235);
 
-    private readonly UIButton CloseButton;
+    private readonly TextButton CloseButton;
     private readonly MarkdownBlock Content;
-    private readonly UIButton MaximizeButton;
+    private readonly TextButton MaximizeButton;
     private readonly ScrollModel Scroll = new();
     private readonly ScrollBarBinder ScrollBinder;
     private readonly ScrollBarControl Scrollbar;
     private readonly UILabel TitleLabel;
 
     private bool IsMaximized;
-    private int TitleBarHeight;
+    private readonly int TitleBarHeight = Math.Max(TextRenderer.CHAR_HEIGHT, TITLE_BUTTON_SIZE) + 2;
     private Rectangle ViewportBounds;
 
-    public MarkdownView(GraphicsDevice device, Rectangle viewportBounds)
+    public MarkdownView(Rectangle viewportBounds)
     {
         Name = "MarkdownView";
         Visible = false;
         UsesControlStack = true;
         ViewportBounds = viewportBounds;
 
-        var cache = UiRenderer.Instance!;
-        var closeNormal = cache.GetEpfTexture("butt001.epf", CLOSE_NORMAL);
-        var closePressed = cache.GetEpfTexture("butt001.epf", CLOSE_PRESSED);
-        TitleBarHeight = Math.Max(TextRenderer.CHAR_HEIGHT + 2, closeNormal.Height + 2);
-
         TitleLabel = new UILabel
         {
             Name = "Title",
             Height = TextRenderer.CHAR_HEIGHT,
-            ForegroundColor = TitleColor,
             ShadowStyle = ShadowStyle.BottomRight,
             IsHitTestVisible = false
         };
+        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle, TitleColor);
         AddChild(TitleLabel);
 
-        CloseButton = new UIButton
-        {
-            Name = "Close",
-            Width = closeNormal.Width,
-            Height = closeNormal.Height,
-            NormalTexture = closeNormal,
-            PressedTexture = closePressed
-        };
+        CloseButton = new TextButton("×", TITLE_BUTTON_SIZE, TITLE_BUTTON_SIZE) { Name = "close" };
         CloseButton.Clicked += Hide;
         AddChild(CloseButton);
 
-        //owned by the button — UIButton.Dispose disposes its textures
-        var glyphSize = Math.Max(9, closeNormal.Height - 6);
-
-        MaximizeButton = new UIButton
-        {
-            Name = "Maximize",
-            Width = glyphSize,
-            Height = glyphSize,
-            NormalTexture = ImageUtil.BuildFilledBorder(device, glyphSize, 1, LegendColors.Silver),
-            HoverTexture = ImageUtil.BuildFilledBorder(device, glyphSize, 1, LegendColors.White)
-        };
+        MaximizeButton = new TextButton(MAXIMIZE_TEXT, TITLE_BUTTON_SIZE, TITLE_BUTTON_SIZE) { Name = "maximize" };
         MaximizeButton.Clicked += ToggleMaximize;
         AddChild(MaximizeButton);
 
@@ -156,6 +134,7 @@ public sealed class MarkdownView : UIPanel
     private void ToggleMaximize()
     {
         IsMaximized = !IsMaximized;
+        MaximizeButton.SetText(IsMaximized ? RESTORE_TEXT : MAXIMIZE_TEXT);
         UpdateBounds();
         Content.EnsureLayout();
         SyncScroll();
@@ -178,26 +157,42 @@ public sealed class MarkdownView : UIPanel
             RebuildFrameBackground();
 
         //title bar row, inset past the frame border
-        TitleLabel.X = FRAME_INSET;
-        TitleLabel.Y = FRAME_INSET + (TitleBarHeight - TitleLabel.Height) / 2;
+        var inset = FrameInset;
+        TitleLabel.X = inset;
+        TitleLabel.Y = inset + (TitleBarHeight - TitleLabel.Height) / 2;
 
-        CloseButton.X = Width - FRAME_INSET - CloseButton.Width;
-        CloseButton.Y = FRAME_INSET + (TitleBarHeight - CloseButton.Height) / 2;
+        CloseButton.X = Width - inset - CloseButton.Width;
+        CloseButton.Y = inset + (TitleBarHeight - CloseButton.Height) / 2;
 
         MaximizeButton.X = CloseButton.X - MaximizeButton.Width - 4;
-        MaximizeButton.Y = FRAME_INSET + (TitleBarHeight - MaximizeButton.Height) / 2;
+        MaximizeButton.Y = inset + (TitleBarHeight - MaximizeButton.Height) / 2;
 
         TitleLabel.Width = MaximizeButton.X - TitleLabel.X - 4;
 
         //content region below the title bar, scrollbar on the right
-        Content.X = FRAME_INSET + CONTENT_PAD;
-        Content.Y = FRAME_INSET + TitleBarHeight + CONTENT_PAD;
-        Content.Width = Width - FRAME_INSET * 2 - CONTENT_PAD * 2 - ScrollBarControl.DEFAULT_WIDTH;
-        Content.Height = Height - Content.Y - FRAME_INSET - CONTENT_PAD;
+        Content.X = inset + CONTENT_PAD;
+        Content.Y = inset + TitleBarHeight + CONTENT_PAD;
+        Content.Width = Width - inset * 2 - CONTENT_PAD * 2 - ScrollBarControl.DEFAULT_WIDTH;
+        Content.Height = Height - Content.Y - inset - CONTENT_PAD;
 
-        Scrollbar.X = Width - FRAME_INSET - ScrollBarControl.DEFAULT_WIDTH;
+        Scrollbar.X = Width - inset - ScrollBarControl.DEFAULT_WIDTH;
         Scrollbar.Y = Content.Y;
         Scrollbar.Height = Content.Height;
+    }
+
+    //the legacy frame border, or the border of the theme's frame art when that is wider
+    private int FrameInset
+        => HasThemePart(ThemeRoles.FramePanel) && TryGetThemeBorder(ThemeRoles.FramePanel, out var border)
+            ? Math.Max(FRAME_INSET, border)
+            : FRAME_INSET;
+
+    //a themed view draws the theme's frame art in place of the legacy frame
+    protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+    {
+        if (TryDrawThemePart(spriteBatch, ThemeRoles.FramePanel, bounds))
+            return;
+
+        base.DrawChrome(spriteBatch, bounds);
     }
 
     private void RebuildFrameBackground()

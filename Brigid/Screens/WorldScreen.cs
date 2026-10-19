@@ -552,7 +552,7 @@ public sealed partial class WorldScreen : IScreen
             ZIndex = 2
         };
 
-        MarkdownNotice = new MarkdownView(Device, viewport)
+        MarkdownNotice = new MarkdownView(viewport)
         {
             ZIndex = 4
         };

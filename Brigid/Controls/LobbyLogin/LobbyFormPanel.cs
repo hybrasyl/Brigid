@@ -4,7 +4,6 @@ using Brigid.Controls.Generic;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
 
@@ -36,10 +35,7 @@ public abstract class LobbyFormPanel : CenteredModalPanel
 
     private readonly string BusyText;
     private readonly UILabel Status;
-    private readonly List<UILabel> FieldLabels = [];
     private readonly List<UITextBox> TextFields = [];
-
-    private bool StatusIsError;
 
     /// <summary>The button that submits the form.</summary>
     public TextButton SubmitButton { get; }
@@ -94,6 +90,7 @@ public abstract class LobbyFormPanel : CenteredModalPanel
             WordWrap = true,
             IsHitTestVisible = false
         };
+        Status.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
         AddChild(Status);
     }
 
@@ -134,7 +131,7 @@ public abstract class LobbyFormPanel : CenteredModalPanel
             IsHitTestVisible = false
         };
 
-        FieldLabels.Add(label);
+        label.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
         parent.AddChild(label);
     }
 
@@ -171,7 +168,11 @@ public abstract class LobbyFormPanel : CenteredModalPanel
     private void SetStatus(string message, bool isError)
     {
         Status.Text = message;
-        StatusIsError = isError;
+
+        if (isError)
+            Status.SetForegroundRole(ThemeRoles.TextError, DialogPalette.ErrorText);
+        else
+            Status.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
     }
 
     /// <summary>
@@ -256,18 +257,6 @@ public abstract class LobbyFormPanel : CenteredModalPanel
             field.IsFocused = false;
             field.Text = string.Empty;
         }
-    }
-
-    public override void Draw(SpriteBatch spriteBatch)
-    {
-        var text = ThemeColor(ThemeRoles.Text, TextColors.Default);
-
-        foreach (var label in FieldLabels)
-            label.ForegroundColor = text;
-
-        Status.ForegroundColor = StatusIsError ? ThemeColor(ThemeRoles.TextError, DialogPalette.ErrorText) : text;
-
-        base.Draw(spriteBatch);
     }
 
     /// <summary>Enter. The default submits the form.</summary>

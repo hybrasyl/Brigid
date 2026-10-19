@@ -149,7 +149,10 @@ public sealed class DropDown : UIPanel
                 : BoxHovered ? DialogPalette.ButtonHoverFill : DialogPalette.ButtonIdleFill;
 
             DrawRectClipped(spriteBatch, box, fill);
-            DrawBorderClipped(spriteBatch, box, Enabled ? DialogPalette.FrameBorder : DialogPalette.Divider);
+            DrawBorderClipped(
+                spriteBatch,
+                box,
+                Enabled ? ThemeColor(ThemeRoles.Border, DialogPalette.FrameBorder) : ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
         }
 
         var textColor = Enabled
@@ -166,7 +169,7 @@ public sealed class DropDown : UIPanel
         if (!TryDrawThemePart(spriteBatch, ThemeRoles.DropDownList, list))
         {
             DrawRectClipped(spriteBatch, list, DialogPalette.FrameFill);
-            DrawBorderClipped(spriteBatch, list, DialogPalette.FrameBorder);
+            DrawBorderClipped(spriteBatch, list, ThemeColor(ThemeRoles.Border, DialogPalette.FrameBorder));
         }
 
         var inset = ContentInset(ThemeRoles.DropDownList);
@@ -177,9 +180,9 @@ public sealed class DropDown : UIPanel
             var selected = i == SelectedIndex;
 
             if (i == HoveredRow)
-                DrawRectClipped(spriteBatch, Inner(row), DialogPalette.RowHoverFill);
+                DrawRectClipped(spriteBatch, Inner(row), ThemeColor(ThemeRoles.RowHover, DialogPalette.RowHoverFill));
             else if (selected)
-                DrawRectClipped(spriteBatch, Inner(row), DialogPalette.RowSelectedFill);
+                DrawRectClipped(spriteBatch, Inner(row), ThemeColor(ThemeRoles.RowSelected, DialogPalette.RowSelectedFill));
 
             if (DisabledItems[i])
             {

@@ -27,6 +27,11 @@ public static class ThemeRoles
     public const string ScrollUpPressed = "scrollbar.up.pressed";
     public const string ScrollDown = "scrollbar.down";
     public const string ScrollDownPressed = "scrollbar.down.pressed";
+    public const string InputSlot = "input.slot";
+    public const string InputSlotFocus = "input.slot.focus";
+    public const string CheckBoxNormal = "checkbox.normal";
+    public const string CheckBoxHover = "checkbox.hover";
+    public const string CheckBoxMark = "checkbox.mark";
 
     //colours
     public const string Text = "text";
@@ -35,6 +40,11 @@ public static class ThemeRoles
     public const string TextTitle = "text.title";
     public const string TextError = "text.error";
     public const string Divider = "divider";
+    public const string Border = "border";
+    public const string RowHover = "row.hover";
+    public const string RowSelected = "row.selected";
+    public const string InputText = "input.text";
+    public const string InputFocus = "input.focus";
 
     //fonts
     public const string TitleFont = "title";

@@ -82,14 +82,19 @@ public sealed class TextButton : UIPanel
 
         //centre the styled glyph in the button using the styled width; band-centred vertically like a normal label.
         //clip to this element's ClipRect (refreshed by base.Draw) so a partially-scrolled row trims the glyph.
-        //RefreshVisual keeps Label.ForegroundColor current (even while the label is hidden), so reuse it.
-        var color = Label.ForegroundColor;
+        //the label is hidden, so it does not apply its colour role itself
+        Label.ApplyForegroundRole();
+        var color = Label.DrawnForegroundColor;
         var textWidth = TextRenderer.MeasureWidth(text, LabelStyle);
         var x = ScreenX + (Width - textWidth) / 2;
         var y = ScreenY + (Height - TextRenderer.CHAR_HEIGHT) / 2;
 
         FontEngine.Instance.DrawLine(spriteBatch, text, new Vector2(x, y), color, ClipRect, style: LabelStyle);
     }
+
+    //the flat border is part of the look: the outline, or the divider colour while disabled
+    protected internal override Color? DrawnBorderColor
+        => BorderColor is null ? null : Enabled ? ThemeColor(ThemeRoles.Border, EdgeColor) : ThemeColor(ThemeRoles.Divider, DisabledEdge);
 
     //a state that the theme leaves out uses button.normal; with no theme the button keeps its flat look
     protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
@@ -124,9 +129,13 @@ public sealed class TextButton : UIPanel
     private void RefreshVisual()
     {
         BackgroundColor = Enabled ? Pressed ? PressFill : Hovered ? HoverFill : IdleFill : IdleFill;
-        Label.ForegroundColor = Enabled
-            ? TextColorOverride ?? ThemeColor(ThemeRoles.Text, LegendColors.White)
-            : ThemeColor(ThemeRoles.TextDisabled, DisabledText);
+        if (!Enabled)
+            Label.SetForegroundRole(ThemeRoles.TextDisabled, DisabledText);
+        else if (TextColorOverride is { } overrideColor)
+            Label.ForegroundColor = overrideColor;
+        else
+            Label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+
         BorderColor = Enabled ? EdgeColor : DisabledEdge;
     }
 

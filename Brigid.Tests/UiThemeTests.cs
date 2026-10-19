@@ -206,7 +206,7 @@ public class UiThemeTests
         Assert.Equal(UiTheme.DEFAULT_DENSITY, pack.Theme.Density);
     }
 
-    private static UiThemePack BuildPack(string? themeJson, params (string Name, byte[] Bytes)[] entries)
+    internal static UiThemePack BuildPack(string? themeJson, params (string Name, byte[] Bytes)[] entries)
     {
         var stream = new MemoryStream();
 
@@ -232,7 +232,7 @@ public class UiThemeTests
         entry.Write(bytes);
     }
 
-    private static byte[] Png(int width, int height)
+    internal static byte[] Png(int width, int height)
     {
         using var bitmap = new SKBitmap(width, height);
         bitmap.Erase(SKColors.Teal);

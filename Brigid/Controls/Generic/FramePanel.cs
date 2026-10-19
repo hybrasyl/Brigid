@@ -41,6 +41,9 @@ public class FramePanel : UIPanel
         BorderColor = DialogPalette.FrameBorder;
     }
 
+    //the flat border is part of the look
+    protected internal override Color? DrawnBorderColor => BorderColor is { } border ? ThemeColor(ThemeRoles.Border, border) : null;
+
     protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
     {
         if (TryDrawThemePart(spriteBatch, ThemeRoles.FramePanel, bounds))

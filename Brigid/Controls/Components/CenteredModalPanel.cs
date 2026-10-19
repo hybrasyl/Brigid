@@ -90,10 +90,10 @@ public abstract class CenteredModalPanel : FramePanel
             Width = width,
             Height = TextRenderer.CHAR_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Center,
-            ForegroundColor = DialogPalette.Title,
             Text = title,
             IsHitTestVisible = false
         };
+        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
         AddChild(TitleLabel);
 
         CloseButton = AddBottomBarButton("Close", CLOSE_W, Hide, "close");
@@ -228,8 +228,6 @@ public abstract class CenteredModalPanel : FramePanel
 
     public override void Draw(SpriteBatch spriteBatch)
     {
-        TitleLabel.ForegroundColor = ThemeColor(ThemeRoles.TextTitle, DialogPalette.Title);
-
         base.Draw(spriteBatch);
 
         if (!Visible)

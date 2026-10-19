@@ -85,11 +85,11 @@ public class UIPanel : UIElement
     /// </summary>
     protected virtual void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
     {
-        if (BackgroundColor.HasValue)
-            DrawRectClipped(spriteBatch, bounds, BackgroundColor.Value);
+        if (DrawnBackgroundColor is { } fill)
+            DrawRectClipped(spriteBatch, bounds, fill);
 
-        if (BorderColor.HasValue)
-            DrawBorderClipped(spriteBatch, bounds, BorderColor.Value);
+        if (DrawnBorderColor is { } border)
+            DrawBorderClipped(spriteBatch, bounds, border);
 
         if (Background is not null)
             DrawTexture(spriteBatch, Background, new Vector2(ScreenX, ScreenY), Color.White);

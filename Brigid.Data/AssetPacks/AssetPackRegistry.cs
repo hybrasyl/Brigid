@@ -257,6 +257,18 @@ public static class AssetPackRegistry
     /// </summary>
     public static UiThemePack? GetUiThemePack() => Packs.GetValueOrDefault("ui_theme") as UiThemePack;
 
+    /// <summary>
+    ///     Registers <paramref name="pack" /> for <paramref name="contentType" />, or removes the registration when it is null.
+    ///     For tests only: a test that uses it changes static state, so it runs in a collection with parallelization off.
+    /// </summary>
+    internal static void SetPackForTests(string contentType, IAssetPack? pack)
+    {
+        if (pack is null)
+            Packs.Remove(contentType);
+        else
+            Packs[contentType] = pack;
+    }
+
     private static void TryRegisterPack(string path)
     {
         ZipArchive? archive = null;

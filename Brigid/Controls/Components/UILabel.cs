@@ -41,10 +41,49 @@ public class UILabel : UIElement
         set => TextElement.ColorCodesEnabled = value;
     }
 
+    /// <summary>
+    ///     The text colour that was set. With a role from <see cref="SetForegroundRole" />, it is the fallback, and the label
+    ///     draws in the theme colour of the role. Setting it clears the role.
+    /// </summary>
     public Color ForegroundColor
     {
-        get => TextElement.Color;
-        set => Invalidate(TextElement.Text, value);
+        get => SetColor ?? TextElement.Color;
+        set
+        {
+            SetColor = value;
+            ForegroundRole = null;
+            Invalidate(TextElement.Text, value);
+        }
+    }
+
+    //the colour that was set (null before the first set), and the theme colour role of the text
+    private Color? SetColor;
+    private string? ForegroundRole;
+
+    /// <summary>The colour that the label draws in: the colour of its role, or <see cref="ForegroundColor" />.</summary>
+    internal Color DrawnForegroundColor => TextElement.Color;
+
+    /// <summary>
+    ///     Draws the text in the theme colour of <paramref name="role" />, or in <paramref name="fallback" /> when the label is
+    ///     not themed or the theme has no such colour. Use it for a colour that is part of the look, not for one that carries
+    ///     meaning.
+    /// </summary>
+    public void SetForegroundRole(string role, Color fallback)
+    {
+        ForegroundColor = fallback;
+        ForegroundRole = role;
+    }
+
+    //the theme is known only at draw time, because a label takes it from its parent
+    internal void ApplyForegroundRole()
+    {
+        if (ForegroundRole is null)
+            return;
+
+        var color = RoleColor(ForegroundRole, ForegroundColor);
+
+        if (color != TextElement.Color)
+            Invalidate(TextElement.Text, color);
     }
 
     /// <summary>
@@ -132,6 +171,8 @@ public class UILabel : UIElement
     {
         if (!Visible)
             return;
+
+        ApplyForegroundRole();
 
         //empty labels still need a valid ClipRect so ContainsPoint hit-testing works.
         //ClipRect is otherwise only refreshed inside base.Draw, which the next early

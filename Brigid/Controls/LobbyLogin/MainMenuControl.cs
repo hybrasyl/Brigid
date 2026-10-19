@@ -306,7 +306,7 @@ public sealed class MainMenuControl : UIPanel
     {
         if (AboutView is null)
         {
-            AboutView = new MarkdownView(ChaosGame.Device, new Rectangle(0, 0, Width, Height)) { Name = "aboutview", ZIndex = 1 };
+            AboutView = new MarkdownView(new Rectangle(0, 0, Width, Height)) { Name = "aboutview", ZIndex = 1 };
             AddChild(AboutView);
         }
 
