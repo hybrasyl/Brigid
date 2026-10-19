@@ -32,6 +32,9 @@ public static class ThemeRoles
     public const string CheckBoxNormal = "checkbox.normal";
     public const string CheckBoxHover = "checkbox.hover";
     public const string CheckBoxMark = "checkbox.mark";
+    public const string SliderTrack = "slider.track";
+    public const string SliderFill = "slider.fill";
+    public const string SliderThumb = "slider.thumb";
 
     //colours
     public const string Text = "text";

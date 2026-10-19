@@ -352,7 +352,7 @@ _noptdlg.txt
   Purpose:  Options menu — music/sound volume sliders, Friends/Macro/Setting/ExitGame buttons
   Images referenced by controls:
     _noptdlg.epf/.spf    — Anchor background
-    option04.epf/.spf     — Slider thumb (Tick control, palette 0)
+    option04.epf/.spf     — Slider thumb (Tick control, palette 0); no longer loaded: the pause menu's slider is a primitive (BRIG-55)
     _nbtn.epf/.spf        — Action button frames
 
 _nmacro.txt

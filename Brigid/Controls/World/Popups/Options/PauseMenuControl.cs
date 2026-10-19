@@ -1,225 +1,109 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
-using Brigid.Data;
 using Brigid.Definitions;
-using Brigid.Extensions;
 using Brigid.Rendering;
-using Brigid.Utilities;
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.World.Popups.Options;
 
 /// <summary>
-///     Center-screen menu opened with Escape. Contains Sound / Music / Ambience sliders plus Settings / Exit
-///     Game / Close buttons. Background is a DlgBack2.spf tile composited with the dlgframe.epf 8-piece
-///     border; action buttons are rendered as colored rects with text overlays. Clicking Settings closes the
-///     menu and opens the Options modal (Friends/Macros now live as tabs there).
+///     Center-screen menu opened with Escape or Q (BRIG-55). Contains Sound / Music / Ambience sliders and the Settings and
+///     Exit Game buttons; Close is the bottom bar's. Clicking Settings closes the menu and opens the Options modal
+///     (Friends/Macros now live as tabs there). Escape closes the menu, and X closes it and exits.
+///     <para>
+///         A primitive <see cref="CenteredModalPanel" /> that takes the theme: the frame, the buttons, the sliders and the
+///         label colours come from the theme, with the flat <see cref="DialogPalette" /> look as the fallback. Every child
+///         has a lowercase name.
+///     </para>
 /// </summary>
-public sealed class PauseMenuControl : UIPanel
+public sealed class PauseMenuControl : CenteredModalPanel
 {
-    private const int PANEL_WIDTH = 260;
-    private const int PANEL_HEIGHT = 194;
+    private const int PANEL_W = 260;
+    private const int PANEL_H = 170;
 
-    //vertical positions inside the panel
-    private const int TITLE_Y = 18;
-    private const int SOUND_LABEL_Y = 48;
-    private const int SOUND_TRACK_Y = 52;
-    private const int MUSIC_LABEL_Y = 72;
-    private const int MUSIC_TRACK_Y = 76;
-    private const int AMBIENCE_LABEL_Y = 96;
-    private const int AMBIENCE_TRACK_Y = 100;
-    private const int BUTTON_ROW_1_Y = 124;
-    private const int CLOSE_Y = 154;
+    private const int ROW_STRIDE = 24;
+    private const int ROW_H = 16;
+    private const int LABEL_W = 64;
+    private const int SLIDER_W = 146;
+    private const int SLIDER_H = 14;
 
-    //button dimensions
-    private const int BUTTON_WIDTH = 100;
-    private const int BUTTON_HEIGHT = 22;
+    private const int BUTTON_W = 100;
+    private const int BUTTON_H = 22;
     private const int BUTTON_GAP = 12;
-    private const int CLOSE_WIDTH = 84;
+    private const int SECTION_GAP = 6;
 
-    //volume slider geometry
-    private const int TRACK_X = 88;
-    private const int TRACK_WIDTH = 138;
-    private const int TRACK_HEIGHT = 12;
-
-    private static readonly Color ButtonNormalBg = new(36, 36, 40, 220);
-    private static readonly Color ButtonHoverBg = new(70, 70, 80, 235);
-    private static readonly Color ButtonBorder = new(170, 170, 180, 255);
-    private static readonly Color TitleColor = new(230, 220, 180, 255);
-
-    private readonly SliderControl MusicSlider;
     private readonly SliderControl SoundSlider;
+    private readonly SliderControl MusicSlider;
     private readonly SliderControl AmbienceSlider;
 
-    //viewport the panel centers within; defaults to full screen until SetViewportBounds runs
-    private Rectangle Viewport = new(0, 0, 640, 480);
-
-    public UIButton CloseButton { get; }
-    public UIButton ExitButton { get; }
-    public UIButton SettingsButton { get; }
-
     public PauseMenuControl()
+        : base("Menu", PANEL_W, PANEL_H, useTheme: true)
     {
-        Name = "PauseMenu";
-        Visible = false;
-        UsesControlStack = true;
-        Width = PANEL_WIDTH;
-        Height = PANEL_HEIGHT;
-        this.CenterOnScreen();
+        Name = "pausemenu";
 
-        //composite tiled background with 8-piece border (same pattern as OkPopupMessageControl)
-        using var bgTile = DataContext.UserControls.GetSpfImage("DlgBack2.spf");
+        var content = ContentBounds;
+        var rowsX = content.X + (content.Width - LABEL_W - SLIDER_W) / 2;
+        var y = content.Y + SECTION_GAP;
 
-        if (bgTile is not null)
-        {
-            using var composite = DialogFrame.Composite(bgTile, PANEL_WIDTH, PANEL_HEIGHT);
-
-            if (composite is not null)
-                Background = TextureConverter.ToTexture2D(composite);
-        }
-
-        //title
-        AddChild(
-            new UILabel
-            {
-                X = 0,
-                Y = TITLE_Y,
-                Width = PANEL_WIDTH,
-                Height = 16,
-                Text = "Menu",
-                ForegroundColor = TitleColor,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                IsHitTestVisible = false
-            });
-
-        //volume sliders — thumb comes from option04.epf frame 0 (same as the legacy _noptdlg prefab)
-        var thumbTexture = UiRenderer.Instance?.GetEpfTexture("option04.epf", 0);
-
-        AddChild(
-            new UILabel
-            {
-                X = 24,
-                Y = SOUND_LABEL_Y,
-                Width = 56,
-                Height = 16,
-                Text = "Sound",
-                ForegroundColor = Color.White,
-                IsHitTestVisible = false
-            });
-
-        SoundSlider = new SliderControl(new Rectangle(TRACK_X, SOUND_TRACK_Y, TRACK_WIDTH, TRACK_HEIGHT), thumbTexture);
+        //each control is created here with a literal name, so that the primitives report can read it
+        SoundSlider = new SliderControl(SLIDER_W, SLIDER_H) { Name = "sound" };
+        AddSliderRow(new UILabel { Name = "sound_label", Text = "Sound" }, SoundSlider, rowsX, ref y);
         SoundSlider.ValueChanged += v => OnSoundVolumeChanged?.Invoke(v);
-        AddChild(SoundSlider);
 
-        AddChild(
-            new UILabel
-            {
-                X = 24,
-                Y = MUSIC_LABEL_Y,
-                Width = 56,
-                Height = 16,
-                Text = "Music",
-                ForegroundColor = Color.White,
-                IsHitTestVisible = false
-            });
-
-        MusicSlider = new SliderControl(new Rectangle(TRACK_X, MUSIC_TRACK_Y, TRACK_WIDTH, TRACK_HEIGHT), thumbTexture);
+        MusicSlider = new SliderControl(SLIDER_W, SLIDER_H) { Name = "music" };
+        AddSliderRow(new UILabel { Name = "music_label", Text = "Music" }, MusicSlider, rowsX, ref y);
         MusicSlider.ValueChanged += v => OnMusicVolumeChanged?.Invoke(v);
-        AddChild(MusicSlider);
 
-        AddChild(
-            new UILabel
-            {
-                X = 24,
-                Y = AMBIENCE_LABEL_Y,
-                Width = 56,
-                Height = 16,
-                Text = "Ambience",
-                ForegroundColor = Color.White,
-                IsHitTestVisible = false
-            });
-
-        AmbienceSlider = new SliderControl(new Rectangle(TRACK_X, AMBIENCE_TRACK_Y, TRACK_WIDTH, TRACK_HEIGHT), thumbTexture);
+        AmbienceSlider = new SliderControl(SLIDER_W, SLIDER_H) { Name = "ambience" };
+        AddSliderRow(new UILabel { Name = "ambience_label", Text = "Ambience" }, AmbienceSlider, rowsX, ref y);
         AmbienceSlider.ValueChanged += v => OnAmbienceVolumeChanged?.Invoke(v);
-        AddChild(AmbienceSlider);
 
-        //action row: Settings + Exit side by side, centered horizontally
-        var gridTotalWidth = BUTTON_WIDTH * 2 + BUTTON_GAP;
-        var leftX = (PANEL_WIDTH - gridTotalWidth) / 2;
-        var rightX = leftX + BUTTON_WIDTH + BUTTON_GAP;
+        //Settings and Exit Game side by side, centred below the sliders
+        var buttonsX = content.X + (content.Width - (2 * BUTTON_W + BUTTON_GAP)) / 2;
+        var buttonsY = y + SECTION_GAP;
 
-        SettingsButton = CreateTextButton("Settings", leftX, BUTTON_ROW_1_Y, BUTTON_WIDTH);
-        SettingsButton.Clicked += () =>
+        var settings = new TextButton("Settings", BUTTON_W, BUTTON_H) { Name = "settings", X = buttonsX, Y = buttonsY };
+        settings.Clicked += () =>
         {
             Hide();
             OnSettings?.Invoke();
         };
+        AddChild(settings);
 
-        ExitButton = CreateTextButton("Exit Game", rightX, BUTTON_ROW_1_Y, BUTTON_WIDTH);
-        ExitButton.Clicked += () =>
+        var exit = new TextButton("Exit Game", BUTTON_W, BUTTON_H)
         {
-            Hide();
-            OnExit?.Invoke();
+            Name = "exit",
+            X = buttonsX + BUTTON_W + BUTTON_GAP,
+            Y = buttonsY
         };
-
-        //close button — centered below the action row
-        CloseButton = CreateTextButton("Close", (PANEL_WIDTH - CLOSE_WIDTH) / 2, CLOSE_Y, CLOSE_WIDTH);
-        CloseButton.Clicked += Hide;
+        exit.Clicked += Exit;
+        AddChild(exit);
     }
 
-    /// <summary>
-    ///     Creates a colored-rect button with hover feedback and adds it (plus its text label) to the panel's
-    ///     children. Label is hit-test-transparent so clicks pass to the button.
-    /// </summary>
-    private UIButton CreateTextButton(string text, int x, int y, int width)
+    //places a row: the label at the left and the slider beside it
+    private void AddSliderRow(UILabel label, SliderControl slider, int x, ref int y)
     {
-        var button = new UIButton
-        {
-            X = x,
-            Y = y,
-            Width = width,
-            Height = BUTTON_HEIGHT,
-            BackgroundColor = ButtonNormalBg,
-            BorderColor = ButtonBorder
-        };
-        button.Hovered += _ => button.BackgroundColor = ButtonHoverBg;
-        button.Unhovered += _ => button.BackgroundColor = ButtonNormalBg;
-        AddChild(button);
+        label.X = x;
+        label.Y = y + (SLIDER_H - ROW_H) / 2;
+        label.Width = LABEL_W;
+        label.Height = ROW_H;
+        label.VerticalAlignment = VerticalAlignment.Center;
+        label.IsHitTestVisible = false;
+        label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        AddChild(label);
 
-        AddChild(
-            new UILabel
-            {
-                X = x,
-                Y = y + 4,
-                Width = width,
-                Height = BUTTON_HEIGHT - 4,
-                Text = text,
-                ForegroundColor = Color.White,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                IsHitTestVisible = false
-            });
-
-        return button;
+        slider.X = x + LABEL_W;
+        slider.Y = y;
+        AddChild(slider);
+        y += ROW_STRIDE;
     }
 
-    /// <summary>
-    ///     Sets the playable viewport rect (typically the HUD's MAP area). The panel re-centers within it so it
-    ///     doesn't render under the HUD chrome.
-    /// </summary>
-    public void SetViewportBounds(Rectangle viewport)
+    private void Exit()
     {
-        Viewport = viewport;
-        CenterInViewport();
-    }
-
-    private void CenterInViewport()
-    {
-        X = Viewport.X + (Viewport.Width - Width) / 2;
-        Y = Viewport.Y + (Viewport.Height - Height) / 2;
+        Hide();
+        OnExit?.Invoke();
     }
 
     public int GetMusicVolume() => MusicSlider.Value;
@@ -234,44 +118,30 @@ public sealed class PauseMenuControl : UIPanel
 
     public void SetAmbienceVolume(int volume) => AmbienceSlider.SetValue(volume);
 
-    public void Show()
-    {
-        if (Visible)
-            return;
-
-        CenterInViewport();
-        InputDispatcher.Instance?.PushControl(this);
-        Visible = true;
-    }
-
-    public void Hide()
-    {
-        if (!Visible)
-            return;
-
-        InputDispatcher.Instance?.RemoveControl(this);
-        Visible = false;
-        OnClose?.Invoke();
-    }
-
     public event AmbienceVolumeChangedHandler? OnAmbienceVolumeChanged;
-    public event CloseHandler? OnClose;
     public event ExitHandler? OnExit;
     public event MusicVolumeChangedHandler? OnMusicVolumeChanged;
     public event SettingsHandler? OnSettings;
     public event SoundVolumeChangedHandler? OnSoundVolumeChanged;
 
+    //Escape closes the menu and X closes it and exits. Every other key goes on to the world screen, as before the
+    //rebuild: Q closes the menu again, and a panel hotkey closes it and opens its panel. The base modal marks every key as
+    //handled, so this override does not call it
     public override void OnKeyDown(KeyDownEvent e)
     {
-        if (e.Key == Keys.Escape)
+        switch (e.Key)
         {
-            Hide();
-            e.Handled = true;
-        } else if (e.Key == Keys.X)
-        {
-            Hide();
-            OnExit?.Invoke();
-            e.Handled = true;
+            case Keys.Escape:
+                Hide();
+                e.Handled = true;
+
+                break;
+
+            case Keys.X:
+                Exit();
+                e.Handled = true;
+
+                break;
         }
     }
 }
