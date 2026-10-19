@@ -1,5 +1,4 @@
 #region
-using System.Text.RegularExpressions;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.LobbyLogin;
@@ -26,7 +25,7 @@ public class MainMenuControlTests
         var menu = new MainMenuControl();
 
         Assert.Equal("mainmenu", menu.Name);
-        AssertNamedTree(menu);
+        UiAssert.NamedTree(menu);
     }
 
     [Fact]
@@ -78,7 +77,7 @@ public class MainMenuControlTests
         menu.Alerts.Add(MenuAlerts.LegacyImport(() => { }, () => { }));
         Click(menu.StoryButton);
 
-        AssertNamedTree(menu);
+        UiAssert.NamedTree(menu);
     }
 
     [Fact]
@@ -257,18 +256,6 @@ public class MainMenuControlTests
     public void TheAboutTextShips()
         => Assert.StartsWith("# About Hybrasyl", MainMenuControl.ReadText("about.md"));
 
-    private static void AssertNamedTree(UIPanel panel)
-    {
-        var names = panel.Children.Select(child => child.Name).ToList();
-
-        //the id rule of the ui_panels layout plan; a dot is the path separator, so it is never part of a name
-        Assert.All(names, name => Assert.Matches(new Regex("^[a-z0-9_]+$"), name));
-        Assert.Equal(names.Count, names.Distinct().Count());
-
-        //a TextButton or a tab is a panel too; its label is its own detail, not a separate target
-        foreach (var child in panel.Children.OfType<UIPanel>().Where(child => child is not (TextButton or SelectableTab)))
-            AssertNamedTree(child);
-    }
 
     private static void Click(TextButton button) => button.OnClick(new ClickEvent { Button = MouseButton.Left });
 

@@ -1,5 +1,4 @@
 #region
-using System.Text.RegularExpressions;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.LobbyLogin;
@@ -27,7 +26,7 @@ public class CharacterCreatorControlTests
         var creator = new CharacterCreatorControl();
 
         Assert.Equal("charcreate", creator.Name);
-        AssertNamedTree(creator);
+        UiAssert.NamedTree(creator);
     }
 
     [Fact]
@@ -244,6 +243,20 @@ public class CharacterCreatorControlTests
     }
 
     [Fact]
+    public void WhileBusyTheCreatorCanStillBeCancelled()
+    {
+        var creator = new CharacterCreatorControl();
+        var cancels = 0;
+        creator.OnCancel += () => cancels++;
+
+        creator.SetBusy(true);
+        creator.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
+
+        Assert.Equal(1, cancels);
+        Assert.True(creator.CancelButton.Enabled);
+    }
+
+    [Fact]
     public void HideClosesTheSpeciesList()
     {
         var creator = new CharacterCreatorControl();
@@ -272,16 +285,4 @@ public class CharacterCreatorControlTests
     }
 
     private static ClickEvent LeftClick() => new() { Button = MouseButton.Left };
-    private static void AssertNamedTree(UIPanel panel)
-    {
-        var names = panel.Children.Select(child => child.Name).ToList();
-
-        //the id rule of the ui_panels layout plan; a dot is the path separator, so it is never part of a name
-        Assert.All(names, name => Assert.Matches(new Regex("^[a-z0-9_]+$"), name));
-        Assert.Equal(names.Count, names.Distinct().Count());
-
-        //a TextButton or a tab is a panel too; its label is its own detail, not a separate target
-        foreach (var child in panel.Children.OfType<UIPanel>().Where(child => child is not (TextButton or SelectableTab)))
-            AssertNamedTree(child);
-    }
 }
