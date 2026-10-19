@@ -44,7 +44,7 @@ public sealed class ThemedModalLayoutTests : IDisposable
 
     //Options is left out: its setting labels read msg.tbl, which a test does not load. It lays out from ContentBounds as
     //the others do
-    public static TheoryData<string> Modals => ["boards", "castable", "keybind", "serverinfo", "certificate", "insecure", "pause"];
+    public static TheoryData<string> Modals => ["boards", "castable", "keybind", "serverinfo", "certificate", "insecure", "pause", "popup"];
 
     [Theory]
     [MemberData(nameof(Modals))]
@@ -155,6 +155,7 @@ public sealed class ThemedModalLayoutTests : IDisposable
         "certificate" => new CertificateTrustPromptControl(),
         "insecure"    => new InsecureConnectionPromptControl(),
         "pause"       => new PauseMenuControl(),
+        "popup"       => new OkPopupMessageControl("Notice", showCancel: true),
         _             => throw new ArgumentOutOfRangeException(nameof(modal))
     };
 }

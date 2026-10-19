@@ -760,7 +760,7 @@ public sealed partial class WorldScreen
 
         //high ZIndex so the popup floats above all panels (StatusBook, GroupTabControl, dialogs, ...).
         //10 matches DisconnectPopup, the only other interruption-class modal.
-        var popup = new OkPopupMessageControl(true)
+        var popup = new OkPopupMessageControl("Group Invite", showCancel: true)
         {
             Name = "GroupInvitePopup",
             ZIndex = 10

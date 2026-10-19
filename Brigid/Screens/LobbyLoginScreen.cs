@@ -201,7 +201,7 @@ public sealed class LobbyLoginScreen : IScreen
         PasswordChangeControl.OnOk += OnPasswordChangeOkClicked;
         PasswordChangeControl.OnCancel += OnPasswordChangeCancelClicked;
 
-        LobbyLoginPopupMessage = new OkPopupMessageControl
+        LobbyLoginPopupMessage = new OkPopupMessageControl("Notification")
         {
             ZIndex = 1,
             Name = "LobbyLoginPopupMessage"
@@ -209,7 +209,7 @@ public sealed class LobbyLoginScreen : IScreen
         LobbyLoginPopupMessage.OnOk += OnLobbyLoginPopupMessageOk;
 
         //one-time first-run offer to import legacy per-character config (OK = import, Cancel = start fresh)
-        MigrationPrompt = new OkPopupMessageControl(showCancel: true)
+        MigrationPrompt = new OkPopupMessageControl("Import Settings", showCancel: true)
         {
             ZIndex = 2,
             Name = "MigrationPrompt"

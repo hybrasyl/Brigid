@@ -20,7 +20,8 @@ namespace Brigid.Controls.Components;
 ///     <para>
 ///         Subclasses lay their content out inside <see cref="ContentBounds" /> (add it with <c>AddChild</c>),
 ///         add bottom-bar actions with <see cref="AddBottomBarButton" />, and hang any pre-close teardown off
-///         <see cref="OnClose" /> (which also covers the Escape path). Override <see cref="Show" /> to accept
+///         <see cref="OnClose" /> (which also covers the Escape path). A modal that fits its height to its content calls
+///         <see cref="SetContentHeight" />. Override <see cref="Show" /> to accept
 ///         data (call <c>base.Show()</c> to push and reveal), <see cref="Hide" /> for teardown, and
 ///         <see cref="OnMouseScroll" /> to route the wheel to a scroll model.
 ///     </para>
@@ -207,11 +208,29 @@ public abstract class CenteredModalPanel : FramePanel
         LaidOutInset = Inset;
         TitleLabel.Y = ChromeOffset + (TITLE_H - TextRenderer.CHAR_HEIGHT) / 2;
 
-        foreach (var button in BottomBarButtons)
-            button.Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2;
-
+        PlaceBottomBarRow();
         RelayoutBottomBar();
         LayoutContent();
+    }
+
+    //puts the bottom-bar buttons on the bar's row
+    private void PlaceBottomBarRow()
+    {
+        foreach (var button in BottomBarButtons)
+            button.Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2;
+    }
+
+    /// <summary>
+    ///     Sets the panel height so that <see cref="ContentBounds" /> is <paramref name="contentHeight" /> px tall, for a
+    ///     modal that fits its height to its content; such a modal can give 0 as the constructor height. The bottom bar moves
+    ///     with the bottom edge, and the panel is centered again. The top of <see cref="ContentBounds" /> does not move, but
+    ///     its bottom does, so place the content again after this call.
+    /// </summary>
+    protected void SetContentHeight(int contentHeight)
+    {
+        Height = ContentTop + contentHeight + ChromeOffset + BOTTOM_H;
+        PlaceBottomBarRow();
+        CenterInViewport();
     }
 
     /// <summary>

@@ -1,8 +1,7 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Data;
-using Brigid.Extensions;
-using Brigid.Utilities;
+using Brigid.Definitions;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -10,180 +9,164 @@ using Microsoft.Xna.Framework.Input;
 namespace Brigid.Controls.Generic;
 
 /// <summary>
-///     A popup message dialog with DlgBack2.spf tiled background (clipped to interior height), dlgframe.epf 16×16 border,
-///     and butt001.epf OK (+ optional Cancel) button.
+///     A short message with OK and an optional Cancel: the logout prompt, the connection-lost prompt, the board and
+///     exchange results, the group invite, and the lobby messages. A primitive <see cref="CenteredModalPanel" /> that
+///     takes the theme: the frame, the buttons and the text colour come from the theme. With no theme, the frame and the
+///     buttons have the flat <see cref="DialogPalette" /> look, and the text is white.
+///     <para>
+///         The panel has a fixed width, and its height fits the wrapped message. OK raises <see cref="OnOk" /> and Cancel
+///         raises <see cref="OnCancel" />; the host hides the popup. Enter and Space are OK. Escape is Cancel, or OK when
+///         the popup has no Cancel. The popup is modal: it takes every other key, so nothing behind it gets a key while it
+///         is open.
+///     </para>
 /// </summary>
-public sealed class OkPopupMessageControl : UIPanel
+public sealed class OkPopupMessageControl : CenteredModalPanel
 {
-    private const int TILES_WIDE = 4;
-    private const int INTERIOR_HEIGHT = 54;
-    private const int CONTENT_PADDING = 6;
-    private const int BUTTON_MARGIN = 1;
+    private const int PANEL_W = 300;
+    private const int ACTION_W = 64;
 
-    //butt001.epf frame indices — 2 frames per button (normal/pressed)
-    private const int OK_NORMAL = 15;
-    private const int OK_PRESSED = 16;
-    private const int CANCEL_NORMAL = 21;
-    private const int CANCEL_PRESSED = 22;
+    //the space above and below the message
+    private const int TEXT_GAP = 6;
 
-    private readonly int ContentHeight;
-    private readonly int ContentWidth;
-    private readonly int ContentX;
-    private readonly int ContentY;
+    //the message area is two to 20 lines tall; the popup clips a longer message
+    private const int MIN_LINES = 2;
+    private const int MAX_LINES = 20;
 
     private readonly UILabel MessageLabel;
     private UIElement? PreviousFocus;
 
-    public UIButton? CancelButton { get; }
-    public UIButton OkButton { get; }
+    //the FontEngine generation that the panel was last fitted at; a new face or window size wraps the message again
+    private int FittedGeneration = -1;
 
-    public OkPopupMessageControl(bool showCancel = false)
+    public TextButton? CancelButton { get; }
+    public TextButton OkButton { get; }
+
+    public event CancelHandler? OnCancel;
+    public event OkHandler? OnOk;
+
+    /// <param name="title">The text of the title band.</param>
+    /// <param name="showCancel">True to show Cancel beside OK.</param>
+    public OkPopupMessageControl(string title, bool showCancel = false)
+        //FitToText sets the height
+        : base(title, PANEL_W, 0, useTheme: true)
     {
-        Visible = false;
-        UsesControlStack = true;
+        IsModal = true;
 
-        //load background tile
-        using var bgTile = DataContext.UserControls.GetSpfImage("DlgBack2.spf");
+        //the popup has no Close: OK and Cancel answer it
+        CloseButton.Visible = false;
 
-        if (bgTile is null)
-            throw new InvalidOperationException("Failed to load DlgBack2.spf");
-
-        var borderSize = DialogFrame.BORDER_SIZE;
-        var interiorWidth = bgTile.Width * TILES_WIDE - 23;
-        var totalWidth = borderSize + interiorWidth + borderSize;
-        var totalHeight = borderSize + INTERIOR_HEIGHT + borderSize;
-
-        //composite tiled background with border
-        using var composite = DialogFrame.Composite(bgTile, totalWidth, totalHeight);
-
-        if (composite is null)
-            throw new InvalidOperationException("Failed to composite dialog background");
-
-        Width = totalWidth;
-        Height = totalHeight;
-        this.CenterOnScreen();
-        Background = TextureConverter.ToTexture2D(composite);
-
-        //content area — text fills above the button row
-        ContentX = borderSize + CONTENT_PADDING;
-        ContentY = borderSize + CONTENT_PADDING;
-        ContentWidth = interiorWidth - CONTENT_PADDING * 2;
-        ContentHeight = INTERIOR_HEIGHT - CONTENT_PADDING * 2;
-
-        //button textures
-        var cache = UiRenderer.Instance!;
-        var okNormalTex = cache.GetEpfTexture("butt001.epf", OK_NORMAL);
-        var okPressedTex = cache.GetEpfTexture("butt001.epf", OK_PRESSED);
-
-        var okWidth = okNormalTex.Width;
-        var okHeight = okNormalTex.Height;
-        var buttonY = totalHeight - borderSize - okHeight - BUTTON_MARGIN + 5;
-        var rightButtonX = totalWidth - borderSize - BUTTON_MARGIN + 4;
-        int okX;
-
-        //cancel button (optional) — positioned on the right
         if (showCancel)
-        {
-            var cancelNormalTex = cache.GetEpfTexture("butt001.epf", CANCEL_NORMAL);
-            var cancelPressedTex = cache.GetEpfTexture("butt001.epf", CANCEL_PRESSED);
+            CancelButton = AddBottomBarButton("Cancel", ACTION_W, Cancel, "cancel");
 
-            var cancelWidth = cancelNormalTex.Width;
-
-            CancelButton = new UIButton
-            {
-                Name = "Cancel",
-                X = rightButtonX - cancelWidth,
-                Y = buttonY,
-                Width = cancelWidth,
-                Height = cancelNormalTex.Height,
-                NormalTexture = cancelNormalTex,
-                PressedTexture = cancelPressedTex
-            };
-            CancelButton.Clicked += () => OnCancel?.Invoke();
-            AddChild(CancelButton);
-
-            okX = CancelButton.X - okWidth - BUTTON_MARGIN;
-        } else
-            okX = rightButtonX - okWidth;
-
-        //ok button — left of cancel, or slides right when cancel absent
-        OkButton = new UIButton
-        {
-            Name = "OK",
-            X = okX,
-            Y = buttonY,
-            Width = okWidth,
-            Height = okHeight,
-            NormalTexture = okNormalTex,
-            PressedTexture = okPressedTex
-        };
-        OkButton.Clicked += () => OnOk?.Invoke();
-        AddChild(OkButton);
+        OkButton = AddBottomBarButton("OK", ACTION_W, Ok, "ok");
 
         MessageLabel = new UILabel
         {
-            X = ContentX - 9,
-            Y = ContentY - 10,
-            Width = ContentWidth,
-            Height = ContentHeight,
+            Name = "message",
             WordWrap = true,
-            ForegroundColor = Color.White,
-            VerticalAlignment = VerticalAlignment.Top
+            VerticalAlignment = VerticalAlignment.Top,
+            IsHitTestVisible = false
         };
+        MessageLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
         AddChild(MessageLabel);
+
+        FitToText();
     }
 
-    public void Hide()
+    /// <summary>
+    ///     Shows the popup with <paramref name="message" />. When the popup is open, the message changes and the popup stays
+    ///     open.
+    /// </summary>
+    public void Show(string message)
     {
-        InputDispatcher.Instance!.RemoveControl(this);
-        Visible = false;
+        MessageLabel.Text = message;
+        FitToText();
+
+        //a second Show while the popup is open (back-to-back server messages) must not record the focus again: the focus
+        //is clear at that point, so the real previous focus would be lost
+        if (Visible)
+            return;
+
+        //record the focus to give it back on Hide, then clear it, so that the keys come to this popup on the control stack
+        //and not to the text box that had the focus
+        PreviousFocus = InputDispatcher.Instance?.ExplicitFocus;
+        InputDispatcher.Instance?.ClearExplicitFocus();
+
+        base.Show();
+    }
+
+    public override void Hide()
+    {
+        base.Hide();
         MessageLabel.Text = string.Empty;
 
-        //restore focus to whatever had it before the popup stole it (e.g. the login password box)
+        //give the focus back to the control that had it before the popup (for example the login password box)
         if (PreviousFocus is not null)
         {
-            InputDispatcher.Instance!.SetExplicitFocus(PreviousFocus);
+            InputDispatcher.Instance?.SetExplicitFocus(PreviousFocus);
             PreviousFocus = null;
         }
     }
 
-    public event CancelHandler? OnCancel;
+    protected override void LayoutContent() => FitToText();
 
-    public event OkHandler? OnOk;
-
-    public void Show(string message)
+    public override void Update(GameTime gameTime)
     {
-        MessageLabel.Text = message;
+        //the label wraps again when the face or the window size changes; the panel then fits the new line count
+        if (Visible && (FontEngine.Instance.Generation != FittedGeneration))
+            FitToText();
 
-        //a second Show while already up (back-to-back server messages) must not re-stash:
-        //explicit focus is already cleared at that point, so stashing again would overwrite
-        //the real PreviousFocus with null and lose the focus restore on dismiss
-        if (Visible)
-            return;
-
-        //remember who had focus so we can restore it on dismiss, then clear focus so
-        //keyboard input routes to this popup via the control stack instead of being
-        //eaten by the previously-focused textbox.
-        PreviousFocus = InputDispatcher.Instance!.ExplicitFocus;
-        InputDispatcher.Instance!.ClearExplicitFocus();
-        InputDispatcher.Instance!.PushControl(this);
-        Visible = true;
+        base.Update(gameTime);
     }
+
+    //sizes the panel to the wrapped message and places the message in the content area
+    private void FitToText()
+    {
+        var content = ContentBounds;
+
+        MessageLabel.X = content.X;
+        MessageLabel.Width = content.Width;
+
+        //a new width or a new FontEngine generation wraps the text again
+        MessageLabel.Text = MessageLabel.Text;
+        FittedGeneration = FontEngine.Instance.Generation;
+
+        var wrappedHeight = MessageLabel.ContentHeight;
+        var lines = Math.Clamp(wrappedHeight / TextRenderer.CHAR_HEIGHT, MIN_LINES, MAX_LINES);
+        var areaHeight = lines * TextRenderer.CHAR_HEIGHT;
+        SetContentHeight(areaHeight + 2 * TEXT_GAP);
+
+        //a message shorter than the area is centered in it
+        var textHeight = Math.Min(wrappedHeight, areaHeight);
+        MessageLabel.Y = ContentBounds.Y + TEXT_GAP + (areaHeight - textHeight) / 2;
+        MessageLabel.Height = textHeight;
+    }
+
+    private void Ok() => OnOk?.Invoke();
+
+    private void Cancel() => OnCancel?.Invoke();
 
     public override void OnKeyDown(KeyDownEvent e)
     {
-        if (e.Key is Keys.Enter or Keys.Space)
+        switch (e.Key)
         {
-            OkButton.PerformClick();
-            e.Handled = true;
-        } else if (e.Key == Keys.Escape)
-        {
-            if (CancelButton is not null)
-                CancelButton.PerformClick();
-            else
-                OkButton.PerformClick();
+            //Alt+Enter changes the window size; it must not answer the popup
+            case Keys.Enter when !e.Alt:
+            case Keys.Space:
+                Ok();
 
-            e.Handled = true;
+                break;
+
+            case Keys.Escape:
+                if (CancelButton is not null)
+                    Cancel();
+                else
+                    Ok();
+
+                break;
         }
+
+        //the popup is modal: no key goes on to the screen behind it
+        e.Handled = true;
     }
 }

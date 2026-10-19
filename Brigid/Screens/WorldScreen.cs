@@ -441,12 +441,12 @@ public sealed partial class WorldScreen : IScreen
         };
         //above the modal tier (10): both popups are centered inside the boards modal's footprint, so at a lower
         //ZIndex they would draw under it and every click would be claimed by the modal behind them.
-        DeleteConfirm = new OkPopupMessageControl(true)
+        DeleteConfirm = new OkPopupMessageControl("Delete Post", showCancel: true)
         {
             ZIndex = 11,
             Name = "DeleteConfirm"
         };
-        BoardResponsePopup = new OkPopupMessageControl
+        BoardResponsePopup = new OkPopupMessageControl("Boards")
         {
             ZIndex = 11,
             Name = "BoardResponsePopup"
@@ -454,21 +454,21 @@ public sealed partial class WorldScreen : IScreen
 
         BoardResponsePopup.OnOk += () => BoardResponsePopup.Hide();
 
-        ExchangeResultPopup = new OkPopupMessageControl
+        ExchangeResultPopup = new OkPopupMessageControl("Exchange")
         {
             ZIndex = 3,
             Name = "ExchangeResultPopup"
         };
         ExchangeResultPopup.OnOk += () => ExchangeResultPopup.Hide();
 
-        EmptyMerchantPopup = new OkPopupMessageControl
+        EmptyMerchantPopup = new OkPopupMessageControl("Bank")
         {
             ZIndex = 3,
             Name = "EmptyMerchantPopup"
         };
         EmptyMerchantPopup.OnOk += () => EmptyMerchantPopup.Hide();
 
-        DisconnectPopup = new OkPopupMessageControl(true)
+        DisconnectPopup = new OkPopupMessageControl("Disconnected", showCancel: true)
         {
             ZIndex = 10,
             Name = "DisconnectPopup"
@@ -481,7 +481,7 @@ public sealed partial class WorldScreen : IScreen
         };
         DisconnectPopup.OnCancel += () => Game.Exit();
 
-        ExitConfirmPopup = new OkPopupMessageControl
+        ExitConfirmPopup = new OkPopupMessageControl("Log Out")
         {
             ZIndex = 10,
             Name = "ExitConfirmPopup"
