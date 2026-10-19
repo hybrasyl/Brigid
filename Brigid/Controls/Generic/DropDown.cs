@@ -21,7 +21,13 @@ namespace Brigid.Controls.Generic;
 ///     </para>
 ///     <para>
 ///         The box uses the theme's button parts and the list uses <see cref="ThemeRoles.DropDownList" />. With no theme
-///         part, each has the flat <see cref="DialogPalette" /> look.
+///         part, each has the flat <see cref="DialogPalette" /> look. The text and the arrow keep clear of the border art
+///         of a sliced part.
+///     </para>
+///     <para>
+///         An entry can be disabled with <see cref="SetEntryEnabled" />. A disabled entry shows in the list in the
+///         disabled text colour and in italics, does not highlight under the mouse, and the player cannot select it. A
+///         click on it leaves the list open.
 ///     </para>
 /// </summary>
 public sealed class DropDown : UIPanel
@@ -30,6 +36,7 @@ public sealed class DropDown : UIPanel
     private const int ARROW_W = 7;
 
     private readonly string[] Items;
+    private readonly bool[] DisabledItems;
     private readonly int RowHeight;
 
     private bool BoxHovered;
@@ -58,18 +65,32 @@ public sealed class DropDown : UIPanel
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(rowHeight);
 
         Items = [.. items];
+        DisabledItems = new bool[Items.Length];
         RowHeight = rowHeight;
         Width = width;
         Height = rowHeight;
         SelectedIndex = Items.Length > 0 ? 0 : -1;
     }
 
-    /// <summary>Moves the selection without raising <see cref="SelectionChanged" />. An index out of range is ignored.</summary>
+    /// <summary>
+    ///     Moves the selection without raising <see cref="SelectionChanged" />. An index out of range is ignored. The host can
+    ///     select a disabled entry, for example a value that the server set; only the player cannot.
+    /// </summary>
     public void SetSelected(int index)
     {
         if ((index >= 0) && (index < Items.Length))
             SelectedIndex = index;
     }
+
+    /// <summary>Enables or disables the entry at <paramref name="index" />. An index out of range is ignored.</summary>
+    public void SetEntryEnabled(int index, bool enabled)
+    {
+        if ((index >= 0) && (index < Items.Length))
+            DisabledItems[index] = !enabled;
+    }
+
+    /// <summary>False when the entry at <paramref name="index" /> is disabled or out of range.</summary>
+    public bool IsEntryEnabled(int index) => (index >= 0) && (index < Items.Length) && !DisabledItems[index];
 
     /// <summary>Opens the list. A control that has no entries or is disabled does not open.</summary>
     public void Open()
@@ -135,8 +156,9 @@ public sealed class DropDown : UIPanel
             ? ThemeColor(ThemeRoles.Text, LegendColors.White)
             : ThemeColor(ThemeRoles.TextDisabled, DialogPalette.DisabledText);
 
-        DrawRow(spriteBatch, box, SelectedText, textColor);
-        DrawArrow(spriteBatch, box, textColor);
+        var inset = ContentInset(ThemeRoles.ButtonNormal);
+        DrawRow(spriteBatch, box, SelectedText, textColor, inset, FontStyle.Regular);
+        DrawArrow(spriteBatch, box, textColor, inset);
     }
 
     private void DrawList(SpriteBatch spriteBatch, Rectangle list)
@@ -146,6 +168,8 @@ public sealed class DropDown : UIPanel
             DrawRectClipped(spriteBatch, list, DialogPalette.FrameFill);
             DrawBorderClipped(spriteBatch, list, DialogPalette.FrameBorder);
         }
+
+        var inset = ContentInset(ThemeRoles.DropDownList);
 
         for (var i = 0; i < Items.Length; i++)
         {
@@ -157,30 +181,41 @@ public sealed class DropDown : UIPanel
             else if (selected)
                 DrawRectClipped(spriteBatch, Inner(row), DialogPalette.RowSelectedFill);
 
+            if (DisabledItems[i])
+            {
+                DrawRow(spriteBatch, row, Items[i], ThemeColor(ThemeRoles.TextDisabled, DialogPalette.DisabledText), inset, FontStyle.Italic);
+
+                continue;
+            }
+
             var color = selected
                 ? ThemeColor(ThemeRoles.TextSelected, DialogPalette.SelectedText)
                 : ThemeColor(ThemeRoles.Text, LegendColors.White);
 
-            DrawRow(spriteBatch, row, Items[i], color);
+            DrawRow(spriteBatch, row, Items[i], color, inset, FontStyle.Regular);
         }
     }
 
     //a row highlight keeps clear of the 1 px border
     private static Rectangle Inner(Rectangle row) => new(row.X + 1, row.Y, row.Width - 2, row.Height);
 
-    private void DrawRow(SpriteBatch spriteBatch, Rectangle row, string text, Color color)
-        => DrawTextClipped(
+    //the text and the arrow keep clear of the border art of a sliced theme part
+    private int ContentInset(string role) => TryGetThemeBorder(role, out var border) ? Math.Max(TEXT_INSET, border) : TEXT_INSET;
+
+    private void DrawRow(SpriteBatch spriteBatch, Rectangle row, string text, Color color, int inset, FontStyle style)
+        => FontEngine.Instance.DrawLine(
             spriteBatch,
-            new Vector2(row.X + TEXT_INSET, row.Y + (row.Height - TextRenderer.CHAR_HEIGHT) / 2),
             text,
+            new Vector2(row.X + inset, row.Y + (row.Height - TextRenderer.CHAR_HEIGHT) / 2),
             color,
-            colorCodesEnabled: false);
+            ClipRect,
+            style: style);
 
     //a small down-pointing triangle at the right of the box, drawn as rows of pixels so it needs no glyph
-    private void DrawArrow(SpriteBatch spriteBatch, Rectangle box, Color color)
+    private void DrawArrow(SpriteBatch spriteBatch, Rectangle box, Color color, int inset)
     {
         var rows = (ARROW_W + 1) / 2;
-        var left = box.Right - TEXT_INSET - ARROW_W;
+        var left = box.Right - inset - ARROW_W;
         var top = box.Y + (box.Height - rows) / 2;
 
         for (var i = 0; i < rows; i++)
@@ -198,7 +233,9 @@ public sealed class DropDown : UIPanel
     public override void OnMouseMove(MouseMoveEvent e)
     {
         BoxHovered = e.ScreenY < ScreenY + RowHeight;
-        HoveredRow = IsOpen ? RowAt(e.ScreenY) : -1;
+
+        var row = IsOpen ? RowAt(e.ScreenY) : -1;
+        HoveredRow = IsEntryEnabled(row) ? row : -1;
     }
 
     public override void OnMouseLeave()
@@ -231,6 +268,10 @@ public sealed class DropDown : UIPanel
         }
 
         var row = RowAt(e.ScreenY);
+
+        if ((row >= 0) && DisabledItems[row])
+            return;
+
         Close();
 
         if ((row < 0) || (row == SelectedIndex))

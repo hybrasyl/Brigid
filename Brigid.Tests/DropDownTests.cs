@@ -147,6 +147,53 @@ public class DropDownTests
         Assert.False(disabled.IsOpen);
     }
 
+    [Fact]
+    public void AClickOnADisabledEntryLeavesTheListOpenWithNoChange()
+    {
+        var dropDown = new DropDown(["Human", "Elf", "Dwarf"], 100, ROW_H);
+        var changes = 0;
+        dropDown.SelectionChanged += _ => changes++;
+        dropDown.SetEntryEnabled(1, false);
+
+        ClickAt(dropDown, 0);
+        ClickAt(dropDown, 2);
+
+        Assert.True(dropDown.IsOpen);
+        Assert.Equal(0, dropDown.SelectedIndex);
+        Assert.Equal(0, changes);
+
+        ClickAt(dropDown, 3);
+
+        Assert.False(dropDown.IsOpen);
+        Assert.Equal(2, dropDown.SelectedIndex);
+    }
+
+    [Fact]
+    public void AnEntryCanBeEnabledAgain()
+    {
+        var dropDown = new DropDown(["Human", "Elf"], 100, ROW_H);
+        dropDown.SetEntryEnabled(1, false);
+        dropDown.SetEntryEnabled(1, true);
+
+        ClickAt(dropDown, 0);
+        ClickAt(dropDown, 2);
+
+        Assert.Equal(1, dropDown.SelectedIndex);
+    }
+
+    [Fact]
+    public void SetEntryEnabledIgnoresAnIndexOutOfRange()
+    {
+        var dropDown = new DropDown(["Human"], 100, ROW_H);
+
+        dropDown.SetEntryEnabled(5, false);
+        dropDown.SetEntryEnabled(-1, false);
+
+        Assert.True(dropDown.IsEntryEnabled(0));
+        Assert.False(dropDown.IsEntryEnabled(5));
+        Assert.False(dropDown.IsEntryEnabled(-1));
+    }
+
     //a left click on row 0 (the box) or on list row n (row n + 1 of the open control)
     private static void ClickAt(DropDown dropDown, int row)
         => dropDown.OnClick(
