@@ -17,12 +17,14 @@ namespace Brigid.Controls.LobbyLogin;
 ///     and keeps its flow: the screen reads the name and the two passwords for the first create packet, and the
 ///     <c>Selected*</c> values for the second. The appearance rules are in <see cref="CreatorAppearance" />.
 ///     <para>
-///         The species list has only Human, and the create packets do not carry it: the row is a place for BRIG-21's
-///         species list. Validation and server messages show in the status line above the buttons, not in a popup. The
-///         space below the <c>look</c> group is kept free for BRIG-21's clan and class rows.
+///         The species list shows the starter species and the body type list shows the four builds (BRIG-118), but only
+///         Human and "Type A - Average" are enabled. The other entries are disabled until the server can accept them. The
+///         create packets carry neither: the rows are a place for BRIG-21's lists. Validation and server messages show in
+///         the status line above the buttons, not in a popup. The space below the <c>look</c> group is kept free for
+///         BRIG-21's clan and class rows.
 ///     </para>
 ///     <para>
-///         Enter is Create, and Escape closes an open species list or else is Cancel. Tab moves between the text fields.
+///         Enter is Create, and Escape closes an open drop-down list or else is Cancel. Tab moves between the text fields.
 ///     </para>
 /// </summary>
 public sealed class CharacterCreatorControl : CenteredModalPanel
@@ -39,6 +41,7 @@ public sealed class CharacterCreatorControl : CenteredModalPanel
     private const int GROUP_GAP = 12;
     private const int STATUS_H = 36;
     private const int STEPPER_W = 120;
+    private const int DROPDOWN_W = 140;
     private const int GENDER_TAB_W = 64;
     private const int SWATCH_W = 28;
     private const int SWATCH_H = 16;
@@ -51,6 +54,11 @@ public sealed class CharacterCreatorControl : CenteredModalPanel
     private const float WALK_FRAME_INTERVAL_MS = 350f;
 
     private static readonly Color DefaultSwatch = new(128, 128, 128);
+
+    //the starter species (BRIG-21, singular names) and the four builds in letter order (BRIG-118); the first entry of each
+    //is the only one enabled
+    private static readonly string[] SpeciesNames = ["Human", "Lyrien", "Dwarf", "Sylari", "Kobold", "Triton"];
+    private static readonly string[] BodyFrameNames = ["Type A - Average", "Type B - Brawny", "Type L - Lean", "Type S - Stout"];
 
     //a swatch name is a literal, so that a ui_panels pack does not depend on the names of the DisplayColor members;
     //the order is CreatorAppearance.HairColors
@@ -86,8 +94,14 @@ public sealed class CharacterCreatorControl : CenteredModalPanel
     public UITextBox PasswordField { get; }
     public UITextBox PasswordConfirmField { get; }
 
-    /// <summary>The species list. Only Human, and cosmetic: the create packets do not carry a species.</summary>
+    /// <summary>The species list. Only Human is enabled. The list is cosmetic: the create packets do not carry a species.</summary>
     public DropDown Species { get; }
+
+    /// <summary>
+    ///     The body type list (BodyFrame, BRIG-118). Only "Type A - Average" is enabled. The list is cosmetic: the create
+    ///     packets do not carry a body type.
+    /// </summary>
+    public DropDown BodyFrame { get; }
 
     public TextButton CreateButton { get; }
     public TextButton CancelButton { get; }
@@ -147,21 +161,27 @@ public sealed class CharacterCreatorControl : CenteredModalPanel
 
         Look = new UIPanel { Name = "look" };
 
-        //the open list covers the gender row, so the list draws above it
-        Species = new DropDown(["Human"], STEPPER_W, ROW_H) { Name = "species", ZIndex = 1 };
+        //an open list covers the rows below it, so each list draws above the rows under it
+        Species = new DropDown(SpeciesNames, DROPDOWN_W, ROW_H) { Name = "species", ZIndex = 2 };
+        EnableFirstEntryOnly(Species);
         AddFieldLabel(Look, "species_label", "Species", 0);
         AddLookControl(Species, 0);
 
+        BodyFrame = new DropDown(BodyFrameNames, DROPDOWN_W, ROW_H) { Name = "bodyframe", ZIndex = 1 };
+        EnableFirstEntryOnly(BodyFrame);
+        AddFieldLabel(Look, "bodyframe_label", "Body", 1);
+        AddLookControl(BodyFrame, 1);
+
         GenderTabs = new TabStrip(["Male", "Female"], GENDER_TAB_W, ROW_H) { Name = "gender" };
         GenderTabs.TabClicked += index => Appearance.SetGender(index == 0 ? Gender.Male : Gender.Female);
-        AddFieldLabel(Look, "gender_label", "Gender", 1);
-        AddLookControl(GenderTabs, 1);
+        AddFieldLabel(Look, "gender_label", "Gender", 2);
+        AddLookControl(GenderTabs, 2);
 
         HairStepper = new Stepper(STEPPER_W, ROW_H) { Name = "hair" };
         HairStepper.Previous += Appearance.PreviousHairStyle;
         HairStepper.Next += Appearance.NextHairStyle;
-        AddFieldLabel(Look, "hair_label", "Hair", 2);
-        AddLookControl(HairStepper, 2);
+        AddFieldLabel(Look, "hair_label", "Hair", 3);
+        AddLookControl(HairStepper, 3);
 
         HairColorGrid = new UIPanel { Name = "haircolor" };
         Swatches = new ColorSwatch[CreatorAppearance.HairColors.Count];
@@ -187,8 +207,8 @@ public sealed class CharacterCreatorControl : CenteredModalPanel
         var rows = (Swatches.Length + SWATCH_COLUMNS - 1) / SWATCH_COLUMNS;
         HairColorGrid.Width = SWATCH_COLUMNS * (SWATCH_W + SWATCH_GAP) - SWATCH_GAP;
         HairColorGrid.Height = rows * (SWATCH_H + SWATCH_GAP) - SWATCH_GAP;
-        AddFieldLabel(Look, "haircolor_label", "Colour", 3);
-        AddLookControl(HairColorGrid, 3);
+        AddFieldLabel(Look, "haircolor_label", "Colour", 4);
+        AddLookControl(HairColorGrid, 4);
         AddChild(Look);
 
         Status = new UILabel
@@ -257,7 +277,7 @@ public sealed class CharacterCreatorControl : CenteredModalPanel
         Look.X = formX;
         Look.Y = Account.Y + Account.Height + GROUP_GAP;
         Look.Width = formWidth;
-        Look.Height = 3 * ROW_STRIDE + HairColorGrid.Height;
+        Look.Height = 4 * ROW_STRIDE + HairColorGrid.Height;
     }
 
     private UITextBox AddField(string name, int row, int maxLength, bool masked)
@@ -278,6 +298,12 @@ public sealed class CharacterCreatorControl : CenteredModalPanel
         Account.AddChild(box);
 
         return box;
+    }
+
+    private static void EnableFirstEntryOnly(DropDown dropDown)
+    {
+        for (var i = 1; i < dropDown.Entries.Count; i++)
+            dropDown.SetEntryEnabled(i, false);
     }
 
     private void AddLookControl(UIElement control, int row)
@@ -386,6 +412,7 @@ public sealed class CharacterCreatorControl : CenteredModalPanel
         }
 
         Species.SetSelected(0);
+        BodyFrame.SetSelected(0);
         ClearStatus();
         SetBusy(false);
         Appearance.Reset();
@@ -472,9 +499,11 @@ public sealed class CharacterCreatorControl : CenteredModalPanel
                 return;
 
             case Keys.Escape:
-                if (Species.IsOpen)
+                if (Species.IsOpen || BodyFrame.IsOpen)
+                {
                     Species.Close();
-                else
+                    BodyFrame.Close();
+                } else
                     OnCancel?.Invoke();
 
                 e.Handled = true;

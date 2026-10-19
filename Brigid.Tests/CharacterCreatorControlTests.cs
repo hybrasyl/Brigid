@@ -44,12 +44,50 @@ public class CharacterCreatorControlTests
     }
 
     [Fact]
-    public void TheSpeciesListHasOnlyHuman()
+    public void TheSpeciesListEnablesOnlyHuman()
     {
         var creator = new CharacterCreatorControl();
 
-        Assert.Equal(["Human"], creator.Species.Entries);
+        Assert.Equal(["Human", "Lyrien", "Dwarf", "Sylari", "Kobold", "Triton"], creator.Species.Entries);
         Assert.Equal("Human", creator.Species.SelectedText);
+        AssertOnlyTheFirstEntryIsEnabled(creator.Species);
+    }
+
+    [Fact]
+    public void TheBodyFrameListEnablesOnlyTypeA()
+    {
+        var creator = new CharacterCreatorControl();
+
+        Assert.Equal(["Type A - Average", "Type B - Brawny", "Type L - Lean", "Type S - Stout"], creator.BodyFrame.Entries);
+        Assert.Equal("Type A - Average", creator.BodyFrame.SelectedText);
+        AssertOnlyTheFirstEntryIsEnabled(creator.BodyFrame);
+    }
+
+    private static void AssertOnlyTheFirstEntryIsEnabled(DropDown dropDown)
+    {
+        Assert.True(dropDown.IsEntryEnabled(0));
+
+        for (var i = 1; i < dropDown.Entries.Count; i++)
+            Assert.False(dropDown.IsEntryEnabled(i));
+    }
+
+    [Fact]
+    public void EachOpenListDrawsAboveTheRowsItCovers()
+    {
+        var creator = new CharacterCreatorControl();
+        var look = creator.FindChild<UIPanel>("look")!;
+        var gender = look.FindChild<TabStrip>("gender")!;
+
+        Assert.True(creator.Species.ZIndex > creator.BodyFrame.ZIndex);
+        Assert.True(creator.BodyFrame.ZIndex > gender.ZIndex);
+
+        //the open list is clipped to the look group, so the whole list must fit in it
+        foreach (var dropDown in new[] { creator.Species, creator.BodyFrame })
+        {
+            dropDown.Open();
+            Assert.True(dropDown.Y + dropDown.Height <= look.Height);
+            dropDown.Close();
+        }
     }
 
     [Fact]
@@ -148,6 +186,12 @@ public class CharacterCreatorControlTests
         creator.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
 
         Assert.Equal(1, cancels);
+
+        creator.BodyFrame.Open();
+        creator.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
+
+        Assert.False(creator.BodyFrame.IsOpen);
+        Assert.Equal(1, cancels);
     }
 
     [Fact]
@@ -228,7 +272,6 @@ public class CharacterCreatorControlTests
     }
 
     private static ClickEvent LeftClick() => new() { Button = MouseButton.Left };
-
     private static void AssertNamedTree(UIPanel panel)
     {
         var names = panel.Children.Select(child => child.Name).ToList();
