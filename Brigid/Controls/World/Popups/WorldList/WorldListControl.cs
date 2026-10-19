@@ -21,8 +21,12 @@ namespace Brigid.Controls.World.Popups.WorldList;
 ///     "Total" readout, a vertical strip of class-filter buttons on the left, a bordered count column, and a scrollbar'd
 ///     name/title list on the right, above a bottom bar with a Close button. Double-clicking a name row starts a
 ///     whisper. Family/friend names are recoloured; a social-status icon is shown per row.
+///     <para>
+///         The panel takes the theme (BRIG-120): the frame art, the tab parts on the filters, and the role colours. A themed
+///         frame that is wider than the flat one grows the panel, and the content moves in by <see cref="ContentOffset" />.
+///     </para>
 /// </summary>
-public sealed class WorldListControl : UIPanel
+public sealed class WorldListControl : FramePanel
 {
     private const int TAB_COUNT = 9;
     private const int STATUS_ICON_COUNT = 8;
@@ -67,19 +71,16 @@ public sealed class WorldListControl : UIPanel
     private const int TOTAL_LABEL_W = 120;
 
     //── colors (frame/tab/row palette shared via DialogPalette; CountIdleColor is list-specific) ──
-    private static readonly Color FrameFill = DialogPalette.FrameFill;
-    private static readonly Color FrameBorder = DialogPalette.FrameBorder;
     private static readonly Color DividerColor = DialogPalette.Divider;
     private static readonly Color TitleColor = DialogPalette.Title;
     private static readonly Color RowHoverFill = DialogPalette.RowHoverFill;
     private static readonly Color SelectedTextColor = DialogPalette.SelectedText;
     private static readonly Color CountIdleColor = new(150, 152, 164);
-    private static readonly Color TabIdleFill = DialogPalette.TabIdleFill;
-    private static readonly Color TabSelectedFill = DialogPalette.TabSelectedFill;
-    private static readonly Color TabIdleBorder = DialogPalette.TabIdleBorder;
-    private static readonly Color TabSelectedBorder = DialogPalette.TabSelectedBorder;
 
-    private readonly FilterButton[] Filters = new FilterButton[TAB_COUNT];
+    private readonly SelectableTab[] Filters = new SelectableTab[TAB_COUNT];
+
+    //how far a themed frame moved the content in from where the constants place it
+    private readonly int ContentOffset;
 
     //per-filter counts are formatted + measured once per snapshot (in UpdateCounts), not per frame; DrawCounts is
     //then pure layout + colour. Both regular and bold widths are cached because the selected count is drawn bold and
@@ -119,10 +120,7 @@ public sealed class WorldListControl : UIPanel
         UsesControlStack = true;
         Width = PANEL_WIDTH;
         Height = PANEL_HEIGHT;
-        X = (ChaosGame.VIRTUAL_WIDTH - PANEL_WIDTH) / 2;
-        Y = (ChaosGame.VIRTUAL_HEIGHT - PANEL_HEIGHT) / 2;
-        BackgroundColor = FrameFill;
-        BorderColor = FrameBorder;
+        UseTheme = true;
 
         //social-status icons from _nemots.spf (frame 0 of each group) — cache-owned by UiRenderer, so not disposed here
         LoadStatusIcons();
@@ -135,10 +133,10 @@ public sealed class WorldListControl : UIPanel
             Width = PANEL_WIDTH,
             Height = TextRenderer.CHAR_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Center,
-            ForegroundColor = TitleColor,
             Text = "Aislings",
             IsHitTestVisible = false
         };
+        titleLabel.SetForegroundRole(ThemeRoles.TextTitle, TitleColor);
         AddChild(titleLabel);
 
         //── total readout ──
@@ -150,10 +148,10 @@ public sealed class WorldListControl : UIPanel
             Y = totalY,
             Width = TOTAL_LABEL_W,
             Height = TextRenderer.CHAR_HEIGHT,
-            ForegroundColor = LegendColors.White,
             Text = "World",
             IsHitTestVisible = false
         };
+        totalLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
         AddChild(totalLabel);
 
         //right-aligned to the count column's right edge so the world total lines up vertically with the per-filter counts
@@ -164,10 +162,10 @@ public sealed class WorldListControl : UIPanel
             Width = COUNT_RIGHT_EDGE - PADDING,
             Height = TextRenderer.CHAR_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Right,
-            ForegroundColor = LegendColors.White,
             Text = "0",
             IsHitTestVisible = false
         };
+        TotalNumLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
         AddChild(TotalNumLabel);
 
         //── filter column ── (counts are drawn in Draw, right-aligned inside the count box)
@@ -178,7 +176,7 @@ public sealed class WorldListControl : UIPanel
             var index = i;
             var rowY = BODY_Y + i * FILTER_STRIDE + (FILTER_STRIDE - FILTER_H) / 2;
 
-            var filter = new FilterButton(filterLabels[i], FILTER_W, FILTER_H)
+            var filter = new SelectableTab(filterLabels[i], FILTER_W, FILTER_H)
             {
                 X = BUTTON_X,
                 Y = rowY
@@ -232,6 +230,10 @@ public sealed class WorldListControl : UIPanel
         closeButton.Clicked += Close;
         AddChild(closeButton);
 
+        ContentOffset = GrowAroundContent(PADDING);
+        X = (ChaosGame.VIRTUAL_WIDTH - Width) / 2;
+        Y = (ChaosGame.VIRTUAL_HEIGHT - Height) / 2;
+
         WorldState.WorldList.Changed += OnWorldListChanged;
     }
 
@@ -272,22 +274,32 @@ public sealed class WorldListControl : UIPanel
 
         //no-fill boxes give the count column and the name list their own frames — the gap between them reads as the
         //vertical separator between counts and names.
-        DrawBorderClipped(spriteBatch, new Rectangle(ScreenX + COUNT_BOX_X, ScreenY + BODY_Y, COUNT_BOX_W, BODY_H), DividerColor);
-        DrawBorderClipped(spriteBatch, new Rectangle(ScreenX + LIST_BOX_X, ScreenY + BODY_Y, LIST_BOX_W, BODY_H), DividerColor);
+        var divider = ThemeColor(ThemeRoles.Divider, DividerColor);
+        DrawBorderClipped(spriteBatch, new Rectangle(ContentX + COUNT_BOX_X, ContentY + BODY_Y, COUNT_BOX_W, BODY_H), divider);
+        DrawBorderClipped(spriteBatch, new Rectangle(ContentX + LIST_BOX_X, ContentY + BODY_Y, LIST_BOX_W, BODY_H), divider);
 
         DrawCounts(spriteBatch);
     }
 
     private void DrawDivider(SpriteBatch spriteBatch, int localY)
-        => DrawRectClipped(spriteBatch, new Rectangle(ScreenX + PADDING, ScreenY + localY, Width - 2 * PADDING, 1), DividerColor);
+        => DrawRectClipped(
+            spriteBatch,
+            new Rectangle(ContentX + PADDING, ContentY + localY, PANEL_WIDTH - 2 * PADDING, 1),
+            ThemeColor(ThemeRoles.Divider, DividerColor));
+
+    //the screen position that the layout constants count from
+    private int ContentX => ScreenX + ContentOffset;
+    private int ContentY => ScreenY + ContentOffset;
 
     //Counts are drawn (not UILabels) so the selected filter's count can be emphasized: real bold (the font stack now
     //ships a bold face) plus the brighter selected colour; the others are a dimmer regular. Right-aligned to the count
     //column edge using the per-style width cached in UpdateCounts, so this is pure per-frame layout.
     private void DrawCounts(SpriteBatch spriteBatch)
     {
-        var rightEdge = ScreenX + COUNT_RIGHT_EDGE;
-        var baseY = ScreenY + BODY_Y + (FILTER_STRIDE - TextRenderer.CHAR_HEIGHT) / 2;
+        var rightEdge = ContentX + COUNT_RIGHT_EDGE;
+        var baseY = ContentY + BODY_Y + (FILTER_STRIDE - TextRenderer.CHAR_HEIGHT) / 2;
+        var selectedColor = ThemeColor(ThemeRoles.TextSelected, SelectedTextColor);
+        var idleColor = ThemeColor(ThemeRoles.TextDisabled, CountIdleColor);
 
         for (var i = 0; i < TAB_COUNT; i++)
         {
@@ -296,9 +308,9 @@ public sealed class WorldListControl : UIPanel
             var y = baseY + i * FILTER_STRIDE;
 
             if (selected)
-                TextRenderer.DrawText(spriteBatch, new Vector2(x, y), CountText[i], SelectedTextColor, FontStyle.Bold);
+                TextRenderer.DrawText(spriteBatch, new Vector2(x, y), CountText[i], selectedColor, FontStyle.Bold);
             else
-                TextRenderer.DrawText(spriteBatch, new Vector2(x, y), CountText[i], CountIdleColor);
+                TextRenderer.DrawText(spriteBatch, new Vector2(x, y), CountText[i], idleColor);
         }
     }
 
@@ -612,9 +624,9 @@ public sealed class WorldListControl : UIPanel
                 Height = LIST_ROW_H,
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
-                ForegroundColor = LegendColors.White,
                 IsHitTestVisible = false
             };
+            TitleLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
 
             AddChild(Icon);
             AddChild(NameLabel);
@@ -644,6 +656,10 @@ public sealed class WorldListControl : UIPanel
 
         private void RefreshFill() => BackgroundColor = Hovered ? RowHoverFill : null;
 
+        //the hover fill is part of the look
+        protected internal override Color? DrawnBackgroundColor
+            => BackgroundColor is { } fill ? ThemeColor(ThemeRoles.RowHover, fill) : null;
+
         public override void OnMouseEnter()
         {
             Hovered = true;
@@ -663,59 +679,6 @@ public sealed class WorldListControl : UIPanel
                 OnWhisper?.Invoke(EntryName);
                 e.Handled = true;
             }
-        }
-    }
-
-    /// <summary>A class-filter button: centered label with an idle/selected frame.</summary>
-    private sealed class FilterButton : UIPanel
-    {
-        private readonly UILabel Label;
-
-        public event ClickedHandler? Clicked;
-
-        public bool IsSelected
-        {
-            get;
-            set
-            {
-                field = value;
-                BackgroundColor = value ? TabSelectedFill : TabIdleFill;
-                BorderColor = value ? TabSelectedBorder : TabIdleBorder;
-                Label.ForegroundColor = value ? SelectedTextColor : LegendColors.White;
-            }
-        }
-
-        public FilterButton(string text, int width, int height)
-        {
-            Width = width;
-            Height = height;
-            BackgroundColor = TabIdleFill;
-            BorderColor = TabIdleBorder;
-
-            Label = new UILabel
-            {
-                X = 0,
-                Y = 0,
-                Width = width,
-                Height = height,
-                Text = text,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                ShrinkToFit = false,
-                ForegroundColor = LegendColors.White,
-                IsHitTestVisible = false
-            };
-
-            AddChild(Label);
-        }
-
-        public override void OnClick(ClickEvent e)
-        {
-            if (e.Button != MouseButton.Left)
-                return;
-
-            Clicked?.Invoke();
-            e.Handled = true;
         }
     }
 }

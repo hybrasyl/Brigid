@@ -41,6 +41,40 @@ public class FramePanel : UIPanel
         BorderColor = DialogPalette.FrameBorder;
     }
 
+    /// <summary>
+    ///     For a panel that places its content <paramref name="padding" /> in from its edge, as the flat frame needs: when the
+    ///     themed frame needs a wider inset, grows the panel by the difference on each side and moves every child in by it,
+    ///     so the content keeps its size and clears the frame art. Call it once, at the end of the constructor, after
+    ///     <see cref="UIElement.UseTheme" /> is set and the children are added. Returns the distance the content moved; the
+    ///     panel adds it to the positions that it draws itself. With no theme, or a frame that fits, it returns 0. It is the
+    ///     after-layout form of the growth that <see cref="Components.CenteredModalPanel" /> does before its layout.
+    /// </summary>
+    protected int GrowAroundContent(int padding)
+    {
+        if (Grown)
+            throw new InvalidOperationException("GrowAroundContent runs once, at the end of the constructor.");
+
+        Grown = true;
+        var extra = InsetFor(padding) - padding;
+
+        if (extra <= 0)
+            return 0;
+
+        Width += 2 * extra;
+        Height += 2 * extra;
+
+        foreach (var child in Children)
+        {
+            child.X += extra;
+            child.Y += extra;
+        }
+
+        return extra;
+    }
+
+    //GrowAroundContent ran; a second run would grow the panel again
+    private bool Grown;
+
     //the flat border is part of the look
     protected internal override Color? DrawnBorderColor => BorderColor is { } border ? ThemeColor(ThemeRoles.Border, border) : null;
 
