@@ -15,6 +15,7 @@ public static class ThemeRoles
     public const string ButtonDisabled = "button.disabled";
     public const string TabNormal = "tab.normal";
     public const string TabSelected = "tab.selected";
+    public const string DropDownList = "dropdown.list";
     public const string MainMenuBackground = "background.mainmenu";
     public const string MainMenuTitle = "title.mainmenu";
     public const string StoryBackground = "background.story";
@@ -32,6 +33,7 @@ public static class ThemeRoles
     public const string TextDisabled = "text.disabled";
     public const string TextSelected = "text.selected";
     public const string TextTitle = "text.title";
+    public const string TextError = "text.error";
     public const string Divider = "divider";
 
     //fonts

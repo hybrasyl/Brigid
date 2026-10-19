@@ -14,7 +14,7 @@ namespace Brigid.Controls.Components;
 /// </summary>
 public sealed class InputSlotPane : UIPanel
 {
-    private static readonly Color SlotFill = new(0, 0, 0, 205);
+    private static readonly Color SlotFill = DialogPalette.SlotFill;
     private static readonly Color SlotBorder = DialogPalette.Divider;
 
     public override void Draw(SpriteBatch spriteBatch)

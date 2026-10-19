@@ -36,6 +36,12 @@ internal static class DialogPalette
     //ability requirements the player does not meet
     public static readonly Color RequirementUnmet = LegendColors.Scarlet;
 
+    //the dark box behind a text field or a preview
+    public static readonly Color SlotFill = new(0, 0, 0, 205);
+
+    //a form's error line; light enough to read on a dark fill and on theme art
+    public static readonly Color ErrorText = new(255, 128, 104);
+
     //TextButton states
     public static readonly Color ButtonIdleFill = new(30, 32, 42);
     public static readonly Color ButtonHoverFill = new(52, 54, 66);
