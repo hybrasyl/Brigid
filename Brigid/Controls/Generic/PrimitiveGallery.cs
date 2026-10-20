@@ -249,7 +249,26 @@ public sealed class PrimitiveGallery : CenteredModalPanel
             bx,
             by - 2,
             COLUMN_W);
-        by += HEADER_H + SAMPLE_H + 2 * CAPTION_H + 10;
+        by += HEADER_H + SAMPLE_H + 2 * CAPTION_H + 2;
+
+        //a live popup menu: the button opens it below the button, and the button or a pick closes it
+        AddHeader(new UILabel { Name = "popup_header", Text = "PopupMenu (fits its text, rows 14)" }, bx, by);
+        var popupMenu = new PopupMenu(3) { Name = "popup_menu", X = bx, Y = by + HEADER_H + SAMPLE_H, ZIndex = 2 };
+        var openMenu = new TextButton("Open", SAMPLE_W, SAMPLE_H) { Name = "popup_open", X = bx, Y = by + HEADER_H };
+        openMenu.Clicked += () =>
+        {
+            if (popupMenu.Visible)
+                popupMenu.Hide();
+            else
+                popupMenu.Show(openMenu.X, openMenu.Y + SAMPLE_H, "Menu title", [("First entry", static () => { }), ("A longer second entry", static () => { }), ("Third", static () => { })]);
+        };
+        AddChild(openMenu);
+        AddChild(popupMenu);
+
+        //a menu that stays open stays on the control stack
+        OnClose += popupMenu.Hide;
+        AddCaption(new UILabel { Name = "popup_role", Text = $"{ThemeRoles.FramePopup}, {ThemeRoles.RowHover} (click)" }, bx + SAMPLE_W + 6, by - SAMPLE_H + 2, COLUMN_W - SAMPLE_W - 6);
+        by += HEADER_H + SAMPLE_H + 4;
 
         //the roles that a small sample cannot show
         AddHeader(new UILabel { Name = "not_shown_header", Text = "Not shown here" }, bx, by);
@@ -258,9 +277,9 @@ public sealed class PrimitiveGallery : CenteredModalPanel
             {
                 Name = "not_shown",
                 WordWrap = true,
-                Height = 3 * CAPTION_H,
-                Text = $"{ThemeRoles.MainMenuBackground} (main menu), {ThemeRoles.StoryBackground} (Story), "
-                       + $"{ThemeRoles.FrameSign} (360 by 180, the server's wooden sign popup)"
+                Height = 2 * CAPTION_H,
+                Text = $"{ThemeRoles.MainMenuBackground}, {ThemeRoles.StoryBackground} (Story), "
+                       + $"{ThemeRoles.FrameSign} (360 by 180, the wooden sign)"
             },
             bx,
             by - SAMPLE_H,

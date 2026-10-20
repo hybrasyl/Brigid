@@ -70,7 +70,7 @@ public sealed class PrimitiveGalleryTests : IDisposable
     public void EverySampleLiesInsideTheFrame(bool themed)
     {
         using var theme = UiThemeTests.BuildPack(
-            """{ "density": 4, "parts": { "frame.panel": { "file": "frame.png", "slice": [44, 44, 44, 44] } } }""",
+            """{ "density": 4, "parts": { "frame.panel": { "file": "frame.png", "slice": [44, 44, 44, 44] }, "frame.popup": { "file": "frame.png", "slice": [12, 12, 12, 12] } } }""",
             ("frame.png", UiThemeTests.Png(128, 128)));
         AssetPackRegistry.SetUiThemeForTests(themed ? theme : null);
 
@@ -86,11 +86,18 @@ public sealed class PrimitiveGalleryTests : IDisposable
 
             Assert.True(child.X >= content.X, $"{child.Name} starts left of the content");
             Assert.True(child.Y >= content.Y, $"{child.Name} starts above the content");
-            Assert.True(child.X + child.Width <= content.Right, $"{child.Name} ends right of the content");
-            Assert.True(child.Y + child.Height <= content.Bottom, $"{child.Name} ends below the content");
+            Assert.True(child.X + child.Width <= content.Right, $"{child.Name} ends right of the content ({child.X + child.Width} > {content.Right})");
+            Assert.True(child.Y + child.Height <= content.Bottom, $"{child.Name} ends below the content ({child.Y + child.Height} > {content.Bottom})");
         }
 
         Assert.True(gallery.Width <= 640 && gallery.Height <= 480);
+
+        //the popup menu sample, open, stays inside the gallery
+        gallery.FindChild<TextButton>("popup_open")!.OnClick(new ClickEvent { Button = MouseButton.Left });
+        var menu = gallery.FindChild<PopupMenu>("popup_menu")!;
+
+        Assert.True(menu.Visible);
+        Assert.True(menu.X >= 0 && menu.Y >= 0 && menu.X + menu.Width <= gallery.Width && menu.Y + menu.Height <= gallery.Height);
     }
 
     [Fact]

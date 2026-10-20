@@ -36,6 +36,7 @@ public static class ThemeRoles
     public const string SliderFill = "slider.fill";
     public const string SliderThumb = "slider.thumb";
     public const string FrameSign = "frame.sign";
+    public const string FramePopup = "frame.popup";
 
     //content roles: icons, drawn on every host through IconArt, not only on a themed host
     //social status icons, one image for each status
