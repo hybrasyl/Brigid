@@ -552,10 +552,7 @@ public sealed partial class WorldScreen : IScreen
             Game.Connection.SendSocialStatus(status);
             StatusBook.SetEmoticonState((byte)status, UiComponentRepository.GetSocialStatusName(status));
 
-            var emoteIcon = UiRenderer.Instance?.GetEpfTexture("emot000.epf", (int)status * 3);
-
-            if (emoteIcon is not null)
-                UpdateHuds(HudOps.SetEmoteIcon, emoteIcon);
+            UpdateHuds(HudOps.SetEmoteStatus, status);
         };
 
         TextPopup = new TextPopupControl
@@ -668,6 +665,10 @@ public sealed partial class WorldScreen : IScreen
 
         WireHudPanels(SmallHud);
         WireHudPanels(LargeHud);
+
+        //with new status art, the HUDs show the status at once; with none, they keep the prefab frame until a pick
+        if (StatusIcon.HasArt(SocialStatusPicker.CurrentStatus))
+            UpdateHuds(HudOps.SetEmoteStatus, SocialStatusPicker.CurrentStatus);
 
         //build ui atlas after all hud controls are constructed
         UiRenderer.Instance?.BuildAtlas();

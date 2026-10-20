@@ -14,7 +14,7 @@ namespace Brigid.Tests;
 /// <summary>
 ///     The BRIG-122 primitive gallery: Toggle opens it on a root and closes it again, Escape closes an open list first and
 ///     then the gallery, every child has a lowercase name, every sample lies inside the frame (flat and with a wide themed
-///     frame), and every theme role is named on the gallery.
+///     frame), and every theme role is named on the gallery (the status icon roles by their common prefix).
 /// </summary>
 [Collection("FontEngine")]
 public sealed class PrimitiveGalleryTests : IDisposable
@@ -104,9 +104,15 @@ public sealed class PrimitiveGalleryTests : IDisposable
         var roles = typeof(ThemeRoles)
                     .GetFields(BindingFlags.Public | BindingFlags.Static)
                     .Where(field => field.IsLiteral)
-                    .Select(field => (string)field.GetRawConstantValue()!);
+                    .Select(field => (string)field.GetRawConstantValue()!)
+                    .Except(ThemeRoles.StatusIcons);
 
         Assert.All(roles, role => Assert.Contains(role, texts));
+
+        //the status row names its roles once, as the prefix and the part after it
+        var statusRoles = gallery.FindChild<UILabel>("status_roles")!.Text;
+        Assert.Contains("icon.status.*", statusRoles);
+        Assert.All(ThemeRoles.StatusIcons, role => Assert.Contains(role["icon.status.".Length..], statusRoles));
     }
 
     [Fact]

@@ -502,8 +502,9 @@ spelled.epf
   Palette:    gui 0  (note: loaded via GetEpfImages which auto-selects via prefix)
 
 emot000.epf
-  Loaded by:  SocialStatusControl.cs:65  (GetEpfImages)
+  Loaded by:  SocialStatusControl.cs:65  (GetEpfImages); WorldScreen HudOps.SetEmoteStatus (the HUD emote button)
   Purpose:    Emoticon/social status icons (8 frames for 8 status types)
+  Fallback:   The HUD emote button reads it only when there is no icon.status.* theme part or built-in image (BRIG-122)
   Palette:    gui 0
 
 legends.epf
@@ -556,8 +557,9 @@ _nui_nat.spf
   Palette:    Embedded
 
 _nemots.spf
-  Loaded by:  SelfProfileEquipmentTab.cs:175  (TextureConverter.LoadSpfTextures)
-  Purpose:    Emoticon status icons for equipment paperdoll (8 frames)
+  Loaded by:  SelfProfileEquipmentTab, OtherProfileEquipmentTab, WorldListControl  (UiRenderer.GetSpfTexture, per frame)
+  Purpose:    Emoticon status icons for equipment paperdoll and the Aisling list (8 frames)
+  Fallback:   Read only when there is no icon.status.* theme part or built-in image (StatusIcon, BRIG-122)
   Palette:    Embedded
 
 _nsettb.spf

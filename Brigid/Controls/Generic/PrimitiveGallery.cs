@@ -3,6 +3,7 @@ using Brigid.Controls.Components;
 using Brigid.Controls.Scrolling;
 using Brigid.Definitions;
 using Brigid.Rendering;
+using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
@@ -41,6 +42,9 @@ public sealed class PrimitiveGallery : CenteredModalPanel
     private const int CHIP = 12;
     private const int CHIP_ROW = 16;
     private const int CHIP_COLUMN = 146;
+    private const int STATUS_SIZE = 16;
+    private const int STATUS_CELL_W = 36;
+    private const string STATUS_PREFIX = "icon.status.";
 
 
     //where each colour chip is drawn, in panel coordinates, in the order of ThemeRoles.Colours; with no theme colour, a chip shows the flat value of its role
@@ -224,6 +228,29 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         AddChipLabel(new UILabel { Name = "chip_input_focus" }, 10);
         by += (ThemeRoles.Colours.Length + 1) / 2 * CHIP_ROW + 8;
 
+        //the social status icons: the theme's, else Brigid's own; an empty box has neither (the gallery reads no dat file)
+        AddHeader(new UILabel { Name = "status_header", Text = "StatusIcon (16 by 16)" }, bx, by);
+        AddStatusIcon(new StatusIcon { Name = "status_awake" }, SocialStatus.Awake, bx, by);
+        AddStatusIcon(new StatusIcon { Name = "status_do_not_disturb" }, SocialStatus.DoNotDisturb, bx, by);
+        AddStatusIcon(new StatusIcon { Name = "status_daydreaming" }, SocialStatus.DayDreaming, bx, by);
+        AddStatusIcon(new StatusIcon { Name = "status_need_group" }, SocialStatus.NeedGroup, bx, by);
+        AddStatusIcon(new StatusIcon { Name = "status_grouped" }, SocialStatus.Grouped, bx, by);
+        AddStatusIcon(new StatusIcon { Name = "status_lone_hunter" }, SocialStatus.LoneHunter, bx, by);
+        AddStatusIcon(new StatusIcon { Name = "status_group_hunting" }, SocialStatus.GroupHunting, bx, by);
+        AddStatusIcon(new StatusIcon { Name = "status_need_help" }, SocialStatus.NeedHelp, bx, by);
+        AddCaption(
+            new UILabel
+            {
+                Name = "status_roles",
+                WordWrap = true,
+                Height = 2 * CAPTION_H,
+                Text = $"{STATUS_PREFIX}*, left to right: {string.Join(", ", ThemeRoles.StatusIcons.Select(role => role[STATUS_PREFIX.Length..]))}"
+            },
+            bx,
+            by - 2,
+            COLUMN_W);
+        by += HEADER_H + SAMPLE_H + 2 * CAPTION_H + 10;
+
         //the roles that a small sample cannot show
         AddHeader(new UILabel { Name = "not_shown_header", Text = "Not shown here" }, bx, by);
         AddCaption(
@@ -309,6 +336,19 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         label.IsHitTestVisible = false;
         label.SetForegroundRole(ThemeRoles.TextDisabled);
         AddChild(label);
+    }
+
+    //a status icon in its cell of the status row, outlined so that an icon with no art still shows its box
+    private void AddStatusIcon(StatusIcon icon, SocialStatus status, int x, int y)
+    {
+        icon.Status = status;
+        icon.X = x + (int)status * STATUS_CELL_W;
+        icon.Y = y + HEADER_H + (SAMPLE_H - STATUS_SIZE) / 2;
+        icon.Width = STATUS_SIZE;
+        icon.Height = STATUS_SIZE;
+        icon.BorderColor = DialogPalette.Divider;
+        icon.IsHitTestVisible = false;
+        AddChild(icon);
     }
 
     //a role name beside its colour chip, marked "flat" when the theme does not set the colour

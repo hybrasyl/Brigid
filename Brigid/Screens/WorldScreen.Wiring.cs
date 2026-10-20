@@ -837,13 +837,13 @@ public sealed partial class WorldScreen
         public static readonly Action<IWorldHud, string> ShowPersistentMessage =
             static (h, msg) => h.ShowPersistentMessage(msg);
 
-        public static readonly Action<IWorldHud, Texture2D> SetEmoteIcon = static (h, icon) =>
+        //the legacy status icons are the first of each three frames of emot000.epf; read only when there is no new art
+        public static readonly Action<IWorldHud, SocialStatus> SetEmoteStatus = static (h, status) =>
         {
-            if (h.EmoteButton is null)
+            if (h.EmoteButton is null || h.EmoteStatusIcon is null)
                 return;
 
-            h.EmoteButton.NormalTexture = icon;
-            h.EmoteButton.SelectedTexture = icon;
+            h.EmoteStatusIcon.ShowOn(h.EmoteButton, status, () => UiRenderer.Instance?.GetEpfTexture("emot000.epf", (byte)status * 3));
         };
 
         public static readonly Action<IWorldHud, byte, EffectColor> SetEffect =

@@ -29,7 +29,6 @@ namespace Brigid.Controls.World.Popups.WorldList;
 public sealed class WorldListControl : FramePanel
 {
     private const int TAB_COUNT = 9;
-    private const int STATUS_ICON_COUNT = 8;
     private const int SCROLLBAR_W = 16;
 
     //── layout ──
@@ -86,7 +85,6 @@ public sealed class WorldListControl : FramePanel
     private readonly int[] CountWidth = new int[TAB_COUNT];
     private readonly int[] CountWidthBold = new int[TAB_COUNT];
     private readonly NameRow[] Rows = new NameRow[VISIBLE_ROWS];
-    private readonly Texture2D?[] StatusIcons = new Texture2D?[STATUS_ICON_COUNT];
 
     private readonly UILabel TotalNumLabel;
 
@@ -119,8 +117,6 @@ public sealed class WorldListControl : FramePanel
         Height = PANEL_HEIGHT;
         UseTheme = true;
 
-        //social-status icons from _nemots.spf (frame 0 of each group) — cache-owned by UiRenderer, so not disposed here
-        LoadStatusIcons();
         Array.Fill(CountText, "0");
 
         var titleLabel = new UILabel
@@ -247,14 +243,6 @@ public sealed class WorldListControl : FramePanel
             "Server", "Master", "Warrior", "Rogue", "Wizard", hybrasyl ? "Archon" : "Priest", hybrasyl ? "Animist" : "Monk",
             "Peasant", "Guild"
         ];
-    }
-
-    private void LoadStatusIcons()
-    {
-        var cache = UiRenderer.Instance!;
-
-        for (var i = 0; i < STATUS_ICON_COUNT; i++)
-            StatusIcons[i] = cache.GetSpfTexture("_nemots.spf", i);
     }
 
     public override void Draw(SpriteBatch spriteBatch)
@@ -406,7 +394,7 @@ public sealed class WorldListControl : FramePanel
             if (position < FilteredEntries.Count)
             {
                 var entry = FilteredEntries[position];
-                row.SetEntry(entry, StatusIconFor(entry), NameColorFor(entry));
+                row.SetEntry(entry, NameColorFor(entry));
                 row.Visible = true;
             } else
             {
@@ -492,12 +480,6 @@ public sealed class WorldListControl : FramePanel
                 ? LegendColors.Lime
                 : MapWorldListColor(entry.Color);
 
-    private Texture2D? StatusIconFor(WorldListEntry entry)
-    {
-        var idx = (int)entry.SocialStatus;
-
-        return (idx >= 0) && (idx < StatusIcons.Length) ? StatusIcons[idx] : null;
-    }
 
     private static Color MapWorldListColor(WorldListColor color)
     {
@@ -576,7 +558,7 @@ public sealed class WorldListControl : FramePanel
     {
         private const int NAME_W = 130;
 
-        private readonly UIImage Icon;
+        private readonly StatusIcon Icon;
         private readonly UILabel NameLabel;
         private readonly UILabel TitleLabel;
         private bool Hovered;
@@ -591,8 +573,9 @@ public sealed class WorldListControl : FramePanel
             Height = LIST_ROW_H;
 
             //display-only children so the row stays the deepest hit-test target (reliable OnMouseLeave for hover fill)
-            Icon = new UIImage
+            Icon = new StatusIcon
             {
+                Name = "status_icon",
                 X = 0,
                 Y = (LIST_ROW_H - ICON_SIZE) / 2,
                 Width = ICON_SIZE,
@@ -630,10 +613,9 @@ public sealed class WorldListControl : FramePanel
             AddChild(TitleLabel);
         }
 
-        public void SetEntry(WorldListEntry entry, Texture2D? statusIcon, Color nameColor)
+        public void SetEntry(WorldListEntry entry, Color nameColor)
         {
-            Icon.Texture = statusIcon;
-            Icon.Visible = statusIcon is not null;
+            Icon.Visible = Icon.Show(entry.SocialStatus, StatusIcon.NemotsFrame);
             NameLabel.ForegroundColor = nameColor;
             NameLabel.Text = entry.Name;
             TitleLabel.Text = entry.Title ?? string.Empty;
@@ -642,7 +624,8 @@ public sealed class WorldListControl : FramePanel
 
         public void Clear()
         {
-            Icon.Texture = null;
+            Icon.Status = null;
+            Icon.LegacyTexture = null;
             Icon.Visible = false;
             NameLabel.Text = string.Empty;
             TitleLabel.Text = string.Empty;

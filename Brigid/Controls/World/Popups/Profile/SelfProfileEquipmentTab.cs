@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Data;
 using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
@@ -15,9 +16,6 @@ namespace Brigid.Controls.World.Popups.Profile;
 /// </summary>
 public sealed class SelfProfileEquipmentTab : PrefabPanel
 {
-    //emoticon status icon frame index → _nemots.spf frame
-    private const int EMOTICON_FRAME_COUNT = 8;
-
     //idle frame for south-facing direction (walk anim frames 5-9, idle = 5)
     private const int PAPERDOLL_IDLE_FRAME = 5;
     private readonly UILabel? AcLabel;
@@ -28,14 +26,11 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
 
     private readonly UILabel? DexLabel;
 
-    //emoticon status
-    private readonly Texture2D?[] EmoticonIcons;
-
     private readonly UILabel? EmoticonLabel;
     private readonly UIButton? GroupBtn;
     private readonly Texture2D? GroupClosedTexture;
     private readonly Texture2D? GroupOpenTexture;
-    private readonly UIImage? EmoticonImage;
+    private readonly StatusIcon? EmoticonImage;
     private readonly UILabel? IntLabel;
 
     //player info labels
@@ -169,12 +164,6 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
         //emoticon status areas
         var humanIconRect = GetRect("HumanIcon");
 
-        //load emoticon icons from _nemots.spf (frames 0-7)
-        EmoticonIcons = new Texture2D?[EMOTICON_FRAME_COUNT];
-
-        for (var i = 0; i < EMOTICON_FRAME_COUNT; i++)
-            EmoticonIcons[i] = UiRenderer.Instance!.GetSpfTexture("_nemots.spf", i);
-
         //emoticon status text label — prefab places it at the same origin as the icon, so shift
         //it right past the icon to avoid overlap
         EmoticonLabel = CreateLabel("HumanState");
@@ -188,15 +177,15 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
         //to draw on top of the emoticon icon.
         if (humanIconRect != Rectangle.Empty)
         {
-            EmoticonImage = new UIImage
+            EmoticonImage = new StatusIcon
             {
-                Name = "EmoticonIcon",
+                Name = "emoticon_icon",
                 X = humanIconRect.X,
                 Y = humanIconRect.Y,
                 Width = humanIconRect.Width,
-                Height = humanIconRect.Height,
-                Texture = EmoticonIcons[0]
+                Height = humanIconRect.Height
             };
+            EmoticonImage.Show(SocialStatus.Awake, StatusIcon.NemotsFrame);
             AddChild(EmoticonImage);
         }
 
@@ -284,9 +273,6 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
         NationIconTexture?.Dispose();
         PaperdollTexture?.Dispose();
 
-        //clear the emoticon image texture so uiimage.dispose doesn't dispose the cached spf texture
-        EmoticonImage?.Texture = null;
-
         //uiimage children are disposed by base.dispose, but we own the dynamic textures
         base.Dispose();
     }
@@ -305,8 +291,7 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
     {
         EmoticonLabel?.Text = statusText;
 
-        if ((EmoticonImage is not null) && (state < EmoticonIcons.Length))
-            EmoticonImage.Texture = EmoticonIcons[state];
+        EmoticonImage?.Show((SocialStatus)state, StatusIcon.NemotsFrame);
     }
 
     /// <summary>

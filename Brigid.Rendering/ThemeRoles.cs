@@ -37,6 +37,17 @@ public static class ThemeRoles
     public const string SliderThumb = "slider.thumb";
     public const string FrameSign = "frame.sign";
 
+    //content roles: icons, drawn on every host through IconArt, not only on a themed host
+    //social status icons, one image for each status
+    public const string StatusAwake = "icon.status.awake";
+    public const string StatusDoNotDisturb = "icon.status.do_not_disturb";
+    public const string StatusDayDreaming = "icon.status.daydreaming";
+    public const string StatusNeedGroup = "icon.status.need_group";
+    public const string StatusGrouped = "icon.status.grouped";
+    public const string StatusLoneHunter = "icon.status.lone_hunter";
+    public const string StatusGroupHunting = "icon.status.group_hunting";
+    public const string StatusNeedHelp = "icon.status.need_help";
+
     //colours
     public const string Text = "text";
     public const string TextDisabled = "text.disabled";
@@ -57,5 +68,12 @@ public static class ThemeRoles
     public static readonly string[] Colours =
     [
         Text, TextDisabled, TextSelected, TextTitle, TextError, Divider, Border, RowHover, RowSelected, InputText, InputFocus
+    ];
+
+    /// <summary>The social status icon parts, indexed by the wire value of the status (awake is 0).</summary>
+    public static readonly string[] StatusIcons =
+    [
+        StatusAwake, StatusDoNotDisturb, StatusDayDreaming, StatusNeedGroup, StatusGrouped, StatusLoneHunter, StatusGroupHunting,
+        StatusNeedHelp
     ];
 }
