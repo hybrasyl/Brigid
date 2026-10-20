@@ -527,6 +527,7 @@ public sealed partial class WorldScreen : IScreen
         {
             ZIndex = 3
         };
+        SelfProfileTextEditor.SetViewportBounds(WorldHud.ViewportBounds);
 
         SelfProfileTextEditor.OnSave += text =>
         {

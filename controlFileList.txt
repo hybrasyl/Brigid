@@ -471,12 +471,12 @@ scroll.epf
   Palette:    gui 0
 
 dlgframe.epf
-  Loaded by:  DialogFrame.cs:115  (GetEpfImages); composited by DialogFrame.Composite for SelfProfileTextEditorControl, ItemTooltipControl and MarkdownView
+  Loaded by:  DialogFrame.cs:115  (GetEpfImages); composited by DialogFrame.Composite for ItemTooltipControl and MarkdownView
   Purpose:    Dialog frame 9-patch borders (corners + edges for scalable dialogs)
   Palette:    gui 0
 
 butt001.epf
-  Loaded by:  SelfProfileTextEditorControl.cs:60-63  (GetEpfTexture)
+  Loaded by:  (none — every popup that drew it is rebuilt as a primitive, the last one in BRIG-122)
   Purpose:    Standard button spritesheet — OK/Cancel/Yes/No in normal+pressed states
   Palette:    gui 0
 
@@ -515,7 +515,7 @@ spell001.epf
 # ── SPF Files (from Setoa) ─────────────────────────────────────────────────────
 
 DlgBack2.spf
-  Loaded by:  SelfProfileTextEditorControl.cs:48  (GetSpfImage), FramedDialogPanelBase.cs:188  (GetSpfTexture)
+  Loaded by:  FramedDialogPanelBase.cs:188  (GetSpfTexture)
   Purpose:    Dialog background tile — tiled to fill scalable dialog bodies
   Palette:    Embedded (SPF self-contained)
 
@@ -657,7 +657,7 @@ msg.tbl
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm
 #
-# Standalone EPF files:      10 (mouse, scroll, dlgframe, butt001, spelled, emot000, legends, skill001, skill003, spell001)
+# Standalone EPF files:      9 loaded (mouse, scroll, dlgframe, spelled, emot000, legends, skill001, skill003, spell001); butt001 is catalogued but no longer loaded
 # Standalone SPF files:      15 (_nchatbk, _ninvs3, _nui_tb1, _nui_nat, _nemots, _nsettb, _nusersb, _nloadb0/1/2, DlgBack2, _nhk_bk, _nhk_m, _nhke00-13)
 # Palette files:             2  (gui multi-palette, gui06)
 # Data files:                1  (msg.tbl)
