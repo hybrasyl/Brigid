@@ -272,6 +272,9 @@ public sealed class LobbyLoginScreen : IScreen
 
         WireRootInputHandlers();
 
+        //a lobby modal (a form, the greeting, a prompt) takes the mouse; ScreenManager.Switch resets this for the world
+        Game.Dispatcher.EnforceModals = true;
+
         MaybeShowMigrationPrompt();
         MaybeShowAudioMissingNotice();
 

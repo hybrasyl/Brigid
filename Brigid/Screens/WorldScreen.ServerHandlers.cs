@@ -771,16 +771,24 @@ public sealed partial class WorldScreen
         {
             Game.Connection.SendGroupInvite(ClientGroupSwitch.AcceptInvite, sourceName);
             popup.Hide();
-            Root.RemoveChild(popup.Name);
+            RemoveInvitePopup(popup);
         };
 
         popup.OnCancel += () =>
         {
             popup.Hide();
-            Root.RemoveChild(popup.Name);
+            RemoveInvitePopup(popup);
         };
 
         popup.Show(message);
+    }
+
+    //removes this popup only: a second invite has the same name, and RemoveChild(name) disposes every match, which left
+    //the other popup off the tree but still on the control stack
+    private void RemoveInvitePopup(OkPopupMessageControl popup)
+    {
+        Root?.Children.Remove(popup);
+        popup.Dispose();
     }
 
     //--- profiles ---

@@ -105,7 +105,12 @@ public class UIButton : UIElement
     public event HoveredHandler? Hovered;
     public event UnhoveredHandler? Unhovered;
 
-    public void PerformClick() => Clicked?.Invoke();
+    /// <summary>Raises <see cref="Clicked" /> as a left click does. A disabled button does nothing.</summary>
+    public void PerformClick()
+    {
+        if (Enabled)
+            Clicked?.Invoke();
+    }
 
     public override void ResetInteractionState()
     {

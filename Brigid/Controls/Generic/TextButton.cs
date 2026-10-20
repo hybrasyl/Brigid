@@ -176,9 +176,14 @@ public sealed class TextButton : UIPanel
         if (e.Button != MouseButton.Left)
             return;
 
+        PerformClick();
+        e.Handled = true;
+    }
+
+    /// <summary>Raises <see cref="Clicked" /> as a left click does. A disabled button does nothing.</summary>
+    public void PerformClick()
+    {
         if (Enabled)
             Clicked?.Invoke();
-
-        e.Handled = true;
     }
 }

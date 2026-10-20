@@ -230,6 +230,8 @@ public class PanelSlot : UIButton
         (Parent as PanelBase)?.ForceHoverExit();
     }
 
+    public override void OnDragCancel() => (Parent as PanelBase)?.EndDrag();
+
     public override void OnDragDrop(DragDropEvent e)
     {
         IsDropTarget = false;

@@ -500,5 +500,11 @@ public abstract class UIElement : IDisposable
     public virtual void OnDragMove(DragMoveEvent e) { }
     public virtual void OnDragDrop(DragDropEvent e) { }
 
+    /// <summary>
+    ///     The dispatcher ended a drag that this element started, with no drop: the mouse-up was blocked. Clear the drag
+    ///     state that a drop clears.
+    /// </summary>
+    public virtual void OnDragCancel() { }
+
     public event VisibilityChangedHandler? VisibilityChanged;
 }
