@@ -11,9 +11,9 @@ namespace Brigid.Tests;
 public sealed class AssetPackRegistryCollection;
 
 /// <summary>
-///     Several packs of one content type (BRIG-15). A lookup asks the packs in registration order: a pack with no
-///     entry, or with an entry that does not decode, passes the lookup to the next pack, so the first pack that covers
-///     a key wins. Each test registers in-memory archives, and resets the static registry before and after.
+///     Several packs of one content type (BRIG-15). A lookup asks the packs in order of priority, the highest first, and
+///     at the same priority in registration order: a pack with no entry, or with an entry that does not decode, passes
+///     the lookup to the next pack, so the first pack that covers a key wins. Each test registers in-memory archives, and resets the static registry before and after.
 /// </summary>
 [Collection("AssetPackRegistry")]
 public sealed class AssetPackRegistryTests : IDisposable
@@ -52,6 +52,9 @@ public sealed class AssetPackRegistryTests : IDisposable
 
         Assert.True(AssetPackRegistry.RegisterForTest(new ZipArchive(stream, ZipArchiveMode.Read), manifest));
     }
+
+    private static AssetPackManifest Manifest(string contentType, string packId, int priority)
+        => new() { SchemaVersion = 1, PackId = packId, ContentType = contentType, Priority = priority };
 
     private static SKColor ColorOf(SKImage? image)
     {
@@ -138,7 +141,7 @@ public sealed class AssetPackRegistryTests : IDisposable
     [Fact]
     public void NpcIllustration_UsesTheFirstPackWithAValidPortrait()
     {
-        static AssetPackManifest Manifest(string id, int size)
+        static AssetPackManifest PortraitManifest(string id, int size)
             => new()
             {
                 SchemaVersion = 1,
@@ -151,8 +154,8 @@ public sealed class AssetPackRegistryTests : IDisposable
             };
 
         //the first pack promises 4x4 but ships 2x2, so it refuses the portrait and the second pack answers
-        Register("npc_portraits", "first", new() { ["inn.png"] = Png(First) }, Manifest("first", 4));
-        Register("npc_portraits", "second", new() { ["inn.png"] = Png(Second) }, Manifest("second", 2));
+        Register("npc_portraits", "first", new() { ["inn.png"] = Png(First) }, PortraitManifest("first", 4));
+        Register("npc_portraits", "second", new() { ["inn.png"] = Png(Second) }, PortraitManifest("second", 2));
 
         Assert.True(AssetPackRegistry.TryGetNpcIllustration("inn.spf", out var image));
         Assert.Equal(Second, ColorOf(image));
@@ -202,14 +205,98 @@ public sealed class AssetPackRegistryTests : IDisposable
     }
 
     [Fact]
-    public void Lookup_IgnoresPriority()
+    public void Lookup_UsesTheHigherPriority_WhenItRegisteredLater()
     {
         Register("ability_icons", "first", new() { ["skill0001.png"] = Png(First) });
-        Register("ability_icons", "second", new() { ["skill0001.png"] = Png(Second) },
-            new AssetPackManifest { SchemaVersion = 1, PackId = "second", ContentType = "ability_icons", Priority = 500 });
+        Register("ability_icons", "second", new() { ["skill0001.png"] = Png(Second) }, Manifest("ability_icons", "second", 500));
+
+        Assert.True(AssetPackRegistry.TryGetIconImage("skill", 1, out var image));
+        Assert.Equal(Second, ColorOf(image));
+    }
+
+    [Fact]
+    public void Lookup_PutsALowerPriorityAfterTheDefault_WhenItRegisteredFirst()
+    {
+        Register("ability_icons", "first", new() { ["skill0001.png"] = Png(First) }, Manifest("ability_icons", "first", 50));
+        Register("ability_icons", "second", new() { ["skill0001.png"] = Png(Second) });
+
+        Assert.True(AssetPackRegistry.TryGetIconImage("skill", 1, out var image));
+        Assert.Equal(Second, ColorOf(image));
+    }
+
+    [Fact]
+    public void Lookup_KeepsRegistrationOrder_AmongEqualPriorities()
+    {
+        Register("ability_icons", "high", new() { ["skill0002.png"] = Png(Second) }, Manifest("ability_icons", "high", 200));
+        Register("ability_icons", "first", new() { ["skill0001.png"] = Png(First) }, Manifest("ability_icons", "first", 150));
+        Register("ability_icons", "second", new() { ["skill0001.png"] = Png(Second) }, Manifest("ability_icons", "second", 150));
 
         Assert.True(AssetPackRegistry.TryGetIconImage("skill", 1, out var image));
         Assert.Equal(First, ColorOf(image));
+    }
+
+    [Fact]
+    public void Registration_NamesThePriorityWinner()
+    {
+        var warnings = new List<string>();
+        void Collect(string line) => warnings.Add(line);
+
+        AssetPackRegistry.WarningLogged += Collect;
+
+        try
+        {
+            Register("ability_icons", "base", new() { ["skill0001.png"] = Png(First) });
+            Register("ability_icons", "holiday", new() { ["skill0001.png"] = Png(Second) }, Manifest("ability_icons", "holiday", 200));
+        }
+        finally
+        {
+            AssetPackRegistry.WarningLogged -= Collect;
+        }
+
+        var warning = Assert.Single(warnings);
+        Assert.Contains("'holiday' wins over 'base': its priority 200 is higher than 100", warning);
+    }
+
+    [Fact]
+    public void Registration_NamesTheEarlierPack_WhenTheNewPackLosesOnPriority()
+    {
+        var warnings = new List<string>();
+        void Collect(string line) => warnings.Add(line);
+
+        AssetPackRegistry.WarningLogged += Collect;
+
+        try
+        {
+            Register("ability_icons", "holiday", new() { ["skill0001.png"] = Png(Second) }, Manifest("ability_icons", "holiday", 200));
+            Register("ability_icons", "base", new() { ["skill0001.png"] = Png(First) });
+        }
+        finally
+        {
+            AssetPackRegistry.WarningLogged -= Collect;
+        }
+
+        Assert.Contains("'holiday' wins over 'base': its priority 200 is higher than 100", Assert.Single(warnings));
+    }
+
+    [Fact]
+    public void Lookup_KeepsPriorityOrder_WhenALowerPackRegistersBetweenHigherOnes()
+    {
+        Register("ability_icons", "low", new() { ["skill0001.png"] = Png(First) }, Manifest("ability_icons", "low", -5));
+        Register("ability_icons", "high", new() { ["skill0002.png"] = Png(Second) }, Manifest("ability_icons", "high", 300));
+        Register("ability_icons", "middle", new() { ["skill0001.png"] = Png(Second) });
+
+        Assert.True(AssetPackRegistry.TryGetIconImage("skill", 1, out var image));
+        Assert.Equal(Second, ColorOf(image));
+    }
+
+    [Fact]
+    public void GetCreaturePackFor_GivesTheHigherPriorityPack()
+    {
+        Register("creature_sprites", "base", new() { ["creature_sprites/creature_00007/stand/n_001.png"] = Png(First) });
+        Register("creature_sprites", "holiday", new() { ["creature_sprites/creature_00007/stand/n_001.png"] = Png(Second) },
+            Manifest("creature_sprites", "holiday", 200));
+
+        Assert.Equal("holiday", AssetPackRegistry.GetCreaturePackFor(7)?.Manifest.PackId);
     }
 
     [Fact]
@@ -234,7 +321,7 @@ public sealed class AssetPackRegistryTests : IDisposable
         var warning = Assert.Single(warnings);
         Assert.Contains("'first' and 'second' share 1 key(s)", warning);
         Assert.Contains("skill0002.png", warning);
-        Assert.Contains("'first' registered first and wins", warning);
+        Assert.Contains("'first' wins over 'second': it registered first, at the same priority", warning);
     }
 
     private static byte[] EmptyZip()

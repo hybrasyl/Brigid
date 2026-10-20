@@ -97,7 +97,7 @@ Create `_manifest.json`:
 
 - `pack_id` lowercase, unique. E.g., `hybrasyl-mileth-tiles` or `studio-grass-set`.
 - `pack_version` is informational — bump on updates.
-- `priority` is not used. If several `static_tiles` packs are installed and two have the same tile, the pack whose file name sorts first wins, and the client logs a warning.
+- `priority` orders the packs. If several `static_tiles` packs are installed and two have the same tile, the pack with the higher `priority` wins (the default is 100); at the same priority, the pack whose file name sorts first wins. The client logs a warning that names the winner.
 - `covers` is a capability declaration — leave the inner object empty. Coverage is emergent from which PNGs you ship.
 
 ### 4. Assemble the pack

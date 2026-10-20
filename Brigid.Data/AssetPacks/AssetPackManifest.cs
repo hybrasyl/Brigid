@@ -42,8 +42,10 @@ public sealed class AssetPackManifest
     public string ContentType { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Read, and not used. When two packs of one content type cover the same key, the pack that registered first
-    ///     wins (registration is in file-name order); see <see cref="AssetPackRegistry" />. Default 100 when absent.
+    ///     The order of the packs of one content type: when two packs cover the same key, the pack with the higher
+    ///     priority wins, and at the same priority the pack that registered first (in file-name order) wins; see
+    ///     <see cref="AssetPackRegistry" />. A temporary pack, for example a holiday pack, uses a higher priority.
+    ///     Default 100 when absent.
     /// </summary>
     [JsonPropertyName("priority")]
     public int Priority { get; init; } = 100;

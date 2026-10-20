@@ -23,7 +23,7 @@ doesn't surface "a zip full of PNGs"; it is not a security boundary.
 A pack ships modern assets the client prefers over the legacy `.dat`/`.epf`/`.spf` sheets.
 Resolution is **per asset**, not per pack:
 
-1. The lookup asks each registered pack of this content type, in registration order (file-name order).
+1. The lookup asks each registered pack of this content type, the highest `priority` first, and at the same priority in registration order (file-name order).
 2. Hit → modern asset used.
 3. Miss, or decode failure → the next pack is asked; after the last pack, the legacy asset for that ID alone. A creature is the exception: the first pack that covers it owns it, and a bad entry shows the placeholder (see "Several packs of one type, and conflicts").
 
@@ -77,7 +77,7 @@ is lazy, at first lookup.
 
 ### Several packs of one type, and conflicts
 
-A content type can have several packs (BRIG-15). The registry keeps them in **registration order**, and it registers the `*.datf` files in **file-name order** (ordinal, case ignored), so the order is the same on every OS. A lookup asks for a key and tries each pack of the type in that order. So **the pack that registered first wins** a key that two packs cover.
+A content type can have several packs (BRIG-15). The registry keeps them in order of the manifest **`priority`**, the highest first. Packs with the same priority stay in **registration order**, and the registry registers the `*.datf` files in **file-name order** (ordinal, case ignored), so the order is the same on every OS. A lookup asks for a key and tries each pack of the type in that order. So when two packs cover a key, **the pack with the higher priority wins**, and at the same priority **the pack that registered first wins**.
 
 What a pack does with a bad entry depends on the type:
 
@@ -89,9 +89,9 @@ What a pack does with a bad entry depends on the type:
 | `item_icons` | the sprite id; the pack that gives the image also decides the dye | the next pack is asked, then the legacy EPF |
 | `creature_sprites` | the sprite id; the first pack that covers it owns the whole creature (frames, pair count, bounding box) | the placeholder |
 
-At registration the registry compares the new pack's keys with the packs already registered for its type, and logs one warning for each pair that shares keys: both `pack_id`s, the count, the first five keys, and which pack wins. A key is a `.png` entry name for the image types (other files, such as the manifest or a README, are not keys), the id for `music` and `sound_effects` (`sfx_1.wav` and `sfx_0001.mp3` are the same key), the sprite id for `creature_sprites`, and the portrait key for `npc_portraits`. The registry writes its messages through `DataDiagnostics.Log`, so they are in `notice-debug.log`.
+At registration the registry compares the new pack's keys with the packs already registered for its type, and logs one warning for each pair that shares keys: both `pack_id`s, the count, the first five keys, and which pack wins and why. A key is a `.png` entry name for the image types (other files, such as the manifest or a README, are not keys), the id for `music` and `sound_effects` (`sfx_1.wav` and `sfx_0001.mp3` are the same key), the sprite id for `creature_sprites`, and the portrait key for `npc_portraits`. The registry writes its messages through `DataDiagnostics.Log`, so they are in `notice-debug.log`.
 
-The manifest `priority` field is read and **not used**. To make one pack win, give it a file name that sorts first. The sort compares characters, not numbers: `items_9001.datf` sorts after `items_20001.datf`. Zero-pad the numbers in file names (`items_09001`) when the order matters. A convention for chunked content, for example `items_20001-21000.datf` and `items_21001-22000.datf`, is to cover separate keys so that no pack overlaps another.
+To make one pack win, give it a higher `priority` (the default is 100). A temporary pack, for example a holiday pack, uses this: at priority 200 it replaces the art of the packs below it while it is installed, and it stops when it is removed. At the same priority the file name decides. The sort compares characters, not numbers: `items_9001.datf` sorts after `items_20001.datf`. Zero-pad the numbers in file names (`items_09001`) when the order matters. A convention for chunked content, for example `items_20001-21000.datf` and `items_21001-22000.datf`, is to cover separate keys so that no pack overlaps another.
 
 ### Legacy migration
 
@@ -138,7 +138,7 @@ deriving from `AssetPack` (or `AudioPack` for byte-serving types).
 | `pack_id`        | string                                   | `""`    | Logging and conflict messages only                                 |
 | `pack_version`   | string                                   | `""`    | **Nothing reads this.** Informational                              |
 | `content_type`   | string                                   | `""`    | Yes — factory discriminator                                        |
-| `priority`       | int                                      | `100`   | **No.** Read and ignored; the first registered pack wins           |
+| `priority`       | int                                      | `100`   | Yes — order of the packs of a type: highest first, then file name  |
 | `covers`         | `Dictionary<string, CoverageEntry>`      | `{}`    | Only the sub-fields below                                          |
 
 `covers` is a **capability** declaration, not a coverage range — actual coverage is emergent from
@@ -223,7 +223,7 @@ return TryGetImage($"item{spriteId:D5}.png", out image);
 - Regex: `^item\d{5}\.png$`. **5 digits** — legacy IDs reach 15,965+, and modern icons use 20001–32767 (BRIG-77).
 - **1-based**. Guard: `spriteId <= 0` → miss.
 - **The ceiling is 32767.** The server sends an item sprite as `sprite + 0x8000` in a `u16`, so the client removes the flag with `& 0x7FFF`. A sprite above 32767 wraps on the wire.
-- **One resolver for every surface:** `Brigid.Rendering/ItemIconSource.cs`. It removes the flag, asks the `item_icons` packs in registration order (a bad entry passes to the next pack), then reads the legacy EPF + palette. `ItemRenderer` (ground items, dialog portrait) and `UiRenderer.GetItemIcon` (the other surfaces) both call it.
+- **One resolver for every surface:** `Brigid.Rendering/ItemIconSource.cs`. It removes the flag, asks the `item_icons` packs in their order (priority, then file name; a bad entry passes to the next pack), then reads the legacy EPF + palette. `ItemRenderer` (ground items, dialog portrait) and `UiRenderer.GetItemIcon` (the other surfaces) both call it.
 - **Icon offset.** A pack icon draws at `floor((31 − size) / 2)` on each axis in the 31×31 slot (`IconTexture.FromPack`): a 32×32 icon at `-1,-1`, as a modern ability icon does, and a smaller icon centred. A legacy icon draws at `0,0`. On the ground, a pack PNG is centred as a tightly cropped image.
 - **Legacy dye** goes through `AislingDrawDataRepository.ApplyDye`, which leaves a palette without the canonical dye ramp unchanged.
 
@@ -579,7 +579,7 @@ are **not** supported in v1 and would clip.
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | Pack not loading at all                            | Check `notice-debug.log` for `[asset-pack]` at startup. Missing/malformed `_manifest.json`, `schema_version > 1`, unknown `content_type`, or the pack is in the game-data folder instead of `AppPaths.AssetsDir` |
 | Some assets legacy despite being in the pack       | Filename doesn't match the exact pattern (case-insensitive but padding matters), corrupt entry, or the file isn't at the ZIP root |
-| Two packs cover the same key                       | The pack whose file name sorts first wins that key. Startup logs a warning that names both packs and the shared keys |
+| Two packs cover the same key                       | The pack with the higher `priority` wins that key; at the same priority, the pack whose file name sorts first. Startup logs a warning that names both packs, the shared keys and the winner |
 | Icon appears 1px off                               | Expected — a pack icon is centred in the legacy 31×31 slot by its size, so a 32×32 icon draws at `-1,-1` (an ability icon always does). Check the PNG size |
 | `ui_sprite_overrides` frame ignored                | Folder name must include the legacy extension (`butt001.epf/`, not `butt001/`); PNG name must be 4-digit padded (`0000.png`, not `0.png`); frames ≥ the legacy frame count are silently dropped |
 | `npc_portraits` serves nothing                     | `dimensions` missing or non-square → the pack registers but is inert. Check stderr                 |

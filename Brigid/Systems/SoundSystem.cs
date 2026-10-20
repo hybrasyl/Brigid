@@ -371,7 +371,8 @@ public sealed class SoundSystem : IDisposable
     private static nint LoadChunk(int soundId)
     {
         //prefer a .datf sound-effects pack override; a present id replaces the legend.dat sound, a new id adds one.
-        //the loop asks each pack in registration order, and the first entry that decodes wins
+        //the loop asks each pack in the registry's order (priority, then registration order), and the first entry that
+        //decodes wins
         foreach (var pack in AssetPackRegistry.SfxPacks)
         {
             if (!pack.TryGetSfxBytes(soundId, out var packBytes) || (packBytes is not { Length: > 0 }))
@@ -442,7 +443,8 @@ public sealed class SoundSystem : IDisposable
         var pin = default(GCHandle);
 
         //prefer a .datf music pack override; a present id replaces the legacy loose .mus, a new id adds a track. the
-        //loop asks each pack in registration order, and the first entry that loads wins
+        //loop asks each pack in the registry's order (priority, then registration order), and the first entry that loads
+        //wins
         foreach (var pack in AssetPackRegistry.MusicPacks)
         {
             if (!pack.TryGetMusicBytes(musicId, out var bytes) || (bytes is not { Length: > 0 }))

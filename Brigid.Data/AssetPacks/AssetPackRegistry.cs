@@ -12,12 +12,15 @@ namespace Brigid.Data.AssetPacks;
 ///     embedded <c>_manifest.json</c>. Missing manifests, malformed JSON, or unsupported schema versions cause the pack
 ///     to be skipped with a warning rather than failing startup.
 ///     <para>
-///     A content type can have several packs. The registry keeps them in registration order, and it registers the
-///     files in file-name order (ordinal, case ignored), so the order is the same on every OS. A lookup asks for a key
-///     (an id, a name) and tries each pack of the type in that order: a pack that has no entry for the key, or whose
-///     entry does not decode, passes the lookup to the next pack, and after the last pack the caller uses legacy art.
-///     So when two packs cover the same key, the pack that registered first wins. Registration logs a warning that
-///     names both packs and the shared keys. The manifest <c>priority</c> field does not change the order.
+///     A content type can have several packs. The registry keeps them in order of the manifest <c>priority</c>, the
+///     highest first; packs with the same priority stay in registration order, and the registry registers the files in
+///     file-name order (ordinal, case ignored), so the order is the same on every OS. A lookup asks for a key (an id, a
+///     name) and tries each pack of the type in that order: a pack that has no entry for the key, or whose entry does
+///     not decode, passes the lookup to the next pack, and after the last pack the caller uses legacy art. So when two
+///     packs cover the same key, the pack with the higher priority wins, and at the same priority the pack that
+///     registered first wins. A temporary pack, for example a holiday pack, uses a higher priority to replace the art
+///     of the packs below it while it is installed. Registration logs a warning that names both packs, the shared keys
+///     and the winner.
 ///     </para>
 ///     <para>
 ///     There are three kinds of lookup. For a key that is one image, the registry gives a <c>TryGet…</c> lookup that
@@ -68,8 +71,8 @@ public static class AssetPackRegistry
     //the number of shared keys that an overlap warning names
     private const int OVERLAP_KEYS_SHOWN = 5;
 
-    //registered packs keyed by manifest.content_type, in registration order. a lookup tries them in this order, so
-    //the first pack that covers a key wins
+    //registered packs keyed by manifest.content_type: the highest priority first, then in registration order. a
+    //lookup tries them in this order, so the first pack that covers a key wins
     private static readonly Dictionary<string, List<IAssetPack>> Packs = new();
     private static bool Initialized;
 
@@ -346,7 +349,9 @@ public static class AssetPackRegistry
 
     /// <summary>
     ///     Single consolidated registration path. Looks up a factory for the declared content type, warns about the keys
-    ///     that the new pack shares with the packs already registered for that type, and adds the new pack after them.
+    ///     that the new pack shares with the packs already registered for that type, and puts the new pack in the order:
+    ///     after every pack with the same or a higher priority, so a higher priority wins a shared key, and equal
+    ///     priorities keep the registration order.
     /// </summary>
     private static bool TryRegisterByContentType(ZipArchive archive, AssetPackManifest manifest)
     {
@@ -361,17 +366,30 @@ public static class AssetPackRegistry
             Packs[manifest.ContentType] = list;
         }
 
-        foreach (var earlier in list)
-        {
-            var shared = SharedKeys(earlier, pack);
+        var index = list.FindIndex(other => other.Manifest.Priority < manifest.Priority);
 
-            if (shared.Count > 0)
-                LogWarning($"{manifest.ContentType} packs '{earlier.Manifest.PackId}' and '{manifest.PackId}' share {shared.Count} key(s) "
-                           + $"({string.Join(", ", shared.Take(OVERLAP_KEYS_SHOWN))}{(shared.Count > OVERLAP_KEYS_SHOWN ? ", ..." : string.Empty)}); "
-                           + $"'{earlier.Manifest.PackId}' registered first and wins");
+        if (index < 0)
+            index = list.Count;
+
+        for (var i = 0; i < list.Count; i++)
+        {
+            var other = list[i];
+            var shared = SharedKeys(other, pack);
+
+            if (shared.Count == 0)
+                continue;
+
+            var (winner, loser) = i < index ? (other.Manifest, manifest) : (manifest, other.Manifest);
+            var reason = winner.Priority == loser.Priority
+                ? "it registered first, at the same priority"
+                : $"its priority {winner.Priority} is higher than {loser.Priority}";
+
+            LogWarning($"{manifest.ContentType} packs '{other.Manifest.PackId}' and '{manifest.PackId}' share {shared.Count} key(s) "
+                       + $"({string.Join(", ", shared.Take(OVERLAP_KEYS_SHOWN))}{(shared.Count > OVERLAP_KEYS_SHOWN ? ", ..." : string.Empty)}); "
+                       + $"'{winner.PackId}' wins over '{loser.PackId}': {reason}");
         }
 
-        list.Add(pack);
+        list.Insert(index, pack);
 
         return true;
     }

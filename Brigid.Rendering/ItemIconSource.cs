@@ -12,7 +12,7 @@ namespace Brigid.Rendering;
 ///     Gives the image of an item sprite, for every item surface: ground items and the dialog portrait
 ///     (<see cref="ItemRenderer" />), and the inventory, bank, shop, item menu, exchange and equipment icons
 ///     (<see cref="UiRenderer.GetItemIcon" />). It removes the item flag of a wire value, asks the <c>item_icons</c> packs
-///     in registration order, and then reads the legacy EPF. A pack entry that does not decode passes the lookup to the
+///     in their order (priority, then registration order), and then reads the legacy EPF. A pack entry that does not decode passes the lookup to the
 ///     next pack.
 /// </summary>
 public static class ItemIconSource
