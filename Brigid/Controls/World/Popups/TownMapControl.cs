@@ -21,7 +21,15 @@ public sealed class TownMapControl : UIPanel
     private const int FRAME_HEIGHT = 406;
     private const float MARKER_FRAME_INTERVAL = 0.083f;
 
-    private record struct TownMapEntry(int MapId, int X, int Y, int TileWidth, int TileHeight);
+    /// <summary>
+    ///     One line of <c>_tcoord.txt</c>. <see cref="X" /> is the town image's left offset in the frame, and
+    ///     <see cref="ImageX" /> is that offset as a positive number. The file writes the sign three ways for the same
+    ///     meaning: <c>-74,71</c>, <c>- 74,71</c> (a space after the minus) and <c>120 101</c> (no sign).
+    /// </summary>
+    internal readonly record struct TownMapEntry(int MapId, int X, int Y, int TileWidth, int TileHeight)
+    {
+        public int ImageX => Math.Abs(X);
+    }
 
     private List<TownMapEntry>? CoordEntries;
 
@@ -114,12 +122,12 @@ public sealed class TownMapControl : UIPanel
             AddChild(IconBarImage);
         }
 
-        //layer 3: town image — _tcoord.txt x is negated centering offset, y is vertical offset
+        //layer 3: town image — _tcoord.txt x is the left offset (see TownMapEntry.ImageX), y is the top offset
         TownImageLayer = LoadSpfAsImage($"_t{mapId}.spf");
 
         if (TownImageLayer is not null)
         {
-            TownImageLayer.X = -entry.X;
+            TownImageLayer.X = entry.ImageX;
             TownImageLayer.Y = entry.Y;
             AddChild(TownImageLayer);
         }
@@ -298,18 +306,24 @@ public sealed class TownMapControl : UIPanel
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         foreach (var line in lines)
-        {
-            var numbers = ExtractNumbers(line);
+            if (ParseCoordLine(line) is { } coords)
+                CoordEntries.Add(coords);
+    }
 
-            if (numbers.Count >= 5)
-                CoordEntries.Add(
-                    new TownMapEntry(
-                        numbers[0],
-                        numbers[1],
-                        numbers[2],
-                        numbers[3],
-                        numbers[4]));
-        }
+    /// <summary>Parses one <c>_tcoord.txt</c> line: map id, x, y, tile width, tile height. Returns null for a line with fewer numbers.</summary>
+    internal static TownMapEntry? ParseCoordLine(string line)
+    {
+        var numbers = ExtractNumbers(line);
+
+        if (numbers.Count < 5)
+            return null;
+
+        return new TownMapEntry(
+            numbers[0],
+            numbers[1],
+            numbers[2],
+            numbers[3],
+            numbers[4]);
     }
 
     private static List<int> ExtractNumbers(string line)

@@ -15,6 +15,11 @@ public abstract class RepositoryBase
                 .SetSlidingExpiration(TimeSpan.FromMinutes(15))
                 .RegisterPostEvictionCallback(HandleDisposableEntries);
 
+    /// <summary>
+    ///     Returns the cached value for <paramref name="key" />, or creates it with <paramref name="factory" /> and caches
+    ///     it. Throws when the factory returns null, and caches nothing then. For an asset that can be absent, use
+    ///     <see cref="GetOrCreateOrNull{T}" />.
+    /// </summary>
     protected virtual T GetOrCreate<T>(string key, Func<T> factory)
     {
         if (Cache.TryGetValue(key, out T? cached))
@@ -22,14 +27,27 @@ public abstract class RepositoryBase
 
         using var scope = CacheLock.EnterScope();
 
-        return Cache.GetOrCreate(
-            key,
-            entry =>
-            {
-                ConfigureEntry(entry);
+        if (Cache.TryGetValue(key, out cached))
+            return cached!;
 
-                return factory();
-            }) ?? throw new NullReferenceException();
+        return Add(key, factory() ?? throw new NullReferenceException());
+    }
+
+    /// <summary>
+    ///     Returns the cached value for <paramref name="key" />, or creates it with <paramref name="factory" />. Returns
+    ///     null when the factory returns null. Caches only a value that is not null, so a later call looks again.
+    /// </summary>
+    protected T? GetOrCreateOrNull<T>(string key, Func<T?> factory) where T : class
+    {
+        if (Cache.TryGetValue(key, out T? cached) && cached is not null)
+            return cached;
+
+        using var scope = CacheLock.EnterScope();
+
+        if (Cache.TryGetValue(key, out cached) && cached is not null)
+            return cached;
+
+        return factory() is { } value ? Add(key, value) : null;
     }
 
     protected virtual T GetOrCreate<T>(int key, Func<T> factory)
@@ -39,14 +57,10 @@ public abstract class RepositoryBase
 
         using var scope = CacheLock.EnterScope();
 
-        return Cache.GetOrCreate(
-            key,
-            entry =>
-            {
-                ConfigureEntry(entry);
+        if (Cache.TryGetValue(key, out cached))
+            return cached!;
 
-                return factory();
-            }) ?? throw new NullReferenceException();
+        return Add(key, factory() ?? throw new NullReferenceException());
     }
 
     //zero-alloc cache hit path: callers pass TState as a struct and a static lambda, avoiding closure+Func allocation on every call
@@ -60,13 +74,7 @@ public abstract class RepositoryBase
         if (Cache.TryGetValue(key, out cached))
             return cached!;
 
-        using var entry = Cache.CreateEntry(key);
-        ConfigureEntry(entry);
-
-        var value = factory(state);
-        entry.Value = value;
-
-        return value ?? throw new NullReferenceException();
+        return Add(key, factory(state) ?? throw new NullReferenceException());
     }
 
     protected T GetOrCreate<T, TState>(string key, TState state, Func<TState, T> factory)
@@ -79,13 +87,19 @@ public abstract class RepositoryBase
         if (Cache.TryGetValue(key, out cached))
             return cached!;
 
-        using var entry = Cache.CreateEntry(key);
-        ConfigureEntry(entry);
+        return Add(key, factory(state) ?? throw new NullReferenceException());
+    }
 
-        var value = factory(state);
-        entry.Value = value;
+    //the caller holds CacheLock and has checked the value is not null
+    private T Add<T>(object key, T value)
+    {
+        using (var entry = Cache.CreateEntry(key))
+        {
+            ConfigureEntry(entry);
+            entry.Value = value;
+        }
 
-        return value ?? throw new NullReferenceException();
+        return value;
     }
 
     protected static void HandleDisposableEntries(

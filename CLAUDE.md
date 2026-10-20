@@ -15,7 +15,9 @@ dotnet run --project Brigid/Brigid.csproj
 
 The client requires a Dark Ages game-data directory (the folder containing `*.dat` archives). Point `GlobalSettings.DataPath` at that directory before running; `LobbyHost`/`LobbyPort` and `ClientVersion` also live in `GlobalSettings`.
 
-Tests live in `Brigid.Tests` (xunit): `dotnet test Brigid.slnx`. Coverage is currently a handful of targeted regression/smoke tests, not a full suite.
+Release packaging lives in `Build/`: `fixup-sdl-runtimes.sh`, `macos/`, and `linux/package-linux.sh`, which builds the `.deb` (declares the bundled SDL2_mixer's six codec libraries by soname) and the AppImage (bundles them beside the mixer with `$ORIGIN` runpaths, so it needs the ubuntu-24.04 runner's glibc 2.39 or newer). The Linux tarball does neither and relies on the system's codecs. Write local package outputs (`make-app.sh --output`, the `package-linux.sh` `<out-dir>`) to `dist/`, which git ignores. `Build/icon/` holds the icon sources for each platform; see its `README.md`.
+
+Tests live in `Brigid.Tests` (xunit): `dotnet test Brigid.slnx`. Coverage is currently a handful of targeted regression/smoke tests, not a full suite. Tests that change static state (`WorldState`, `DataDiagnostics.Log`, `FontEngine`, `DebugOverlay`, textbox focus) share a named collection with `DisableParallelization = true`. The test assembly replaces the SDL backend of `Utilities/Clipboard` with the in-memory `TestClipboard`.
 
 ## Solution Structure
 
@@ -48,6 +50,23 @@ DALib (Dark Ages file format + networking support) comes from the pinned NuGet p
 | `../lodunity/`      | Decompile of the Unity LOD client.                                    |
 | `../Chaos-Server/`  | Chaos-Server source (Sichii). Protocol reference for compat work.     |
 
+The **docs repo** is a private sibling checkout holding the Dark Ages protocol/format reference, the per-project design plans, and the issue tracker. It is referred to by that name throughout this file.
+
+## Issue Tracker
+
+Issues are **not** in Jira. The tracker is git-backed — files are the database — and it lives in the docs repo under `tracker/`:
+
+```text
+tracker/config.yaml                        # projects, statuses, issue types, fields, people
+tracker/issues/<PREFIX>/<PREFIX>-<n>.md    # one file per issue, sharded by project prefix
+```
+
+`BRIG` is this repo's prefix, so `BRIG-64` is `tracker/issues/BRIG/BRIG-64.md`. Each issue is markdown with YAML frontmatter, and grep over that frontmatter is the intended query interface (`grep -rl "^status: in-progress" tracker/issues/BRIG`). An empty result usually means the wrong prefix, not a missing issue. `tracker/config.yaml` is authoritative for the status and type vocabularies — read it rather than trusting any summary.
+
+Design docs for a card live in the docs repo at `docs/plans/brigid/BRIG-<id>-<slug>.md` and are linked from the card's `docs:` frontmatter plus a `HasDesignDoc` label; see that directory's `README.md` before adding one.
+
+**Read-only by default** — read the tracker freely for context, mutate only when asked. Never hand-allocate an issue ID; the tracker has a tool for it, because the obvious `ls | sort | tail` recipe has produced duplicate IDs in practice.
+
 ## Key Dependencies
 
 | Package                                    | Purpose                                                                   |
@@ -61,7 +80,6 @@ DALib (Dark Ages file format + networking support) comes from the pinned NuGet p
 | Chaos.Geometry 1.11.0-preview              | Geometry types -- rectangles, points (NuGet)                              |
 | Chaos.Pathfinding 1.11.0-preview           | A* pathfinding (NuGet)                                                    |
 | Microsoft.Extensions.Caching.Memory 10.0.5 | MemoryCache infrastructure                                                |
-| TextCopy 6.2.1                             | Cross-platform clipboard access (used by `Utilities/Clipboard`)           |
 
 The `Chaos.*` preview packages (`Chaos.Common`, `Chaos.DarkAges`, `Chaos.Geometry`, `Chaos.Pathfinding`) are inherited from the upstream project and are slated for replacement with Hybrasyl equivalents. `Chaos.Networking` and `Chaos.Cryptography` were already removed in the DALib networking cutover (2026-06/07); the remaining packages supply shared definition enums, extension methods, geometry, and pathfinding only — no protocol serialization.
 
@@ -74,11 +92,12 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 ### Data Layer (`Brigid.Data`)
 - **`DataContext`** -- Static singleton exposing all repositories via `Initialize()`.
 - **`DatArchives`** -- Static holder for 22 game data archives loaded at startup via memory-mapped files.
-- **`RepositoryBase`** -- Abstract base with MemoryCache (15-min sliding expiration). Uses `GetOrCreate<T>(key, factory)`.
+- **`DataPathResolver`** -- Join every path to a game file in the Dark Ages data directory (archives, `npc/`, `music/`) through `Resolve(root, segments)`. Data directories do not agree on filename case (the installer writes `Legend.dat`, an unpacker can write `legend.dat`), and Linux refuses the wrong case. Brigid-owned folders there (`hybrasyl-data/`, the legacy per-character folders) still use `Path.Combine`.
+- **`RepositoryBase`** -- Abstract base with MemoryCache (15-min sliding expiration). Uses `GetOrCreate<T>(key, factory)`, which throws on a null load; use `GetOrCreateOrNull<T>` for an asset that can be absent. Neither caches a null.
 - **11 repositories** (exposed on `DataContext` by these accessor names): AislingDrawData, CreatureSprites, Effects, Fonts, LightMasks, LocalPlayerSettings, MapsFiles, MetaFiles, PanelSprites, Tiles, UserControls (the UI-component repository).
 - **`ControlPrefab`/`ControlPrefabSet`** -- Wraps DALib Control definitions + pre-rendered SKImage arrays. First control (Anchor) defines panel bounds.
 - Control file catalog in `controlFileList.txt` at solution root.
-- **`AssetPackRegistry`** (`AssetPacks/`) -- Static registry. On `Initialize()`, scans the per-user erisco assets directory (`AppPaths.AssetsDir`) for `*.datf` files (ZIP archives with modern asset overrides), reads each one's `_manifest.json`, validates `schema_version`, and registers a single pack per `content_type`. On first launch it performs a one-time best-effort migration of legacy `{DataContext.DataPath}/hybrasyl-data/` packs (the `LEGACY_PACK_SUBFOLDER`) into the assets directory. Lookups return null when no pack is registered; the renderer/audio layer falls through to legacy. Full per-type catalog (entry naming, ID bases, manifest fields actually read, legacy fallbacks, enforced constraints) is in `assetPackList.md` at solution root; `asset-pack-format.md` in the document repo is the artist-facing format spec. Twelve content types are supported, each with a typed accessor:
+- **`AssetPackRegistry`** (`AssetPacks/`) -- Static registry. On `Initialize()`, scans the per-user Erisco assets directory (`AppPaths.AssetsDir`) for `*.datf` files (ZIP archives with modern asset overrides), reads each one's `_manifest.json`, validates `schema_version`, and registers a single pack per `content_type`. On first launch it performs a one-time best-effort migration of legacy `{DataContext.DataPath}/hybrasyl-data/` packs (the `LEGACY_PACK_SUBFOLDER`) into the assets directory. Lookups return null when no pack is registered; the renderer/audio layer falls through to legacy. Full per-type catalog (entry naming, ID bases, manifest fields actually read, legacy fallbacks, enforced constraints) is in `assetPackList.md` at solution root; `asset-pack-format.md` in the docs repo is the artist-facing format spec. Twelve content types are supported, each with a typed accessor:
   - `ability_icons` -> `IconPack` -> `GetIconPack()`
   - `item_icons` -> `ItemPack` -> `GetItemPack()`
   - `nation_badges` -> `NationBadgePack` -> `GetNationBadgePack()`
@@ -93,6 +112,9 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
   - `town_maps` -> `TownMapPack` -> `GetTownMapPack()` (T-key town maps by map number; full-panel entries `town_{mapId:D5}.png`, drawn via `UiRenderer.GetTownMapImage` in place of the legacy `national.dat` `_t*` composite; no player marker)
 - **`AudioPack`** (`AssetPacks/`) -- Shared base for `MusicPack`/`SfxPack`. Entries named `{prefix}_{id}.{ext}` at the archive root; builds an extension-agnostic `id -> entry` map at construction and returns raw bytes via `TryGetAudioBytes` (no decode — the audio layer hands bytes to SDL_mixer). `MusicPack` overrides loose `{DataPath}/music/{id}.mus`; `SfxPack` overrides `legend.dat` `{id}.mp3`. A present id = replace, a new id = add.
 - **`IconPack`** (`AssetPacks/`) -- Wraps a ZipArchive of `{prefix}_{id:D4}.png` entries. `TryGetIconImage(prefix, spriteId, out SKImage?)` case-insensitive lookup; decode failures treated as "not present" so renderer falls back cleanly to legacy.
+- **`DataDiagnostics`** -- Log seam for `Brigid.Data` and `Brigid.Rendering`, which cannot reference `NoticeDebugLog`. `Program.cs` sets `Log` to `NoticeDebugLog.Write`; `Try` runs best-effort file IO and logs a failure.
+- **`MetaFileCache`** -- Static helpers for the metafile cache in `AppPaths.MetaFileDir`. `IsSafeName` refuses a server-sent name that is not a bare, cross-platform file name; `GetChecksum`, `TryWrite` and `PruneUnlisted` (deletes the files the server no longer lists) apply it.
+- **`AppPaths`** -- Per-user `Erisco/Brigid` directories (`AppRoot`, `AssetsDir`, `MetaFileDir`, `MapsDir` and others). `MigrateLegacyVendorFolder()` runs once in `Program.cs`, before anything reads `AppRoot`, and moves a legacy lowercase `erisco` folder entry by entry.
 
 ### Rendering Layer (`Brigid.Rendering`)
 - **`TextureConverter`** -- DALib `SKImage` -> MonoGame `Texture2D` (RGBA8888 premul). Entry points: `ConvertImage<T>()`, `ToTexture2D()`.
@@ -100,7 +122,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 - **`PixelBufferScope`** -- `ref struct` RAII wrapper around `ArrayPool<Color>.Shared.Rent` + `Texture2D.GetData`/`SetData`. Use this instead of hand-rolling rent/get/set/return. Two constructors: `(Texture2D source)` reads the texture into a fresh buffer; `(int width, int height)` rents an **uninitialized** buffer (callers must `Array.Clear(scope.Pixels, 0, scope.Count)` if they depend on zeros). Exposes `Pixels`, `Count`, `Width`, `Height`, `AsSpan()` for bounds-safe iteration; `CommitTo(Texture2D)` uploads pixels back via `SetData`. This is the *only* place outside tests that should call `ArrayPool<Color>.Shared.Rent`.
 - **`Camera`** -- Isometric camera: `WorldToScreen`, `ScreenToWorld`, `TileToWorld`, `WorldToTile`, `GetVisibleTileBounds()`.
 - **`MapRenderer`** -- Background + foreground tile rendering. `DrawBackground()`, `DrawForegroundTile()`, `PreloadMapTiles()`.
-- **`TextRenderer`** -- Higher-level text concerns layered on `FontEngine` (the glyph backend is FontStashSharp/TTF, not SkiaSharp): inline `{=x}` color codes, drop shadows, per-glyph clipping, measurement, wrapping. `DrawText()`, `DrawTextClipped()`, `DrawLines()`, `MeasureWidth()`, `MeasureCharWidth()`, `FindLineBreak()`, `WrapLines()`, `WrapText()`. `CHAR_HEIGHT` (12) is the line grid; glyph ink size is independent of it. `FindLineBreak` advances whole Unicode scalars, so a returned index is always a UTF-16 boundary -- breaking a surrogate pair leaves lone halves that sanitize to U+FFFD.
+- **`TextRenderer`** -- Higher-level text concerns layered on `FontEngine` (the glyph backend is FontStashSharp/TTF, not SkiaSharp): inline `{=x}` color codes, drop shadows, per-glyph clipping, measurement, wrapping. `DrawText()`, `DrawTextClipped()`, `DrawLines()`, `MeasureWidth()`, `FindLineBreak()`, `WrapLines()`, `WrapText()`. Both wrap methods continue an inline `{=x}` code onto the lines after it. `CHAR_HEIGHT` (12) is the line grid; glyph ink size is independent of it. `FindLineBreak` advances whole Unicode scalars, so a returned index is always a UTF-16 boundary -- breaking a surrogate pair leaves lone halves that sanitize to U+FFFD.
 - **`UiRenderer`** -- UI panel rendering utilities.
 - **`DarknessRenderer`** -- Light/darkness overlay. Consumes light sources from `LightingSystem`.
 - **`TabMapRenderer`** -- Mini-map rendering. Also consumes from `LightingSystem` for fog-of-war.
@@ -124,7 +146,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 ### Networking Layer (`Brigid.Networking`)
 - **`GameClient`** -- Owns the TCP socket; hands framing, encryption, and (de)serialization to DALib's `PacketCodec` (stateless, shared across connections; per-connection `CryptoState` replaced wholesale at each handshake). Inbound packets surface as typed `IServerPacket` values via `DrainPackets()`; outbound are sent as typed `IClientPacket` via `Send()`. Auto-responds to byte/tick heartbeats. `TryGetTcpSmoothedRttMs()` exposes the kernel's RTT estimate for `LatencyMonitor`.
 - **`ConnectionManager`** -- State machine (Disconnected->Connecting->Lobby->Login->World), array-indexed handler dispatch (60+ handlers), 48+ events. Full lobby/login/world-entry flows. Player action methods, communication, NPC/dialog, requests. `ProcessPackets()` (called from the game loop) drains the client queue and dispatches; handler exceptions are logged to `NoticeDebugLog` rather than rethrown, so protocol divergence is visible instead of fatal.
-- **`NoticeDebugLog`** -- Static diagnostic logger (stdout + `notice-debug.log` in the app base directory). The networking layer's standing debug channel.
+- **`NoticeDebugLog`** -- Static diagnostic logger (stdout + `notice-debug.log` in the app base directory). The client's standing debug channel (`Brigid` and `Brigid.Networking`). `Brigid.Data` and `Brigid.Rendering` write through `DataDiagnostics.Log`, which `Program.cs` sets to it.
 - Protocol types come from DALib: packets in `DALib.Networking.Packets.Client`/`.Server`, opcodes + codec in `DALib.Networking.Wire`, crypto in `DALib.Networking.Crypto`. Shared definition enums (stats, directions, etc.) still come from `Chaos.DarkAges.Definitions` / `Chaos.Geometry`. The server-table blob is parsed by DALib's `ServerTableDataPacket`; the `name;description` field is split client-side via `ServerEntryExtensions.SplitNameDescription()`.
 
 ### Client Project (`Brigid`) Internal Organization
@@ -136,7 +158,7 @@ Brigid/
 ├── GlobalSettings.cs         — Static config (ClientVersion, DataPath, LobbyHost/Port)
 ├── InputBuffer.cs            — Event-driven input capture and buffering
 ├── InputDispatcher.cs        — UI event dispatch: hit-test, bubble, drag, click synthesis, control stack
-├── Sdl.cs                    — Centralized SDL2 P/Invoke declarations (keyboard, text, mouse button, mouse wheel event constants consumed by InputBuffer; audio subsystem init/quit, SDL_GetError, SDL_RWFromConstMem consumed by SoundSystem)
+├── Sdl.cs                    — Centralized SDL2 P/Invoke declarations (keyboard, text, mouse button, mouse wheel event constants consumed by InputBuffer; audio subsystem init/quit, SDL_GetError, SDL_RWFromConstMem consumed by SoundSystem; SDL_GetClipboardText/SDL_SetClipboardText/SDL_free/SDL_ClearError consumed by Utilities/Clipboard; SDL_RaiseWindow consumed by ChaosGame.RaiseWindow)
 ├── SdlMixer.cs               — SDL2_mixer P/Invoke wrapper (Mix_* functions and constants, consumed by SoundSystem)
 ├── Collections/              — WorldState, CircularBuffer
 ├── Models/                   — WorldEntity, Animation, EntityRemovalAnimation, WorldFrameState, SlotDragPayload, PathfindingState, etc.
@@ -144,7 +166,7 @@ Brigid/
 ├── Systems/                  — AnimationSystem, CastingSystem, SoundSystem, Pathfinder, LightingSystem, LatencyMonitor, ClientSettings, MachineIdentity, AbilityRequirements
 │   └── Keybinds/             — CommandId, KeyChord, KeybindCatalog, Keybinds (rebindable key resolution)
 ├── Screens/                  — IScreen, ScreenManager, LobbyLoginScreen, WorldScreen (7 partial files)
-├── Rendering/                — EntityOverlayManager, WorldDebugRenderer
+├── Rendering/                — EntityOverlayManager, WorldDebugRenderer, SystemTextPainter
 ├── Controls/                 — Full UI control hierarchy (see UI Control System below)
 │   └── Scrolling/            — ScrollModel, IScrollSource, ScrollView, ScrollBarBinder, VirtualizedListView, SelectableTextView, LabelScrollSource, TextBoxScrollSync
 ├── Definitions/              — Delegates, Enums, DoorTable, InputEvents, TextColors
@@ -154,7 +176,7 @@ Brigid/
 
 ### Screen System
 - **`IScreen`/`ScreenManager`** -- Stack-based screen management.
-- **`LauncherScreen`** -- Zero-config startup screen (server select + asset-folder picker + Connect), shown on every launch unless env vars (`DA_HOST`/`DA_ASSET_PATH`) fully specify a valid setup. **The one deliberately non-`UIElement` screen:** it renders before `DataContext.Initialize` (the asset path is what it exists to obtain), so it cannot use prefab panels/atlas fonts -- it draws with a 1x1 white texture + `SystemFontText` (OS typeface) and reads `InputBuffer` directly (`Root => null`, not in the `InputDispatcher` tree). `Connect` persists `LauncherConfig` then calls `ChaosGame.FinishAssetInitialization()` (the deferred asset-load seam) and switches to the lobby. If it grows past the add-server form, factor its primitive helpers into a shared asset-free UI helper rather than expanding the monolith.
+- **`LauncherScreen`** -- Zero-config startup screen (server select + asset-folder picker + Connect), shown on every launch unless env vars (`DA_HOST`/`DA_ASSET_PATH`) fully specify a valid setup. **The one deliberately non-`UIElement` screen:** it renders before `DataContext.Initialize` (the asset path is what it exists to obtain), so it cannot use prefab panels/atlas fonts -- it draws with a 1x1 white texture + `SystemFontText` (OS typeface) and reads `InputBuffer` directly (`Root => null`, not in the `InputDispatcher` tree). `Connect` persists `LauncherConfig` then calls `ChaosGame.FinishAssetInitialization()` (the deferred asset-load seam) and switches to the lobby. Its drawing primitives (OS-typeface text, rectangles snapped to the native pixel grid, and their caches) are in `SystemTextPainter` (`Brigid/Rendering/`); put new asset-free drawing there, not in the screen.
 - **`LobbyLoginScreen`** -- Full login flow: lobby connect, server select, login, character creation, transition to world.
 - **`WorldScreen`** -- Main game screen, split into 7 partial class files:
   - `WorldScreen.cs` -- Base class, fields, construction
@@ -171,7 +193,7 @@ Brigid/
 
 **Login Flow (`Controls/LobbyLogin/`):** LobbyLoginControl, LoginControl, ServerSelectControl, CharacterCreationControl, LoginNoticeControl, PasswordChangeControl, LogoImage.
 
-**Generic Controls (`Controls/Generic/`):** OkPopupMessageControl, TextPopupControl, MarkdownView (near-fullscreen markdown notice for `SystemMessageType.MarkdownNotice` = 0x20, a Hybrasyl/USDA extension: title bar with close/maximize, scrollbar, Escape dismisses, non-modal; debug-test via F11 overlay + Ctrl+M), ScrollBarControl, SliderControl, DebugOverlay. Asset-free primitives shared by the from-scratch modals: DialogPalette (the one colour source), TextButton, SelectableTab, TabStrip (row/column of tabs; clicked and selected are separate so a server-authoritative surface can defer selection to the reply), CheckBox.
+**Generic Controls (`Controls/Generic/`):** OkPopupMessageControl, TextPopupControl, AudioMissingNoticeControl (`CenteredModalPanel` no-sound notice: per-distro install commands on Linux, reinstall advice elsewhere), MarkdownView (near-fullscreen markdown notice for `SystemMessageType.MarkdownNotice` = 0x20, a Hybrasyl/USDA extension: title bar with close/maximize, scrollbar, Escape dismisses, non-modal; debug-test via F11 overlay + Ctrl+M), ScrollBarControl, SliderControl, DebugOverlay. Asset-free primitives shared by the from-scratch modals: DialogPalette (the one colour source), TextButton, SelectableTab, TabStrip (row/column of tabs; clicked and selected are separate so a server-authoritative surface can defer selection to the reply), CheckBox.
 
 **World HUD (`Controls/World/Hud/`):** IWorldHud interface, WorldHudControl (classic compact HUD), LargeWorldHudControl (expanded HUD), OrangeBarControl, ChatInputControl, EffectBarControl/EffectSlotControl, MailButton (unread-mail pulse indicator driven by `PlayerAttributes.HasUnreadMail`).
 
@@ -188,7 +210,7 @@ Brigid/
 ### Game Systems (`Brigid/Systems/`)
 - **`AnimationSystem`** -- Pure methods for walk/body/creature animations, frame calculation, walk offset lerp.
 - **`CastingSystem`** -- Spell targeting + chant management.
-- **`SoundSystem`** -- SDL2_mixer-based audio. SFX decoded to PCM once via `Mix_LoadWAV_RW` and cached as `Mix_Chunk` pointers; playback uses the mixer's channel pool with per-channel volume. Music streams via `Mix_LoadMUS`/`Mix_LoadMUS_RW` with `Mix_FadeOutMusic`/`Mix_FadeInMusic` for map transitions. Same-sound overlap ducks prior instances by -3 dB (equal-power) instead of voice-stealing. Both paths are pack-first: `LoadChunk` prefers `AssetPackRegistry.GetSfxPack()` over `legend.dat`, and `StartMusic` prefers `GetMusicPack()` (streamed from a pinned byte[] via `Mix_LoadMUS_RW`) over the loose `{DataPath}/music/{id}.mus`. The pinned music buffer is released in lockstep with the music handle by `FreeCurrentMusic`.
+- **`SoundSystem`** -- SDL2_mixer-based audio. SFX decoded to PCM once via `Mix_LoadWAV_RW` and cached as `Mix_Chunk` pointers; playback uses the mixer's channel pool with per-channel volume. Music streams via `Mix_LoadMUS`/`Mix_LoadMUS_RW` with `Mix_FadeOutMusic`/`Mix_FadeInMusic` for map transitions. Same-sound overlap ducks prior instances by -3 dB (equal-power) instead of voice-stealing. Both paths are pack-first: `LoadChunk` prefers `AssetPackRegistry.GetSfxPack()` over `legend.dat`, and `StartMusic` prefers `GetMusicPack()` (streamed from a pinned byte[] via `Mix_LoadMUS_RW`) over the loose `{DataPath}/music/{id}.mus`. The pinned music buffer is released in lockstep with the music handle by `FreeCurrentMusic`. Before any `Mix_*` call the constructor probes the mixer via `DllResolver.TryResolve` (the resolver plus the runtime's default search, the order a p/invoke uses; `NativeLibrary.TryLoad` with an assembly skips the resolver). If SDL2_mixer or a codec library it links cannot load -- the Linux build links six system codecs -- `MixerLibraryMissing` is set, every call no-ops, and `LobbyLoginScreen` shows `AudioMissingNoticeControl` once per process.
 - **`Pathfinder`** -- A* pathfinding algorithm.
 - **`LightingSystem`** -- Owns the per-frame light source buffer. Walks world entities, reads `LanternSize`, and gathers into a span consumed read-only by `DarknessRenderer` and `TabMapRenderer` (neither stores its own copy). Caches Euclidean circle offset arrays (radius 3/5) and exposes `BaselineVisibilityOffsets` for the unconditional player-tile reveal on darkness maps.
 - **`LatencyMonitor`** -- Static class. Passive sink for application-layer round-trip-time samples. Producers call `Update(long? rttMs)` (null clears the reading); the HUD subscribes to `LatencyChanged` and reads `LatencyMs`. May fire on any thread — subscribers must not block, and any non-trivial work should be marshalled to the game-loop thread by the consumer. Producer: `ChaosGame` runs a 2s polling task while in World state that calls `GameClient.TryGetTcpSmoothedRttMs` — real kernel-measured smoothed RTT, no protocol changes. Cross-platform via `SIO_TCP_INFO` IOCTL (Windows), `getsockopt(IPPROTO_TCP, TCP_INFO)` (Linux), or `getsockopt(IPPROTO_TCP, TCP_CONNECTION_INFO)` (macOS). Clears via `Update(null)` on World exit.
@@ -248,7 +270,7 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - Hotkeys (all *defaults* -- every one resolves through `Keybinds` in `KeybindContext.WorldHud` and is rebindable in Options -> Keybinds; see `Keybinds.Defaults` for the authoritative table):
   - HUD tabs: A=Inventory, S=Skills, D=Spells, F=Chat, G=Stats, H=Tools; the Shift variant selects the alternate panel (Shift+A expands Inventory, Shift+F=MessageHistory, Shift+G=ExtendedStats). Base and alt are independent bindings.
   - Toggles: Q=PauseMenu, W=Boards, E=WorldList, R=SocialStatus, T=TownMap, Y=Group, B=PickupItem, J=GroupHighlight, Tab=TabMap (PageUp/PageDown zoom), `/`=SwapHudLayout, backtick=UnequipWeapon/Shield
-  - Function keys: F1=Help/Merchant, F3=Macros, F4=Settings, F5=Refresh, F7=BoardList, F8=KeybindMenu, F9=Ignore, F10=Friends
+  - Function keys: F1=Help/Merchant (also while the NPC window is the top popup), F3=Macros, F4=Settings, F5=Refresh, F7=BoardList, F8=KeybindMenu, F9=Ignore, F10=Friends
   - Other: Space=Assail, Enter=ChatFocus, Alt+Enter=CycleWindowSize, Shift+1=Shout, Shift+'=Whisper
 - Textbox editing keys: Ctrl+A=select all, Ctrl+C/X/V=copy/cut/paste, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y=undo/redo, Home/End (or Alt+Left/Right)=line start/end; Enter inserts a newline in multiline boxes. These resolve through the keybind registry (`Keybinds`, `KeybindContext.TextEditing`) so they honour rebindings and the per-OS primary modifier (Cmd on macOS); the editor family is rebindable in Options → Keybinds. Pure caret nav (arrows/Home/End/word nav) and text mutation stay literal in `UITextBox.OnKeyDown`. Chat input: Up/Down cycles sent-message history (draft preserved).
 - Grid panels use `PanelBase` -> `PanelSlot` with slot number overlays and cooldown rendering
@@ -265,13 +287,13 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - **Data bag entities:** WorldEntity holds all state; AnimationSystem provides pure functions
 - **Separation:** Rendering layer has no dependency on Networking; coordination happens in Client project
 - **Global entity wiring:** ChaosGame wires entity tracking events at construction (before WorldScreen exists)
-- **Pathfinding:** Right-click A* to tile/entity, entity following with auto-assail, arrow/spacebar cancels
+- **Pathfinding:** Right-click A* to a ground tile (a single right-click on a creature or aisling does not move the player); double right-click on a creature or aisling follows it with auto-assail; arrow/spacebar cancels
 - **Casting flow:** CastingSystem coordinates targeting -> UseSpellOnTarget and chant progress
 
 ### Text Sizing & Passes
 Durable rules; violating one produces a silent visual defect rather than a failure.
 - **`FontEngine.RENDER_SIZE` (15) is a ceiling, not the default.** The size ordinary UI text draws at is `FontEngine.UiSize` -- the largest size at or below `RENDER_SIZE` whose glyph *ink* fits the 12px `TextRenderer.CHAR_HEIGHT` cell every Dark Ages prefab text rect is built on. It is **per-face** (at 15px Noto and Iosevka ink 12px, Anonymous Pro inks 13, Comic Shanns 16) and is a pure property of the face, cached on it. Passing `null`/omitting a size means `UiSize`; only pass an explicit size when the caller genuinely owns its own line grid (markdown headers/code).
-- **Measure at the size and spacing you draw at.** Measuring at the default while drawing at an explicit size puts carets, selection rects and hit-tests out of step with the glyphs. Controls holding a `TextElement` measure through `TextElement.Measure`/`MeasureChar` rather than calling `TextRenderer` directly, and each keeps its `size:`/`characterSpacing:` pair in exactly one private `DrawRun` helper -- the pair being repeated per call site is what caused an entire family of these bugs.
+- **Measure at the size and spacing you draw at.** Measuring at the default while drawing at an explicit size puts carets, selection rects and hit-tests out of step with the glyphs. Controls holding a `TextElement` measure through `TextElement.Measure`, and hit-test a click through `TextElement.IndexAtX`, rather than calling `TextRenderer` directly. Never add up single-glyph widths across a line: a lone glyph carries no tracking to the next glyph, and a rounded glyph width loses up to 0.5 px off 1x (`FindLineBreak` adds unrounded `MeasureWidthExact` widths plus the tracking). Each control keeps its `size:`/`characterSpacing:` pair in exactly one private `DrawRun` helper -- the pair being repeated per call site is what caused an entire family of these bugs.
 - **Negative tracking vs natural advances.** `FontEngine.DEFAULT_TRACKING` is -1px globally. The shipped faces carry no sidebearing slack, so that default pulls glyph ink into its neighbour; text that autofits to fill a width cancels it (`ChatTextStyle.Spacing = -DEFAULT_TRACKING`) and sizes against the faces' natural advances instead.
 - **All text draws in the native pass.** Text rasterized into the 640x480 virtual render target is point-upscaled with the world and renders blurry beside crisp UI text. Draw from `IScreen.DrawNative` (or `ChaosGame`'s native layer). A `Debug.Assert` in `FontEngine.DrawLineCore` catches violations; its predicate is the pure, unit-tested `IsUpscaledTextDraw`.
 - **`FontEngine.Generation` bumps on face change *and* layout-scale change.** Because `MeasureWidth` is layout-scale dependent (it measures at native pixel size and divides back into virtual space), a window resize can move measured widths and wrap points without the nominal size changing. Anything caching a measurement, a wrap, or a derived layout must key on `Generation`, not just on the resolved size.
@@ -280,7 +302,7 @@ Durable rules; violating one produces a silent visual defect rather than a failu
 ### Other
 - Case-insensitive string operations: `StartsWithI`, `ContainsI`, `EqualsI`, `ReplaceI`
 - Thread-safe cache access via `RepositoryBase.GetOrCreate<T>` (per-instance Lock)
-- Repository `Get` methods return null on failure (try-catch pattern)
+- `RepositoryBase`-cached `Get` methods return null for an absent asset through `GetOrCreateOrNull`; a catch is only for a corrupt asset
 - UI controls use `NeverRemove` cache priority; other assets use sliding expiration
 - Disposable cached objects are disposed via post-eviction callbacks
 

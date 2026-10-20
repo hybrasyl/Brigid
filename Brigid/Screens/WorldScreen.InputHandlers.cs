@@ -710,6 +710,17 @@ public sealed partial class WorldScreen
             return;
         }
 
+        //f1 — help merchant (server-side). Above the stack guard so that it also works while an NPC or vendor window is
+        //the top popup; any other popup on top still blocks it
+        if (Keybinds.Matches(e, CommandId.World_HelpMerchant)
+            && ((Game.Dispatcher.ControlStackCount == 0) || (Game.Dispatcher.TopControl == NpcSession)))
+        {
+            Game.Connection.ClickEntity(uint.MaxValue);
+            e.Handled = true;
+
+            return;
+        }
+
         //stack guard: suppress all game hotkeys when a popup is active
         if (Game.Dispatcher.ControlStackCount > 0)
             return;
@@ -831,15 +842,6 @@ public sealed partial class WorldScreen
         if (Controls.Generic.DebugOverlay.IsActive && e is { Key: Keys.M, Ctrl: true })
         {
             ShowMarkdownTestNotice();
-            e.Handled = true;
-
-            return;
-        }
-
-        //f1 — help merchant (server-side)
-        if (Keybinds.Matches(e, CommandId.World_HelpMerchant))
-        {
-            Game.Connection.ClickEntity(uint.MaxValue);
             e.Handled = true;
 
             return;
@@ -1121,9 +1123,9 @@ public sealed partial class WorldScreen
             return;
         }
 
-        //cache the hovered entity for the upcoming doubleclick — pathfinding triggered by this press will start
-        //moving the player on the next update, which shifts the camera and makes the second click's ScreenToTile
-        //resolve to a different world tile than the entity actually occupies
+        //cache the hovered entity for the upcoming doubleclick — the entity can walk between the two clicks, and a path
+        //from an earlier click can move the player, so the second click's ScreenToTile can resolve to a different world
+        //tile than the entity occupies
         var currentTick = Environment.TickCount;
 
         if ((currentTick - PendingDoubleClickTick) > DOUBLE_CLICK_CACHE_WINDOW_MS)
@@ -1133,17 +1135,24 @@ public sealed partial class WorldScreen
 
         //exclude self — the player's own sprite has a hitbox, and a rapid right-click on the tile the
         //player is walking off of overlaps that hitbox, which would cache the player as a double-click
-        //target and kick off a self-follow loop in OnRootDoubleClick
-        if (hoverEntity?.Type is ClientEntityType.Aisling or ClientEntityType.Creature
-            && (hoverEntity.Id != Game.Connection.AislingId))
+        //target and kick off a self-follow loop in OnRootDoubleClick.
+        //exclude a hidden aisling — it has a hitbox only so that spells can target it, and OnRootDoubleClick does not
+        //follow one, so a cached hidden aisling would make this press do nothing
+        var isDoubleClickTarget = false;
+
+        if (hoverEntity is { Type: ClientEntityType.Aisling or ClientEntityType.Creature, IsHidden: false } target
+            && (target.Id != Game.Connection.AislingId))
         {
-            PendingDoubleClickEntityId = hoverEntity.Id;
+            PendingDoubleClickEntityId = target.Id;
             PendingDoubleClickTick = currentTick;
+            isDoubleClickTarget = true;
         }
 
-        //ctrl is a UI modifier (ctrl+left-click opens the aisling context menu) — suppress single-press
-        //pathfinding, but prime the same-tile tracker so a right-doubleclick still resolves to follow.
-        if (e.Ctrl)
+        //neither press starts a ground path; both prime the same-tile tracker so a right-doubleclick still resolves to
+        //follow. Ctrl is a UI modifier (ctrl+left-click opens the aisling context menu). A press on a creature or another
+        //aisling is the first half of the retail double right-click that pursues and attacks; retail has no single
+        //right-click action on a living object, and a path here walked the player away on each attack attempt.
+        if (e.Ctrl || isDoubleClickTarget)
         {
             if (MapFile is not null)
             {
@@ -1317,8 +1326,8 @@ public sealed partial class WorldScreen
             //tracker still updates so any consumers relying on the last-clicked tile stay accurate
             var sameTile = RightClickTracker.Click(tileX, tileY);
 
-            //prefer the entity captured on the first single right-click — pathfinding started by that click will have
-            //moved the player by now, shifting the camera and making ScreenToTile resolve to a different world tile
+            //prefer the entity captured on the first single right-click — the entity, or the player on an earlier path, can
+            //have moved by now, and ScreenToTile then resolves to a different world tile
             WorldEntity? entity = null;
 
             if (PendingDoubleClickEntityId.HasValue

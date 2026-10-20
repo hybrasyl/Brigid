@@ -6,6 +6,7 @@ namespace Brigid.Tests;
 // DataDiagnostics.Try is the guard that keeps a denied/locked/full file write from terminating the client (the
 // Program-Files UnauthorizedAccessException crash). It swallows only IO/permission failures, logs them via the wired
 // sink, and lets genuine bugs (non-IO exceptions) propagate.
+[Collection("DataDiagnostics")]
 public class DataDiagnosticsTests
 {
     [Fact]
