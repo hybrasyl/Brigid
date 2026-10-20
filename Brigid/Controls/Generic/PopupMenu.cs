@@ -17,7 +17,8 @@ namespace Brigid.Controls.Generic;
 ///         menu). The selected row
 ///         has the <see cref="ThemeRoles.RowHover" /> fill; the mouse or the Up and Down keys select a row. A click or
 ///         Enter picks the selected entry and closes the menu. A click that is not on an entry, a right-click and Escape
-///         close the menu. While the menu is open, it takes Enter, also with no selection.
+///         close the menu. The menu gets the keys when it is the top control and no text box has the focus; then it takes
+///         Enter, also with no selection. While the chat box has the focus, the keys go to the chat.
 ///     </para>
 ///     <para>
 ///         The menu is on the control stack while it is open. So a host closes it on a click outside it, and also when the

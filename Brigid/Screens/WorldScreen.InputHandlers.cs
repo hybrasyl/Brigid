@@ -1030,7 +1030,7 @@ public sealed partial class WorldScreen
         {
             //any movement intent dismisses the door context menu. right-click-driven movement is
             //already covered by the outside-click guard in OnRootMouseDown; this path catches
-            //keyboard movement (arrows + zxcv).
+            //keyboard movement that the open menu does not take (with no text box focused, it takes Up and Down to select a row).
             if (DoorContext.Visible)
                 DoorContext.Hide();
 
@@ -1089,8 +1089,8 @@ public sealed partial class WorldScreen
     /// </summary>
     private void OnRootMouseDown(MouseDownEvent e)
     {
-        //door context menu dismisses on any click outside its bounds — clicks on the menu itself
-        //are consumed by DoorContextMenu.OnClick and never reach here. swallow the event so the
+        //door context menu dismisses on any click outside its bounds — presses on the menu itself
+        //are consumed by PopupMenu.OnMouseDown and never reach here. swallow the event so the
         //same click doesn't ALSO kick off pathfinding/attack on the tile underneath.
         if (DoorContext.Visible && !DoorContext.ContainsPoint(e.ScreenX, e.ScreenY))
         {

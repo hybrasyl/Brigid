@@ -491,6 +491,11 @@ dlgframe.epf
   Purpose:    Dialog frame 9-patch borders (corners + edges for scalable dialogs)
   Palette:    gui 0
 
+popupbox.epf
+  Loaded by:  (none — the world context menus are PopupMenus that draw the frame.popup theme part, BRIG-125)
+  Purpose:    The frame of the aisling and door context menus
+  Palette:    gui 0
+
 butt001.epf
   Loaded by:  (none — every popup that drew it is rebuilt as a primitive, the last one in BRIG-122)
   Purpose:    Standard button spritesheet — OK/Cancel/Yes/No in normal+pressed states
@@ -675,7 +680,7 @@ msg.tbl
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm
 #
-# Standalone EPF files:      9 loaded (mouse, scroll, dlgframe, spelled, emot000, legends, skill001, skill003, spell001); butt001 is catalogued but no longer loaded
+# Standalone EPF files:      9 loaded (mouse, scroll, dlgframe, spelled, emot000, legends, skill001, skill003, spell001); butt001 and popupbox are catalogued but no longer loaded
 # Standalone SPF files:      15 (_nchatbk, _ninvs3, _nui_tb1, _nui_nat, _nemots, _nsettb, _nusersb, _nloadb0/1/2, DlgBack2, _nhk_bk, _nhk_m, _nhke00-13)
 # Palette files:             2  (gui multi-palette, gui06)
 # Data files:                1  (msg.tbl)
