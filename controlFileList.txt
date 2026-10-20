@@ -487,7 +487,7 @@ scroll.epf
   Palette:    gui 0
 
 dlgframe.epf
-  Loaded by:  DialogFrame.cs:115  (GetEpfImages); composited by DialogFrame.Composite for ItemTooltipControl and MarkdownView
+  Loaded by:  DialogFrame.cs:115  (GetEpfImages); composited by DialogFrame.Composite for MarkdownView (the item tooltip is a TooltipFrame since BRIG-125)
   Purpose:    Dialog frame 9-patch borders (corners + edges for scalable dialogs)
   Palette:    gui 0
 
