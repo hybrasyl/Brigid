@@ -119,6 +119,18 @@ public sealed class TextButton : UIPanel
 
     public void SetText(string text) => Label.Text = text;
 
+    /// <summary>
+    ///     Shows the hover or the pressed look with no mouse, for the primitive gallery. The button then takes no mouse
+    ///     input, so that the mouse does not set the state again.
+    /// </summary>
+    internal void ShowState(bool hovered, bool pressed)
+    {
+        IsHitTestVisible = false;
+        Hovered = hovered;
+        Pressed = pressed;
+        RefreshVisual();
+    }
+
     /// <summary>Tints the label (null restores the default white / disabled-grey behavior).</summary>
     public void SetTextColor(Color? color)
     {

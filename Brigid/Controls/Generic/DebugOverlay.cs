@@ -62,6 +62,7 @@ public static class DebugOverlay
         "num5 grab what a click hits, or drop   ctrl+num5 grab any element (labels, titles)",
         "num+ / num-   next / previous element under the grab point",
         "arrows move   shift+arrows resize   the change prints to the console",
+        "ctrl+g primitive gallery: every primitive and theme colour, with its role",
         "num/ hide these shortcuts"
     ];
 

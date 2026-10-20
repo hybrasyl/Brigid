@@ -53,6 +53,17 @@ public sealed class CheckBox : UIElement
     //the flat border is part of the look
     protected internal override Color? DrawnBorderColor => BorderColor is { } border ? ThemeColor(ThemeRoles.Border, border) : null;
 
+    /// <summary>
+    ///     Shows the hover look, or not, with no mouse, for the primitive gallery. The check box then takes no mouse input,
+    ///     so that the mouse does not set the state again.
+    /// </summary>
+    internal void ShowState(bool hovered)
+    {
+        IsHitTestVisible = false;
+        Hovered = hovered;
+        RefreshFill();
+    }
+
     private void RefreshFill() => BackgroundColor = Hovered ? DialogPalette.ButtonHoverFill : DialogPalette.ButtonIdleFill;
 
     public override void Draw(SpriteBatch spriteBatch)

@@ -856,6 +856,10 @@ public sealed class ChaosGame : Game
             //numpad 0 — restore all sub-toggles (escape hatch after muting individual layers)
             if (InputBuffer.WasKeyPressed(Keys.NumPad0))
                 DebugOverlay.ShowUiBoxes = DebugOverlay.ShowUiNames = DebugOverlay.ShowWorld = DebugOverlay.ShowPerf = true;
+
+            //ctrl+g — the primitive gallery: the reference sheet for the flat look, or for the installed theme
+            if ((InputBuffer.IsKeyHeld(Keys.LeftControl) || InputBuffer.IsKeyHeld(Keys.RightControl)) && InputBuffer.WasKeyPressed(Keys.G))
+                PrimitiveGallery.Toggle(Screens.ActiveScreen?.Root);
         }
 
         //f12 — screenshot
