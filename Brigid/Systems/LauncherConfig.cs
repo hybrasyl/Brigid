@@ -66,7 +66,7 @@ public static class LauncherConfig
     public static int? WindowMultiplier { get; set; }
 
     /// <summary>
-    ///     <c>%LOCALAPPDATA%\erisco\Brigid</c> (Windows), <c>~/.config/erisco/Brigid</c> (Linux/macOS) via
+    ///     <c>%LOCALAPPDATA%\Erisco\Brigid</c> (Windows), <c>~/.config/Erisco/Brigid</c> (Linux/macOS) via
     ///     <see cref="AppPaths" /> — the user-writable, cross-platform home shared by the Erisco toolset. Must live
     ///     <em>outside</em> the asset path because it is what tells the client where the asset path is.
     /// </summary>

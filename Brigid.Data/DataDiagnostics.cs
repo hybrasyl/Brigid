@@ -4,7 +4,7 @@ namespace Brigid.Data;
 ///     Minimal diagnostic seam for the data layer. <c>Brigid.Data</c> sits below <c>Brigid.Networking</c> (where
 ///     <c>NoticeDebugLog</c> lives), so it can't log directly; the client wires <see cref="Log" /> to its logger at
 ///     startup. Used to report best-effort IO failures that are caught (never rethrown) so a read-only/locked path can
-///     never crash the client.
+///     never crash the client, and by the layers above (Rendering) to report a corrupt asset that is skipped.
 /// </summary>
 public static class DataDiagnostics
 {

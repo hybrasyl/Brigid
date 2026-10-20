@@ -29,6 +29,9 @@ public sealed class LobbyLoginScreen : IScreen
     private const string CONNECTION_LOST = "The connection to the server was lost.";
     private const string NOT_CONNECTED = "The client is not connected to the server.";
 
+    //the screen is rebuilt on every return from the world; the notice shows once per process
+    private static bool AudioMissingNoticeShown;
+
     private readonly bool ReturningFromWorld;
     private bool AwaitingCharFinalize;
 
@@ -50,6 +53,7 @@ public sealed class LobbyLoginScreen : IScreen
     private bool PendingConfigSwitch;
     private OkPopupMessageControl LobbyLoginPopupMessage = null!;
     private OkPopupMessageControl MigrationPrompt = null!;
+    private AudioMissingNoticeControl AudioMissingNotice = null!;
     private CertificateTrustPromptControl TrustPrompt = null!;
     private InsecureConnectionPromptControl InsecurePrompt = null!;
 
@@ -217,11 +221,16 @@ public sealed class LobbyLoginScreen : IScreen
         MigrationPrompt.OnOk += OnMigrationImport;
         MigrationPrompt.OnCancel += OnMigrationSkip;
 
-        TrustPrompt = new CertificateTrustPromptControl { Name = "TrustPrompt" };
+        //added after MigrationPrompt at the same ZIndex, so it draws above it and tops the control stack
+        AudioMissingNotice = new AudioMissingNoticeControl(OperatingSystem.IsLinux()) { ZIndex = 2 };
+
+        //the connection prompts can open while a notice above is still up; keep them on top so the visible prompt
+        //is the one the control stack routes Enter/Escape to
+        TrustPrompt = new CertificateTrustPromptControl { Name = "TrustPrompt", ZIndex = 3 };
         TrustPrompt.OnTrusted += OnCertificateTrusted;
         TrustPrompt.OnDeclined += CertificateTrustStore.Decline;
 
-        InsecurePrompt = new InsecureConnectionPromptControl { Name = "InsecurePrompt" };
+        InsecurePrompt = new InsecureConnectionPromptControl { Name = "InsecurePrompt", ZIndex = 3 };
         InsecurePrompt.OnContinued += OnInsecureConnectionAccepted;
         InsecurePrompt.OnRefused += OnInsecureConnectionRefused;
 
@@ -254,6 +263,7 @@ public sealed class LobbyLoginScreen : IScreen
             Root.AddChild(PreviewPassword);
         Root.AddChild(LobbyLoginPopupMessage);
         Root.AddChild(MigrationPrompt);
+        Root.AddChild(AudioMissingNotice);
         Root.AddChild(TrustPrompt);
         Root.AddChild(InsecurePrompt);
 
@@ -263,15 +273,19 @@ public sealed class LobbyLoginScreen : IScreen
         WireRootInputHandlers();
 
         MaybeShowMigrationPrompt();
+        MaybeShowAudioMissingNotice();
 
-        if (ReturningFromWorld)
+        //a logout redirect leaves the client connected to the login server. A server that closes the connection at
+        //logout leaves no connection, and a login or a create would then wait for a reply that never comes, so start
+        //again from the lobby
+        if (ReturningFromWorld && (Game.Connection.State == ConnectionState.Login))
         {
             //already connected to login server via redirect — skip lobby handshake, show login directly
             StartPanel.SetButtonsEnabled(false);
             ShowLogin();
         } else
 
-            //fresh start — connect to lobby
+            //fresh start, or the server closed the connection at logout — connect to lobby
             BeginLobbyConnect();
     }
 
@@ -585,6 +599,17 @@ public sealed class LobbyLoginScreen : IScreen
     }
 
     private void OnLobbyLoginPopupMessageOk() => LobbyLoginPopupMessage.Hide();
+
+    //── once-per-process notice that the audio libraries are missing ──
+    private void MaybeShowAudioMissingNotice()
+    {
+        if (AudioMissingNoticeShown || !Game.SoundSystem.MixerLibraryMissing)
+            return;
+
+        AudioMissingNoticeShown = true;
+
+        AudioMissingNotice.Show();
+    }
 
     //── one-time legacy character-data import offer ──
 

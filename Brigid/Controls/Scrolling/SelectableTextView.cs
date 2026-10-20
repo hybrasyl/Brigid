@@ -87,4 +87,14 @@ public sealed class SelectableTextView : UIPanel
     ///     control, so keyboard events stop there instead of descending — it forwards them here.
     /// </summary>
     public void ForwardKey(KeyDownEvent e) => Label.OnKeyDown(e);
+
+    /// <summary>Raised on each left press in the text. See <see cref="UILabel.SelectionPressed" />.</summary>
+    public event Action? SelectionPressed
+    {
+        add => Label.SelectionPressed += value;
+        remove => Label.SelectionPressed -= value;
+    }
+
+    /// <summary>Drops the selection, leaving the text and the scroll position unchanged.</summary>
+    public void ClearSelection() => Label.ClearSelection();
 }

@@ -421,6 +421,14 @@ public sealed class FontEngine : ITextMeasurer
     ///     what autofit needs, since the default tracking is what pushes glyph ink into collision.
     /// </summary>
     public int MeasureWidth(string text, int size, FontStyle style, float extraSpacing)
+        => (int)MathF.Round(MeasureWidthExact(text, size, style, extraSpacing));
+
+    /// <summary>
+    ///     As <see cref="MeasureWidth(string, int, FontStyle, float)" />, unrounded. A sum of per-glyph widths must add
+    ///     these: off 1x the native advances divide to half pixels, and rounding each one (to even) loses up to half a
+    ///     pixel per glyph, so a summed line came out narrower than the same line measured whole and drawn.
+    /// </summary>
+    public float MeasureWidthExact(string text, int size, FontStyle style, float extraSpacing)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
@@ -430,10 +438,9 @@ public sealed class FontEngine : ITextMeasurer
         var (face, faceStyle) = Resolve(style);
 
         if ((LayoutScaleX == 1f) && (LayoutScaleY == 1f))
-            return (int)MathF.Round(
-                face.GetFont(faceStyle, size)
-                    .MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING + extraSpacing)
-                    .X);
+            return face.GetFont(faceStyle, size)
+                       .MeasureString(sanitized, characterSpacing: DEFAULT_TRACKING + extraSpacing)
+                       .X;
 
         //mirror the native draw: measure at the native pixel size with native-scaled tracking, then divide back into
         //virtual space. This is what makes the measured width equal the drawn width glyph-for-glyph.
@@ -442,7 +449,7 @@ public sealed class FontEngine : ITextMeasurer
                               .MeasureString(sanitized, characterSpacing: (DEFAULT_TRACKING + extraSpacing) * LayoutScaleX)
                               .X;
 
-        return (int)MathF.Round(nativeWidth / LayoutScaleX);
+        return nativeWidth / LayoutScaleX;
     }
 
     /// <summary>The line height in virtual px of <paramref name="style" /> at pixel size <paramref name="size" />.</summary>

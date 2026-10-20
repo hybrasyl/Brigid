@@ -55,15 +55,19 @@ public static class DatArchives
         Npcbase = Load(nameof(Npcbase));
     }
 
+    /// <summary>
+    ///     Opens <c>{key}.dat</c> from the data directory, or <c>npc/npcbase.dat</c> for <c>npcbase</c>. The key and the
+    ///     <c>npc</c> folder match the names on disk whatever their case, so <c>Cious</c> opens <c>cious.dat</c> or
+    ///     <c>Cious.dat</c>.
+    /// </summary>
     public static DataArchive Load(string key)
     {
         key = key.WithExtension(".dat");
 
-        if (key.StartsWithI("npcbase"))
-            return DataArchive.FromFile(Path.Combine(DataContext.DataPath, "npc", key));
+        var path = key.StartsWithI("npcbase")
+            ? DataPathResolver.Resolve(DataContext.DataPath, "npc", key)
+            : DataPathResolver.Resolve(DataContext.DataPath, key);
 
-        var archive = DataArchive.FromFile(Path.Combine(DataContext.DataPath, key));
-
-        return archive;
+        return DataArchive.FromFile(path);
     }
 }

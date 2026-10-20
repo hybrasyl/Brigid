@@ -52,6 +52,11 @@ public sealed class ChaosGame : Game
     ///     loader can't parse our BMP and falls back to its default icon, so we decode a PNG with SkiaSharp and set the
     ///     icon directly via SDL. Best-effort: any missing resource/handle just leaves MonoGame's default in place.
     /// </summary>
+    /// <remarks>
+    ///     On Windows and Linux the icon is the round medallion, the house icon there. On macOS, SDL sets the window icon
+    ///     as the application's Dock icon, and MonoGame sets its own logo when it creates the window. So on macOS the
+    ///     icon is the inset tile, the same art as the bundle's <c>Brigid.icns</c>.
+    /// </remarks>
     private void SetWindowIcon()
     {
         var window = Window.Handle;
@@ -59,7 +64,9 @@ public sealed class ChaosGame : Game
         if (window == nint.Zero)
             return;
 
-        using var stream = typeof(ChaosGame).Assembly.GetManifestResourceStream("BrigidIcon.png");
+        using var stream = typeof(ChaosGame).Assembly.GetManifestResourceStream(
+            OperatingSystem.IsMacOS() ? "BrigidIconMac.png" :
+            OperatingSystem.IsLinux() ? "BrigidIconLinux.png" : "BrigidIcon.png");
 
         if (stream is null)
             return;
@@ -107,6 +114,7 @@ public sealed class ChaosGame : Game
     private readonly GraphicsDeviceManager Graphics;
     private static string MetaFilePath => AppPaths.MetaFileDir;
     private readonly Dictionary<string, uint> MetaPendingChecksums = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, int> MetaRequestCounts = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<IServerPacket> PacketBuffer = [];
     private int CursorOffsetX;
     private int CursorOffsetY;
@@ -644,6 +652,13 @@ public sealed class ChaosGame : Game
     }
 
     /// <summary>
+    ///     Brings the game window to the front and makes it the key window. An external dialog that took activation
+    ///     does not always hand it back, and on macOS SDL hides the cursor through cursor rects that only the key
+    ///     window applies.
+    /// </summary>
+    internal void RaiseWindow() => Sdl.SDL_RaiseWindow(Window.Handle);
+
+    /// <summary>
     ///     Cycles the window through integer multipliers of the virtual resolution (640×480).
     ///     Advances to the next multiplier if it fits on the current monitor, otherwise wraps to 1×.
     /// </summary>
@@ -859,28 +874,7 @@ public sealed class ChaosGame : Game
     }
 
     #region Metadata Sync
-    private uint ComputeLocalMetaCheckSum(string name)
-    {
-        var filePath = Path.Combine(MetaFilePath, name);
-
-        if (!File.Exists(filePath))
-            return 0;
-
-        try
-        {
-            using var fileStream = File.OpenRead(filePath);
-            using var zlibStream = new ZLibStream(fileStream, CompressionMode.Decompress);
-            using var memoryStream = new MemoryStream();
-
-            zlibStream.CopyTo(memoryStream);
-
-            //retail + Hybrasyl both send standard (inverted) CRC-32 — verified against the retail checksum routine
-            return CRC32.Calculate(memoryStream.ToArray());
-        } catch
-        {
-            return 0;
-        }
-    }
+    private const int MAX_METAFILE_REQUESTS = 3;
 
     private void HandleMetaData(ServerPackets.MetafilePacket pkt)
     {
@@ -900,7 +894,7 @@ public sealed class ChaosGame : Game
 
     private void HandleMetaDataCheckSums(IList<ServerPackets.MetafileEntry>? collection)
     {
-        if (collection is null || (collection.Count == 0))
+        if (collection is null)
         {
             OnMetaDataSyncComplete?.Invoke();
 
@@ -908,18 +902,34 @@ public sealed class ChaosGame : Game
         }
 
         MetaPendingChecksums.Clear();
+        MetaRequestCounts.Clear();
         MetaSyncStarted = true;
+
+        var listed = new List<ServerPackets.MetafileEntry>(collection.Count);
 
         foreach (var info in collection)
         {
-            var localCheckSum = ComputeLocalMetaCheckSum(info.Name);
-
-            if (localCheckSum != info.Checksum)
-                MetaPendingChecksums[info.Name] = info.Checksum;
+            if (MetaFileCache.IsSafeName(info.Name))
+                listed.Add(info);
+            else
+                NoticeDebugLog.Write($"[meta] ignored a metafile checksum with an unsafe name: \"{info.Name}\"");
         }
 
+        //the list is the server's whole catalog, so a local file that it does not name is stale. An empty list empties
+        //the cache. Retail clears only its store in memory, but MetaFileRepository reads every file in the folder, so a
+        //file left on disk stays in use.
+        foreach (var name in MetaFileCache.PruneUnlisted(MetaFilePath, listed.Select(info => info.Name)))
+            NoticeDebugLog.Write($"[meta] deleted a metafile the server no longer lists: {name}");
+
+        foreach (var info in listed)
+            if (MetaFileCache.GetChecksum(MetaFilePath, info.Name) != info.Checksum)
+                MetaPendingChecksums[info.Name] = info.Checksum;
+
         foreach (var name in MetaPendingChecksums.Keys)
+        {
+            MetaRequestCounts[name] = 1;
             Connection.SendMetaDataRequest(MetaDataRequestType.DataByName, name);
+        }
 
         if (MetaPendingChecksums.Count == 0)
             OnMetaDataSyncComplete?.Invoke();
@@ -927,11 +937,48 @@ public sealed class ChaosGame : Game
 
     private void HandleMetaDataFileData(ServerPackets.MetafileDataPacket info)
     {
-        if (string.IsNullOrEmpty(info.Name) || (info.Data.Length == 0))
+        if (string.IsNullOrEmpty(info.Name))
             return;
 
-        DataDiagnostics.Try(() => File.WriteAllBytes(Path.Combine(MetaFilePath, info.Name), info.Data), "write metafile");
+        //never pending: the checksum list drops an unsafe name before the client requests anything
+        if (!MetaFileCache.IsSafeName(info.Name))
+        {
+            NoticeDebugLog.Write($"[meta] ignored a metafile with an unsafe name: \"{info.Name}\"");
+
+            return;
+        }
+
+        if (MetaPendingChecksums.TryGetValue(info.Name, out var expected))
+        {
+            var requests = MetaRequestCounts.GetValueOrDefault(info.Name);
+
+            switch (MetaFileCache.CheckReceived(info.Data, expected, requests, MAX_METAFILE_REQUESTS))
+            {
+                case MetaFileReceipt.Valid:
+                    MetaFileCache.TryWrite(MetaFilePath, info.Name, info.Data);
+
+                    break;
+
+                case MetaFileReceipt.Retry:
+                    NoticeDebugLog.Write($"[meta] {info.Name} does not match its checksum. Requesting it again ({requests + 1} of {MAX_METAFILE_REQUESTS}).");
+                    MetaRequestCounts[info.Name] = requests + 1;
+                    Connection.SendMetaDataRequest(MetaDataRequestType.DataByName, info.Name);
+
+                    return;
+
+                //a bad entry completes after the last request, so one bad entry cannot stop the sync
+                case MetaFileReceipt.GiveUp:
+                    NoticeDebugLog.Write($"[meta] {info.Name} does not match its checksum after {requests} requests. The cache keeps its old copy, if it has one.");
+
+                    break;
+            }
+        }
+        //a file that the client did not request has no checksum to compare, so it is written unchecked
+        else if (info.Data.Length > 0)
+            MetaFileCache.TryWrite(MetaFilePath, info.Name, info.Data);
+
         MetaPendingChecksums.Remove(info.Name);
+        MetaRequestCounts.Remove(info.Name);
 
         if (MetaSyncStarted && (MetaPendingChecksums.Count == 0))
             OnMetaDataSyncComplete?.Invoke();

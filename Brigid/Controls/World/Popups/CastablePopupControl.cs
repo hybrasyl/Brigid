@@ -145,6 +145,7 @@ public sealed class CastablePopupControl : CenteredModalPanel
                 MaxLength = CHANT_MAX_LENGTH,
                 Visible = false,
                 FocusedBackgroundColor = DialogPalette.RowHoverFill,
+                VerticalAlignment = VerticalAlignment.Center,
                 //lets Tab/Shift+Tab traverse the lines through the panel's own tab-stop walk; without it the
                 //focused box swallows Tab outright.
                 IsTabStop = true

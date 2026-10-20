@@ -1,7 +1,9 @@
 #region
 using Brigid.Collections;
 using Brigid.Data;
+using Brigid.Networking;
 using Brigid.Systems;
+using Brigid.Systems.Keybinds;
 using Chaos.DarkAges.Definitions;
 using Chaos.Geometry;
 using Chaos.Geometry.Abstractions;
@@ -20,6 +22,10 @@ namespace Brigid.Screens;
 
 public sealed partial class WorldScreen
 {
+    //a map-data wait with no new row for this long ends: a server that drops or short-streams the rows must not keep the
+    //loading bar on the screen with no limit
+    private const float MAP_DATA_TIMEOUT_MS = 10_000f;
+
     #region Map Assembly
     private void HandleUserId(uint id) => WorldState.PlayerEntityId = id;
 
@@ -28,8 +34,9 @@ public sealed partial class WorldScreen
         WorldMap.HideMap();
         //same map (refresh) — skip expensive teardown, just clear transient entity state. checksum must
         //also match: a server-side map edit reuses the same id but changes the bytes, so a mismatch means
-        //the cached MapFile is stale and we have to take the full reload path.
-        if ((args.MapId == CurrentMapId) && (args.Checksum == CurrentMapCheckSum) && MapFile is not null)
+        //the cached MapFile is stale and we have to take the full reload path. A map whose data timed out also takes the
+        //full reload path, so a refresh asks for it again.
+        if ((args.MapId == CurrentMapId) && (args.Checksum == CurrentMapCheckSum) && MapFile is not null && !MapDataIncomplete)
         {
             ClearTransientState();
 
@@ -60,6 +67,7 @@ public sealed partial class WorldScreen
             args.Checksum);
         MapPreloaded = false;
         AwaitingMapData = false;
+        MapDataIncomplete = false;
         CurrentMapId = (short)args.MapId;
         CurrentMapCheckSum = args.Checksum;
         CurrentMapFlags = (MapFlags)args.Flags;
@@ -71,6 +79,8 @@ public sealed partial class WorldScreen
             MapFile = new MapFile(args.Width, args.Height);
             InitializeEmptyTiles(MapFile);
             AwaitingMapData = true;
+            MapDataIdleMs = 0f;
+            MapDataRowsReceived = 0;
             Game.Connection.RequestMapData();
         }
 
@@ -110,8 +120,12 @@ public sealed partial class WorldScreen
 
         var y = args.RowIndex;
 
-        if (y >= MapFile.Height)
+        //ignore rows that arrive after the wait timed out: the pathfinder and tab map are built from the rows before it
+        if ((y >= MapFile.Height) || MapDataIncomplete)
             return;
+
+        MapDataIdleMs = 0f;
+        MapDataRowsReceived++;
 
         //each tile is 6 bytes: bg(2 be), lfg(2 be), rfg(2 be)
         var data = args.RowData;
@@ -139,6 +153,30 @@ public sealed partial class WorldScreen
             SaveMapFile(CurrentMapId);
             FinalizeMapLoad();
         }
+    }
+
+    /// <summary>
+    ///     Ends a map-data wait that received no row for <see cref="MAP_DATA_TIMEOUT_MS" />. The map loads with the rows
+    ///     that arrived and is not saved. A refresh or the next entry to the map requests it again.
+    /// </summary>
+    private void TickMapDataWatchdog(float elapsedMs)
+    {
+        if (!AwaitingMapData)
+            return;
+
+        MapDataIdleMs += elapsedMs;
+
+        if (MapDataIdleMs < MAP_DATA_TIMEOUT_MS)
+            return;
+
+        AwaitingMapData = false;
+        MapDataIncomplete = true;
+
+        NoticeDebugLog.Write(
+            $"[map] map data for map {CurrentMapId} stopped after {MapDataRowsReceived} of {MapFile?.Height} rows; the map loads without the rest");
+        var refreshKey = KeybindCatalog.Format(Keybinds.Effective(CommandId.World_Refresh).Primary);
+        WorldState.Chat.AddOrangeBarMessage($"The map did not load completely. Press {refreshKey} to load it again.");
+        FinalizeMapLoad();
     }
 
     private void HandleMapLoadComplete()

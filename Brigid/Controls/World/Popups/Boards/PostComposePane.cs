@@ -91,10 +91,6 @@ internal sealed class PostComposePane : UIPanel
             IsMultiLine = true,
             IsSelectable = true,
             MaxLength = BODY_MAX_LENGTH,
-            PaddingLeft = 0,
-            PaddingRight = 0,
-            PaddingTop = 0,
-            PaddingBottom = 0,
             IsTabStop = true
         };
         BodyBox.SetForegroundRole(ThemeRoles.InputText, TextColors.Default);
@@ -150,6 +146,7 @@ internal sealed class PostComposePane : UIPanel
             Height = FIELD_H,
             MaxLength = maxLength,
             FocusedBackgroundColor = DialogPalette.RowHoverFill,
+            VerticalAlignment = VerticalAlignment.Center,
             IsTabStop = true
         };
 

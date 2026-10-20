@@ -556,6 +556,22 @@ public sealed class NpcSessionControl : PrefabPanel
         UpdateScrollButtons();
     }
 
+    public override void OnMouseScroll(MouseScrollEvent e)
+    {
+        //the wheel over the message bar scrolls dialog text that overflows, as the arrow buttons do; wheel-up moves toward
+        //the top. A notch over a menu that cannot scroll comes up here too, and must not scroll the text. The notch is
+        //always consumed, as in ScrollView, so it does not scroll a panel under the dialog
+        var textArea = MessageBarImage ?? (UIElement)DialogTextLabel;
+
+        if (DialogScroll.CanScroll && textArea.ContainsPoint(e.ScreenX, e.ScreenY))
+        {
+            DialogScroll.WheelBy(e.Delta);
+            UpdateScrollButtons();
+        }
+
+        e.Handled = true;
+    }
+
     private void SetDialogText(string? text)
     {
         DialogTextLabel.Text = text ?? string.Empty;

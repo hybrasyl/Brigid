@@ -11,7 +11,7 @@ namespace Brigid.Controls.World.Popups.Boards;
 /// <summary>
 ///     The read view for one post — the single pane replacing both <c>ArticleReadControl</c> (<c>_narti</c>) and
 ///     <c>MailReadControl</c> (<c>_nmailr</c>), which differed only by a Reply button the modal now owns. A header
-///     line (author · date · subject) over a scrollable, selectable body.
+///     line (author · date · subject) over a scrollable body. The subject and the body are both selectable.
 /// </summary>
 internal sealed class PostReadPane : UIPanel
 {
@@ -25,6 +25,9 @@ internal sealed class PostReadPane : UIPanel
     private readonly UILabel DateLabel;
     private readonly UILabel SubjectLabel;
     private readonly SelectableTextView Body;
+
+    //the subject and the body are each selectable; keys go to the one pressed last, and only that one keeps a selection
+    private bool SubjectHasKeys;
 
     /// <summary>The post being read — the cursor for the modal's Prev/Next/Delete/Reply actions.</summary>
     public short CurrentPostId { get; private set; }
@@ -48,11 +51,27 @@ internal sealed class PostReadPane : UIPanel
         AuthorLabel = AddHeader(0, AUTHOR_W, ThemeRoles.TextTitle, DialogPalette.Title);
         DateLabel = AddHeader(dateX, DATE_W, ThemeRoles.TextTitle, DialogPalette.Title);
         SubjectLabel = AddHeader(subjectX, Math.Max(0, pane.Width - subjectX), ThemeRoles.Text, LegendColors.White);
+        SubjectLabel.IsSelectable = true;
+        SubjectLabel.IsHitTestVisible = true;
+        SubjectLabel.SelectionPressed += OnSubjectPressed;
 
         var bodyTop = HEADER_H + HEADER_GAP;
 
         Body = new SelectableTextView(new Rectangle(0, bodyTop, pane.Width, pane.Height - bodyTop));
+        Body.SelectionPressed += OnBodyPressed;
         AddChild(Body);
+    }
+
+    private void OnSubjectPressed()
+    {
+        SubjectHasKeys = true;
+        Body.ClearSelection();
+    }
+
+    private void OnBodyPressed()
+    {
+        SubjectHasKeys = false;
+        SubjectLabel.ClearSelection();
     }
 
     private UILabel AddHeader(int x, int width, string role, Color fallback)
@@ -91,16 +110,29 @@ internal sealed class PostReadPane : UIPanel
         CurrentAuthor = author;
         EnablePrev = enablePrev;
 
+        SubjectHasKeys = false;
         AuthorLabel.Text = author;
         DateLabel.Text = $"{month}/{day}";
         SubjectLabel.Text = subject;
 
         Body.SetText(message);
+
+        //a label resets its selection only when its text changes; a reply often keeps the subject, and a step to it
+        //must not keep the old highlight
+        SubjectLabel.ClearSelection();
+        Body.ClearSelection();
     }
 
     /// <summary>
-    ///     Routes a key to the selectable body so Ctrl+C / select-all / caret navigation work. The modal is the top
-    ///     control, so keyboard events stop there instead of descending to the label.
+    ///     Routes a key to the subject or the body, whichever was pressed last, so Ctrl+C / select-all / caret
+    ///     navigation work. The modal is the top control, so keyboard events stop there instead of descending to the
+    ///     labels.
     /// </summary>
-    public void ForwardKey(KeyDownEvent e) => Body.ForwardKey(e);
+    public void ForwardKey(KeyDownEvent e)
+    {
+        if (SubjectHasKeys)
+            SubjectLabel.OnKeyDown(e);
+        else
+            Body.ForwardKey(e);
+    }
 }

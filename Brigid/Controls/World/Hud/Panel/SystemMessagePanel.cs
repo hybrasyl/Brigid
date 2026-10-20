@@ -1,4 +1,5 @@
 #region
+using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
@@ -28,20 +29,21 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
     private Rectangle DisplayBounds;
     private Rectangle ExpandedDisplayBounds;
-    private int LastHistoryCount;
+    //set by the Chat events, not by a change in History.Count: the history is a ring buffer, and its count stops
+    //changing when the buffer is full
+    private bool HistoryChanged = true;
     private UILabel[] Lines;
     private int MaxVisibleLines;
-    private int RenderedHistoryCount = -1;
     private int RenderedScrollOffset = -1;
 
-    public SystemMessagePanel(Rectangle displayBounds, Rectangle panelBounds, IReadOnlyList<Chat.OrangeBarMessage> history)
+    public SystemMessagePanel(Rectangle displayBounds, Rectangle panelBounds)
     {
         Name = "MessageHistory";
         NormalDisplayBounds = displayBounds;
         DisplayBounds = displayBounds;
         PanelOriginX = panelBounds.X;
         PanelOriginY = panelBounds.Y;
-        History = history;
+        History = WorldState.Chat.GetOrangeBarHistory();
 
         Background = UiRenderer.Instance!.GetSpfTexture("_nchatbk.spf");
 
@@ -80,6 +82,9 @@ public sealed class SystemMessagePanel : ExpandablePanel
         Model.Changed += _ => RenderedScrollOffset = -1;
 
         AddChild(Bar);
+
+        WorldState.Chat.OrangeBarMessageAdded += OnOrangeBarMessageAdded;
+        WorldState.Chat.Cleared += OnChatCleared;
     }
 
     /// <summary>
@@ -130,12 +135,23 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
     //labels are children — drawn automatically by base.draw()
 
+    public override void Dispose()
+    {
+        WorldState.Chat.OrangeBarMessageAdded -= OnOrangeBarMessageAdded;
+        WorldState.Chat.Cleared -= OnChatCleared;
+
+        base.Dispose();
+    }
+
+    private void OnChatCleared() => HistoryChanged = true;
+
+    private void OnOrangeBarMessageAdded(Chat.OrangeBarMessage _) => HistoryChanged = true;
+
     private void RefreshDisplay()
     {
-        if ((History.Count == RenderedHistoryCount) && (Model.Offset == RenderedScrollOffset))
+        if (Model.Offset == RenderedScrollOffset)
             return;
 
-        RenderedHistoryCount = History.Count;
         RenderedScrollOffset = Model.Offset;
 
         var maxLines = Math.Min(MaxVisibleLines, Lines.Length);
@@ -216,14 +232,16 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
         base.Update(gameTime);
 
-        if (History.Count != LastHistoryCount)
+        if (HistoryChanged)
         {
             var wasAtBottom = Model.Offset == 0;
-            LastHistoryCount = History.Count;
+            HistoryChanged = false;
+            RenderedScrollOffset = -1;
 
             Model.SetMetrics(History.Count, MaxVisibleLines);
 
-            //stick to the bottom when already there; otherwise keep the same lines-from-bottom offset
+            //stick to the bottom when already there; otherwise keep the same lines-from-bottom offset. The offset counts
+            //from the newest line, so an entry evicted from the full buffer needs no change to it
             if (wasAtBottom)
                 Model.ScrollToStart();
         }
