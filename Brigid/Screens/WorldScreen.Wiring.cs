@@ -745,6 +745,7 @@ public sealed partial class WorldScreen
         PauseMenu.SetViewportBounds(viewport);
         WorldList.SetViewportBounds(viewport);
         MarkdownNotice.SetViewportBounds(viewport);
+        TextPopup.SetViewportBounds(viewport);
 
         FollowPlayerCamera();
 

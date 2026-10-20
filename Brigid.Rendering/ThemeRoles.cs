@@ -35,6 +35,7 @@ public static class ThemeRoles
     public const string SliderTrack = "slider.track";
     public const string SliderFill = "slider.fill";
     public const string SliderThumb = "slider.thumb";
+    public const string FrameSign = "frame.sign";
 
     //colours
     public const string Text = "text";

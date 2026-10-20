@@ -183,6 +183,25 @@ public abstract class CenteredModalPanel : FramePanel
 
     protected void SetTitle(string title) => TitleLabel.Text = title;
 
+    //false while a subclass shows a second look with its own chrome
+    private bool TitleBandShown = true;
+
+    /// <summary>
+    ///     True (the default) when the panel shows its title band and the two dividers. A subclass with a second look that
+    ///     draws its own chrome (the text popup's wooden sign) sets it to false. The bottom-bar buttons do not change; the
+    ///     subclass hides them itself.
+    /// </summary>
+    protected bool ShowsTitleBand
+    {
+        get => TitleBandShown;
+
+        set
+        {
+            TitleBandShown = value;
+            TitleLabel.Visible = value;
+        }
+    }
+
     /// <summary>Re-centers the panel within an arbitrary viewport rect (typically the HUD's play area).</summary>
     public void SetViewportBounds(Rectangle viewport)
     {
@@ -190,7 +209,8 @@ public abstract class CenteredModalPanel : FramePanel
         CenterInViewport();
     }
 
-    private void CenterInViewport()
+    /// <summary>Centers the panel in its viewport again, for a subclass that changes its size while it is open.</summary>
+    protected void CenterInViewport()
     {
         X = Viewport.X + (Viewport.Width - Width) / 2;
         Y = Viewport.Y + (Viewport.Height - Height) / 2;
@@ -274,7 +294,7 @@ public abstract class CenteredModalPanel : FramePanel
     {
         base.Draw(spriteBatch);
 
-        if (!Visible)
+        if (!Visible || !ShowsTitleBand)
             return;
 
         //dividers framing the title band and the bottom action bar (drawn over the fill, inset by PADDING like

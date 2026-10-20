@@ -561,6 +561,7 @@ public sealed partial class WorldScreen : IScreen
         {
             ZIndex = 2
         };
+        TextPopup.SetViewportBounds(viewport);
 
         MarkdownNotice = new MarkdownView(viewport)
         {

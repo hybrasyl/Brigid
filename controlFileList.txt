@@ -471,12 +471,12 @@ scroll.epf
   Palette:    gui 0
 
 dlgframe.epf
-  Loaded by:  DialogFrame.cs:115  (GetEpfImages); composited by DialogFrame.Composite for TextPopupControl, SelfProfileTextEditorControl, ItemTooltipControl and MarkdownView
+  Loaded by:  DialogFrame.cs:115  (GetEpfImages); composited by DialogFrame.Composite for SelfProfileTextEditorControl, ItemTooltipControl and MarkdownView
   Purpose:    Dialog frame 9-patch borders (corners + edges for scalable dialogs)
   Palette:    gui 0
 
 butt001.epf
-  Loaded by:  TextPopupControl.cs:70-71, SelfProfileTextEditorControl.cs:60-63  (GetEpfTexture)
+  Loaded by:  SelfProfileTextEditorControl.cs:60-63  (GetEpfTexture)
   Purpose:    Standard button spritesheet — OK/Cancel/Yes/No in normal+pressed states
   Palette:    gui 0
 
@@ -515,7 +515,7 @@ spell001.epf
 # ── SPF Files (from Setoa) ─────────────────────────────────────────────────────
 
 DlgBack2.spf
-  Loaded by:  TextPopupControl.cs:101, SelfProfileTextEditorControl.cs:48  (GetSpfImage), FramedDialogPanelBase.cs:188  (GetSpfTexture)
+  Loaded by:  SelfProfileTextEditorControl.cs:48  (GetSpfImage), FramedDialogPanelBase.cs:188  (GetSpfTexture)
   Purpose:    Dialog background tile — tiled to fill scalable dialog bodies
   Palette:    Embedded (SPF self-contained)
 

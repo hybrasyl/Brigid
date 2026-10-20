@@ -21,6 +21,9 @@ public class ServerGreetingTests
     public void TheGreetingIsModal() => Assert.True(new ServerGreetingControl().IsModal);
 
     [Fact]
+    public void EveryChildHasAUniqueName() => UiAssert.NamedTree(new ServerGreetingControl());
+
+    [Fact]
     public void EnterAcceptsTheGreeting()
     {
         var greeting = new ServerGreetingControl();
