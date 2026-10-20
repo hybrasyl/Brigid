@@ -194,6 +194,22 @@ _nui_fm.txt
   Images referenced by controls:
     _nui_fm.epf/.spf     — Tab page background
 
+_nui_ske.txt
+  Class:    (retired) — replaced by AbilityMetadataDetailsControl on StatusBookDetailsPanel
+  File:     Controls/World/Popups/Profile/AbilityMetadataDetailsControl.cs (primitive, no prefab)
+  Purpose:  Skill/spell detail popup — icon, level, prerequisites, stat requirements, description
+  Images referenced by controls:
+    (not catalogued while the panel was live)
+
+_nui_eve.txt
+  Class:    (retired) — replaced by EventMetadataDetailsControl on StatusBookDetailsPanel
+  File:     Controls/World/Popups/Profile/EventMetadataDetailsControl.cs (primitive, no prefab)
+  Purpose:  Event detail popup — state icon, level range, prerequisite, reward, description
+  Images referenced by controls:
+    (not catalogued while the panel was live)
+  Also manually loaded:
+    leicon.epf           — Event state icons (content; still loaded by the primitive popup)
+
 # ── World Popups & Dialogs ─────────────────────────────────────────────────────
 
 _nexch.txt
@@ -647,12 +663,12 @@ msg.tbl
 # SECTION 5: SUMMARY — QUICK REFERENCE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Control .txt files:        42 total (19 retired — see the (retired) markers in Section 1)
+# Control .txt files:        44 total (21 retired — see the (retired) markers in Section 1)
 #   Login flow:              _nsvr
 #   Main HUD:                _nbk_s, _nstatus
 #   Self-profile tabs:       _nui, _nui_eq, _nui_sk, _nui_dr, _nui_ev, _nui_al, _nui_fm
 #   Popups/dialogs:          _nexch, _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, _nhotkem, _nhotkey
-#   Retired (primitive now): _nmoney, litemex, _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook,
+#   Retired (primitive now): _nmoney, litemex, _nui_ske, _nui_eve, _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook,
 #                            _noptdlg, _nmacro, _nsett, _nfriend, _nstart, _nlogin, _ncreate, _nagree, _npw
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm

@@ -1,97 +1,76 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Data.Models;
-using Brigid.Extensions;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.World.Popups.Profile;
 
 /// <summary>
-///     Detail popup for an event entry (_nui_eve prefab). Shows state icon from leicon.epf, name, circle info,
-///     prerequisites, reward, and description (Result when completed, Summary otherwise). Dismisses on any click or
-///     Escape.
+///     The detail popup for an event entry in the status book (BRIG-122): the state icon from <c>leicon.epf</c> (game
+///     content), the level range, the prerequisite, the reward, and the description (the result when the event is
+///     completed, else the summary). A caption hides when its value is empty.
 /// </summary>
-public sealed class EventMetadataDetailsControl : PrefabPanel
+public sealed class EventMetadataDetailsControl : StatusBookDetailsPanel
 {
-    private readonly UILabel? DescLabel;
-    private readonly UIImage? IconImage;
-    private readonly UILabel? LevelLabel;
-    private readonly UILabel? MustLabel;
-    private readonly UILabel? NameLabel;
-    private readonly UILabel? RewardLabel;
+    private readonly UILabel LevelLabel;
+    private readonly UILabel PreReqCaption;
+    private readonly UILabel PreReqLabel;
+    private readonly UILabel RewardCaption;
+    private readonly UILabel RewardLabel;
 
     public EventMetadataDetailsControl()
-        : base("_nui_eve")
+        : base("eventdetails", 3, 0)
     {
-        Visible = false;
-        IsModal = true;
-        UsesControlStack = true;
+        //each label is made here with a literal name, so that the primitives report can read it
+        LevelLabel = AddRow(new UILabel { Name = "level" });
+        PreReqCaption = AddCaption(new UILabel { Name = "prereq_caption", Text = "Requires" });
+        PreReqLabel = AddRow(new UILabel { Name = "prereq" });
+        RewardCaption = AddCaption(new UILabel { Name = "reward_caption", Text = "Reward" });
+        RewardLabel = AddRow(new UILabel { Name = "reward" });
 
-        IconImage = CreateImage("ICON");
-        NameLabel = CreateLabel("NAME");
-        NameLabel?.ForegroundColor = LegendColors.White;
-        LevelLabel = CreateLabel("LEV");
-        LevelLabel?.ForegroundColor = LegendColors.White;
-        LevelLabel?.Width = 150;
-        
-        MustLabel = CreateLabel("MUST");
-        MustLabel?.ForegroundColor = LegendColors.White;
-        RewardLabel = CreateLabel("REWARD");
-        RewardLabel?.ForegroundColor = LegendColors.White;
-        DescLabel = CreateLabel("DESC");
-        DescLabel?.ForegroundColor = LegendColors.White;
-        DescLabel?.WordWrap = true;
+        LayoutContent();
     }
 
-    private static string FormatPrerequisites(EventMetadataEntry entry)
-        => !string.IsNullOrEmpty(entry.PreRequisiteId) ? entry.PreRequisiteId : string.Empty;
+    //the level range, then the prerequisite and the reward with their captions, beside the icon
+    protected override void LayoutContent()
+    {
+        base.LayoutContent();
 
-    /// <summary>
-    ///     Populates and shows the detail view for the given event entry.
-    /// </summary>
+        var captionW = CaptionWidth(PreReqCaption, RewardCaption);
+
+        PlaceRow(LevelLabel, HeaderX, HeaderY, HeaderWidth);
+        PlaceRow(PreReqCaption, HeaderX, HeaderY + ROW_H, captionW);
+        PlaceRow(PreReqLabel, HeaderX + captionW, HeaderY + ROW_H, HeaderWidth - captionW);
+        PlaceRow(RewardCaption, HeaderX, HeaderY + 2 * ROW_H, captionW);
+        PlaceRow(RewardLabel, HeaderX + captionW, HeaderY + 2 * ROW_H, HeaderWidth - captionW);
+    }
+
+    /// <summary>Shows the popup for <paramref name="entry" /> in <paramref name="state" />, centered in <paramref name="viewport" />.</summary>
     public void ShowEntry(EventMetadataEntry entry, EventState state, Rectangle viewport)
     {
-        this.CenterIn(viewport);
+        Populate(entry);
 
-        NameLabel?.Text = entry.Title;
-
-        LevelLabel?.Text = entry.Page >= 6 ? "master" : $"{entry.Page} level range";
-
-        MustLabel?.Text = FormatPrerequisites(entry);
-
-        RewardLabel?.Text = entry.Reward;
-
-        DescLabel?.Text = state == EventState.Completed ? entry.Result : entry.Summary;
-
-        if (IconImage is not null)
+        var iconFrame = state switch
         {
-            var iconFrame = state switch
-            {
-                EventState.Completed => 0,
-                EventState.Available => 1,
-                _                    => 2
-            };
+            EventState.Completed => 0,
+            EventState.Available => 1,
+            _                    => 2
+        };
 
-            IconImage.Texture = UiRenderer.Instance!.GetEpfTexture("leicon.epf", iconFrame);
-        }
+        Icon.Texture = UiRenderer.Instance!.GetEpfTexture("leicon.epf", iconFrame);
+        Icon.TextureOffset = Vector2.Zero;
 
-        Show();
+        ShowEntry(entry.Title, state == EventState.Completed ? entry.Result : entry.Summary, viewport);
     }
 
-    public override void OnKeyDown(KeyDownEvent e)
+    /// <summary>Sets the rows for <paramref name="entry" />. Internal for the tests.</summary>
+    internal void Populate(EventMetadataEntry entry)
     {
-        if (e.Key is Keys.Escape or Keys.Enter)
-        {
-            Hide();
-            e.Handled = true;
-        }
-    }
-
-    public override void OnClick(ClickEvent e)
-    {
-        Hide();
-        e.Handled = true;
+        LevelLabel.Text = entry.Page >= 6 ? "master" : $"{entry.Page} level range";
+        PreReqLabel.Text = entry.PreRequisiteId ?? string.Empty;
+        RewardLabel.Text = entry.Reward;
+        PreReqCaption.Visible = PreReqLabel.Text.Length > 0;
+        RewardCaption.Visible = RewardLabel.Text.Length > 0;
     }
 }
