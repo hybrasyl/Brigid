@@ -119,7 +119,7 @@ public sealed partial class WorldScreen
         //gold bag (slot 0) — show the gold amount popup
         if (slot == 0)
         {
-            GoldDrop.CenterVerticallyIn(viewport);
+            GoldDrop.SetViewportBounds(viewport);
             GoldDrop.ShowForTarget(droppedOnEntity ? entity!.Id : null, tileX, tileY);
             WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
 
@@ -1180,6 +1180,7 @@ public sealed partial class WorldScreen
         //exchange gold-click coordination — clicking the money label opens the gold amount popup
         if (Exchange.Visible && Exchange.IsMyMoneyClicked(e.ScreenX, e.ScreenY))
         {
+            GoldDrop.SetViewportBounds(new Rectangle(Exchange.X, Exchange.Y, Exchange.Width, Exchange.Height));
             GoldDrop.ShowForTarget(Exchange.OtherUserId, 0, 0);
             WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
             e.Handled = true;

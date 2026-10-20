@@ -581,8 +581,7 @@ public sealed partial class WorldScreen
 
     private void HandleExchangeAmountRequested(byte fromSlot)
     {
-        ItemAmount.X = Exchange.X + (Exchange.Width - ItemAmount.Width) / 2;
-        ItemAmount.Y = Exchange.Y + (Exchange.Height - ItemAmount.Height) / 2;
+        ItemAmount.SetViewportBounds(new Rectangle(Exchange.X, Exchange.Y, Exchange.Width, Exchange.Height));
         ItemAmount.ShowForSlot(fromSlot);
 
         //surface the slot's hover description (e.g. "Apple[ 10 ]") in the HUD bar while the popup

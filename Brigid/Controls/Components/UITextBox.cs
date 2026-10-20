@@ -188,6 +188,12 @@ public class UITextBox : UIElement
     public int MaxLength { get; set; } = 12;
 
     /// <summary>
+    ///     When true, the box takes only the digits 0 to 9: a typed character that is not a digit does nothing, and a paste
+    ///     keeps only its digits. Text that code sets is not filtered.
+    /// </summary>
+    public bool DigitsOnly { get; set; }
+
+    /// <summary>
     ///     Non-editable prefix rendered before the editable text (e.g. "Name: " for chat). Not included in <see cref="Text" />
     ///     and cannot be deleted by the user.
     /// </summary>
@@ -980,6 +986,9 @@ public class UITextBox : UIElement
 
         clipText = NormalizeLineBreaks(clipText, IsMultiLine);
 
+        if (DigitsOnly)
+            clipText = string.Concat(clipText.Where(char.IsAsciiDigit));
+
         //re-check after stripping — a newline-only clipboard becomes empty and must not record a no-op undo
         if (clipText.Length == 0)
             return;
@@ -1540,7 +1549,7 @@ public class UITextBox : UIElement
             return;
         }
 
-        if (char.IsControl(c))
+        if (char.IsControl(c) || (DigitsOnly && !char.IsAsciiDigit(c)))
             return;
 
         //nothing to insert if the box is full and there is no selection to replace

@@ -410,19 +410,22 @@ public sealed partial class WorldScreen : IScreen
             ZIndex = 2
         };
 
-        GoldDrop.OnConfirm += amount =>
+        GoldDrop.OnConfirm += confirmed =>
         {
+            //the packets carry the gold as an int
+            var amount = (int)Math.Min(confirmed, int.MaxValue);
+
             if (Exchange.Visible && (GoldDrop.TargetEntityId == Exchange.OtherUserId))
-                Game.Connection.SendExchangeInteraction(ExchangeRequestType.SetGold, Exchange.OtherUserId, goldAmount: (int)amount);
+                Game.Connection.SendExchangeInteraction(ExchangeRequestType.SetGold, Exchange.OtherUserId, goldAmount: amount);
             else if (GoldDrop.TargetEntityId.HasValue)
-                Game.Connection.DropGoldOnCreature((int)amount, GoldDrop.TargetEntityId.Value);
+                Game.Connection.DropGoldOnCreature(amount, GoldDrop.TargetEntityId.Value);
             else
-                Game.Connection.DropGold((int)amount, GoldDrop.TargetTileX, GoldDrop.TargetTileY);
+                Game.Connection.DropGold(amount, GoldDrop.TargetTileX, GoldDrop.TargetTileY);
         };
 
         //match retail: while the gold amount popup is open, the HUD description bar shows what's
         //being operated on even though nothing is hovered. clear it when the popup closes.
-        GoldDrop.Closed += () => WorldHud.SetDescription(null);
+        GoldDrop.OnClose += () => WorldHud.SetDescription(null);
 
         ItemAmount = new ItemAmountControl
         {
@@ -438,7 +441,7 @@ public sealed partial class WorldScreen : IScreen
                 (byte)Math.Min(amount, byte.MaxValue));
         };
 
-        ItemAmount.Closed += () => WorldHud.SetDescription(null);
+        ItemAmount.OnClose += () => WorldHud.SetDescription(null);
 
         //ZIndex 10 = the top modal tier, and no SetViewportBounds — like the Options modal it centers on the
         //window rather than the play area, which is smaller than the modal.

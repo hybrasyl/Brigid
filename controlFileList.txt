@@ -205,12 +205,21 @@ _nexch.txt
     _nbtn.epf/.spf       — OK/Cancel button frames
 
 _nmoney.txt
-  Class:    GoldExchangeControl : PrefabPanel
-  File:     Controls/World/Popups/GoldExchangeControl.cs
-  Purpose:  Gold exchange input — amount textbox, OK/Cancel
+  Class:    (retired) — replaced by GoldAmountControl on AmountPromptPanel
+  File:     Controls/World/Popups/GoldAmountControl.cs (primitive, no prefab)
+  Purpose:  Gold amount input (drop and exchange) — amount textbox, OK/Cancel
   Images referenced by controls:
     _nmoney.epf/.spf     — Anchor background
     _nbtn.epf/.spf       — OK/Cancel button frames
+
+litemex.txt
+  Class:    (retired) — replaced by ItemAmountControl on AmountPromptPanel
+  File:     Controls/World/Popups/ItemAmountControl.cs (primitive, no prefab)
+  Purpose:  Stackable item amount input for an exchange — amount textbox, OK/Cancel
+  Images referenced by controls:
+    (not catalogued while the panel was live)
+  Also manually loaded:
+    butt001.epf          — Custom OK/Cancel buttons (retired with the panel)
 
 _nbdlist.txt
   Class:    (retired) — replaced by BoardsModalControl's BoardIndexPane
@@ -467,7 +476,7 @@ dlgframe.epf
   Palette:    gui 0
 
 butt001.epf
-  Loaded by:  TextPopupControl.cs:70-71, ItemAmountControl.cs:49-66, SelfProfileTextEditorControl.cs:60-63  (GetEpfTexture)
+  Loaded by:  TextPopupControl.cs:70-71, SelfProfileTextEditorControl.cs:60-63  (GetEpfTexture)
   Purpose:    Standard button spritesheet — OK/Cancel/Yes/No in normal+pressed states
   Palette:    gui 0
 
@@ -638,12 +647,12 @@ msg.tbl
 # SECTION 5: SUMMARY — QUICK REFERENCE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Control .txt files:        38 total (17 retired — see the (retired) markers in Section 1)
+# Control .txt files:        42 total (19 retired — see the (retired) markers in Section 1)
 #   Login flow:              _nsvr
 #   Main HUD:                _nbk_s, _nstatus
 #   Self-profile tabs:       _nui, _nui_eq, _nui_sk, _nui_dr, _nui_ev, _nui_al, _nui_fm
-#   Popups/dialogs:          _nexch, _nmoney, _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, _nhotkem, _nhotkey
-#   Retired (primitive now): _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook,
+#   Popups/dialogs:          _nexch, _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, _nhotkem, _nhotkey
+#   Retired (primitive now): _nmoney, litemex, _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook,
 #                            _noptdlg, _nmacro, _nsett, _nfriend, _nstart, _nlogin, _ncreate, _nagree, _npw
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm
