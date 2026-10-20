@@ -52,4 +52,10 @@ public static class ThemeRoles
 
     //fonts
     public const string TitleFont = "title";
+
+    /// <summary>The colour roles, in the order that the primitive gallery shows them.</summary>
+    public static readonly string[] Colours =
+    [
+        Text, TextDisabled, TextSelected, TextTitle, TextError, Divider, Border, RowHover, RowSelected, InputText, InputFocus
+    ];
 }

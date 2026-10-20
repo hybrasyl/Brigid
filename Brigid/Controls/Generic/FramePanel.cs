@@ -76,7 +76,7 @@ public class FramePanel : UIPanel
     private bool Grown;
 
     //the flat border is part of the look
-    protected internal override Color? DrawnBorderColor => BorderColor is { } border ? ThemeColor(ThemeRoles.Border, border) : null;
+    protected internal override Color? DrawnBorderColor => BorderColor is null ? null : ThemeColor(ThemeRoles.Border);
 
     protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
     {

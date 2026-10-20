@@ -1,4 +1,5 @@
 #region
+using Brigid.Controls.Generic;
 using Brigid.Systems.Keybinds;
 using Brigid.Utilities;
 using Microsoft.Xna.Framework;
@@ -74,12 +75,16 @@ public class UILabel : UIElement
     ///     Draws the text in the theme colour of <paramref name="role" />, or in <paramref name="fallback" /> when the label is
     ///     not themed or the theme has no such colour. Use it for a colour that is part of the look, not for one that carries
     ///     meaning.
+    ///     Use the one-argument form, which draws the flat value of the role, unless the flat look needs another colour.
     /// </summary>
     public void SetForegroundRole(string role, Color fallback)
     {
         ForegroundColor = fallback;
         ForegroundRole = role;
     }
+
+    /// <summary>Draws the text in the theme colour of <paramref name="role" />, or in the flat value of the role.</summary>
+    public void SetForegroundRole(string role) => SetForegroundRole(role, DialogPalette.ForRole(role));
 
     //the theme is known only at draw time, because a label takes it from its parent
     internal void ApplyForegroundRole()

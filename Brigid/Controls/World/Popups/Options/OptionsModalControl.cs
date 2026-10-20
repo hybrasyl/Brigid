@@ -205,7 +205,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 VerticalAlignment = VerticalAlignment.Center,
                 IsHitTestVisible = false
             };
-            number.SetForegroundRole(ThemeRoles.TextSelected, DialogPalette.SelectedText);
+            number.SetForegroundRole(ThemeRoles.TextSelected);
             content.AddChild(number);
 
             MacroBoxes[i] = new UITextBox
@@ -216,12 +216,12 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 Width = pane.Width - MACRO_LABEL_W - 4,
                 Height = BOX_HEIGHT,
                 MaxLength = MACRO_MAX_LENGTH,
-                FocusedBackgroundColor = DialogPalette.RowHoverFill,
+                FocusedBackgroundColor = DialogPalette.InputFocus,
                 VerticalAlignment = VerticalAlignment.Center,
                 IsTabStop = true
             };
 
-            MacroBoxes[i].SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+            MacroBoxes[i].SetForegroundRole(ThemeRoles.InputText);
             content.AddChild(MacroBoxes[i]);
         }
 
@@ -244,7 +244,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 Width = colWidth,
                 Height = BOX_HEIGHT,
                 MaxLength = FRIEND_MAX_LENGTH,
-                FocusedBackgroundColor = DialogPalette.RowHoverFill,
+                FocusedBackgroundColor = DialogPalette.InputFocus,
                 VerticalAlignment = VerticalAlignment.Center,
                 IsTabStop = true
             };
@@ -257,13 +257,13 @@ public sealed class OptionsModalControl : CenteredModalPanel
                 Width = colWidth,
                 Height = BOX_HEIGHT,
                 MaxLength = FRIEND_MAX_LENGTH,
-                FocusedBackgroundColor = DialogPalette.RowHoverFill,
+                FocusedBackgroundColor = DialogPalette.InputFocus,
                 VerticalAlignment = VerticalAlignment.Center,
                 IsTabStop = true
             };
 
-            FriendCol1[i].SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
-            FriendCol2[i].SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+            FriendCol1[i].SetForegroundRole(ThemeRoles.InputText);
+            FriendCol2[i].SetForegroundRole(ThemeRoles.InputText);
             content.AddChild(FriendCol1[i]);
             content.AddChild(FriendCol2[i]);
         }
@@ -410,7 +410,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
             };
         }
 
-        SettingLabels[index].SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+        SettingLabels[index].SetForegroundRole(ThemeRoles.Text);
         SettingLabels[index].Text = text;
     }
 
@@ -513,6 +513,6 @@ public sealed class OptionsModalControl : CenteredModalPanel
             return;
 
         //vertical divider between the tab column and the content pane.
-        DrawRectClipped(spriteBatch, new Rectangle(ScreenX + PaneX - PANE_GAP / 2, ScreenY + ContentTop, 1, ContentBounds.Height), ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
+        DrawRectClipped(spriteBatch, new Rectangle(ScreenX + PaneX - PANE_GAP / 2, ScreenY + ContentTop, 1, ContentBounds.Height), ThemeColor(ThemeRoles.Divider));
     }
 }

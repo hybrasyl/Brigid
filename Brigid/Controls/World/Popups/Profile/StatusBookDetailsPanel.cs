@@ -69,7 +69,7 @@ public abstract class StatusBookDetailsPanel : CenteredModalPanel
             VerticalAlignment = VerticalAlignment.Top,
             IsHitTestVisible = false
         };
-        DescriptionLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        DescriptionLabel.SetForegroundRole(ThemeRoles.Text);
         AddChild(DescriptionLabel);
 
         HeaderHeight = Math.Max(ICON_SIZE, headerRows * ROW_H);
@@ -120,7 +120,7 @@ public abstract class StatusBookDetailsPanel : CenteredModalPanel
         label.PaddingRight = 0;
         label.VerticalAlignment = VerticalAlignment.Center;
         label.IsHitTestVisible = false;
-        label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        label.SetForegroundRole(ThemeRoles.Text);
         AddChild(label);
 
         return label;
@@ -130,7 +130,7 @@ public abstract class StatusBookDetailsPanel : CenteredModalPanel
     protected UILabel AddCaption(UILabel label)
     {
         AddRow(label);
-        label.SetForegroundRole(ThemeRoles.TextDisabled, DialogPalette.DisabledText);
+        label.SetForegroundRole(ThemeRoles.TextDisabled);
 
         return label;
     }

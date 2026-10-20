@@ -56,9 +56,9 @@ public sealed class SelfProfileTextEditorControl : CenteredModalPanel
             IsMultiLine = true,
             ClampToVisibleArea = true,
             MaxLength = MAX_LENGTH,
-            FocusedBackgroundColor = DialogPalette.RowHoverFill
+            FocusedBackgroundColor = DialogPalette.InputFocus
         };
-        TextBox.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+        TextBox.SetForegroundRole(ThemeRoles.InputText);
         EditorPane.AddChild(TextBox);
         AddChild(EditorPane);
 

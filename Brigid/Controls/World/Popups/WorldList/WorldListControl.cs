@@ -71,10 +71,7 @@ public sealed class WorldListControl : FramePanel
     private const int TOTAL_LABEL_W = 120;
 
     //── colors (frame/tab/row palette shared via DialogPalette; CountIdleColor is list-specific) ──
-    private static readonly Color DividerColor = DialogPalette.Divider;
-    private static readonly Color TitleColor = DialogPalette.Title;
     private static readonly Color RowHoverFill = DialogPalette.RowHoverFill;
-    private static readonly Color SelectedTextColor = DialogPalette.SelectedText;
     private static readonly Color CountIdleColor = new(150, 152, 164);
 
     private readonly SelectableTab[] Filters = new SelectableTab[TAB_COUNT];
@@ -136,7 +133,7 @@ public sealed class WorldListControl : FramePanel
             Text = "Aislings",
             IsHitTestVisible = false
         };
-        titleLabel.SetForegroundRole(ThemeRoles.TextTitle, TitleColor);
+        titleLabel.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(titleLabel);
 
         //── total readout ──
@@ -151,7 +148,7 @@ public sealed class WorldListControl : FramePanel
             Text = "World",
             IsHitTestVisible = false
         };
-        totalLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        totalLabel.SetForegroundRole(ThemeRoles.Text);
         AddChild(totalLabel);
 
         //right-aligned to the count column's right edge so the world total lines up vertically with the per-filter counts
@@ -165,7 +162,7 @@ public sealed class WorldListControl : FramePanel
             Text = "0",
             IsHitTestVisible = false
         };
-        TotalNumLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        TotalNumLabel.SetForegroundRole(ThemeRoles.Text);
         AddChild(TotalNumLabel);
 
         //── filter column ── (counts are drawn in Draw, right-aligned inside the count box)
@@ -274,7 +271,7 @@ public sealed class WorldListControl : FramePanel
 
         //no-fill boxes give the count column and the name list their own frames — the gap between them reads as the
         //vertical separator between counts and names.
-        var divider = ThemeColor(ThemeRoles.Divider, DividerColor);
+        var divider = ThemeColor(ThemeRoles.Divider);
         DrawBorderClipped(spriteBatch, new Rectangle(ContentX + COUNT_BOX_X, ContentY + BODY_Y, COUNT_BOX_W, BODY_H), divider);
         DrawBorderClipped(spriteBatch, new Rectangle(ContentX + LIST_BOX_X, ContentY + BODY_Y, LIST_BOX_W, BODY_H), divider);
 
@@ -285,7 +282,7 @@ public sealed class WorldListControl : FramePanel
         => DrawRectClipped(
             spriteBatch,
             new Rectangle(ContentX + PADDING, ContentY + localY, PANEL_WIDTH - 2 * PADDING, 1),
-            ThemeColor(ThemeRoles.Divider, DividerColor));
+            ThemeColor(ThemeRoles.Divider));
 
     //the screen position that the layout constants count from
     private int ContentX => ScreenX + ContentOffset;
@@ -298,7 +295,7 @@ public sealed class WorldListControl : FramePanel
     {
         var rightEdge = ContentX + COUNT_RIGHT_EDGE;
         var baseY = ContentY + BODY_Y + (FILTER_STRIDE - TextRenderer.CHAR_HEIGHT) / 2;
-        var selectedColor = ThemeColor(ThemeRoles.TextSelected, SelectedTextColor);
+        var selectedColor = ThemeColor(ThemeRoles.TextSelected);
         var idleColor = ThemeColor(ThemeRoles.TextDisabled, CountIdleColor);
 
         for (var i = 0; i < TAB_COUNT; i++)
@@ -626,7 +623,7 @@ public sealed class WorldListControl : FramePanel
                 VerticalAlignment = VerticalAlignment.Center,
                 IsHitTestVisible = false
             };
-            TitleLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+            TitleLabel.SetForegroundRole(ThemeRoles.Text);
 
             AddChild(Icon);
             AddChild(NameLabel);

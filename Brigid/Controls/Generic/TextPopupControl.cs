@@ -64,7 +64,7 @@ public sealed class TextPopupControl : CenteredModalPanel
             WordWrap = true,
             IsHitTestVisible = false
         };
-        TextLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        TextLabel.SetForegroundRole(ThemeRoles.Text);
 
         TextScroll.AddChild(TextLabel);
         AddChild(TextScroll);
@@ -90,7 +90,7 @@ public sealed class TextPopupControl : CenteredModalPanel
         if (Wooden && !HasThemePart(ThemeRoles.FrameSign))
             TextLabel.ForegroundColor = LegendColors.White;
         else
-            TextLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+            TextLabel.SetForegroundRole(ThemeRoles.Text);
 
         TextLabel.Text = text;
         TextScroll.Sync();

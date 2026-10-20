@@ -118,7 +118,7 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
         if (color is { } literal)
             label.ForegroundColor = literal;
         else
-            label.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
+            label.SetForegroundRole(ThemeRoles.Text);
 
         AddChild(label);
         y += ROW_H;
@@ -143,7 +143,7 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
         if (pending.IsPinMismatch)
             Headline.ForegroundColor = DialogPalette.RequirementUnmet;
         else
-            Headline.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
+            Headline.SetForegroundRole(ThemeRoles.TextTitle);
 
         ServerRow.Text = $"Server:  {pending.Server}";
         SubjectRow.Text = $"Subject: {pending.Subject}";
@@ -164,7 +164,7 @@ public sealed class CertificateTrustPromptControl : CenteredModalPanel
         if (pending.IsPinMismatch)
             Guidance.ForegroundColor = DialogPalette.RequirementUnmet;
         else
-            Guidance.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
+            Guidance.SetForegroundRole(ThemeRoles.Text);
 
         base.Show();
     }

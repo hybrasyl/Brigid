@@ -113,7 +113,7 @@ public sealed class InsecureConnectionPromptControl : CenteredModalPanel
         if (color is { } literal)
             label.ForegroundColor = literal;
         else
-            label.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
+            label.SetForegroundRole(ThemeRoles.Text);
 
         AddChild(label);
         y += ROW_H;

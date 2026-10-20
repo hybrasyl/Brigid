@@ -67,7 +67,7 @@ public abstract class AmountPromptPanel : CenteredModalPanel
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false
         };
-        Prompt.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        Prompt.SetForegroundRole(ThemeRoles.Text);
         AddChild(Prompt);
 
         FieldPane = new InputSlotPane { Name = "field" };
@@ -80,9 +80,9 @@ public abstract class AmountPromptPanel : CenteredModalPanel
             Height = FIELD_H,
             MaxLength = maxLength,
             DigitsOnly = true,
-            FocusedBackgroundColor = DialogPalette.RowHoverFill
+            FocusedBackgroundColor = DialogPalette.InputFocus
         };
-        AmountTextBox.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+        AmountTextBox.SetForegroundRole(ThemeRoles.InputText);
         FieldPane.AddChild(AmountTextBox);
         AddChild(FieldPane);
 

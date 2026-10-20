@@ -42,24 +42,8 @@ public sealed class PrimitiveGallery : CenteredModalPanel
     private const int CHIP_ROW = 16;
     private const int CHIP_COLUMN = 146;
 
-    //the colour roles, each with the flat value that the most primitives use when the theme has no colour. Some
-    //primitives use another flat value for the same role; the plan records that
-    private readonly (string Role, Color Flat)[] ColourRoles =
-    [
-        (ThemeRoles.Text, TextColors.Default),
-        (ThemeRoles.TextDisabled, DialogPalette.DisabledText),
-        (ThemeRoles.TextSelected, DialogPalette.SelectedText),
-        (ThemeRoles.TextTitle, DialogPalette.Title),
-        (ThemeRoles.TextError, DialogPalette.ErrorText),
-        (ThemeRoles.Divider, DialogPalette.Divider),
-        (ThemeRoles.Border, DialogPalette.FrameBorder),
-        (ThemeRoles.RowHover, DialogPalette.RowHoverFill),
-        (ThemeRoles.RowSelected, DialogPalette.RowSelectedFill),
-        (ThemeRoles.InputText, LegendColors.White),
-        (ThemeRoles.InputFocus, DialogPalette.RowHoverFill)
-    ];
 
-    //where each colour chip is drawn, in panel coordinates, in the order of ColourRoles
+    //where each colour chip is drawn, in panel coordinates, in the order of ThemeRoles.Colours; with no theme colour, a chip shows the flat value of its role
     private readonly Rectangle[] ChipRects;
 
     private readonly DropDown DropDownSample;
@@ -127,9 +111,9 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         AddHeader(new UILabel { Name = "slots_header", Text = "InputSlotPane (fields 140 by 18)" }, ax, y);
         var slots = new InputSlotPane { Name = "slots", X = ax, Y = y + HEADER_H, Width = 2 * FIELD_W + 6, Height = 18 };
         var field = new UITextBox { Name = "field", X = 0, Y = 0, Width = FIELD_W, Height = 18, Text = "input.text", IsHitTestVisible = false };
-        field.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
-        var liveField = new UITextBox { Name = "live_field", X = FIELD_W + 6, Y = 0, Width = FIELD_W, Height = 18, FocusedBackgroundColor = DialogPalette.RowHoverFill };
-        liveField.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+        field.SetForegroundRole(ThemeRoles.InputText);
+        var liveField = new UITextBox { Name = "live_field", X = FIELD_W + 6, Y = 0, Width = FIELD_W, Height = 18, FocusedBackgroundColor = DialogPalette.InputFocus };
+        liveField.SetForegroundRole(ThemeRoles.InputText);
         slots.AddChild(field);
         slots.AddChild(liveField);
         AddChild(slots);
@@ -145,7 +129,7 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         var stepper = new Stepper(100, 18) { Name = "stepper", X = ax + 116, Y = y + HEADER_H, IsHitTestVisible = false };
         stepper.SetValue("Hair 3/18");
         AddChild(stepper);
-        AddChild(new ColorSwatch(LegendColors.White) { Name = "swatch", X = ax + 224, Y = y + HEADER_H + 1, Width = 16, Height = 16, IsHitTestVisible = false });
+        AddChild(new ColorSwatch(DialogPalette.Text) { Name = "swatch", X = ax + 224, Y = y + HEADER_H + 1, Width = 16, Height = 16, IsHitTestVisible = false });
         AddChild(
             new ColorSwatch(DialogPalette.Title)
             {
@@ -193,7 +177,7 @@ public sealed class PrimitiveGallery : CenteredModalPanel
             IsHitTestVisible = false,
             Text = "A scroll view with more text than it shows, so that the bar has a thumb to draw. Scroll it with the wheel."
         };
-        scrollText.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+        scrollText.SetForegroundRole(ThemeRoles.Text);
         scroll.AddChild(scrollText);
         AddChild(scroll);
         scrollText.Width = scroll.ContentWidth;
@@ -222,9 +206,9 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         //colour chips, two columns; a colour that the theme does not set says "flat"
         AddHeader(new UILabel { Name = "colours_header", Text = "Colours (the theme's, else the flat value)" }, bx, by);
         by += HEADER_H + 2;
-        ChipRects = new Rectangle[ColourRoles.Length];
+        ChipRects = new Rectangle[ThemeRoles.Colours.Length];
 
-        for (var i = 0; i < ColourRoles.Length; i++)
+        for (var i = 0; i < ThemeRoles.Colours.Length; i++)
             ChipRects[i] = new Rectangle(bx + (i % 2) * CHIP_COLUMN, by + (i / 2) * CHIP_ROW + 1, CHIP, CHIP);
 
         AddChipLabel(new UILabel { Name = "chip_text" }, 0);
@@ -238,7 +222,7 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         AddChipLabel(new UILabel { Name = "chip_row_selected" }, 8);
         AddChipLabel(new UILabel { Name = "chip_input_text" }, 9);
         AddChipLabel(new UILabel { Name = "chip_input_focus" }, 10);
-        by += (ColourRoles.Length + 1) / 2 * CHIP_ROW + 8;
+        by += (ThemeRoles.Colours.Length + 1) / 2 * CHIP_ROW + 8;
 
         //the roles that a small sample cannot show
         AddHeader(new UILabel { Name = "not_shown_header", Text = "Not shown here" }, bx, by);
@@ -294,7 +278,7 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         label.Width = COLUMN_W;
         label.Height = HEADER_H;
         label.IsHitTestVisible = false;
-        label.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
+        label.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(label);
     }
 
@@ -323,7 +307,7 @@ public sealed class PrimitiveGallery : CenteredModalPanel
             label.Height = CAPTION_H;
 
         label.IsHitTestVisible = false;
-        label.SetForegroundRole(ThemeRoles.TextDisabled, DialogPalette.DisabledText);
+        label.SetForegroundRole(ThemeRoles.TextDisabled);
         AddChild(label);
     }
 
@@ -331,7 +315,7 @@ public sealed class PrimitiveGallery : CenteredModalPanel
     private void AddChipLabel(UILabel label, int index)
     {
         var chip = ChipRects[index];
-        var role = ColourRoles[index].Role;
+        var role = ThemeRoles.Colours[index];
 
         label.Text = TryGetThemeColor(role, out _) ? role : $"{role} (flat)";
         label.X = chip.Right + 4;
@@ -339,7 +323,7 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         label.Width = CHIP_COLUMN - CHIP - 8;
         label.Height = CHIP_ROW - 2;
         label.IsHitTestVisible = false;
-        label.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+        label.SetForegroundRole(ThemeRoles.Text);
         AddChild(label);
     }
 
@@ -350,14 +334,13 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         if (!Visible)
             return;
 
-        for (var i = 0; i < ColourRoles.Length; i++)
+        for (var i = 0; i < ThemeRoles.Colours.Length; i++)
         {
-            var (role, flat) = ColourRoles[i];
             var chip = ChipRects[i];
             var screen = new Rectangle(ScreenX + chip.X, ScreenY + chip.Y, chip.Width, chip.Height);
 
-            DrawRectClipped(spriteBatch, screen, ThemeColor(role, flat));
-            DrawBorderClipped(spriteBatch, screen, LegendColors.White);
+            DrawRectClipped(spriteBatch, screen, ThemeColor(ThemeRoles.Colours[i]));
+            DrawBorderClipped(spriteBatch, screen, DialogPalette.Text);
         }
     }
 

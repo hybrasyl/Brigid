@@ -112,7 +112,7 @@ public class StatusBookDetailsTests
             panel.Populate(new AbilityMetadataEntry { Name = "Strike", IsSpell = false, RequiresMaster = true });
 
             Assert.Equal("master", level.Text);
-            Assert.Equal(LegendColors.White, level.ForegroundColor);
+            Assert.Equal(DialogPalette.Text, level.ForegroundColor);
         } finally
         {
             WorldState.IsMaster = wasMaster;

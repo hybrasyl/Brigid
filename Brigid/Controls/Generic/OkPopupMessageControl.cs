@@ -67,7 +67,7 @@ public sealed class OkPopupMessageControl : CenteredModalPanel
             VerticalAlignment = VerticalAlignment.Top,
             IsHitTestVisible = false
         };
-        MessageLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        MessageLabel.SetForegroundRole(ThemeRoles.Text);
         AddChild(MessageLabel);
 
         FitToText();

@@ -115,7 +115,7 @@ public sealed class ServerGreetingControl : CenteredModalPanel
 
     public override void Draw(SpriteBatch spriteBatch)
     {
-        Body.ForegroundColor = ThemeColor(ThemeRoles.Text, TextColors.Default);
+        Body.ForegroundColor = ThemeColor(ThemeRoles.Text);
 
         base.Draw(spriteBatch);
     }

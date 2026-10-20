@@ -20,9 +20,6 @@ public sealed class TextButton : UIPanel
     private static readonly Color IdleFill = DialogPalette.ButtonIdleFill;
     private static readonly Color HoverFill = DialogPalette.ButtonHoverFill;
     private static readonly Color PressFill = DialogPalette.ButtonPressFill;
-    private static readonly Color EdgeColor = DialogPalette.FrameBorder;
-    private static readonly Color DisabledEdge = DialogPalette.Divider;
-    private static readonly Color DisabledText = DialogPalette.DisabledText;
 
     private readonly UILabel Label;
 
@@ -42,7 +39,7 @@ public sealed class TextButton : UIPanel
     {
         Width = width;
         Height = height;
-        BorderColor = EdgeColor;
+        BorderColor = DialogPalette.FrameBorder;
         LabelStyle = labelStyle;
 
         Label = new UILabel
@@ -94,7 +91,7 @@ public sealed class TextButton : UIPanel
 
     //the flat border is part of the look: the outline, or the divider colour while disabled
     protected internal override Color? DrawnBorderColor
-        => BorderColor is null ? null : Enabled ? ThemeColor(ThemeRoles.Border, EdgeColor) : ThemeColor(ThemeRoles.Divider, DisabledEdge);
+        => BorderColor is null ? null : Enabled ? ThemeColor(ThemeRoles.Border) : ThemeColor(ThemeRoles.Divider);
 
     //a state that the theme leaves out uses button.normal; with no theme the button keeps its flat look
     protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
@@ -142,13 +139,11 @@ public sealed class TextButton : UIPanel
     {
         BackgroundColor = Enabled ? Pressed ? PressFill : Hovered ? HoverFill : IdleFill : IdleFill;
         if (!Enabled)
-            Label.SetForegroundRole(ThemeRoles.TextDisabled, DisabledText);
+            Label.SetForegroundRole(ThemeRoles.TextDisabled);
         else if (TextColorOverride is { } overrideColor)
             Label.ForegroundColor = overrideColor;
         else
-            Label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
-
-        BorderColor = Enabled ? EdgeColor : DisabledEdge;
+            Label.SetForegroundRole(ThemeRoles.Text);
     }
 
     public override void OnMouseEnter()

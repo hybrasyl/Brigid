@@ -91,7 +91,7 @@ public sealed class PauseMenuControl : CenteredModalPanel
         label.Height = ROW_H;
         label.VerticalAlignment = VerticalAlignment.Center;
         label.IsHitTestVisible = false;
-        label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        label.SetForegroundRole(ThemeRoles.Text);
         AddChild(label);
 
         slider.X = x + LABEL_W;

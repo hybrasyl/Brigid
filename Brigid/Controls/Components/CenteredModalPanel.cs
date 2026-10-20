@@ -119,7 +119,7 @@ public abstract class CenteredModalPanel : FramePanel
             Text = title,
             IsHitTestVisible = false
         };
-        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
+        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(TitleLabel);
 
         CloseButton = AddBottomBarButton("Close", CLOSE_W, Hide, "close");
@@ -307,7 +307,7 @@ public abstract class CenteredModalPanel : FramePanel
         => DrawRectClipped(
             spriteBatch,
             new Rectangle(ScreenX + Inset, ScreenY + localY, Width - 2 * Inset, 1),
-            ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
+            ThemeColor(ThemeRoles.Divider));
 
     public override void OnKeyDown(KeyDownEvent e)
     {

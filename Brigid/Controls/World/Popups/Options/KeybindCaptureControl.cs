@@ -48,7 +48,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false
         };
-        PromptLabel.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+        PromptLabel.SetForegroundRole(ThemeRoles.Text);
         AddChild(PromptLabel);
 
         CapturedLabel = new UILabel
@@ -61,7 +61,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false
         };
-        CapturedLabel.SetForegroundRole(ThemeRoles.TextSelected, DialogPalette.SelectedText);
+        CapturedLabel.SetForegroundRole(ThemeRoles.TextSelected);
         AddChild(CapturedLabel);
 
         StatusLabel = new UILabel
@@ -100,7 +100,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
         SetTitle($"Rebind — {name}");
         PromptLabel.Text = $"{name} · {slotLabel}";
         CapturedLabel.Text = "Press a key…";
-        CapturedLabel.SetForegroundRole(ThemeRoles.TextDisabled, DialogPalette.DisabledText);
+        CapturedLabel.SetForegroundRole(ThemeRoles.TextDisabled);
         StatusLabel.Text = string.Empty;
         SetButton.SetEnabled(false);
 
@@ -132,7 +132,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
     private void UpdateCapturedDisplay(KeyChord chord)
     {
         CapturedLabel.Text = KeybindCatalog.Format(chord);
-        CapturedLabel.SetForegroundRole(ThemeRoles.TextSelected, DialogPalette.SelectedText);
+        CapturedLabel.SetForegroundRole(ThemeRoles.TextSelected);
 
         var context = Keybinds.Defaults[Command].Context;
 

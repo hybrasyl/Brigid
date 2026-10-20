@@ -33,7 +33,6 @@ public sealed class MarkdownView : UIPanel
     private const string MAXIMIZE_TEXT = "+";
     private const string RESTORE_TEXT = "-";
 
-    private static readonly Color TitleColor = LegendColors.Gold;
     private static readonly SKColor FrameBackgroundColor = new(10, 10, 14, 235);
 
     private readonly TextButton CloseButton;
@@ -62,7 +61,7 @@ public sealed class MarkdownView : UIPanel
             ShadowStyle = ShadowStyle.BottomRight,
             IsHitTestVisible = false
         };
-        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle, TitleColor);
+        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(TitleLabel);
 
         CloseButton = new TextButton("×", TITLE_BUTTON_SIZE, TITLE_BUTTON_SIZE) { Name = "close" };

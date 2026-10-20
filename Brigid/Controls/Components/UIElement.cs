@@ -1,4 +1,5 @@
 #region
+using Brigid.Controls.Generic;
 using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -397,8 +398,15 @@ public abstract class UIElement : IDisposable
     /// <summary>
     ///     The theme colour for <paramref name="role" /> when the element is themed and the theme has it; otherwise
     ///     <paramref name="fallback" />.
+    ///     Use the one-argument form, which draws the flat value of the role, unless the flat look needs another colour.
     /// </summary>
     protected Color ThemeColor(string role, Color fallback) => IsThemed && ThemeArt.TryGetColor(role, out var color) ? color : fallback;
+
+    /// <summary>
+    ///     The theme colour for <paramref name="role" /> when the element is themed and the theme has it; otherwise the flat
+    ///     value of the role, <see cref="DialogPalette.ForRole" />.
+    /// </summary>
+    protected Color ThemeColor(string role) => ThemeColor(role, DialogPalette.ForRole(role));
 
     /// <summary>Gets the theme colour for <paramref name="role" />. False when the element is not themed or the theme has none.</summary>
     protected bool TryGetThemeColor(string role, out Color color)

@@ -61,10 +61,8 @@ public sealed class BankShopPanel : FramePanel
     private const int TOOLTIP_WIDTH = 190;
     private const int TOOLTIP_PAD = 6;
 
-    private static readonly Color TitleColor = DialogPalette.Title;
     private static readonly Color RowHoverFill = DialogPalette.RowHoverFill;
     private static readonly Color RowSelectedFill = DialogPalette.RowSelectedFill;
-    private static readonly Color SelectedTextColor = DialogPalette.SelectedText;
 
     private readonly List<string> Categories = [];
     private readonly List<MerchantEntry> Entries = [];
@@ -130,7 +128,7 @@ public sealed class BankShopPanel : FramePanel
             HorizontalAlignment = HorizontalAlignment.Center,
             IsHitTestVisible = false
         };
-        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle, TitleColor);
+        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(TitleLabel);
 
         //category tab strip (vertical, aligned 1:1 with the item rows)
@@ -223,7 +221,7 @@ public sealed class BankShopPanel : FramePanel
             ShrinkToFit = false,
             IsHitTestVisible = false
         };
-        PageLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        PageLabel.SetForegroundRole(ThemeRoles.Text);
         AddChild(PageLabel);
 
         ItemPrevButton = new TextButton("<", 16, 18)
@@ -813,9 +811,9 @@ public sealed class BankShopPanel : FramePanel
         private void SetTextRole(UILabel label)
         {
             if (IsSelected)
-                label.SetForegroundRole(ThemeRoles.TextSelected, SelectedTextColor);
+                label.SetForegroundRole(ThemeRoles.TextSelected);
             else
-                label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+                label.SetForegroundRole(ThemeRoles.Text);
         }
 
         public override void OnMouseEnter()

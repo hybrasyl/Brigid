@@ -61,7 +61,7 @@ public sealed class Stepper : UIPanel
     public override void Draw(SpriteBatch spriteBatch)
     {
         //the theme can come from a parent, which can change after construction, so the colour is resolved per draw
-        Value.ForegroundColor = ThemeColor(ThemeRoles.Text, TextColors.Default);
+        Value.ForegroundColor = ThemeColor(ThemeRoles.Text);
 
         base.Draw(spriteBatch);
     }

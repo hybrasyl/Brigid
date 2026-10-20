@@ -92,6 +92,7 @@ public sealed class PrimitiveGalleryTests : IDisposable
 
         Assert.True(gallery.Width <= 640 && gallery.Height <= 480);
     }
+
     [Fact]
     public void EveryThemeRoleIsNamedOnTheGallery()
     {

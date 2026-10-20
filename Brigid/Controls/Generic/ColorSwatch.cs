@@ -29,12 +29,12 @@ public sealed class ColorSwatch : UIPanel
 
         if (!IsSelected)
         {
-            DrawBorderClipped(spriteBatch, bounds, ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
+            DrawBorderClipped(spriteBatch, bounds, ThemeColor(ThemeRoles.Divider));
 
             return;
         }
 
-        var selected = ThemeColor(ThemeRoles.TextSelected, DialogPalette.TabSelectedBorder);
+        var selected = ThemeColor(ThemeRoles.TextSelected);
         DrawBorderClipped(spriteBatch, bounds, selected);
         DrawBorderClipped(spriteBatch, new Rectangle(bounds.X + 1, bounds.Y + 1, bounds.Width - 2, bounds.Height - 2), selected);
     }

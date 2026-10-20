@@ -1,4 +1,5 @@
 #region
+using Brigid.Controls.Generic;
 using Brigid.Rendering;
 using Brigid.Systems.Keybinds;
 using Brigid.Utilities;
@@ -76,7 +77,8 @@ public class UITextBox : UIElement
 
     /// <summary>
     ///     Background color drawn behind the textbox when focused. Null = no overlay. A themed box draws the theme's
-    ///     <see cref="ThemeRoles.InputFocus" /> colour in its place, or no fill on the slot art of an <see cref="InputSlotPane" />.
+    ///     <see cref="ThemeRoles.InputFocus" /> colour in its place, else no fill on the slot art of an
+    ///     <see cref="InputSlotPane" />, else the flat <see cref="DialogPalette.InputFocus" />.
     /// </summary>
     public Color? FocusedBackgroundColor { get; set; }
 
@@ -98,12 +100,16 @@ public class UITextBox : UIElement
     ///     Draws the text in the theme colour of <paramref name="role" />, or in <paramref name="fallback" /> when the box is not
     ///     themed or the theme has no such colour. Use it for a colour that is part of the look, not for one that carries
     ///     meaning.
+    ///     Use the one-argument form, which draws the flat value of the role, unless the flat look needs another colour.
     /// </summary>
     public void SetForegroundRole(string role, Color fallback)
     {
         ForegroundColor = fallback;
         ForegroundRole = role;
     }
+
+    /// <summary>Draws the text in the theme colour of <paramref name="role" />, or in the flat value of the role.</summary>
+    public void SetForegroundRole(string role) => SetForegroundRole(role, DialogPalette.ForRole(role));
 
     //the theme is known only at draw time, because a box takes it from its parent
     internal Color DrawnForegroundColor => RoleColor(ForegroundRole, ForegroundColor);
@@ -114,13 +120,13 @@ public class UITextBox : UIElement
     {
         get
         {
-            if (!IsFocused || FocusedBackgroundColor is not { } focusedFill || !IsThemed)
+            if (!IsFocused || FocusedBackgroundColor is null || !IsThemed)
                 return BackgroundColor;
 
             if (TryGetThemeColor(ThemeRoles.InputFocus, out var themed))
                 return themed;
 
-            return Parent is InputSlotPane && HasThemePart(ThemeRoles.InputSlot) ? null : focusedFill;
+            return Parent is InputSlotPane && HasThemePart(ThemeRoles.InputSlot) ? null : DialogPalette.InputFocus;
         }
     }
 

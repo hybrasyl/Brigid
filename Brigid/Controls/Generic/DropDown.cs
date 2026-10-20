@@ -152,12 +152,12 @@ public sealed class DropDown : UIPanel
             DrawBorderClipped(
                 spriteBatch,
                 box,
-                Enabled ? ThemeColor(ThemeRoles.Border, DialogPalette.FrameBorder) : ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
+                Enabled ? ThemeColor(ThemeRoles.Border) : ThemeColor(ThemeRoles.Divider));
         }
 
         var textColor = Enabled
-            ? ThemeColor(ThemeRoles.Text, LegendColors.White)
-            : ThemeColor(ThemeRoles.TextDisabled, DialogPalette.DisabledText);
+            ? ThemeColor(ThemeRoles.Text)
+            : ThemeColor(ThemeRoles.TextDisabled);
 
         var inset = ContentInset(ThemeRoles.ButtonNormal);
         DrawRow(spriteBatch, box, SelectedText, textColor, inset, FontStyle.Regular);
@@ -169,7 +169,7 @@ public sealed class DropDown : UIPanel
         if (!TryDrawThemePart(spriteBatch, ThemeRoles.DropDownList, list))
         {
             DrawRectClipped(spriteBatch, list, DialogPalette.FrameFill);
-            DrawBorderClipped(spriteBatch, list, ThemeColor(ThemeRoles.Border, DialogPalette.FrameBorder));
+            DrawBorderClipped(spriteBatch, list, ThemeColor(ThemeRoles.Border));
         }
 
         var inset = ContentInset(ThemeRoles.DropDownList);
@@ -180,20 +180,20 @@ public sealed class DropDown : UIPanel
             var selected = i == SelectedIndex;
 
             if (i == HoveredRow)
-                DrawRectClipped(spriteBatch, Inner(row), ThemeColor(ThemeRoles.RowHover, DialogPalette.RowHoverFill));
+                DrawRectClipped(spriteBatch, Inner(row), ThemeColor(ThemeRoles.RowHover));
             else if (selected)
-                DrawRectClipped(spriteBatch, Inner(row), ThemeColor(ThemeRoles.RowSelected, DialogPalette.RowSelectedFill));
+                DrawRectClipped(spriteBatch, Inner(row), ThemeColor(ThemeRoles.RowSelected));
 
             if (DisabledItems[i])
             {
-                DrawRow(spriteBatch, row, Items[i], ThemeColor(ThemeRoles.TextDisabled, DialogPalette.DisabledText), inset, FontStyle.Italic);
+                DrawRow(spriteBatch, row, Items[i], ThemeColor(ThemeRoles.TextDisabled), inset, FontStyle.Italic);
 
                 continue;
             }
 
             var color = selected
-                ? ThemeColor(ThemeRoles.TextSelected, DialogPalette.SelectedText)
-                : ThemeColor(ThemeRoles.Text, LegendColors.White);
+                ? ThemeColor(ThemeRoles.TextSelected)
+                : ThemeColor(ThemeRoles.Text);
 
             DrawRow(spriteBatch, row, Items[i], color, inset, FontStyle.Regular);
         }
