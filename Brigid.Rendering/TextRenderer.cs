@@ -141,7 +141,7 @@ public static class TextRenderer
             {
                 var run = text[runStart..i];
                 engine.DrawLine(spriteBatch, run, new Vector2(cursorX, y), activeColor, clip, characterSpacing, size: px);
-                cursorX += engine.MeasureWidth(run, px) + characterSpacing * run.Length;
+                cursorX += RunAdvance(engine, run, px, characterSpacing);
             }
 
             var codeColor = GetColorCode(text[i + 2])!.Value;
@@ -175,7 +175,11 @@ public static class TextRenderer
         if (colorCodesEnabled && (MeasureWidth(text, size, extraSpacing) <= maxWidth))
             return text.Length;
 
-        var width = 0;
+        //summed unrounded (MeasureWidthExact): rounding each glyph lost up to half a pixel apiece off 1x, so wrapped
+        //lines drew wider than maxWidth. Kerning is left out of the sum; it is almost always negative, so the estimate
+        //errs toward an early break, never a late one.
+        var px = size ?? FontEngine.Instance.UiSize;
+        var width = 0f;
         var lastSpace = -1;
         var glyphs = 0;
         var i = 0;
@@ -203,16 +207,10 @@ public static class TextRenderer
             //measuring one glyph at a time loses the inter-character tracking that a whole-string measurement (and
             //the draw) applies between glyphs, which over-estimated every wrapped line by ~1px per character and
             //broke lines well before they actually overflowed. Add it back for every glyph after the first.
-            width += step == 1
-                ? MeasureCharWidth(text[i], size, extraSpacing)
-                : FontEngine.Instance.MeasureWidth(
-                    text.Substring(i, 2),
-                    size ?? FontEngine.Instance.UiSize,
-                    FontStyle.Regular,
-                    extraSpacing);
+            width += FontEngine.Instance.MeasureWidthExact(step == 1 ? text[i].ToString() : text.Substring(i, 2), px, FontStyle.Regular, extraSpacing);
 
             if (glyphs > 0)
-                width += (int)(FontEngine.DEFAULT_TRACKING + extraSpacing);
+                width += FontEngine.DEFAULT_TRACKING + extraSpacing;
 
             glyphs++;
 
@@ -243,21 +241,12 @@ public static class TextRenderer
     ///     Returns true if the text at position i starts a {=x color code sequence.
     /// </summary>
     public static bool IsColorCode(string text, int i)
-        => ((i + 2) < text.Length) && (text[i] == '{') && (text[i + 1] == '=') && GetColorCode(text[i + 2]) is not null;
+        => ((i + 2) < text.Length) && (text[i] == '{') && (text[i + 1] == '=') && LegendPalette.GetTextColor(text[i + 2]).HasValue;
 
     /// <summary>
-    ///     Returns the horizontal pixel advance for a single character, from the active font's metrics.
-    /// </summary>
-    public static int MeasureCharWidth(char c, int? size = null, float extraSpacing = 0f)
-        => FontEngine.Instance.MeasureWidth(
-            c.ToString(),
-            size ?? FontEngine.Instance.UiSize,
-            FontStyle.Regular,
-            extraSpacing);
-
-    /// <summary>
-    ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Sums per color run so
-    ///     the result matches the cursor advance used while drawing.
+    ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Adds the same
+    ///     <see cref="RunAdvance" /> for each color run that the draw moves the pen by, so a caret placed with this width
+    ///     sits where the text is drawn. The sum is rounded once: a rounded width per run loses up to 0.5 px off 1x.
     /// </summary>
     public static int MeasureWidth(string text, int? size = null, float extraSpacing = 0f)
     {
@@ -266,7 +255,7 @@ public static class TextRenderer
 
         var engine = FontEngine.Instance;
         var px = size ?? FontEngine.Instance.UiSize;
-        var width = 0;
+        var width = 0f;
         var runStart = 0;
 
         for (var i = 0; i < text.Length; i++)
@@ -275,17 +264,24 @@ public static class TextRenderer
                 continue;
 
             if (i > runStart)
-                width += engine.MeasureWidth(text[runStart..i], px, FontStyle.Regular, extraSpacing);
+                width += RunAdvance(engine, text[runStart..i], px, extraSpacing);
 
             i += 2;
             runStart = i + 1;
         }
 
         if (runStart < text.Length)
-            width += engine.MeasureWidth(text[runStart..], px, FontStyle.Regular, extraSpacing);
+            width += RunAdvance(engine, text[runStart..], px, extraSpacing);
 
-        return width;
+        return (int)MathF.Round(width);
     }
+
+    /// <summary>
+    ///     How far the pen moves for one color run, drawn at <paramref name="extraSpacing" /> on top of the default
+    ///     tracking. The draw and <see cref="MeasureWidth(string, int?, float)" /> both use it, so they cannot disagree.
+    /// </summary>
+    private static float RunAdvance(FontEngine engine, string run, int px, float extraSpacing)
+        => engine.MeasureWidthExact(run, px, FontStyle.Regular, extraSpacing);
 
     /// <summary>
     ///     Pixel width of a single-run string in an explicit font style, matching the styled <see cref="DrawText(
@@ -312,7 +308,8 @@ public static class TextRenderer
     #region Word Wrapping
     /// <summary>
     ///     Word-wraps text into lines that fit within maxWidth pixels. Splits on explicit newlines, then wraps each
-    ///     paragraph by character width.
+    ///     paragraph by character width. An inline {=x} color code continues onto the lines after it, as in
+    ///     <see cref="WrapText" />.
     /// </summary>
     public static List<string> WrapLines(string text, int maxWidth, int? size = null, float extraSpacing = 0f)
     {
@@ -321,25 +318,13 @@ public static class TextRenderer
         if ((maxWidth <= 0) || string.IsNullOrEmpty(text))
             return lines;
 
+        string? activeColorCode = null;
+
         foreach (var paragraph in text.Split('\n'))
-        {
-            var remaining = paragraph;
-
-            while (remaining.Length > 0)
-            {
-                var lineEnd = FindLineBreak(remaining, maxWidth, size: size, extraSpacing: extraSpacing);
-
-                lines.Add(
-                    remaining[..lineEnd]
-                        .TrimEnd());
-
-                remaining = remaining[lineEnd..]
-                    .TrimStart();
-            }
-
             if (paragraph.Length == 0)
                 lines.Add(string.Empty);
-        }
+            else
+                WrapParagraph(paragraph, maxWidth, size, extraSpacing, trimLeading: true, lines, ref activeColorCode);
 
         return lines;
     }
@@ -372,26 +357,42 @@ public static class TextRenderer
                 continue;
             }
 
-            //inherit the active color code from prior lines so inline {=x} codes persist across wraps/paragraphs
-            var remaining = activeColorCode is not null ? activeColorCode + paragraph : paragraph;
-
-            while (remaining.Length > 0)
-            {
-                var lineEnd = FindLineBreak(remaining, maxWidth, size: size, extraSpacing: extraSpacing);
-                var line = remaining[..lineEnd].TrimEnd();
-                lines.Add(line);
-                activeColorCode = FindLastColorCode(line) ?? activeColorCode;
-                remaining = remaining[lineEnd..];
-
-                //only re-prepend the active color code when the prepended length is strictly
-                //less than what we just consumed — otherwise FindLineBreak on the next iteration
-                //returns the same lineEnd and remaining never shrinks (infinite loop).
-                if (activeColorCode is not null && (remaining.Length > 0) && (activeColorCode.Length < lineEnd))
-                    remaining = activeColorCode + remaining;
-            }
+            WrapParagraph(paragraph, maxWidth, size, extraSpacing, trimLeading: false, lines, ref activeColorCode);
         }
 
         return lines;
+    }
+
+    /// <summary>
+    ///     Word-wraps one paragraph into <paramref name="lines" />. The last {=x} color code continues onto each line after
+    ///     it, and onto the next paragraph through <paramref name="activeColorCode" />. When
+    ///     <paramref name="trimLeading" /> is true, the spaces after a break are removed from the start of the next line.
+    /// </summary>
+    private static void WrapParagraph(
+        string paragraph,
+        int maxWidth,
+        int? size,
+        float extraSpacing,
+        bool trimLeading,
+        List<string> lines,
+        ref string? activeColorCode)
+    {
+        var remaining = activeColorCode is not null ? activeColorCode + paragraph : paragraph;
+
+        while (remaining.Length > 0)
+        {
+            var lineEnd = FindLineBreak(remaining, maxWidth, size: size, extraSpacing: extraSpacing);
+            var line = remaining[..lineEnd].TrimEnd();
+            lines.Add(line);
+            activeColorCode = FindLastColorCode(line) ?? activeColorCode;
+            remaining = trimLeading ? remaining[lineEnd..].TrimStart() : remaining[lineEnd..];
+
+            //only re-prepend the active color code when the prepended length is strictly
+            //less than what we just consumed — otherwise FindLineBreak on the next iteration
+            //returns the same lineEnd and remaining never shrinks (infinite loop).
+            if (activeColorCode is not null && (remaining.Length > 0) && (activeColorCode.Length < lineEnd))
+                remaining = activeColorCode + remaining;
+        }
     }
 
     private static string? FindLastColorCode(string line)

@@ -56,7 +56,7 @@ public sealed class UiComponentRepository : RepositoryBase
     {
         try
         {
-            return GetOrCreate(key, () => LoadPrefabSet(key));
+            return GetOrCreateOrNull(key, () => LoadPrefabSet(key));
         }
         //rule 6 exemption: corrupt asset -> graceful null fallback (no validate-before-parse path)
         catch
@@ -275,7 +275,7 @@ public sealed class UiComponentRepository : RepositoryBase
     /// </summary>
     public SKImage? GetNationalSpfImage(string fileName, int frameIndex = 0)
     {
-        var spf = GetOrCreate($"NSPF_{fileName}", () => LoadNationalSpfFile(fileName));
+        var spf = GetOrCreateOrNull($"NSPF_{fileName}", () => LoadNationalSpfFile(fileName));
 
         if (spf is null || (frameIndex >= spf.Count))
             return null;
@@ -293,7 +293,7 @@ public sealed class UiComponentRepository : RepositoryBase
         if (AssetPackRegistry.TryGetUiSprite(fileName, frameIndex, out var overrideImage) && (overrideImage is not null))
             return overrideImage;
 
-        var spf = GetOrCreate($"SPF_{fileName}", () => LoadSpfFile(fileName));
+        var spf = GetOrCreateOrNull($"SPF_{fileName}", () => LoadSpfFile(fileName));
 
         if (spf is null || (frameIndex >= spf.Count))
             return null;

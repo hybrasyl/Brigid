@@ -40,6 +40,7 @@ public sealed partial class WorldScreen
 
         //ease the transfer loading bar while it's up across the reconnect gap (cosmetic; see MapLoadingBar)
         MapLoading.Tick(elapsedMs);
+        TickMapDataWatchdog(elapsedMs);
 
         //polled rather than driven by the transport event, which fires on the connect task: this is the
         //thread allowed to touch the control tree, and a world transfer re-establishes the transport
@@ -76,8 +77,9 @@ public sealed partial class WorldScreen
             var isSmooth = (entity == player) && smoothScroll;
             AnimationSystem.Advance(entity, elapsedMs, isSmooth);
 
-            //update creature optional standing animation cycle
-            if (entity.Type == ClientEntityType.Creature)
+            //update the optional standing animation cycle of a creature sprite, including an aisling in monster form.
+            //a swimmer draws the swim sprite, whose idle keeps the default interval.
+            if (entity.IsRenderedAsCreatureSprite && !entity.IsOnSwimmingTile)
             {
                 var animInfo = Game.CreatureRenderer.GetAnimInfo(entity.SpriteId);
 

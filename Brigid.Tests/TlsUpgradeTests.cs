@@ -34,7 +34,7 @@ public class TlsUpgradeTests
     ///     A marked greeting drives the upgrade: TLS comes up and the dialect is engaged, with the
     ///     negotiation itself carried inside the encrypted channel.
     /// </summary>
-    [Fact]
+    [TlsServerFact]
     public async Task MarkedGreeting_UpgradesAndEngagesTheDialect()
     {
         using var certificate = CreateSelfSignedCertificate();
@@ -114,7 +114,7 @@ public class TlsUpgradeTests
     ///     upgrades before it speaks. Resetting it per connection would make every hop after the
     ///     lobby plaintext — which is precisely where the credentials travel.
     /// </summary>
-    [Fact]
+    [TlsServerFact]
     public async Task CapabilitySurvivesDisconnect_SoClientFirstHopsUpgrade()
     {
         using var certificate = CreateSelfSignedCertificate();
@@ -148,7 +148,7 @@ public class TlsUpgradeTests
     ///     and its reply is discarded. The server says nothing further until the client speaks, so the
     ///     session stalls with both ends healthy and waiting.
     /// </summary>
-    [Fact]
+    [TlsServerFact]
     public async Task Greeting_IsNotDispatchableUntilTheConnectionCanReply()
     {
         using var certificate = CreateSelfSignedCertificate();
@@ -191,7 +191,7 @@ public class TlsUpgradeTests
     ///     identity, not the address that was dialled. Without the split, a hop redirected to by address
     ///     puts an IP literal to the certificate check and to the pin lookup, and neither can match.
     /// </summary>
-    [Fact]
+    [TlsServerFact]
     public async Task Upgrade_ValidatesAgainstTheIdentityRatherThanTheDialledAddress()
     {
         using var certificate = CreateSelfSignedCertificate();
@@ -223,7 +223,7 @@ public class TlsUpgradeTests
     ///     Omitting the identity leaves the dialled host doing both jobs, which is what the lobby hop
     ///     wants: it is reached by the name the user configured.
     /// </summary>
-    [Fact]
+    [TlsServerFact]
     public async Task Upgrade_WithoutAnIdentity_ValidatesAgainstTheDialledHost()
     {
         using var certificate = CreateSelfSignedCertificate();
@@ -253,7 +253,7 @@ public class TlsUpgradeTests
     ///     connection state. The token proves the round trip is this probe's reply and not merely
     ///     traffic — a client that echoed its own send, or replied to the wrong probe, fails here.
     /// </summary>
-    [Fact]
+    [TlsServerFact]
     public async Task ExtensionFrame_RoundTripsOnTheNegotiatedDialect()
     {
         using var certificate = CreateSelfSignedCertificate();
@@ -311,7 +311,7 @@ public class TlsUpgradeTests
     ///     loop does: extension packets arrive on their own queue, so a drain that only pulled retail
     ///     packets would leave the reply sitting there forever with the panel still saying "measuring".
     /// </summary>
-    [Fact]
+    [TlsServerFact]
     public async Task EchoProbe_ReportsARoundTripThroughTheConnectionManager()
     {
         using var certificate = CreateSelfSignedCertificate();

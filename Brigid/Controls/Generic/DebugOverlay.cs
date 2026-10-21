@@ -60,7 +60,6 @@ public static class DebugOverlay
     private static float Gen2FlashTimer;
     private static float LastFrameWorkMs;
     private static int FpsCounter;
-    private static int DisplayFps;
     private static float FpsElapsed;
     private static long SnappedDrawCount;
     private static long DebugDrawCount;
@@ -99,18 +98,21 @@ public static class DebugOverlay
     private static float StatsY => Y + GRAPH_HEIGHT + 4;
 
     /// <summary>
-    ///     Call at the start of Update to capture the previous frame's work time and begin timing the new frame.
+    ///     Call at the start of Update. Starts timing a frame at the first Update after a Draw. With a fixed time step,
+    ///     MonoGame runs catch-up Updates and skips Draws under load, so every Update before the next Draw is part of
+    ///     the same frame.
     /// </summary>
     public static void BeginFrame()
     {
-        LastFrameWorkMs = (float)FrameStopwatch.Elapsed.TotalMilliseconds;
-        FrameStopwatch.Restart();
+        if (!FrameStopwatch.IsRunning)
+            FrameStopwatch.Restart();
     }
 
     private static void ClearCaches()
     {
         TextElementCache.Clear();
         StatsTextElement = null;
+        ResetFrameCounters();
 
         //reset change-detection sentinels so the next activation rebuilds every line exactly once
         StatsPrevFps = -1;
@@ -399,7 +401,7 @@ public static class DebugOverlay
         var netMs = LatencyMonitor.LatencyMs;
         var drawCount = SnappedDrawCount;
         var debugDrawCount = DebugDrawCount;
-        var fps = DisplayFps;
+        var fps = FramesPerSecond;
         var ms = LastFrameWorkMs;
 
         //line 0 — FPS + frame time (0.05ms tolerance matches {ms:F1} display precision)
@@ -621,9 +623,36 @@ public static class DebugOverlay
     }
 
     /// <summary>
-    ///     Call at the end of Draw to stop timing the current frame's Update+Draw work.
+    ///     Call at the end of Draw. Stops timing the frame's Update+Draw work, samples it for the frame-time graph, and
+    ///     counts the drawn frame for the FPS readout.
     /// </summary>
-    public static void EndFrame() => FrameStopwatch.Stop();
+    public static void EndFrame()
+    {
+        FrameStopwatch.Stop();
+        LastFrameWorkMs = (float)FrameStopwatch.Elapsed.TotalMilliseconds;
+
+        if (!IsActive)
+            return;
+
+        FrameTimeHistory[FrameTimeIndex % FRAME_TIME_HISTORY] = LastFrameWorkMs;
+        FrameTimeIndex++;
+        FpsCounter++;
+    }
+
+    /// <summary>
+    ///     The drawn frames in the last full second.
+    /// </summary>
+    internal static int FramesPerSecond { get; private set; }
+
+    /// <summary>
+    ///     Starts the FPS count again from zero, so frames counted before the overlay closed do not go into the next reading.
+    /// </summary>
+    internal static void ResetFrameCounters()
+    {
+        FpsCounter = 0;
+        FpsElapsed = 0f;
+        FramesPerSecond = 0;
+    }
 
     /// <summary>
     ///     Captures the GPU draw count before the debug overlay renders its own draws. Call immediately before Draw() so the
@@ -640,23 +669,18 @@ public static class DebugOverlay
     }
 
     /// <summary>
-    ///     Call once per frame from Update() to sample frame time and GC counters.
+    ///     Call once per Update to publish the FPS each second and sample GC counters. EndFrame counts the frames.
     /// </summary>
     public static void Update(GameTime gameTime)
     {
         if (!IsActive)
             return;
 
-        FrameTimeHistory[FrameTimeIndex % FRAME_TIME_HISTORY] = LastFrameWorkMs;
-        FrameTimeIndex++;
-
-        //fps counter — count actual frames per second
-        FpsCounter++;
         FpsElapsed += (float)gameTime.ElapsedGameTime.TotalMilliseconds;
 
         if (FpsElapsed >= 1000f)
         {
-            DisplayFps = FpsCounter;
+            FramesPerSecond = FpsCounter;
             FpsCounter = 0;
             FpsElapsed -= 1000f;
         }

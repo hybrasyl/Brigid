@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Brigid
+Comment=Dark Ages client by the Hybrasyl project
+Exec=brigid
+Icon=brigid
+Categories=Game;RolePlaying;
+Terminal=false

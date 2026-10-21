@@ -48,6 +48,15 @@ public class UITextBox : UIElement
     public HorizontalAlignment HorizontalAlignment { get; set; } = HorizontalAlignment.Left;
 
     /// <summary>
+    ///     Where a single-line box puts its text line inside the padded area. <see cref="VerticalAlignment.Top" /> keeps
+    ///     the line at <c>PaddingTop</c>, which the prefab text rects are built for; any other value centres it, as
+    ///     <see cref="UILabel" /> does. A box taller than one line usually wants it centred. Multi-line boxes always start
+    ///     at the top. The default is <see cref="VerticalAlignment.Top" /> on purpose, so the prefab boxes do not move;
+    ///     <see cref="UILabel" /> defaults to <see cref="VerticalAlignment.Center" />.
+    /// </summary>
+    public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Top;
+
+    /// <summary>
     ///     When true, prevents text input that would cause the content to exceed the visible area. Only applies to multiline
     ///     text boxes. Uses the computed line layout to determine whether content fits.
     /// </summary>
@@ -98,8 +107,13 @@ public class UITextBox : UIElement
 
                 FocusedTextBox = this;
                 TextBoxFocusGained?.Invoke(this);
-            } else if (FocusedTextBox == this)
-                FocusedTextBox = null;
+            } else
+            {
+                if (FocusedTextBox == this)
+                    FocusedTextBox = null;
+
+                TextBoxFocusLost?.Invoke(this);
+            }
         }
     }
 
@@ -108,6 +122,12 @@ public class UITextBox : UIElement
     ///     The InputDispatcher subscribes to this to keep keyboard routing in sync.
     /// </summary>
     public static event TextBoxFocusHandler? TextBoxFocusGained;
+
+    /// <summary>
+    ///     Fired when any UITextBox loses focus via IsFocused becoming false. The InputDispatcher subscribes to this so
+    ///     that it does not keep routing input to a box that no longer has focus.
+    /// </summary>
+    public static event TextBoxFocusHandler? TextBoxFocusLost;
 
     public bool IsMasked { get; set; }
     public bool IsMultiLine { get; set; }
@@ -248,7 +268,7 @@ public class UITextBox : UIElement
 
     private void ComputeLineLayout()
     {
-        var innerWidth = Width - PaddingLeft + PaddingRight;
+        var innerWidth = Width - PaddingLeft - PaddingRight;
 
         if ((innerWidth == CachedLayoutWidth) && (Text == CachedLayoutText))
             return;
@@ -491,8 +511,12 @@ public class UITextBox : UIElement
         var displayText = IsMasked ? new string('*', Text.Length) : Text;
         var sx = ScreenX;
         var sy = ScreenY;
-        var textY = sy + PaddingTop;
+        var innerY = sy + PaddingTop;
         var textHeight = Height - PaddingTop - PaddingBottom;
+
+        var textY = VerticalAlignment == VerticalAlignment.Top
+            ? innerY
+            : innerY + Math.Max(0, (textHeight - TextRenderer.CHAR_HEIGHT) / 2);
 
         //prefix offset — non-editable text rendered before editable content
         var prefixWidth = 0;
@@ -545,8 +569,8 @@ public class UITextBox : UIElement
             {
                 var alignBounds = new Rectangle(
                     sx + PaddingLeft,
-                    textY,
-                    Width - PaddingLeft + PaddingRight,
+                    innerY,
+                    Width - PaddingLeft - PaddingRight,
                     textHeight);
 
                 var alignX = HorizontalAlignment switch
@@ -556,8 +580,8 @@ public class UITextBox : UIElement
                     _                    => alignBounds.X
                 };
 
-                var alignY = alignBounds.Y + (alignBounds.Height - TextElement.Height) / 2;
-                DrawRun(spriteBatch, new Vector2(alignX, alignY), displayText, ForegroundColor);
+                //textY, not a second centring formula: the text must not move up or down when the box gets focus
+                DrawRun(spriteBatch, new Vector2(alignX, textY), displayText, ForegroundColor);
             } else
                 DrawRun(spriteBatch, new Vector2(textStartX, textY), displayText, ForegroundColor);
         }
@@ -835,62 +859,12 @@ public class UITextBox : UIElement
             return 0;
 
         var displayText = IsMasked ? new string('*', Text.Length) : Text;
-        var prevWidth = 0;
 
-        for (var i = 0; i < displayText.Length;)
-        {
-            //skip color codes as atomic units — they have zero visual width
-            if (ColorCodesEnabled && TextRenderer.IsColorCode(displayText, i))
-            {
-                i += 3;
-
-                continue;
-            }
-
-            var nextI = i + 1;
-            var charWidth = prevWidth + TextElement.MeasureChar(displayText[i]);
-            var midpoint = (prevWidth + charWidth) / 2;
-
-            if (localX < midpoint)
-                return i;
-
-            prevWidth = charWidth;
-            i = nextI;
-        }
-
-        return displayText.Length;
+        return TextElement.IndexAtX(displayText, localX, ColorCodesEnabled);
     }
 
     private int HitTestCursorPosition(int targetPixelX, string lineText)
-    {
-        if ((lineText.Length == 0) || (targetPixelX <= 0))
-            return 0;
-
-        var prevWidth = 0;
-
-        for (var i = 0; i < lineText.Length;)
-        {
-            //skip color codes as atomic units
-            if (ColorCodesEnabled && TextRenderer.IsColorCode(lineText, i))
-            {
-                i += 3;
-
-                continue;
-            }
-
-            var nextI = i + 1;
-            var charWidth = prevWidth + TextElement.MeasureChar(lineText[i]);
-            var midpoint = (prevWidth + charWidth) / 2;
-
-            if (targetPixelX < midpoint)
-                return i;
-
-            prevWidth = charWidth;
-            i = nextI;
-        }
-
-        return lineText.Length;
-    }
+        => TextElement.IndexAtX(lineText, targetPixelX, ColorCodesEnabled);
 
     private int HitTestMultiLine(int mouseX, int mouseY)
     {
@@ -944,6 +918,15 @@ public class UITextBox : UIElement
 
     public event TextBoxFocusHandler? OnFocused;
 
+    /// <summary>
+    ///     Removes the line breaks from pasted text for a single-line box. For a multi-line box, changes each \r\n and each
+    ///     lone \r to the one \n that Enter inserts.
+    /// </summary>
+    internal static string NormalizeLineBreaks(string text, bool isMultiLine)
+        => isMultiLine
+            ? text.Replace("\r\n", "\n").Replace('\r', '\n')
+            : text.Replace("\r", "").Replace("\n", "");
+
     private void HandlePaste()
     {
         var clipText = Clipboard.GetText();
@@ -951,9 +934,7 @@ public class UITextBox : UIElement
         if (string.IsNullOrEmpty(clipText))
             return;
 
-        //strip newlines for single-line textboxes
-        if (!IsMultiLine)
-            clipText = clipText.Replace("\r", "").Replace("\n", "");
+        clipText = NormalizeLineBreaks(clipText, IsMultiLine);
 
         //re-check after stripping — a newline-only clipboard becomes empty and must not record a no-op undo
         if (clipText.Length == 0)
@@ -1223,6 +1204,9 @@ public class UITextBox : UIElement
         if (!IsFocused || !Enabled)
             return;
 
+        //Update skips a hidden box, so text cleared while the box was hidden can leave the cursor past the end
+        ClampPositions();
+
         //clipboard / undo-redo / select-all / line start-end resolve through the keybind registry so they honour
         //rebindings and the per-OS primary modifier (Ctrl on Windows/Linux, Cmd on macOS). Pure caret nav and
         //text mutation below stay literal — they are not rebindable commands.
@@ -1447,11 +1431,15 @@ public class UITextBox : UIElement
             case CommandId.Editor_Cut when HasSelection && !IsReadOnly:
             {
                 var clipboardText = IsMasked ? new string('*', SelectionLength) : StripColorCodes(SelectedText);
-                Clipboard.SetText(clipboardText);
+                e.Handled = true;
+
+                //keep the selection when the clipboard refused it, so a cut never loses text
+                if (!Clipboard.SetText(clipboardText))
+                    return true;
+
                 RecordUndo(EditKind.Cut);
                 DeleteSelection();
                 ResetCursor();
-                e.Handled = true;
 
                 return true;
             }
@@ -1483,6 +1471,9 @@ public class UITextBox : UIElement
     {
         if (!IsFocused || IsReadOnly || !Enabled)
             return;
+
+        //Update skips a hidden box, so text cleared while the box was hidden can leave the cursor past the end
+        ClampPositions();
 
         var c = e.Character;
 

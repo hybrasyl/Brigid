@@ -56,8 +56,53 @@ public sealed class TextElement
     /// </summary>
     public int Measure(string text) => TextRenderer.MeasureWidth(text, FontSize, CharacterSpacing);
 
-    /// <summary>Advance of a single glyph at this element's size and spacing; see <see cref="Measure" />.</summary>
-    public int MeasureChar(char c) => TextRenderer.MeasureCharWidth(c, FontSize, CharacterSpacing);
+    /// <summary>
+    ///     The caret index nearest to <paramref name="x" /> pixels from the start of <paramref name="text" />, for a mouse
+    ///     click. Measures each candidate prefix whole, as the caret and the selection are drawn. Do not add up
+    ///     single-glyph widths: a single glyph has no tracking to the next glyph, so the sum is wider than the drawn
+    ///     text. A {=x} color code (when <paramref name="colorCodesEnabled" />) and a surrogate pair are one step.
+    ///     Prefix widths only grow, so a binary search finds the glyph with log n measurements. A drag-select calls this
+    ///     on each mouse move.
+    /// </summary>
+    public int IndexAtX(string text, int x, bool colorCodesEnabled)
+    {
+        if ((text.Length == 0) || (x <= 0))
+            return 0;
+
+        var glyphs = new List<(int Start, int End)>();
+
+        for (var i = 0; i < text.Length;)
+        {
+            if (colorCodesEnabled && TextRenderer.IsColorCode(text, i))
+            {
+                i += 3;
+
+                continue;
+            }
+
+            var end = char.IsHighSurrogate(text[i]) && (i + 1 < text.Length) && char.IsLowSurrogate(text[i + 1]) ? i + 2 : i + 1;
+            glyphs.Add((i, end));
+            i = end;
+        }
+
+        //the caret goes before the first glyph whose midpoint is right of x
+        var low = 0;
+        var high = glyphs.Count;
+
+        while (low < high)
+        {
+            var mid = (low + high) / 2;
+            var (start, end) = glyphs[mid];
+            var midpoint = (Measure(text[..start]) + Measure(text[..end])) / 2;
+
+            if (x < midpoint)
+                high = mid;
+            else
+                low = mid + 1;
+        }
+
+        return low < glyphs.Count ? glyphs[low].Start : text.Length;
+    }
 
     /// <summary>
     ///     Shadow style applied during <see cref="Draw" />; also widens/heightens the bounding box reported by

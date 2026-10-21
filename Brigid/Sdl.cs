@@ -104,6 +104,10 @@ internal static partial class Sdl
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial void SDL_RestoreWindow(nint window);
 
+    [LibraryImport("SDL2")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial void SDL_RaiseWindow(nint window);
+
     //SDL_WindowFlags bits reported by SDL_GetWindowFlags (consumed by ChaosGame for maximize detection)
     public const uint SDL_WINDOW_MAXIMIZED = 0x00000080;
 
@@ -177,6 +181,25 @@ internal static partial class Sdl
     [LibraryImport("SDL2")]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial void SDL_FreeSurface(nint surface);
+
+    //SDL_GetClipboardText returns a UTF-8 copy that SDL allocates. Release it with SDL_free. The copy is empty when the
+    //clipboard has no text or the read fails, and SDL_GetError then gives the reason. It is NULL only when the
+    //allocation fails. Both clipboard calls need the video subsystem, so call them on the game thread.
+    [LibraryImport("SDL2")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial nint SDL_GetClipboardText();
+
+    [LibraryImport("SDL2", StringMarshalling = StringMarshalling.Utf8)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial int SDL_SetClipboardText(string text);
+
+    [LibraryImport("SDL2")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial void SDL_free(nint memory);
+
+    [LibraryImport("SDL2")]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial void SDL_ClearError();
 
     /// <summary>Copies the current SDL error string for diagnostics — returns empty if SDL has no pending error.</summary>
     public static string GetError()

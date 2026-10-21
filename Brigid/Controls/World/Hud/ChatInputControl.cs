@@ -33,7 +33,10 @@ public sealed class ChatInputControl : UIPanel
     //(host ends in kru.com).
     private const int RETAIL_MESSAGE_LENGTH = 55;
 
+    private static readonly Color FocusedBackground = new(0, 0, 0, 160);
+
     private readonly int FullWidth;
+    private readonly int MessageMaxLength;
     private readonly List<string> MessageHistory = [];
     private readonly UILabel PrefixLabel;
     private readonly UITextBox TextBox;
@@ -45,8 +48,6 @@ public sealed class ChatInputControl : UIPanel
     //-1 = not cycling (live input / draft); 0 = most recent sent message
     private int MessageHistoryIndex = -1;
     private Action<string>? PromptCallback;
-    private Color? SavedFocusedBackgroundColor;
-    private int SavedMaxLength;
 
     //last size and font generation applied to the prefix label and text box
     private int AppliedTextSize = -1;
@@ -74,6 +75,7 @@ public sealed class ChatInputControl : UIPanel
         Width = rect.Width;
         Height = rect.Height;
         FullWidth = rect.Width;
+        MessageMaxLength = GlobalSettings.IsCursed ? RETAIL_MESSAGE_LENGTH : 255;
 
         PrefixLabel = new UILabel
         {
@@ -98,12 +100,12 @@ public sealed class ChatInputControl : UIPanel
             Y = 0,
             Width = rect.Width,
             Height = rect.Height,
-            MaxLength = GlobalSettings.IsCursed ? RETAIL_MESSAGE_LENGTH : 255,
+            MaxLength = MessageMaxLength,
             PaddingLeft = 1,
             PaddingRight = 1,
             PaddingTop = 1,
             PaddingBottom = 1,
-            FocusedBackgroundColor = new Color(0, 0, 0, 160)
+            FocusedBackgroundColor = FocusedBackground
         };
 
         AddChild(TextBox);
@@ -186,6 +188,15 @@ public sealed class ChatInputControl : UIPanel
         if (InputDispatcher.Instance is { } dispatcher)
             dispatcher.ChatInputTextBox = TextBox;
 
+        //a switch from a prompt to a chat mode (a whisper from the aisling menu while a prompt is open) is also an exit
+        //from the prompt, and the prompt's text is not chat
+        if (Mode == ChatMode.Prompt)
+        {
+            RestoreFromPrompt();
+            TextBox.Text = string.Empty;
+            TextBox.ResetUndoHistory();
+        }
+
         Mode = mode;
         MessageHistoryIndex = -1;
         DraftMessage = string.Empty;
@@ -227,8 +238,6 @@ public sealed class ChatInputControl : UIPanel
     public void ShowPrompt(string prefix, int maxLength, Action<string> onConfirm)
     {
         PromptCallback = onConfirm;
-        SavedMaxLength = TextBox.MaxLength;
-        SavedFocusedBackgroundColor = TextBox.FocusedBackgroundColor;
 
         TextBox.MaxLength = maxLength;
         TextBox.FocusedBackgroundColor = Color.White;
@@ -246,6 +255,11 @@ public sealed class ChatInputControl : UIPanel
 
     public void Unfocus()
     {
+        //every exit from a prompt goes through Unfocus or FocusInternal, so the prompt's white background and short
+        //MaxLength cannot stay on the chat box
+        if (Mode == ChatMode.Prompt)
+            RestoreFromPrompt();
+
         Mode = ChatMode.None;
         WhisperTarget = null;
         TextBox.IsReadOnly = false;
@@ -276,8 +290,8 @@ public sealed class ChatInputControl : UIPanel
     private void RestoreFromPrompt()
     {
         PromptCallback = null;
-        TextBox.MaxLength = SavedMaxLength;
-        TextBox.FocusedBackgroundColor = SavedFocusedBackgroundColor;
+        TextBox.MaxLength = MessageMaxLength;
+        TextBox.FocusedBackgroundColor = FocusedBackground;
         TextBox.BackgroundColor = null;
         PrefixLabel.BackgroundColor = Color.Black;
     }
@@ -447,7 +461,6 @@ public sealed class ChatInputControl : UIPanel
             case ChatMode.Prompt:
                 var callback = PromptCallback;
                 var text = TextBox.Text;
-                RestoreFromPrompt();
                 Unfocus();
                 callback?.Invoke(text);
 
@@ -455,13 +468,7 @@ public sealed class ChatInputControl : UIPanel
         }
     }
 
-    private void HandleEscape()
-    {
-        if (Mode == ChatMode.Prompt)
-            RestoreFromPrompt();
-
-        Unfocus();
-    }
+    private void HandleEscape() => Unfocus();
 
     public override void OnTextInput(TextInputEvent e)
     {
