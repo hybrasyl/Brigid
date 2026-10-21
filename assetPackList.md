@@ -25,7 +25,7 @@ Resolution is **per asset**, not per pack:
 
 1. The lookup asks each registered pack of this content type, the highest `priority` first, and at the same priority in registration order (file-name order).
 2. Hit → modern asset used.
-3. Miss, or decode failure → the next pack is asked; after the last pack, the legacy asset for that ID alone. A creature is the exception: the first pack that covers it owns it, and a bad entry shows the placeholder (see "Several packs of one type, and conflicts").
+3. Miss, or decode failure → the next pack is asked; after the last pack, the legacy asset for that ID alone. Two types are exceptions: the first pack that covers a creature owns it, and a bad entry shows the placeholder; and one `ui_theme` pack is active, so a part that it does not have takes the flat look (see "Several packs of one type, and conflicts").
 
 Decode failure is deliberately indistinguishable from absence (`AssetPack.TryGetImage` swallows read
 and decode errors), so a corrupt entry degrades to legacy instead of breaking a surface.
@@ -87,6 +87,7 @@ What a pack does with a bad entry depends on the type:
 | `music`, `sound_effects` | the id | the next pack is asked, then the legacy sound |
 | `item_icons` | the sprite id; the pack that gives the image also decides the dye | the next pack is asked, then the legacy EPF |
 | `creature_sprites` | the sprite id; the first pack that covers it owns the whole creature (frames, pair count, bounding box) | the placeholder |
+| `ui_theme` | none: one theme is active (the selected `pack_id`, else the first), and themes share no keys | the flat look; never another theme's part |
 
 At registration the registry compares the new pack's keys with the packs already registered for its type, and logs one warning for each pair that shares keys: both `pack_id`s, the count, the first five keys, which pack a lookup asks first and why, and that an entry of that pack that does not decode passes the lookup to the other pack. A key is a `.png` entry name for the image types (other files, such as the manifest or a README, are not keys), the id for `music` and `sound_effects` (`sfx_1.wav` and `sfx_0001.mp3` are the same key), the sprite id for `creature_sprites`, and the portrait key for `npc_portraits`. The registry writes its messages through `DataDiagnostics.Log`, so they are in `notice-debug.log`.
 
@@ -176,7 +177,7 @@ behavioral difference.
 | `sound_effects`       | `sfx_{id}.{ext}`                                     | raw server id      | `SfxPacks`                  | `legend.dat` `{id}.mp3`                           |
 | `world_maps`          | `{fieldName}.png`                                    | named, not numeric | `TryGetFieldImage`          | `{field}.epf` + `{field}.pal` in `setoa.dat`      |
 | `town_maps`           | `town_{mapId:D5}.png`                                | raw map id         | `TryGetTownMapImage`        | `national.dat` `_t*` five-layer composite         |
-| `ui_theme`            | `theme.json` + the files it names                    | role, not numeric  | `GetUiThemePack()`          | the flat `DialogPalette` look of the primitive    |
+| `ui_theme`            | `theme.json` + the files it names                    | role, not numeric  | `GetUiThemePack()` (active) | the flat `DialogPalette` look of the primitive    |
 
 All lookups are case-insensitive. Unless a section says otherwise, entries live at the ZIP root and
 subfolders are ignored.
@@ -562,6 +563,8 @@ are **not** supported in v1 and would clip.
 primitives (`TextButton`, `SelectableTab`, `CenteredModalPanel`). It does not replace legacy art: a
 primitive with no theme part keeps its flat `DialogPalette` look. A control uses the theme only when
 `UIElement.UseTheme` is true on it or on the nearest parent that sets it.
+
+**One theme is active.** Several themes can be installed (`UiThemePacks`, in priority order, then by file name), but themes are alternatives, not layers. `GetUiThemePack()` returns the theme whose `pack_id` the player selected (`UiTheme:` in `brigid.cfg`, through `SelectUiTheme` at startup; case ignored), else the first theme. A selected id that is not installed logs a warning and uses the first theme. A part, colour or font that the active theme does not have takes the flat look, never another theme's. `CoverageKeys` is empty, so two themes give no shared-key warning. There is no theme picker in the client yet: edit `brigid.cfg`.
 
 `theme.json` at the ZIP root names each part, colour and font by **role**, not by panel or control,
 so every themed button gets the same `button.normal` art. Roles ignore case.

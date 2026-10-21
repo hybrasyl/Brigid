@@ -4,6 +4,7 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using Brigid.Collections;
 using Brigid.Data;
+using Brigid.Data.AssetPacks;
 using DALib.Utility;
 using Brigid.Controls.Generic;
 using Brigid.Networking;
@@ -560,6 +561,7 @@ public sealed class ChaosGame : Game
         AppPaths.SetServerScope(GlobalSettings.LobbyHost);
         DataDiagnostics.Try(() => Directory.CreateDirectory(MetaFilePath), "create metafile dir");
         ClientSettings.Load();
+        AssetPackRegistry.SelectUiTheme(ClientSettings.UiTheme);
         //load keybind overrides (DataPath was resolved during config/launcher setup); pure defaults if absent.
         Keybinds.Load();
         //LoadContent constructed FontEngine early (with the default face) so the launcher's frames have a non-null

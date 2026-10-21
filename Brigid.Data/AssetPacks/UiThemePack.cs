@@ -19,6 +19,12 @@ public sealed class UiThemePack : AssetPack
 
     public UiTheme Theme { get; }
 
+    /// <summary>
+    ///     None. Themes are alternatives, not layers: one theme is active, and it never takes a part from another theme,
+    ///     so two installed themes share no key and give no overlap warning.
+    /// </summary>
+    public override IEnumerable<string> CoverageKeys => [];
+
     internal UiThemePack(ZipArchive archive, AssetPackManifest manifest)
         : base(archive, manifest)
     {

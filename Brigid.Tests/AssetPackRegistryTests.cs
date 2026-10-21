@@ -1,6 +1,8 @@
 #region
 using System.IO.Compression;
+using System.Text;
 using Brigid.Data.AssetPacks;
+using Brigid.Rendering;
 using SkiaSharp;
 using Xunit;
 #endregion
@@ -323,6 +325,106 @@ public sealed class AssetPackRegistryTests : IDisposable
         Assert.Contains("'first' and 'second' share 1 key(s)", warning);
         Assert.Contains("skill0002.png", warning);
         Assert.Contains("'first' is asked first, before 'second': it registered first, at the same priority", warning);
+    }
+
+    private static void RegisterTheme(string packId, int priority, bool withFrame)
+    {
+        var json = withFrame ? """{ "parts": { "frame.panel": { "file": "frame.png" } } }""" : "{}";
+        var entries = new Dictionary<string, byte[]> { [UiThemePack.THEME_ENTRY_NAME] = Encoding.UTF8.GetBytes(json) };
+
+        if (withFrame)
+            entries["frame.png"] = Png(First);
+
+        Register("ui_theme", packId, entries, Manifest("ui_theme", packId, priority));
+    }
+
+    [Fact]
+    public void UiTheme_IsTheFirstPack_WhenNoThemeIsSelected()
+    {
+        RegisterTheme("wood", 100, false);
+        RegisterTheme("stone", 200, false);
+
+        Assert.Equal(["stone", "wood"], AssetPackRegistry.UiThemePacks.Select(pack => pack.Manifest.PackId));
+        Assert.Equal("stone", AssetPackRegistry.GetUiThemePack()?.Manifest.PackId);
+    }
+
+    [Fact]
+    public void UiTheme_IsTheSelectedPack_IgnoringCase()
+    {
+        RegisterTheme("wood", 100, false);
+        RegisterTheme("stone", 200, false);
+
+        AssetPackRegistry.SelectUiTheme("WOOD");
+        Assert.Equal("wood", AssetPackRegistry.GetUiThemePack()?.Manifest.PackId);
+
+        AssetPackRegistry.SelectUiTheme(null);
+        Assert.Equal("stone", AssetPackRegistry.GetUiThemePack()?.Manifest.PackId);
+    }
+
+    [Fact]
+    public void UiTheme_ASelectionMadeBeforeThePackRegisters_TakesEffectWhenItRegisters()
+    {
+        AssetPackRegistry.SelectUiTheme("wood");
+        RegisterTheme("stone", 200, false);
+        Assert.Equal("stone", AssetPackRegistry.GetUiThemePack()?.Manifest.PackId);
+
+        RegisterTheme("wood", 100, false);
+        Assert.Equal("wood", AssetPackRegistry.GetUiThemePack()?.Manifest.PackId);
+    }
+
+    [Fact]
+    public void UiTheme_ASelectionThatIsNotInstalled_UsesTheFirstPack_AndWarns()
+    {
+        var warnings = new List<string>();
+        void Collect(string line) => warnings.Add(line);
+
+        RegisterTheme("wood", 100, false);
+        AssetPackRegistry.WarningLogged += Collect;
+
+        try
+        {
+            AssetPackRegistry.SelectUiTheme("goth");
+        }
+        finally
+        {
+            AssetPackRegistry.WarningLogged -= Collect;
+        }
+
+        Assert.Equal("wood", AssetPackRegistry.GetUiThemePack()?.Manifest.PackId);
+        Assert.Contains("the selected ui_theme 'goth' is not installed; using 'wood'", Assert.Single(warnings));
+    }
+
+    [Fact]
+    public void UiTheme_ThemeArtDoesNotTakeAPartFromAnotherTheme()
+    {
+        RegisterTheme("wood", 100, true);
+        RegisterTheme("stone", 200, false);
+
+        Assert.False(ThemeArt.HasPart("frame.panel"));
+
+        AssetPackRegistry.SelectUiTheme("wood");
+        Assert.True(ThemeArt.HasPart("frame.panel"));
+    }
+
+    [Fact]
+    public void UiThemes_ShareNoKeys_SoTwoThemesGiveNoWarning()
+    {
+        var warnings = new List<string>();
+        void Collect(string line) => warnings.Add(line);
+
+        AssetPackRegistry.WarningLogged += Collect;
+
+        try
+        {
+            RegisterTheme("wood", 100, true);
+            RegisterTheme("stone", 100, true);
+        }
+        finally
+        {
+            AssetPackRegistry.WarningLogged -= Collect;
+        }
+
+        Assert.Empty(warnings);
     }
 
     private static byte[] EmptyZip()

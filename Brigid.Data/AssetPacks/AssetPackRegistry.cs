@@ -23,13 +23,15 @@ namespace Brigid.Data.AssetPacks;
 ///     and the pack that a lookup asks first.
 ///     </para>
 ///     <para>
-///     There are three kinds of lookup. For a key that is one image, the registry gives a <c>TryGet…</c> lookup that
+///     There are four kinds of lookup. For a key that is one image, the registry gives a <c>TryGet…</c> lookup that
 ///     decodes the image and asks the next pack when the decode fails. For a key with several values that must come
 ///     from one pack (a creature: its frames, its pair count and its bounding box), the first pack that covers the
 ///     key owns it (<see cref="GetCreaturePackFor" />), and an entry of that pack that does not decode shows the
 ///     placeholder. When only the caller can tell whether an entry works, or must keep a second decision with the pack
 ///     that answered, the caller goes through the ordered <c>…Packs</c> sequence itself: audio, which SDL decodes, and
-///     items, whose dye the pack that gives the image decides (<c>ItemIconSource</c>).
+///     items, whose dye the pack that gives the image decides (<c>ItemIconSource</c>). A UI theme is the fourth kind:
+///     themes are alternatives, not layers, so one theme is active (<see cref="GetUiThemePack" />) and a part that it
+///     does not have takes the flat look, never the part of another theme.
 ///     </para>
 ///     <para>
 ///     Adding a new pack type is one factory entry in <see cref="Factories" /> plus its typed accessors.
@@ -85,6 +87,11 @@ public static class AssetPackRegistry
     //lookup tries them in this order, so the first pack that covers a key wins
     private static readonly Dictionary<string, List<IAssetPack>> Packs = new();
     private static bool Initialized;
+
+    //the pack_id of the theme that the player selected, or null for the first theme. The active theme is a field, as
+    //ThemeArt asks for it on each draw
+    private static string? SelectedUiThemeId;
+    private static UiThemePack? ActiveUiTheme;
 
     /// <summary>
     ///     Scans <see cref="AppPaths.AssetsDir" /> for <c>*.datf</c> files and registers each pack by its declared
@@ -246,6 +253,9 @@ public static class AssetPackRegistry
     /// <summary>The <c>town_maps</c> packs, in lookup order.</summary>
     public static IEnumerable<TownMapPack> TownMapPacks => PacksOf<TownMapPack>("town_maps");
 
+    /// <summary>The installed <c>ui_theme</c> packs, in priority order. Only one is active; see <see cref="GetUiThemePack" />.</summary>
+    public static IEnumerable<UiThemePack> UiThemePacks => PacksOf<UiThemePack>("ui_theme");
+
     /// <summary>True when at least one <c>static_tiles</c> pack is registered. Lets the map preload skip its pack pass.</summary>
     public static bool HasStaticTilePacks => Packs.TryGetValue("static_tiles", out var list) && (list.Count > 0);
 
@@ -305,22 +315,36 @@ public static class AssetPackRegistry
     }
 
     /// <summary>
-    ///     Returns the currently-registered UI theme pack, or null if no pack of <c>content_type: ui_theme</c> is
-    ///     present.
+    ///     Returns the active UI theme: the installed pack whose <c>pack_id</c> the player selected with
+    ///     <see cref="SelectUiTheme" />, else the first pack in <see cref="UiThemePacks" />, or null when no theme is
+    ///     installed.
     /// </summary>
-    public static UiThemePack? GetUiThemePack() => Packs.GetValueOrDefault("ui_theme") as UiThemePack;
+    public static UiThemePack? GetUiThemePack() => ActiveUiTheme;
 
     /// <summary>
-    ///     Registers <paramref name="pack" /> for <paramref name="contentType" />, or removes the registration when it is null.
-    ///     For tests only: a test that uses it changes static state, so it runs in a collection with parallelization off.
+    ///     Selects the active UI theme by its <c>pack_id</c> (case ignored). Null or blank selects the first installed
+    ///     theme, and so does an id that no installed theme has. Call it after <see cref="Initialize" />: a selection made
+    ///     before its pack registers takes effect when the pack registers, but it first logs that the theme is not installed.
     /// </summary>
-    internal static void SetPackForTests(string contentType, IAssetPack? pack)
+    public static void SelectUiTheme(string? packId)
     {
-        if (pack is null)
-            Packs.Remove(contentType);
-        else
-            Packs[contentType] = pack;
+        SelectedUiThemeId = string.IsNullOrWhiteSpace(packId) ? null : packId;
+        UpdateActiveUiTheme();
+
+        if (SelectedUiThemeId is not null && !string.Equals(ActiveUiTheme?.Manifest.PackId, SelectedUiThemeId, StringComparison.OrdinalIgnoreCase))
+            LogWarning($"the selected ui_theme '{SelectedUiThemeId}' is not installed; using {(ActiveUiTheme is null ? "the flat look" : $"'{ActiveUiTheme.Manifest.PackId}'")}");
     }
+
+    /// <summary>
+    ///     Makes <paramref name="pack" /> the active theme without registering it, or makes no theme active when it is
+    ///     null. For the tests of the themed controls, which build a pack in memory and do not test the registry. The next
+    ///     registration or selection replaces it.
+    /// </summary>
+    internal static void SetUiThemeForTests(UiThemePack? pack) => ActiveUiTheme = pack;
+
+    private static void UpdateActiveUiTheme()
+        => ActiveUiTheme = UiThemePacks.FirstOrDefault(pack => string.Equals(pack.Manifest.PackId, SelectedUiThemeId, StringComparison.OrdinalIgnoreCase))
+                           ?? UiThemePacks.FirstOrDefault();
 
     private static void TryRegisterPack(string path)
     {
@@ -447,6 +471,9 @@ public static class AssetPackRegistry
 
         list.Insert(index, pack);
 
+        if (pack is UiThemePack)
+            UpdateActiveUiTheme();
+
         return true;
     }
 
@@ -481,6 +508,8 @@ public static class AssetPackRegistry
                 pack.Dispose();
 
         Packs.Clear();
+        SelectedUiThemeId = null;
+        ActiveUiTheme = null;
         Initialized = true;
     }
 

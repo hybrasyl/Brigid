@@ -20,14 +20,13 @@ public sealed class ThemeRoleTests : IDisposable
     private static readonly Color ThemeColour = new(16, 32, 48);
     private static readonly Color FocusFill = new(38, 40, 48);
 
-    private readonly IAssetPack? PreviousTheme = AssetPackRegistry.GetUiThemePack();
     private UiThemePack? Theme;
 
     public ThemeRoleTests() => FontEngine.Initialize(0);
 
     public void Dispose()
     {
-        AssetPackRegistry.SetPackForTests("ui_theme", PreviousTheme);
+        AssetPackRegistry.SetUiThemeForTests(null);
         Theme?.Dispose();
     }
 
@@ -185,7 +184,7 @@ public sealed class ThemeRoleTests : IDisposable
         Theme = parts.Length > 0
             ? UiThemeTests.BuildPack(json, ("slot.png", UiThemeTests.Png(8, 8)))
             : UiThemeTests.BuildPack(json);
-        AssetPackRegistry.SetPackForTests("ui_theme", Theme);
+        AssetPackRegistry.SetUiThemeForTests(Theme);
     }
 
     private static T InPanel<T>(T child, bool themed) where T : UIElement

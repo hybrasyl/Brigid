@@ -24,7 +24,6 @@ public sealed class ThemedModalLayoutTests : IDisposable
     private const int THEMED_INSET = 14;
     private const int FLAT_PADDING = 6;
 
-    private readonly IAssetPack? PreviousTheme = AssetPackRegistry.GetUiThemePack();
     private readonly UiThemePack Theme;
 
     public ThemedModalLayoutTests()
@@ -33,12 +32,12 @@ public sealed class ThemedModalLayoutTests : IDisposable
         Theme = UiThemeTests.BuildPack(
             """{ "density": 4, "parts": { "frame.panel": { "file": "frame.png", "slice": [44, 44, 44, 44] } } }""",
             ("frame.png", UiThemeTests.Png(128, 128)));
-        AssetPackRegistry.SetPackForTests("ui_theme", Theme);
+        AssetPackRegistry.SetUiThemeForTests(Theme);
     }
 
     public void Dispose()
     {
-        AssetPackRegistry.SetPackForTests("ui_theme", PreviousTheme);
+        AssetPackRegistry.SetUiThemeForTests(null);
         Theme.Dispose();
     }
 
@@ -73,9 +72,9 @@ public sealed class ThemedModalLayoutTests : IDisposable
     [Fact]
     public void TheBankShopPanelGrowsAroundItsContent()
     {
-        AssetPackRegistry.SetPackForTests("ui_theme", null);
+        AssetPackRegistry.SetUiThemeForTests(null);
         var flat = new BankShopPanel();
-        AssetPackRegistry.SetPackForTests("ui_theme", Theme);
+        AssetPackRegistry.SetUiThemeForTests(Theme);
 
         var themed = new BankShopPanel();
         var grow = THEMED_INSET - FLAT_PADDING;
@@ -135,14 +134,14 @@ public sealed class ThemedModalLayoutTests : IDisposable
     //the content area of the same modal with no theme: a themed modal grows so that its content keeps this size
     private Point FlatContentSize(string modal)
     {
-        AssetPackRegistry.SetPackForTests("ui_theme", null);
+        AssetPackRegistry.SetUiThemeForTests(null);
 
         try
         {
             return Create(modal).ContentBounds.Size;
         } finally
         {
-            AssetPackRegistry.SetPackForTests("ui_theme", Theme);
+            AssetPackRegistry.SetUiThemeForTests(Theme);
         }
     }
 
