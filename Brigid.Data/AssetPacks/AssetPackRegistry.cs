@@ -32,6 +32,15 @@ public static class AssetPackRegistry
     //resurrects stale legacy packs. Not a .datf, so pack discovery ignores it.
     private const string MIGRATION_MARKER_NAME = ".legacy-migrated";
 
+    //the SearchOption overload matches with MatchCasing.PlatformDefault, which is case-sensitive on Linux and so
+    //missed a pack named Wood.DATF there. The other options keep that overload's behaviour.
+    private static readonly EnumerationOptions PackFileSearch = new()
+    {
+        MatchCasing = MatchCasing.CaseInsensitive,
+        AttributesToSkip = 0,
+        IgnoreInaccessible = false
+    };
+
     //factories know how to build each pack type from a (ZipArchive, AssetPackManifest) pair. Adding a new content
     //type = add one line here + write the pack class. Keyed by manifest.content_type.
     private static readonly Dictionary<string, Func<ZipArchive, AssetPackManifest, IAssetPack>> Factories = new()
@@ -91,7 +100,7 @@ public static class AssetPackRegistry
         var discovered = 0;
         var registeredBefore = Packs.Count;
 
-        foreach (var path in Directory.EnumerateFiles(packDir, "*.datf", SearchOption.TopDirectoryOnly))
+        foreach (var path in EnumeratePackFiles(packDir))
         {
             discovered++;
             TryRegisterPack(path);
@@ -135,7 +144,7 @@ public static class AssetPackRegistry
 
                 var migrated = 0;
 
-                foreach (var src in Directory.EnumerateFiles(legacyDir, "*.datf", SearchOption.TopDirectoryOnly))
+                foreach (var src in EnumeratePackFiles(legacyDir))
                 {
                     var dst = Path.Combine(assetsDir, Path.GetFileName(src));
 
@@ -321,6 +330,9 @@ public static class AssetPackRegistry
             archive?.Dispose();
         }
     }
+
+    /// <summary>The <c>*.datf</c> files directly in <paramref name="dir" />, whatever the case of the extension.</summary>
+    internal static IEnumerable<string> EnumeratePackFiles(string dir) => Directory.EnumerateFiles(dir, "*.datf", PackFileSearch);
 
     /// <summary>
     ///     Returns why the registry refuses a manifest, or null when it accepts it. The registry accepts schema versions 1

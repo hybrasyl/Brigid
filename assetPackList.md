@@ -51,8 +51,9 @@ standard targets `~/.config`, which is `SpecialFolder.ApplicationData` there. If
 returns `""` (stripped env, `HOME` unset), the base falls back to `AppContext.BaseDirectory` so
 packs never scatter into the CWD.
 
-Scan is `Directory.EnumerateFiles(packDir, "*.datf", SearchOption.TopDirectoryOnly)` — extension
-`.datf` only, top level only, no recursion.
+Scan is `AssetPackRegistry.EnumeratePackFiles(packDir)` — extension `.datf` only, in any case
+(`Wood.DATF` registers on Linux too), top level only, no recursion. The legacy migration below
+uses the same scan.
 
 ### Validation ladder
 
