@@ -99,17 +99,42 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         AddCaption(new UILabel { Name = "checkbox_checked_role", Text = ThemeRoles.CheckBoxMark }, ax + 2 * CELL_W, y);
         y += SECTION_H;
 
-        //slider: track, fill and thumb
-        AddHeader(new UILabel { Name = "slider_header", Text = "SliderControl (146 by 14, thumb 8 by 14)" }, ax, y);
+        //slider: track, fill and thumb; beside it a live horizontal scroll bar
+        AddHeader(new UILabel { Name = "slider_header", Text = "SliderControl (146 by 14), horizontal scroll bar" }, ax, y);
         var slider = new SliderControl(146, 14) { Name = "slider" };
         slider.SetValue(6);
         AddRow(y, ax, slider);
+        AddChild(
+            new ScrollBarControl
+            {
+                Name = "hscroll",
+                Orientation = ScrollOrientation.Horizontal,
+                X = ax + 152,
+                Y = y + HEADER_H + (SAMPLE_H - ScrollBarControl.DEFAULT_WIDTH) / 2,
+                Width = COLUMN_W - 152,
+                Height = ScrollBarControl.DEFAULT_WIDTH,
+                TotalItems = 10,
+                VisibleItems = 4,
+                MaxValue = 6
+            });
         AddCaption(
             new UILabel { Name = "slider_role", Text = $"{ThemeRoles.SliderTrack}, {ThemeRoles.SliderFill}, {ThemeRoles.SliderThumb}" },
             ax,
             y,
             COLUMN_W);
-        y += SECTION_H;
+        AddCaption(
+            new UILabel
+            {
+                Name = "hscroll_role",
+                WordWrap = true,
+                Height = 2 * CAPTION_H,
+                Text = $"{ThemeRoles.ScrollHTrack}, {ThemeRoles.ScrollHThumbHover}, {ThemeRoles.ScrollHThumbPressed}, "
+                       + $"{ThemeRoles.ScrollLeftPressed}, {ThemeRoles.ScrollRightPressed}: use the bar"
+            },
+            ax,
+            y + CAPTION_H,
+            COLUMN_W);
+        y += SECTION_H + 2 * CAPTION_H;
 
         //input slots: a field with text, and a live field to click for the focused slot
         AddHeader(new UILabel { Name = "slots_header", Text = "InputSlotPane (fields 140 by 18)" }, ax, y);

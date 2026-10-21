@@ -27,6 +27,14 @@ public static class ThemeRoles
     public const string ScrollUpPressed = "scrollbar.up.pressed";
     public const string ScrollDown = "scrollbar.down";
     public const string ScrollDownPressed = "scrollbar.down.pressed";
+    public const string ScrollHTrack = "scrollbar.htrack";
+    public const string ScrollHThumb = "scrollbar.hthumb";
+    public const string ScrollHThumbHover = "scrollbar.hthumb.hover";
+    public const string ScrollHThumbPressed = "scrollbar.hthumb.pressed";
+    public const string ScrollLeft = "scrollbar.left";
+    public const string ScrollLeftPressed = "scrollbar.left.pressed";
+    public const string ScrollRight = "scrollbar.right";
+    public const string ScrollRightPressed = "scrollbar.right.pressed";
     public const string InputSlot = "input.slot";
     public const string InputSlotFocus = "input.slot.focus";
     public const string CheckBoxNormal = "checkbox.normal";
