@@ -1,5 +1,6 @@
 #region
 using Brigid.Data;
+using Brigid.Data.AssetPacks;
 using Brigid.Data.Models;
 using Brigid.Data.Utilities;
 using Brigid.Extensions;
@@ -286,7 +287,7 @@ public static class WorldState
                 case ItemWorldObject groundItem:
                     entity.Type = ClientEntityType.GroundItem;
                     //wire item sprites carry the 0x8000 item-range flag; strip it so pack lookups resolve
-                    entity.SpriteId = (ushort)(entity.SpriteId & 0x7FFF);
+                    entity.SpriteId = (ushort)ItemSpriteIds.ToSpriteId(entity.SpriteId);
                     entity.ItemColor = groundItem.Color;
 
                     break;

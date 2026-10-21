@@ -21,7 +21,7 @@ public sealed class AssetPackManifest
 
     /// <summary>
     ///     Identifier for this pack. Required, and used in log messages. The registry does not detect duplicates by this
-    ///     id; it resolves two packs of one <see cref="ContentType" /> by <see cref="Priority" />.
+    ///     id; it orders the packs of one <see cref="ContentType" /> by <see cref="Priority" />, then by file name.
     /// </summary>
     [JsonPropertyName("pack_id")]
     public string PackId { get; init; } = string.Empty;
@@ -33,11 +33,12 @@ public sealed class AssetPackManifest
     public string PackVersion { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Enum discriminator selecting which typed pack accessor this pack registers with. The registry's
+    ///     Enum discriminator selecting which pack list of the registry this pack goes in. The registry's
     ///     <c>Factories</c> dictionary lists every recognized value; manifests declaring an unknown content type are
     ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>nation_badges</c>,
     ///     <c>item_icons</c>, <c>npc_portraits</c>, <c>static_tiles</c>, <c>legend_mark_icons</c>,
-    ///     <c>ui_sprite_overrides</c>, <c>creature_sprites</c>, <c>music</c>, <c>sound_effects</c>, <c>world_maps</c>.
+    ///     <c>ui_sprite_overrides</c>, <c>creature_sprites</c>, <c>music</c>, <c>sound_effects</c>, <c>world_maps</c>,
+    ///     <c>town_maps</c>.
     ///     Future content types land as additions to that dictionary.
     /// </summary>
     [JsonPropertyName("content_type")]

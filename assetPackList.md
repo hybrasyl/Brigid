@@ -112,8 +112,7 @@ renderer's cache is cleared. Restart the client.
 
 ### Adding a content type
 
-Three edits: one line in `AssetPackRegistry.Factories`, one typed accessor, and the pack class
-deriving from `AssetPack` (or `AudioPack` for byte-serving types).
+Three edits: one line in `AssetPackRegistry.Factories`; the accessors, which are an ordered `…Packs` sequence and a key lookup (and a `CoverageKeys` override when the key is not the `.png` entry name, so that the overlap warning names the right keys); and the pack class deriving from `AssetPack` (or `AudioPack` for byte-serving types).
 
 ---
 
@@ -225,7 +224,7 @@ return TryGetImage($"item{spriteId:D5}.png", out image);
 - **1-based**. Guard: `spriteId <= 0` → miss.
 - **The ceiling is 32767.** The server sends an item sprite as `sprite + 0x8000` in a `u16`, so the client removes the flag with `& 0x7FFF`. A sprite above 32767 wraps on the wire.
 - **One resolver for every surface:** `Brigid.Rendering/ItemIconSource.cs`. It removes the flag, asks the `item_icons` packs in their order (priority, then file name; a bad entry passes to the next pack), then reads the legacy EPF + palette. `ItemRenderer` (ground items, dialog portrait) and `UiRenderer.GetItemIcon` (the other surfaces) both call it.
-- **Icon offset.** A pack icon draws at `floor((31 − size) / 2)` on each axis in the 31×31 slot (`IconTexture.FromPack`): a 32×32 icon at `-1,-1`, as a modern ability icon does, and a smaller icon centred. A legacy icon draws at `0,0`. On the ground, a pack PNG is centred as a tightly cropped image.
+- **Icon offset.** A pack icon draws at `floor((31 − size) / 2)` on each axis in the 31×31 slot (`IconTexture.FromPack`): a 32×32 icon at `-1,-1`, as a modern ability icon does, and a smaller icon centred. The client does not clamp a larger icon: a 48×48 icon draws at `-9,-9` and covers the next slots. Taliesin accepts 16 to 32 px, so only a pack made by hand can have one. A legacy icon draws at `0,0`. On the ground, a pack PNG is centred as a tightly cropped image.
 - **Legacy dye** goes through `AislingDrawDataRepository.ApplyDye`, which leaves a palette without the canonical dye ramp unchanged.
 
 **Which items take the dye (BRIG-41).** `ItemPack.IsDyeable(spriteId, image)` decides, for the pack that gives the image:
