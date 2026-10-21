@@ -100,7 +100,7 @@ public sealed class TextPopupControl : CenteredModalPanel
         if (Visible)
         {
             //a second message comes back to the top of the control stack, so that the keys come to it again
-            CenterInViewport();
+            PlaceInViewport();
             InputDispatcher.Instance?.PushControl(this);
         } else
             base.Show();

@@ -294,8 +294,8 @@ _nmails.txt
     _nbtn.epf/.spf       — Send/Cancel button frames
 
 _ngcdlg0.txt
-  Class:    GroupTab : PrefabPanel
-  File:     Controls/World/Popups/GroupTab.cs
+  Class:    (retired) — replaced by GroupTab, the Members tab of GroupTabControl
+  File:     Controls/World/Popups/GroupTab.cs (primitive, no prefab)
   Purpose:  Group member list tab — 13 member slots computed from USER0 and USER1 anchor rects (stride 22), each with a per-row kick button. OK closes the parent tab container.
   Images referenced by controls:
     _ngcdlg0.epf/.spf    — Anchor background
@@ -303,8 +303,8 @@ _ngcdlg0.txt
     B_BTN0 (prefab entry) — 3-frame kick button texture set: 0=normal, 1=pressed, 2=disabled
 
 _ngcmain.txt
-  Class:    GroupTabControl : PrefabPanel
-  File:     Controls/World/Popups/GroupTabControl.cs
+  Class:    (retired) — replaced by GroupTabControl on CenteredModalPanel
+  File:     Controls/World/Popups/GroupTabControl.cs (primitive, no prefab)
   Purpose:  Tabbed container for the group window. Hosts GroupTab (members, TAB0) and GroupRecruitPanel (recruit, TAB1). Close button on the header.
   Images referenced by controls:
     _ngcdlg0.epf/.spf    — Anchor background (shared — _ngcmain.spf does not exist)
@@ -312,8 +312,8 @@ _ngcmain.txt
     _ngcbtns.epf/.spf    — Small (normal) tab button frames (2 frames at 69×20)
 
 _ngcdlg1.txt
-  Class:    GroupRecruitPanel : PrefabPanel
-  File:     Controls/World/Popups/GroupRecruitPanel.cs
+  Class:    (retired) — replaced by the GroupRecruitPanel form, in GroupTabControl and GroupBoxViewerControl
+  File:     Controls/World/Popups/GroupRecruitPanel.cs (primitive, no prefab)
   Purpose:  Group recruitment dialog with three modes — OwnerNew / OwnerEdit / Viewer. Mode governs which of BTN_BEGIN / BTN_MODIFY / BTN_RESET / BTN_QUERY_JOIN / BTN_CANCEL is visible. All action buttons share the same screen coordinates and are toggled via visibility.
   Controls referenced by prefab:
     TITLE                — group box title (editable in owner modes, locked in viewer; max 18 chars)
@@ -670,13 +670,14 @@ msg.tbl
 # SECTION 5: SUMMARY — QUICK REFERENCE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Control .txt files:        44 total (22 retired — see the (retired) markers in Section 1)
+# Control .txt files:        44 total (25 retired — see the (retired) markers in Section 1)
 #   Login flow:              _nsvr
 #   Main HUD:                _nbk_s, _nstatus
 #   Self-profile tabs:       _nui, _nui_eq, _nui_sk, _nui_dr, _nui_ev, _nui_al, _nui_fm
-#   Popups/dialogs:          _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, _nhotkem, _nhotkey
+#   Popups/dialogs:          lgcpane, lnpcd, _nhotkem, _nhotkey
 #   Retired (primitive now): _nmoney, litemex, _nui_ske, _nui_eve, _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook,
-#                            _noptdlg, _nmacro, _nsett, _nfriend, _nstart, _nlogin, _ncreate, _nagree, _npw, _nexch
+#                            _noptdlg, _nmacro, _nsett, _nfriend, _nstart, _nlogin, _ncreate, _nagree, _npw, _nexch,
+#                            _ngcmain, _ngcdlg0, _ngcdlg1
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm
 #

@@ -1,118 +1,88 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
+using Brigid.Definitions;
+using Brigid.Rendering;
 using Brigid.ViewModel;
 using Chaos.Extensions.Common;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.World.Popups;
 
 /// <summary>
-///     Group/party panel using _ngcdlg0 prefab. Displays group member slots with quit buttons.
-///     When the player is the leader, quit buttons next to other members are enabled (kick).
-///     BTN_OK closes the panel.
+///     The Members tab of the group window (BRIG-126 step 3c), in place of the legacy <c>_ngcdlg0</c> prefab. Up to 13
+///     rows, one for each member of the group. A row shows the name, and "Leader" on the leader's row. When you are the
+///     leader, the row of each other member has a Kick button. With no group, the tab says so. The tab shows the
+///     <c>WorldState.Group</c> state; the host gives its size and place.
 /// </summary>
-public sealed class GroupTab : PrefabPanel
+public sealed class GroupTab : UIPanel
 {
-    private const int MAX_MEMBERS = 13;
-    private const int ROW_HEIGHT = 22;
-    private const int NAME_X = 53;
-    private const int NAME_START_Y = 47;
-    private const int QUIT_BTN_X = 156;
-    private const int QUIT_BTN_START_Y = 42;
-    private const int QUIT_BTN_WIDTH = 30;
-    private const int QUIT_BTN_HEIGHT = 20;
+    public const int MAX_MEMBERS = 13;
+    private const int ROW_H = 17;
+    private const int KICK_W = 44;
+    private const int LEADER_W = 64;
+    private const int KICK_H = 16;
 
-    private readonly UILabel?[] MemberLabels = new UILabel?[MAX_MEMBERS];
-    private readonly UIButton[] QuitButtons = new UIButton[MAX_MEMBERS];
-    private bool Dirty;
+    /// <summary>The height of the tab: one row for each member.</summary>
+    public const int HEIGHT = MAX_MEMBERS * ROW_H;
 
-    private GroupChangedHandler GroupChangedHandler { get; }
+    private readonly Row[] Rows = new Row[MAX_MEMBERS];
+    private readonly UILabel EmptyLabel;
+    private readonly GroupChangedHandler GroupChangedHandler;
+    private bool Dirty = true;
 
-    public UIButton? OkButton { get; }
+    public event GroupKickHandler? OnKick;
 
-    public GroupTab()
-        : base("_ngcdlg0", false)
+    public GroupTab(int width)
     {
-        Name = "Group";
-        Visible = false;
-        UsesControlStack = true;
+        Width = width;
+        Height = HEIGHT;
+        IsPassThrough = true;
 
-        //position at top-left of screen
-        X = 0;
-        Y = 0;
-
-        OkButton = CreateButton("BTN_OK");
-
-        if (OkButton is not null)
-            OkButton.Clicked += () =>
-            {
-                Hide();
-                OnClose?.Invoke();
-            };
-
-        //quit button textures from b_btn0: 0=normal, 1=pressed, 2=disabled
-        var cache = UiRenderer.Instance!;
-        var pressedTexture = cache.GetPrefabTexture("_ngcdlg0", "B_BTN0", 1);
-        var disabledTexture = cache.GetPrefabTexture("_ngcdlg0", "B_BTN0", 2);
-
-        //create member name labels and quit buttons for each row
         for (var i = 0; i < MAX_MEMBERS; i++)
         {
-            var controlName = $"USER{i}";
-            var label = CreateLabel(controlName);
-
-            if (label is not null)
-                MemberLabels[i] = label;
-            else
+            var row = new Row(width)
             {
-                MemberLabels[i] = new UILabel
-                {
-                    Name = controlName,
-                    X = NAME_X,
-                    Y = NAME_START_Y + i * ROW_HEIGHT,
-                    Width = 72,
-                    Height = 12
-                };
-
-                AddChild(MemberLabels[i]!);
-            }
-
-            //quit/kick button for each row — disabled by default
-            var quitButton = new UIButton
-            {
-                Name = $"QUIT{i}",
-                X = QUIT_BTN_X,
-                Y = QUIT_BTN_START_Y + i * ROW_HEIGHT,
-                Width = QUIT_BTN_WIDTH,
-                Height = QUIT_BTN_HEIGHT,
-                NormalTexture = disabledTexture,
-                PressedTexture = pressedTexture,
-                Enabled = false
+                Name = $"row_{i}",
+                Y = i * ROW_H
             };
-
-            //capture index for the click handler
-            var memberIndex = i;
-
-            quitButton.Clicked += () =>
-            {
-                var members = WorldState.Group.Members;
-
-                if (memberIndex < members.Count)
-                    OnKick?.Invoke(members[memberIndex]);
-            };
-
-            QuitButtons[i] = quitButton;
-            AddChild(quitButton);
+            row.KickButton.Clicked += () => OnKick?.Invoke(row.NameLabel.Text);
+            Rows[i] = row;
+            AddChild(row);
         }
+
+        EmptyLabel = new UILabel
+        {
+            Name = "empty",
+            Width = width,
+            Height = ROW_H,
+            Text = "You are not in a group.",
+            VerticalAlignment = VerticalAlignment.Center,
+            PaddingLeft = 0,
+            IsHitTestVisible = false
+        };
+        EmptyLabel.SetForegroundRole(ThemeRoles.TextDisabled);
+        AddChild(EmptyLabel);
 
         GroupChangedHandler = () => Dirty = true;
         WorldState.Group.Changed += GroupChangedHandler;
-        Dirty = true;
     }
+
+    /// <summary>The name of one row, and whether it has the Kick button and the leader mark. Internal for the tests.</summary>
+    internal (string Name, bool CanKick, bool IsLeader) RowState(int index)
+    {
+        var row = Rows[index];
+
+        return (row.Visible ? row.NameLabel.Text : string.Empty, row.Visible && row.KickButton.Visible, row.Visible && row.LeaderLabel.Visible);
+    }
+
+    /// <summary>The Kick button of one row. Internal for the tests.</summary>
+    internal TextButton KickButton(int index) => Rows[index].KickButton;
+
+    /// <summary>True when the tab says that you are not in a group. Internal for the tests.</summary>
+    internal bool ShowsEmpty => EmptyLabel.Visible;
 
     public override void Dispose()
     {
@@ -121,71 +91,93 @@ public sealed class GroupTab : PrefabPanel
         base.Dispose();
     }
 
-    public override void Draw(SpriteBatch spriteBatch)
-    {
-        if (!Visible)
-            return;
-
-        base.Draw(spriteBatch);
-    }
-
-    public event CloseHandler? OnClose;
-    public event GroupKickHandler? OnKick;
-
-    private void Refresh()
-    {
-        Dirty = false;
-        var members = WorldState.Group.Members;
-        var leaderName = WorldState.Group.LeaderName;
-        var isLeader = WorldState.Group.IsLeader;
-        var playerName = WorldState.PlayerName;
-
-        var cache = UiRenderer.Instance!;
-        var normalTexture = cache.GetPrefabTexture("_ngcdlg0", "B_BTN0", 0);
-        var disabledTexture = cache.GetPrefabTexture("_ngcdlg0", "B_BTN0", 2);
-
-        for (var i = 0; i < MAX_MEMBERS; i++)
-        {
-            if (MemberLabels[i] is not null)
-            {
-                if (i < members.Count)
-                {
-                    var isMemberLeader = leaderName is not null && members[i].EqualsI(leaderName);
-                    MemberLabels[i]!.ForegroundColor = isMemberLeader ? LegendColors.White : TextColors.Default;
-                    MemberLabels[i]!.Text = members[i];
-                } else
-                    MemberLabels[i]!.Text = string.Empty;
-            }
-
-            //enable quit button only for other members when we are the leader
-            var isSelf = (i < members.Count)
-                         && members[i]
-                             .EqualsI(playerName);
-            var canKick = isLeader && (i < members.Count) && !isSelf;
-
-            QuitButtons[i].Enabled = canKick;
-            QuitButtons[i].NormalTexture = canKick ? normalTexture : disabledTexture;
-        }
-    }
-
     public override void Update(GameTime gameTime)
     {
-        if (!Visible || !Enabled)
-            return;
-
-        if (Dirty)
+        if (Visible && Dirty)
             Refresh();
 
         base.Update(gameTime);
     }
 
-    public override void OnKeyDown(KeyDownEvent e)
+    private void Refresh()
     {
-        if (e.Key == Keys.Escape)
+        Dirty = false;
+
+        var members = WorldState.Group.Members;
+        var leaderName = WorldState.Group.LeaderName;
+        var isLeader = WorldState.Group.IsLeader;
+
+        for (var i = 0; i < MAX_MEMBERS; i++)
         {
-            Hide();
-            OnClose?.Invoke();
-            e.Handled = true;
+            var row = Rows[i];
+            row.Visible = i < members.Count;
+
+            if (!row.Visible)
+                continue;
+
+            var name = members[i];
+            var isMemberLeader = (leaderName is not null) && name.EqualsI(leaderName);
+
+            row.NameLabel.Text = name;
+            row.LeaderLabel.Visible = isMemberLeader;
+
+            //only the leader kicks, and not themself
+            row.KickButton.Visible = isLeader && !name.EqualsI(WorldState.PlayerName);
+        }
+
+        EmptyLabel.Visible = members.Count == 0;
+    }
+
+    //one member: the name on the left; the Kick button or the leader mark on the right
+    private sealed class Row : UIPanel
+    {
+        public readonly UILabel NameLabel;
+        public readonly UILabel LeaderLabel;
+        public readonly TextButton KickButton;
+
+        public Row(int width)
+        {
+            Width = width;
+            Height = ROW_H;
+            IsPassThrough = true;
+            Visible = false;
+
+            NameLabel = new UILabel
+            {
+                Name = "name",
+                Width = width - LEADER_W - 4,
+                Height = ROW_H,
+                VerticalAlignment = VerticalAlignment.Center,
+                PaddingLeft = 0,
+                IsHitTestVisible = false
+            };
+            NameLabel.SetForegroundRole(ThemeRoles.Text);
+            AddChild(NameLabel);
+
+            LeaderLabel = new UILabel
+            {
+                Name = "leader",
+                X = width - LEADER_W,
+                Width = LEADER_W,
+                Height = ROW_H,
+                Text = "Leader",
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+                PaddingRight = 0,
+                Visible = false,
+                IsHitTestVisible = false
+            };
+            LeaderLabel.SetForegroundRole(ThemeRoles.TextSelected);
+            AddChild(LeaderLabel);
+
+            KickButton = new TextButton("Kick", KICK_W, KICK_H)
+            {
+                Name = "kick",
+                X = width - KICK_W,
+                Y = (ROW_H - KICK_H) / 2,
+                Visible = false
+            };
+            AddChild(KickButton);
         }
     }
 }

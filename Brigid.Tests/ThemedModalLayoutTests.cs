@@ -47,7 +47,7 @@ public sealed class ThemedModalLayoutTests : IDisposable
 
     //Options is left out: its setting labels read msg.tbl, which a test does not load. It lays out from ContentBounds as
     //the others do
-    public static TheoryData<string> Modals => ["boards", "castable", "keybind", "serverinfo", "certificate", "insecure", "pause", "popup", "itemamount", "goldamount", "textpopup", "profiletext", "abilitydetails", "eventdetails", "exchange"];
+    public static TheoryData<string> Modals => ["boards", "castable", "keybind", "serverinfo", "certificate", "insecure", "pause", "popup", "itemamount", "goldamount", "textpopup", "profiletext", "abilitydetails", "eventdetails", "exchange", "group", "groupbox"];
 
     [Theory]
     [MemberData(nameof(Modals))]
@@ -72,6 +72,15 @@ public sealed class ThemedModalLayoutTests : IDisposable
             Assert.True(child.X + child.Width <= content.Right, $"{modal}: {child.Name} ends right of the content");
             Assert.True(child.Y + child.Height <= content.Bottom, $"{modal}: {child.Name} ends below the content");
         }
+    }
+
+    [Fact]
+    public void TheThemedGroupWindowFitsTheSmallHudViewport()
+    {
+        //the small HUD's MAP rect (_nbk_s) is 308 px tall, and the window sits at its top
+        using var window = new GroupTabControl();
+
+        Assert.True(window.Height <= 308, $"the group window is {window.Height} px tall");
     }
 
     [Fact]
@@ -197,6 +206,8 @@ public sealed class ThemedModalLayoutTests : IDisposable
         "abilitydetails" => new AbilityMetadataDetailsControl(),
         "eventdetails" => new EventMetadataDetailsControl(),
         "exchange"    => new ExchangeControl(new Rectangle(0, 0, 640, 480)),
+        "group"       => new GroupTabControl(),
+        "groupbox"    => new GroupBoxViewerControl(),
         _             => throw new ArgumentOutOfRangeException(nameof(modal))
     };
 }

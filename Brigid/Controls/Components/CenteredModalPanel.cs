@@ -11,7 +11,7 @@ namespace Brigid.Controls.Components;
 
 /// <summary>
 ///     Base for from-scratch (asset-free) centered modals in the modernized-dialog family: a
-///     <see cref="DialogPalette" />-framed panel, centered on the viewport, with a title band, a bottom
+///     <see cref="DialogPalette" />-framed panel, centered on the viewport (unless a subclass overrides <see cref="PositionIn" />), with a title band, a bottom
 ///     action bar (a <see cref="TextButton" /> Close plus any subclass buttons), Escape-to-dismiss,
 ///     control-stack participation, and click/wheel absorption so input never leaks to the world behind it.
 ///     Non-modal in the visual sense (no dimmed backdrop) — it matches the existing
@@ -45,7 +45,7 @@ public abstract class CenteredModalPanel : FramePanel
     //bottom-bar buttons in creation order (Close first), so RelayoutBottomBar can re-pack them.
     private readonly List<TextButton> BottomBarButtons = [];
 
-    //the viewport the panel centers within; defaults to the full virtual screen until SetViewportBounds runs.
+    //the viewport the panel is placed within; defaults to the full virtual screen until SetViewportBounds runs.
     private Rectangle Viewport = new(0, 0, ChaosGame.VIRTUAL_WIDTH, ChaosGame.VIRTUAL_HEIGHT);
 
     //the inset the title, the dividers and the bottom bar were last placed for
@@ -106,7 +106,7 @@ public abstract class CenteredModalPanel : FramePanel
         }
 
         LaidOutInset = Inset;
-        CenterInViewport();
+        PlaceInViewport();
 
         TitleLabel = new UILabel
         {
@@ -202,18 +202,29 @@ public abstract class CenteredModalPanel : FramePanel
         }
     }
 
-    /// <summary>Re-centers the panel within an arbitrary viewport rect (typically the HUD's play area).</summary>
+    /// <summary>Places the panel again within an arbitrary viewport rect (typically the HUD's play area).</summary>
     public void SetViewportBounds(Rectangle viewport)
     {
         Viewport = viewport;
-        CenterInViewport();
+        PlaceInViewport();
     }
 
-    /// <summary>Centers the panel in its viewport again, for a subclass that changes its size while it is open.</summary>
-    protected void CenterInViewport()
+    /// <summary>
+    ///     The position of the panel in <paramref name="viewport" />. The default centers the panel. A subclass that sits at
+    ///     a different place overrides it; for example, the group window returns the top left of the viewport.
+    /// </summary>
+    protected virtual Point PositionIn(Rectangle viewport)
+        => new(viewport.X + (viewport.Width - Width) / 2, viewport.Y + (viewport.Height - Height) / 2);
+
+    /// <summary>
+    ///     Puts the panel at its <see cref="PositionIn" /> place in its viewport again, for a subclass that changes its size
+    ///     while it is open.
+    /// </summary>
+    protected void PlaceInViewport()
     {
-        X = Viewport.X + (Viewport.Width - Width) / 2;
-        Y = Viewport.Y + (Viewport.Height - Height) / 2;
+        var position = PositionIn(Viewport);
+        X = position.X;
+        Y = position.Y;
     }
 
     /// <summary>
@@ -243,14 +254,14 @@ public abstract class CenteredModalPanel : FramePanel
     /// <summary>
     ///     Sets the panel height so that <see cref="ContentBounds" /> is <paramref name="contentHeight" /> px tall, for a
     ///     modal that fits its height to its content; such a modal can give 0 as the constructor height. The bottom bar moves
-    ///     with the bottom edge, and the panel is centered again. The top of <see cref="ContentBounds" /> does not move, but
+    ///     with the bottom edge, and the panel is placed in its viewport again. The top of <see cref="ContentBounds" /> does not move, but
     ///     its bottom does, so place the content again after this call.
     /// </summary>
     protected void SetContentHeight(int contentHeight)
     {
         Height = ContentTop + contentHeight + ChromeOffset + BOTTOM_H;
         PlaceBottomBarRow();
-        CenterInViewport();
+        PlaceInViewport();
     }
 
     /// <summary>
@@ -274,7 +285,7 @@ public abstract class CenteredModalPanel : FramePanel
             return;
 
         EnsureFrameLayout();
-        CenterInViewport();
+        PlaceInViewport();
         InputDispatcher.Instance?.PushControl(this);
         Visible = true;
     }

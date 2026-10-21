@@ -757,6 +757,8 @@ public sealed partial class WorldScreen
         TextPopup.SetViewportBounds(viewport);
         SelfProfileTextEditor.SetViewportBounds(viewport);
         Exchange.SetViewportBounds(viewport);
+        GroupPanel.SetViewportBounds(viewport);
+        GroupBoxViewer.SetViewportBounds(viewport);
 
         FollowPlayerCamera();
 

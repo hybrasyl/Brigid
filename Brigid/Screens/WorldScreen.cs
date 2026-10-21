@@ -142,7 +142,7 @@ public sealed partial class WorldScreen : IScreen
     //true while the gold prompt is open for the exchange's gold, false while it is open for a drop. The exchange can close
     //while the prompt is open, so the confirm must not then fall through to a drop on the other player
     private bool GoldForExchange;
-    private GroupRecruitPanel GroupBoxViewer = null!;
+    private GroupBoxViewerControl GroupBoxViewer = null!;
 
     //true when j was pressed — the next selfprofile response triggers group highlighting instead of opening the panel
     private bool GroupHighlightRequested;
@@ -320,6 +320,7 @@ public sealed partial class WorldScreen : IScreen
         HotkeyHelp = new HotkeyHelpControl();
 
         GroupPanel = new GroupTabControl();
+        GroupPanel.SetViewportBounds(WorldHud.ViewportBounds);
 
         GroupPanel.MembersPanel.OnKick += name =>
         {
@@ -397,7 +398,8 @@ public sealed partial class WorldScreen : IScreen
             //in-progress typing in the recruit fields.
         };
 
-        GroupBoxViewer = new GroupRecruitPanel(true);
+        GroupBoxViewer = new GroupBoxViewerControl();
+        GroupBoxViewer.SetViewportBounds(WorldHud.ViewportBounds);
 
         GroupBoxViewer.OnRequestJoin += name => Game.Connection.SendGroupInvite(ClientGroupSwitch.RequestToJoin, name);
 
