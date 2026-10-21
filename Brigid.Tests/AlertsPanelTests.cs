@@ -212,6 +212,18 @@ public class AlertsPanelTests
         Assert.True(panel.Remove(MenuAlerts.OFFLINE_ID));
     }
 
+    [Fact]
+    public void TheInstallCommandsCoverTheThreeDistroFamilies()
+        => Assert.Equal(["apt", "dnf", "pacman"], MenuAlerts.InstallCommands.Select(c => c.Command.Split(' ')[1]));
+
+    [Fact]
+    public void TheDebianInstallCommandNamesTheMixerPackage()
+        => Assert.Contains(MenuAlerts.InstallCommands, c => c.Command == "sudo apt install libsdl2-mixer-2.0-0");
+
+    [Fact]
+    public void TheNoSoundAlertAsksForAReinstallOffLinux()
+        => Assert.Contains("Install Brigid again", MenuAlerts.NoSound(false).Body);
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

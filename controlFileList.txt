@@ -58,8 +58,8 @@
 # ── Login / Lobby Flow ─────────────────────────────────────────────────────────
 
 _nstart.txt
-  Class:    LobbyLoginControl : PrefabPanel
-  File:     Controls/LobbyLogin/LobbyLoginControl.cs
+  Class:    (retired) — replaced by MainMenuControl
+  File:     Controls/LobbyLogin/MainMenuControl.cs (primitive, no prefab)
   Purpose:  Start screen — animated logo, Continue/Exit/Create/Password/Credit/Homepage buttons
   Images referenced by controls:
     _nstart.epf/.spf   — Anchor background
@@ -67,8 +67,8 @@ _nstart.txt
     _nbtn.epf/.spf      — Button normal/pressed states (shared button spritesheet)
 
 _nlogin.txt
-  Class:    LoginControl : PrefabPanel
-  File:     Controls/LobbyLogin/LoginControl.cs
+  Class:    (retired) — replaced by LoginFormControl
+  File:     Controls/LobbyLogin/LoginFormControl.cs (primitive, no prefab)
   Purpose:  Login dialog — username/password textboxes, OK/Cancel buttons
   Images referenced by controls:
     _nlogin.epf/.spf    — Anchor background
@@ -83,8 +83,8 @@ _nsvr.txt
     _nsvrmi.epf/.spf    — Top/Mid/Bot row images (server list entry backgrounds)
 
 _ncreate.txt
-  Class:    CharacterCreationControl : PrefabPanel
-  File:     Controls/LobbyLogin/CharacterCreationControl.cs
+  Class:    (retired) — replaced by CharacterCreatorControl
+  File:     Controls/LobbyLogin/CharacterCreatorControl.cs (primitive, no prefab)
   Purpose:  Character creation — gender, hair style/color, name/password, preview
   Images referenced by controls:
     _ncreate.epf/.spf   — Anchor background
@@ -93,16 +93,16 @@ _ncreate.txt
     _ncbh.epf/.spf      — Help button (HairColor swatch area)
 
 _nagree.txt
-  Class:    EulaNoticeControl : PrefabPanel
-  File:     Controls/LobbyLogin/EulaNoticeControl.cs
+  Class:    (retired) — replaced by ServerGreetingControl
+  File:     Controls/LobbyLogin/ServerGreetingControl.cs (primitive, no prefab)
   Purpose:  EULA/agreement notice — text display, OK/Cancel buttons
   Images referenced by controls:
     _nagree.epf/.spf    — Anchor background
     _nbtn.epf/.spf      — OK/Cancel button frames
 
 _npw.txt
-  Class:    PasswordChangeControl : PrefabPanel
-  File:     Controls/LobbyLogin/PasswordChangeControl.cs
+  Class:    (retired) — replaced by PasswordFormControl
+  File:     Controls/LobbyLogin/PasswordFormControl.cs (primitive, no prefab)
   Purpose:  Password change dialog — current/new/confirm password fields, OK/Cancel
   Images referenced by controls:
     _npw.epf/.spf       — Anchor background
@@ -638,13 +638,13 @@ msg.tbl
 # SECTION 5: SUMMARY — QUICK REFERENCE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Control .txt files:        38 total (12 retired — see the (retired) markers in Section 2)
-#   Login flow:              _nstart, _nlogin, _nsvr, _ncreate, _nagree, _npw
+# Control .txt files:        38 total (17 retired — see the (retired) markers in Section 1)
+#   Login flow:              _nsvr
 #   Main HUD:                _nbk_s, _nstatus
 #   Self-profile tabs:       _nui, _nui_eq, _nui_sk, _nui_dr, _nui_ev, _nui_al, _nui_fm
 #   Popups/dialogs:          _nexch, _nmoney, _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, _nhotkem, _nhotkey
 #   Retired (primitive now): _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook,
-#                            _noptdlg, _nmacro, _nsett, _nfriend
+#                            _noptdlg, _nmacro, _nsett, _nfriend, _nstart, _nlogin, _ncreate, _nagree, _npw
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm
 #

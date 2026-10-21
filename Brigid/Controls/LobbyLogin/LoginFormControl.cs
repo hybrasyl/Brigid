@@ -5,8 +5,8 @@ using Brigid.Controls.Components;
 namespace Brigid.Controls.LobbyLogin;
 
 /// <summary>
-///     The login form as a primitive modal (BRIG-119). It replaces the prefab <see cref="LoginControl" /> and keeps its
-///     flow: the screen reads the name and the password for the login packet.
+///     The login form as a primitive modal (BRIG-119). It replaces the legacy prefab login form (<c>_nlogin</c>) and
+///     keeps its flow: the screen reads the name and the password for the login packet.
 ///     <para>
 ///         Enter in the name field moves the cursor to the password field, as in the legacy form. Enter anywhere else logs
 ///         in, and Escape cancels. While the screen waits for the server, the form stays shown, Log In and Cancel are

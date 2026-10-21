@@ -19,8 +19,8 @@ namespace Brigid.Controls.LobbyLogin;
 ///     <see cref="UIElement.UseTheme" />, so every part of it draws the <c>ui_theme</c> pack's art where the pack has it
 ///     and keeps the flat <see cref="DialogPalette" /> look where it does not.
 ///     <para>
-///         The control raises no events of its own. The screen wires each button's <c>Clicked</c>, as it does for the
-///         legacy <see cref="LobbyLoginControl" />, and adds local alerts to <see cref="Alerts" />. About opens its own
+///         The control raises no events of its own. The screen wires each button's <c>Clicked</c> and adds local alerts
+///         to <see cref="Alerts" />. It replaces the legacy prefab start screen (<c>_nstart</c>). About opens its own
 ///         <see cref="MarkdownView" />, and Story opens its own <see cref="StoryView" />.
 ///     </para>
 /// </summary>

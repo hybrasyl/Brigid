@@ -12,8 +12,8 @@ using Microsoft.Xna.Framework.Input;
 namespace Brigid.Controls.LobbyLogin;
 
 /// <summary>
-///     The server greeting (the login notice) as a primitive modal (BRIG-107). It replaces the prefab
-///     <see cref="LoginNoticeControl" />. The body is the notice text in a scrolling label, with the <c>{=x}</c> colour
+///     The server greeting (the login notice) as a primitive modal (BRIG-107). It replaces the legacy
+///     prefab notice (<c>_nagree</c>). The body is the notice text in a scrolling label, with the <c>{=x}</c> colour
 ///     codes; the screen normalizes the retail text before <see cref="Show(string)" />.
 ///     <para>
 ///         OK raises <see cref="Accepted" />, and the menu buttons then work. Cancel raises <see cref="Declined" />, and the

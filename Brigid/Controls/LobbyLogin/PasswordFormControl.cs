@@ -5,9 +5,9 @@ using Brigid.Controls.Components;
 namespace Brigid.Controls.LobbyLogin;
 
 /// <summary>
-///     The password-change form as a primitive modal (BRIG-119). It replaces the prefab <see cref="PasswordChangeControl" />
-///     and keeps its flow: the screen reads the name, the current password and the new password for the password-change
-///     packet, and checks the confirm field.
+///     The password-change form as a primitive modal (BRIG-119). It replaces the legacy prefab password form
+///     (<c>_npw</c>) and keeps its flow: the screen reads the name, the current password and the new password for the
+///     password-change packet, and checks the confirm field.
 ///     <para>
 ///         Enter changes the password, and Escape cancels. While the screen waits for the server, Change and Cancel are
 ///         disabled, and Escape does nothing. A failure shows in the status line. The legacy form let the player cancel while

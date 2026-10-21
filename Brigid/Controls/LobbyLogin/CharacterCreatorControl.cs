@@ -11,7 +11,7 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Brigid.Controls.LobbyLogin;
 
 /// <summary>
-///     The character creator as a primitive modal (BRIG-116). It replaces the prefab <see cref="CharacterCreationControl" />
+///     The character creator as a primitive modal (BRIG-116). It replaces the legacy prefab creator (<c>_ncreate</c>)
 ///     and keeps its flow: the screen reads the name and the two passwords for the first create packet, and the
 ///     <c>Selected*</c> values for the second. The appearance rules are in <see cref="CreatorAppearance" />.
 ///     <para>
