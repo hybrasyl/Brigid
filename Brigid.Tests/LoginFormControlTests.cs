@@ -120,6 +120,19 @@ public class LoginFormControlTests
     }
 
     [Fact]
+    public void HideEndsTheWait()
+    {
+        var form = new LoginFormControl();
+        form.Show();
+        form.SetBusy(true);
+
+        form.Hide();
+
+        Assert.False(form.IsBusy);
+        Assert.True(form.SubmitButton.Enabled);
+    }
+
+    [Fact]
     public void ClearPasswordEmptiesItAndFocusesIt()
     {
         var form = new LoginFormControl();

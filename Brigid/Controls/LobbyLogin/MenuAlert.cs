@@ -14,6 +14,7 @@ public static class MenuAlerts
 {
     public const string NO_SOUND_ID = "nosound";
     public const string LEGACY_IMPORT_ID = "legacyimport";
+    public const string OFFLINE_ID = "offline";
 
     /// <summary>The install command for each distribution family, in display order.</summary>
     public static IReadOnlyList<(string Distro, string Command)> InstallCommands { get; } =
@@ -38,6 +39,17 @@ public static class MenuAlerts
 
         return new MenuAlert(NO_SOUND_ID, "No Sound", body, [new MenuAlertAction("Dismiss")]);
     }
+
+    /// <summary>
+    ///     Tells the player that the lobby has no connection to the server: the connection was lost, or it did not start.
+    ///     Reconnect starts a new lobby connection. The alert goes away when a new connection starts.
+    /// </summary>
+    public static MenuAlert Offline(Action reconnect)
+        => new(
+            OFFLINE_ID,
+            "Offline",
+            "**Brigid has no connection to the server.**\n\nClick Reconnect to connect to the lobby again.",
+            [new MenuAlertAction("Reconnect", reconnect)]);
 
     /// <summary>
     ///     Offers to import the character settings of the legacy Dark Ages client. The alert does not record a decision when

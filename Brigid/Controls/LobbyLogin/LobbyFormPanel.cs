@@ -242,9 +242,11 @@ public abstract class LobbyFormPanel : CenteredModalPanel
             TextFields[0].IsFocused = true;
     }
 
+    /// <summary>Hides the form, clears its fields and ends its wait, so that the screen does not wait for a closed form.</summary>
     public override void Hide()
     {
         ClearFields();
+        SetBusy(false);
         base.Hide();
     }
 

@@ -209,6 +209,8 @@ public sealed class ConnectionManager : IDisposable
         ushort clientVersion,
         CancellationToken ct = default)
     {
+        //a new lobby session has no server until the server table names it
+        ServerName = string.Empty;
         State = ConnectionState.Connecting;
         Client.ResetCrypto();
         Client.SetSequence(0);

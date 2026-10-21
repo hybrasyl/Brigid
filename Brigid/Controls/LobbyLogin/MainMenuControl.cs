@@ -58,6 +58,9 @@ public sealed class MainMenuControl : UIPanel
     //the buttons that need a lobby connection. About, Story, Config and Exit work without one.
     private readonly TextButton[] ConnectionButtons;
 
+    //the last state that SetButtonsEnabled gave the connection buttons; null before the first call
+    private bool? ConnectionButtonsEnabled;
+
     //the story that ships in the client; Story is disabled when it has no pages
     private readonly StoryScript Story;
 
@@ -231,8 +234,14 @@ public sealed class MainMenuControl : UIPanel
     /// </summary>
     public void SetButtonsEnabled(bool enabled)
     {
-        foreach (var button in ConnectionButtons)
-            button.SetEnabled(enabled);
+        //the screen calls this on every update, so a call with the same state does not refresh the buttons
+        if (ConnectionButtonsEnabled != enabled)
+        {
+            foreach (var button in ConnectionButtons)
+                button.SetEnabled(enabled);
+
+            ConnectionButtonsEnabled = enabled;
+        }
 
         //the lobby is ready without a greeting, for example when the player accepted this notice before
         if (enabled && IsWaitingForGreeting)

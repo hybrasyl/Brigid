@@ -187,6 +187,31 @@ public class AlertsPanelTests
         Assert.Empty(panel.Alerts);
     }
 
+    [Fact]
+    public void TheOfflineAlertReconnects_AndGoesAway()
+    {
+        var panel = new AlertsPanel();
+        var reconnects = 0;
+
+        panel.Add(MenuAlerts.Offline(() => reconnects++));
+        panel.RunAction(0);
+
+        Assert.Equal(1, reconnects);
+        Assert.Empty(panel.Alerts);
+    }
+
+    [Fact]
+    public void ASecondOfflineAlertReplacesTheFirst()
+    {
+        var panel = new AlertsPanel();
+
+        panel.Add(MenuAlerts.Offline(static () => { }));
+        panel.Add(MenuAlerts.Offline(static () => { }));
+
+        Assert.Single(panel.Alerts);
+        Assert.True(panel.Remove(MenuAlerts.OFFLINE_ID));
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

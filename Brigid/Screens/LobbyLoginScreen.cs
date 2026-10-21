@@ -1,5 +1,4 @@
 #region
-using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 using Brigid.Collections;
@@ -29,59 +28,50 @@ public sealed class LobbyLoginScreen : IScreen
     private const string CONNECTION_LOST = "The connection to the server was lost.";
     private const string NOT_CONNECTED = "The client is not connected to the server.";
 
-    //the screen is rebuilt on every return from the world; the notice shows once per process
-    private static bool AudioMissingNoticeShown;
+    //the screen and its menu are made again on every return from the world and after Config; the alert shows once per
+    //process
+    private static bool NoSoundAlertAdded;
 
     private readonly bool ReturningFromWorld;
     private bool AwaitingCharFinalize;
 
+    //the checksum of the greeting that the player accepted, and of the greeting that shows now. A reconnect skips only a
+    //greeting that the player accepted
     private uint? CachedNoticeCheckSum;
-    private bool ChangingPassword;
-    private CharacterCreationControl CharCreateControl = null!;
+    private uint? ShownNoticeCheckSum;
 
-    //flow state
+    //flow state. Connecting is true while the lobby connection starts; a form that waits for the server is busy
+    //(LobbyFormPanel.IsBusy), and the busy form is the one that a server answer is for
     private bool Connecting;
-    private bool CreatingCharacter;
     private bool FollowingRedirect;
-    private LoginNoticeControl LoginNoticeControl = null!;
+
+    //set on the thread that lost the connection; Update stops the waits of the forms on the game loop
+    private volatile bool ConnectionLost;
+
+    //true after the server greeting (or a greeting that the player accepted before). The connection buttons of the menu
+    //are enabled while it is true and no form is open. A new lobby connection sets it to false
+    private bool LobbyReady;
 
     private ChaosGame Game = null!;
     private string? HomepageUrl;
-    private LoginControl LoginControl = null!;
-    private PasswordChangeControl PasswordChangeControl = null!;
     private bool PendingWorldSwitch;
     private bool PendingConfigSwitch;
     private OkPopupMessageControl LobbyLoginPopupMessage = null!;
-    private OkPopupMessageControl MigrationPrompt = null!;
-    private AudioMissingNoticeControl AudioMissingNotice = null!;
     private CertificateTrustPromptControl TrustPrompt = null!;
     private InsecureConnectionPromptControl InsecurePrompt = null!;
 
-    //last transport state written to the start screen's connection line, so the poll only writes on a
-    //change. Drawn tracks the first write, which has to happen even though false is the initial state.
-    private bool ConnectionLineSecure;
-    private bool ConnectionLineDrawn;
     private IList<ServerEntry> ServerList = [];
     private ServerSelectControl ServerSelectControl = null!;
 
-    private UIButton? LastClickedButton;
+    //the menu button that Enter clicks again
+    private TextButton? LastClickedButton;
 
     //ui panels
-    private LobbyLoginControl StartPanel = null!;
-
-    //BRIG-107 preview: the new main menu over the legacy one, while BRIGID_MAIN_MENU_PREVIEW=1. Phase 4 replaces the
-    //legacy menu with it and removes this.
-    private MainMenuControl? PreviewMenu;
-    private ServerGreetingControl? PreviewGreeting;
-
-    //BRIG-116 preview: the primitive creator in place of the legacy one, while BRIGID_MAIN_MENU_PREVIEW=1. The Creator*
-    //helpers pick it; phase 4 deletes the legacy creator and their legacy branch.
-    private CharacterCreatorControl? PreviewCreator;
-
-    //BRIG-119 preview: the primitive login and password forms in place of the legacy ones, while BRIGID_MAIN_MENU_PREVIEW=1.
-    //The Login* and Password* helpers pick them; phase 4 deletes the legacy forms and their legacy branch.
-    private LoginFormControl? PreviewLogin;
-    private PasswordFormControl? PreviewPassword;
+    private MainMenuControl Menu = null!;
+    private ServerGreetingControl Greeting = null!;
+    private CharacterCreatorControl Creator = null!;
+    private LoginFormControl LoginForm = null!;
+    private PasswordFormControl PasswordForm = null!;
 
     /// <inheritdoc />
     public UIPanel? Root { get; private set; }
@@ -124,86 +114,60 @@ public sealed class LobbyLoginScreen : IScreen
     /// <inheritdoc />
     public void LoadContent(GraphicsDevice graphicsDevice)
     {
-        StartPanel = new LobbyLoginControl();
-        LoginControl = new LoginControl();
         ServerSelectControl = new ServerSelectControl();
-        LoginNoticeControl = new LoginNoticeControl();
-        CharCreateControl = new CharacterCreationControl(Game.AislingRenderer);
-        PasswordChangeControl = new PasswordChangeControl();
 
-        //wire button events
-        StartPanel.ContinueButton?.Clicked += OnContinueClicked;
-        StartPanel.ExitButton?.Clicked += OnExitClicked;
-        StartPanel.SubmitCreateButton?.Clicked += OnCreateClicked;
-        StartPanel.PasswordButton?.Clicked += OnPasswordClicked;
-        StartPanel.CreditButton?.Clicked += OnCreditClicked;
-        StartPanel.HomepageButton?.Clicked += OnHomepageClicked;
-        StartPanel.ConfigButton?.Clicked += OnConfigClicked;
+        Menu = new MainMenuControl();
+        Menu.ContinueButton.Clicked += OnContinueClicked;
+        Menu.ExitButton.Clicked += OnExitClicked;
+        Menu.CreateButton.Clicked += OnCreateClicked;
+        Menu.PasswordButton.Clicked += OnPasswordClicked;
+        Menu.HomepageButton.Clicked += OnHomepageClicked;
+        Menu.ConfigButton.Clicked += OnConfigClicked;
 
-        if (Environment.GetEnvironmentVariable("BRIGID_MAIN_MENU_PREVIEW") == "1")
-        {
-            PreviewMenu = new MainMenuControl();
-            PreviewMenu.ContinueButton.Clicked += OnContinueClicked;
-            PreviewMenu.ExitButton.Clicked += OnExitClicked;
-            PreviewMenu.CreateButton.Clicked += OnCreateClicked;
-            PreviewMenu.PasswordButton.Clicked += OnPasswordClicked;
-            PreviewMenu.HomepageButton.Clicked += OnHomepageClicked;
-            PreviewMenu.ConfigButton.Clicked += OnConfigClicked;
-
-            //sample alerts, to see the panel; the preview import alert records no decision
-            PreviewMenu.Alerts.Add(MenuAlerts.NoSound(OperatingSystem.IsLinux()));
-            PreviewMenu.Alerts.Add(MenuAlerts.LegacyImport(static () => { }, static () => { }));
-
-            PreviewGreeting = new ServerGreetingControl();
-            PreviewGreeting.Accepted += OnLoginAccepted;
-            PreviewGreeting.Declined += OnLoginCancelled;
-
-            //the greeting covers the menu buttons and the alerts until the player answers it. A fresh start waits for it with
-            //them hidden; a return from the world gets no greeting
-            var menu = PreviewMenu;
-            PreviewGreeting.VisibilityChanged += visible => menu.SetCovered(visible);
-
-            if (!ReturningFromWorld)
-                PreviewMenu.CoverUntilGreeting();
-
-            PreviewCreator = new CharacterCreatorControl(Game.AislingRenderer, CharacterCreatorControl.DyeSwatchColor);
-            PreviewCreator.OnOk += OnCharCreateOkClicked;
-            PreviewCreator.OnCancel += OnCharCreateCancelClicked;
-
-            PreviewLogin = new LoginFormControl();
-            PreviewLogin.OnOk += OnLoginOkClicked;
-            PreviewLogin.OnCancel += OnLoginCancelClicked;
-
-            PreviewPassword = new PasswordFormControl();
-            PreviewPassword.OnOk += OnPasswordChangeOkClicked;
-            PreviewPassword.OnCancel += OnPasswordChangeCancelClicked;
-        }
-
-        //track last-clicked start panel button so enter can repeat it
-        foreach (var btn in (UIButton?[]) [
-                     StartPanel.ContinueButton,
-                     StartPanel.ExitButton,
-                     StartPanel.SubmitCreateButton,
-                     StartPanel.PasswordButton,
-                     StartPanel.CreditButton,
-                     StartPanel.HomepageButton
+        //Enter clicks the last of these again; Config switches the screen, so it is not one of them
+        foreach (var button in (TextButton[]) [
+                     Menu.CreateButton,
+                     Menu.ContinueButton,
+                     Menu.PasswordButton,
+                     Menu.AboutButton,
+                     Menu.HomepageButton,
+                     Menu.StoryButton,
+                     Menu.ExitButton
                  ])
-            if (btn is not null)
-                btn.Clicked += () => LastClickedButton = btn;
+            button.Clicked += () => LastClickedButton = button;
 
-        LoginControl.OkButton?.Clicked += OnLoginOkClicked;
-        LoginControl.CancelButton?.Clicked += OnLoginCancelClicked;
+        Greeting = new ServerGreetingControl();
+        Greeting.Accepted += OnLoginAccepted;
+        Greeting.Declined += OnLoginCancelled;
+
+        //the greeting covers the menu buttons and the alerts until the player answers it. Each lobby connection waits for
+        //it with them hidden (BeginLobbyConnect); a return from the world in the Login state gets no greeting
+        Greeting.VisibilityChanged += visible => Menu.SetCovered(visible);
+
+        //the server list covers the menu too. When it closes before the greeting, the menu waits for the greeting again
+        ServerSelectControl.VisibilityChanged += visible =>
+        {
+            if (visible)
+                Menu.SetCovered(true);
+            else if (LobbyReady)
+                Menu.SetCovered(false);
+            else
+                Menu.CoverUntilGreeting();
+        };
+
+        Creator = new CharacterCreatorControl(Game.AislingRenderer, CharacterCreatorControl.DyeSwatchColor);
+        Creator.OnOk += OnCharCreateOkClicked;
+        Creator.OnCancel += OnCharCreateCancelClicked;
+
+        LoginForm = new LoginFormControl();
+        LoginForm.OnOk += OnLoginOkClicked;
+        LoginForm.OnCancel += OnLoginCancelClicked;
+
+        PasswordForm = new PasswordFormControl();
+        PasswordForm.OnOk += OnPasswordChangeOkClicked;
+        PasswordForm.OnCancel += OnPasswordChangeCancelClicked;
 
         ServerSelectControl.OnServerSelected += OnServerSelected;
-
-        LoginNoticeControl.OnOk += OnLoginAccepted;
-        LoginNoticeControl.OnCancel += OnLoginCancelled;
-
-        CharCreateControl.OnOk += OnCharCreateOkClicked;
-        CharCreateControl.OnCancel += OnCharCreateCancelClicked;
-
-        PasswordChangeControl.OnOk += OnPasswordChangeOkClicked;
-        PasswordChangeControl.OnCancel += OnPasswordChangeCancelClicked;
 
         LobbyLoginPopupMessage = new OkPopupMessageControl("Notification")
         {
@@ -211,18 +175,6 @@ public sealed class LobbyLoginScreen : IScreen
             Name = "LobbyLoginPopupMessage"
         };
         LobbyLoginPopupMessage.OnOk += OnLobbyLoginPopupMessageOk;
-
-        //one-time first-run offer to import legacy per-character config (OK = import, Cancel = start fresh)
-        MigrationPrompt = new OkPopupMessageControl("Import Settings", showCancel: true)
-        {
-            ZIndex = 2,
-            Name = "MigrationPrompt"
-        };
-        MigrationPrompt.OnOk += OnMigrationImport;
-        MigrationPrompt.OnCancel += OnMigrationSkip;
-
-        //added after MigrationPrompt at the same ZIndex, so it draws above it and tops the control stack
-        AudioMissingNotice = new AudioMissingNoticeControl(OperatingSystem.IsLinux()) { ZIndex = 2 };
 
         //the connection prompts can open while a notice above is still up; keep them on top so the visible prompt
         //is the one the control stack routes Enter/Escape to
@@ -240,30 +192,13 @@ public sealed class LobbyLoginScreen : IScreen
             Width = ChaosGame.VIRTUAL_WIDTH,
             Height = ChaosGame.VIRTUAL_HEIGHT
         };
-        Root.AddChild(StartPanel);
-
-        if (PreviewMenu is not null)
-            Root.AddChild(PreviewMenu);
-
-        if (PreviewGreeting is not null)
-            Root.AddChild(PreviewGreeting);
-        Root.AddChild(LoginControl);
-
-        if (PreviewLogin is not null)
-            Root.AddChild(PreviewLogin);
+        Root.AddChild(Menu);
+        Root.AddChild(Greeting);
+        Root.AddChild(LoginForm);
         Root.AddChild(ServerSelectControl);
-        Root.AddChild(LoginNoticeControl);
-        Root.AddChild(CharCreateControl);
-
-        if (PreviewCreator is not null)
-            Root.AddChild(PreviewCreator);
-        Root.AddChild(PasswordChangeControl);
-
-        if (PreviewPassword is not null)
-            Root.AddChild(PreviewPassword);
+        Root.AddChild(Creator);
+        Root.AddChild(PasswordForm);
         Root.AddChild(LobbyLoginPopupMessage);
-        Root.AddChild(MigrationPrompt);
-        Root.AddChild(AudioMissingNotice);
         Root.AddChild(TrustPrompt);
         Root.AddChild(InsecurePrompt);
 
@@ -275,17 +210,18 @@ public sealed class LobbyLoginScreen : IScreen
         //a lobby modal (a form, the greeting, a prompt) takes the mouse; ScreenManager.Switch resets this for the world
         Game.Dispatcher.EnforceModals = true;
 
-        MaybeShowMigrationPrompt();
-        MaybeShowAudioMissingNotice();
+        MaybeAddLegacyImportAlert();
+        MaybeAddNoSoundAlert();
 
         //a logout redirect leaves the client connected to the login server. A server that closes the connection at
         //logout leaves no connection, and a login or a create would then wait for a reply that never comes, so start
         //again from the lobby
         if (ReturningFromWorld && (Game.Connection.State == ConnectionState.Login))
         {
-            //already connected to login server via redirect — skip lobby handshake, show login directly
-            StartPanel.SetButtonsEnabled(false);
-            ShowLogin();
+            //already connected to login server via redirect — skip lobby handshake, show login directly. The greeting
+            //was accepted before the world, so the menu is ready when the login form closes
+            LobbyReady = true;
+            LoginForm.Show();
         } else
 
             //fresh start, or the server closed the connection at logout — connect to lobby
@@ -337,14 +273,23 @@ public sealed class LobbyLoginScreen : IScreen
 
         MaybeShowTrustPrompt();
         MaybeShowInsecurePrompt();
-        RefreshConnectionLine();
 
-        //the preview follows the legacy menu, which the screen enables and disables, and the server name, which the
-        //lobby learns after the connection line is first drawn. SetConnection changes nothing when the text is the same.
-        PreviewMenu?.SetButtonsEnabled(StartPanel.ContinueButton?.Enabled == true);
-        PreviewMenu?.SetConnection(DataContext.LobbyHost, ConnectionLineSecure, Game.Connection.ServerName);
+        if (ConnectionLost)
+        {
+            ConnectionLost = false;
+            StopWaitsOnConnectionLoss();
+            ShowOffline();
+        }
 
         Game.Dispatcher.ProcessInput(Root!, gameTime);
+
+        //polled after the input, so that a form that the input opens or closes disables or enables the buttons in the
+        //same frame. The transport changes on the connect task, and this loop is the thread that can touch the control
+        //tree. The lobby learns the server name after the connection. The menu changes nothing when the state is the
+        //same
+        Menu.SetButtonsEnabled(LobbyReady && !AnyFormOpen);
+        Menu.SetConnection(DataContext.LobbyHost, Game.Connection.Client.Negotiated is not null, Game.Connection.ServerName);
+
         Root!.Update(gameTime);
     }
 
@@ -360,23 +305,6 @@ public sealed class LobbyLoginScreen : IScreen
 
         Connecting = false;
         TrustPrompt.Show(pending);
-    }
-
-    /// <summary>
-    ///     Keeps the start screen's connection line current. Polled rather than driven by the transport
-    ///     event, which fires on the connect task — this loop is the thread allowed to touch the control
-    ///     tree, and the line has to survive a refused certificate and a reconnect as well.
-    /// </summary>
-    private void RefreshConnectionLine()
-    {
-        var secure = Game.Connection.Client.Negotiated is not null;
-
-        if ((secure == ConnectionLineSecure) && ConnectionLineDrawn)
-            return;
-
-        ConnectionLineSecure = secure;
-        ConnectionLineDrawn = true;
-        StartPanel.SetConnection(DataContext.LobbyHost, secure);
     }
 
     /// <summary>
@@ -401,7 +329,11 @@ public sealed class LobbyLoginScreen : IScreen
         //reconnecting. A hop reached by redirect is retried as that hop — restarting at the lobby would
         //throw away a login the user has already completed.
         if (Game.Connection.RetryLastRedirect())
+        {
+            Menu.Alerts.Remove(MenuAlerts.OFFLINE_ID);
+
             return;
+        }
 
         BeginLobbyConnect();
     }
@@ -418,20 +350,20 @@ public sealed class LobbyLoginScreen : IScreen
         NoticeDebugLog.Write($"user refused an unencrypted connection to {server}");
 
         Game.Connection.Disconnect();
-        StartPanel.SetButtonsEnabled(true);
         LobbyLoginPopupMessage.Show("Disconnected. The server did not offer an encrypted connection.");
     }
 
     private void WireRootInputHandlers() => ((LobbyRootPanel)Root!).Screen = this;
 
     #region Button Handlers
+    private bool AnyFormOpen => LoginForm.Visible || PasswordForm.Visible || Creator.Visible;
+
     private void OnContinueClicked()
     {
-        if (Connecting || LoginVisible || PasswordFormVisible)
+        if (Connecting || AnyFormOpen)
             return;
 
-        ShowLogin();
-        StartPanel.SetButtonsEnabled(false);
+        LoginForm.Show();
     }
 
     private void OnExitClicked() => Game.Exit();
@@ -443,84 +375,77 @@ public sealed class LobbyLoginScreen : IScreen
 
     private void OnCreateClicked()
     {
-        if (Connecting || LoginVisible || PasswordFormVisible || CreatorVisible)
+        if (Connecting || AnyFormOpen)
             return;
 
-        ShowCreator();
+        Creator.Show();
     }
 
     private void OnCharCreateOkClicked()
     {
-        //a second Create before the server answers the first would start a second creation
-        if (CreatingCharacter)
-            return;
-
         if (Game.Connection.State != ConnectionState.Login)
         {
-            ShowCreatorMessage(NOT_CONNECTED);
+            Creator.ShowError(NOT_CONNECTED);
 
             return;
         }
 
-        var (name, password, passwordConfirm) = ReadCreatorFields();
+        var name = Creator.NameField.Text;
+        var password = Creator.PasswordField.Text;
 
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(password))
         {
-            ShowCreatorMessage("Name and password are required.");
+            Creator.ShowError("Name and password are required.");
 
             return;
         }
 
-        if (password != passwordConfirm)
+        if (password != Creator.PasswordConfirmField.Text)
         {
-            ShowCreatorMessage("Passwords do not match.");
-            ClearCreatorField(CharCreateFailureField.Password);
+            Creator.ShowError("Passwords do not match.");
+            Creator.ClearPasswords();
 
             return;
         }
 
-        Connecting = true;
-        CreatingCharacter = true;
         AwaitingCharFinalize = false;
-        PreviewCreator?.SetBusy(true);
+        Creator.SetBusy(true);
         Game.Connection.CreateCharInitial(name, password);
     }
 
+    //a cancel while the server has not answered leaves the menu usable; the form is not busy after Hide, so the answer, if
+    //it comes, is not handled as a creation answer
     private void OnCharCreateCancelClicked()
     {
-        //a cancel while the server has not answered leaves the menu usable; the answer, if it comes, is not waited for
-        if (CreatingCharacter)
-            Connecting = false;
-
-        HideCreator();
-        CreatingCharacter = false;
+        Creator.Hide();
         AwaitingCharFinalize = false;
     }
 
     private void OnPasswordClicked()
     {
-        if (Connecting || LoginVisible || PasswordFormVisible)
+        if (Connecting || AnyFormOpen)
             return;
 
-        ShowPasswordForm();
-        StartPanel.SetButtonsEnabled(false);
+        PasswordForm.Show();
     }
 
     private void OnPasswordChangeOkClicked()
     {
-        var (name, currentPassword, newPassword, confirmPassword) = ReadPasswordFields();
+        var name = PasswordForm.NameField.Text;
+        var currentPassword = PasswordForm.CurrentPasswordField.Text;
+        var newPassword = PasswordForm.NewPasswordField.Text;
 
         if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(currentPassword) || string.IsNullOrWhiteSpace(newPassword))
         {
-            ShowPasswordMessage("All fields are required.");
+            PasswordForm.ShowError("All fields are required.");
 
             return;
         }
 
-        if (newPassword != confirmPassword)
+        if (newPassword != PasswordForm.ConfirmPasswordField.Text)
         {
-            ShowPasswordMessage("New passwords do not match.");
-            ClearNewPasswords();
+            PasswordForm.ShowError("New passwords do not match.");
+            PasswordForm.ClearNewPasswords();
 
             return;
         }
@@ -528,28 +453,16 @@ public sealed class LobbyLoginScreen : IScreen
         //a change sent with no connection gets no answer, so the form would wait with no way out
         if (Game.Connection.State != ConnectionState.Login)
         {
-            ShowPasswordMessage(NOT_CONNECTED);
+            PasswordForm.ShowError(NOT_CONNECTED);
 
             return;
         }
 
-        Connecting = true;
-        ChangingPassword = true;
-        PreviewPassword?.SetBusy(true);
+        PasswordForm.SetBusy(true);
         Game.Connection.ChangePassword(name, currentPassword, newPassword);
     }
 
-    private void OnPasswordChangeCancelClicked()
-    {
-        HidePasswordForm();
-        ChangingPassword = false;
-        StartPanel.SetButtonsEnabled(true);
-    }
-
-    private void OnCreditClicked()
-    {
-        //credits panel not yet implemented
-    }
+    private void OnPasswordChangeCancelClicked() => PasswordForm.Hide();
 
     private void OnHomepageClicked()
     {
@@ -563,13 +476,12 @@ public sealed class LobbyLoginScreen : IScreen
 
     private void OnLoginOkClicked()
     {
-        var (username, password) = ReadLoginFields();
+        var username = LoginForm.NameField.Text;
+        var password = LoginForm.PasswordField.Text;
 
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
         {
-            //the legacy form ignores the click; the primitive one says why
-            if (PreviewLogin is not null)
-                ShowLoginMessage("Name and password are required.");
+            LoginForm.ShowError("Name and password are required.");
 
             return;
         }
@@ -577,13 +489,12 @@ public sealed class LobbyLoginScreen : IScreen
         //a login sent with no connection gets no answer, so the form would wait with no way out
         if (Game.Connection.State != ConnectionState.Login)
         {
-            ShowLoginMessage(NOT_CONNECTED);
+            LoginForm.ShowError(NOT_CONNECTED);
 
             return;
         }
 
-        Connecting = true;
-        SetLoginWaiting();
+        LoginForm.SetBusy(true);
 
         //logging in...
         WorldState.PlayerName = username;
@@ -595,56 +506,41 @@ public sealed class LobbyLoginScreen : IScreen
             MachineIdentity.ClientId2);
     }
 
-    private void OnLoginCancelClicked()
-    {
-        HideLogin();
-        StartPanel.SetButtonsEnabled(true);
-    }
+    private void OnLoginCancelClicked() => LoginForm.Hide();
 
     private void OnLobbyLoginPopupMessageOk() => LobbyLoginPopupMessage.Hide();
 
-    //── once-per-process notice that the audio libraries are missing ──
-    private void MaybeShowAudioMissingNotice()
+    //── once-per-process alert that the audio libraries are missing ──
+    private void MaybeAddNoSoundAlert()
     {
-        if (AudioMissingNoticeShown || !Game.SoundSystem.MixerLibraryMissing)
+        if (NoSoundAlertAdded || !Game.SoundSystem.MixerLibraryMissing)
             return;
 
-        AudioMissingNoticeShown = true;
-
-        AudioMissingNotice.Show();
+        NoSoundAlertAdded = true;
+        Menu.Alerts.Add(MenuAlerts.NoSound(OperatingSystem.IsLinux()));
     }
 
-    //── one-time legacy character-data import offer ──
+    //── legacy character-data import offer, until the player decides ──
 
-    private void MaybeShowMigrationPrompt()
+    private void MaybeAddLegacyImportAlert()
     {
-        //ask only once, and only when there is actually legacy per-character config to import
+        //ask only until the player decides, and only when there is legacy per-character config to import
         if (ClientSettings.LegacyCharacterImport != ClientSettings.MigrationUndecided)
             return;
 
         if (!DataContext.LocalPlayerSettings.HasLegacyCharacterData())
         {
-            //nothing to import — record the decision so we never re-scan or re-ask
+            //nothing to import — record the decision, so that the next start does not look or ask again
             SetMigrationDecision(ClientSettings.MigrationSkip);
 
             return;
         }
 
-        MigrationPrompt.Show(
-            "Import your existing Dark Ages character settings (macros, friends, family, spells)?\n\n"
-            + "OK = Import      Cancel = Start Fresh");
-    }
-
-    private void OnMigrationImport()
-    {
-        SetMigrationDecision(ClientSettings.MigrationImport);
-        MigrationPrompt.Hide();
-    }
-
-    private void OnMigrationSkip()
-    {
-        SetMigrationDecision(ClientSettings.MigrationSkip);
-        MigrationPrompt.Hide();
+        //the alert removes itself when the player picks an action; with no answer it shows again at the next start
+        Menu.Alerts.Add(
+            MenuAlerts.LegacyImport(
+                static () => SetMigrationDecision(ClientSettings.MigrationImport),
+                static () => SetMigrationDecision(ClientSettings.MigrationSkip)));
     }
 
     private static void SetMigrationDecision(int decision)
@@ -671,6 +567,11 @@ public sealed class LobbyLoginScreen : IScreen
     private async void BeginLobbyConnect()
     {
         Connecting = true;
+        Menu.Alerts.Remove(MenuAlerts.OFFLINE_ID);
+        Menu.CoverUntilGreeting();
+
+        //a new connection needs the greeting, or the cached greeting, again before the connection buttons are enabled
+        LobbyReady = false;
 
         await Game.Connection.ConnectToLobbyAsync(DataContext.LobbyHost, DataContext.LobbyPort, DataContext.ClientVersion);
     }
@@ -688,7 +589,7 @@ public sealed class LobbyLoginScreen : IScreen
                 FollowingRedirect = false;
                 Connecting = false;
 
-                //buttons are enabled after eula acceptance (or checksum cache hit) in onloginnotice
+                //the greeting (OnLoginNotice) makes the lobby ready
                 break;
 
             case ConnectionState.World:
@@ -706,13 +607,13 @@ public sealed class LobbyLoginScreen : IScreen
                     break;
 
                 FollowingRedirect = false;
-                StopWaitsOnConnectionLoss();
+                ConnectionLost = true;
 
                 break;
 
-            case ConnectionState.Disconnected when Connecting:
+            case ConnectionState.Disconnected:
                 Connecting = false;
-                StopWaitsOnConnectionLoss();
+                ConnectionLost = true;
 
                 break;
         }
@@ -722,46 +623,34 @@ public sealed class LobbyLoginScreen : IScreen
     {
         FollowingRedirect = false;
         Connecting = false;
-        StopWaitsOnConnectionLoss();
+        ConnectionLost = true;
     }
 
-    //a form that waits for the server cannot get its answer without the connection
+    //with no connection, the menu disables the connection buttons and shows the offline alert with Reconnect. The
+    //greeting and the server list need the connection, so they close. Runs on the game loop, from Update
+    private void ShowOffline()
+    {
+        if (Game.Connection.State != ConnectionState.Disconnected)
+            return;
+
+        LobbyReady = false;
+        Greeting.Hide();
+        ServerSelectControl.Visible = false;
+        Menu.SetCovered(false);
+        Menu.Alerts.Add(MenuAlerts.Offline(BeginLobbyConnect));
+    }
+
+    //a form that waits for the server cannot get its answer without the connection. Runs on the game loop, from Update
     private void StopWaitsOnConnectionLoss()
     {
-        StopCreationOnConnectionLoss();
-
-        if (PreviewLogin is { IsBusy: true })
-        {
-            PreviewLogin.SetBusy(false);
-            PreviewLogin.ShowError(CONNECTION_LOST);
-        }
-
-        if (!ChangingPassword)
-            return;
-
-        ChangingPassword = false;
-
-        if (PreviewPassword is null)
-            return;
-
-        PreviewPassword.SetBusy(false);
-        PreviewPassword.ShowError(CONNECTION_LOST);
-    }
-
-    //a creation that waits for the server cannot finish without the connection
-    private void StopCreationOnConnectionLoss()
-    {
-        if (!CreatingCharacter)
-            return;
-
-        CreatingCharacter = false;
         AwaitingCharFinalize = false;
 
-        if (PreviewCreator is null)
-            return;
-
-        PreviewCreator.SetBusy(false);
-        PreviewCreator.ShowError(CONNECTION_LOST);
+        foreach (var form in (LobbyFormPanel[]) [Creator, PasswordForm, LoginForm])
+            if (form.IsBusy)
+            {
+                form.SetBusy(false);
+                form.ShowError(CONNECTION_LOST);
+            }
     }
 
     private void OnServerTableReceived(IList<ServerEntry> servers)
@@ -785,32 +674,39 @@ public sealed class LobbyLoginScreen : IScreen
     //raised before the old connection closes, so the Disconnected that the close causes sees the flag
     private void OnRedirectReceived(RedirectInfo _) => FollowingRedirect = true;
 
+    //the answer is for the form that waits; only one form is open at a time
     private void OnLoginMessage(LoginMessagePacket pkt)
     {
-        var messageType = (LoginMessageType)pkt.Type;
-
-        if (CreatingCharacter)
+        if (Creator.IsBusy)
         {
             HandleCharCreateMessage(pkt);
 
             return;
         }
 
-        if (ChangingPassword)
+        if (PasswordForm.IsBusy)
         {
             HandlePasswordChangeMessage(pkt);
 
             return;
         }
 
-        if (messageType == LoginMessageType.Confirm)
+        if (!LoginForm.IsBusy)
+        {
+            NoticeDebugLog.Write($"login message 0x{pkt.Type:X2} with no form that waits — \"{pkt.Message}\"");
+
+            return;
+        }
+
+        if ((LoginMessageType)pkt.Type == LoginMessageType.Confirm)
 
             //login accepted. waiting for redirect...
             return;
 
-        //login failed — show login again for retry, clear password
-        Connecting = false;
-        ShowLoginFailure(pkt.Message ?? "Login failed.");
+        //login failed — the form stays open for a retry, with the password cleared
+        LoginForm.SetBusy(false);
+        LoginForm.ClearPassword();
+        LoginForm.ShowError(pkt.Message ?? "Login failed.");
     }
 
     private void HandleCharCreateMessage(LoginMessagePacket pkt)
@@ -824,91 +720,39 @@ public sealed class LobbyLoginScreen : IScreen
                 //initial step confirmed — send finalize with appearance (setting appearance...)
                 AwaitingCharFinalize = true;
 
-                var (hairStyle, gender, hairColor) = ReadCreatorAppearance();
-                Game.Connection.CreateCharFinalize(hairStyle, gender, hairColor);
+                Game.Connection.CreateCharFinalize(Creator.SelectedHairStyle, Creator.SelectedGender, Creator.SelectedHairColor);
             } else
             {
                 //finalize confirmed — character created, show popup
-                Connecting = false;
-                CreatingCharacter = false;
                 AwaitingCharFinalize = false;
-                HideCreator();
+                Creator.Hide();
                 LobbyLoginPopupMessage.Show("Character has been created. Choose \"CONTINUE\".");
             }
 
             return;
         }
 
-        //creation failed — show error popup and clear the relevant field
-        Connecting = false;
+        //creation failed — the status line shows the error, and the relevant field clears
         AwaitingCharFinalize = false;
 
         if (!CharCreateFailure.IsDocumented(pkt.Type))
             NoticeDebugLog.Write($"char-create: undocumented 0x02 result code 0x{pkt.Type:X2} — \"{pkt.Message}\"");
 
-        CreatingCharacter = false;
-        PreviewCreator?.SetBusy(false);
+        Creator.SetBusy(false);
         ClearCreatorField(CharCreateFailure.FieldFor(pkt.Type));
-        ShowCreatorMessage(pkt.Message ?? "Character creation failed.");
-    }
-
-    //BRIG-116: the creator that the Create button opens is the primitive one under the preview switch, else the legacy one
-    private bool CreatorVisible => PreviewCreator?.Visible ?? CharCreateControl.Visible;
-
-    private void ShowCreator()
-    {
-        if (PreviewCreator is not null)
-            PreviewCreator.Show();
-        else
-            CharCreateControl.Show();
-    }
-
-    private void HideCreator()
-    {
-        if (PreviewCreator is not null)
-            PreviewCreator.Hide();
-        else
-            CharCreateControl.Hide();
-    }
-
-    private (string? Name, string? Password, string? Confirm) ReadCreatorFields()
-        => PreviewCreator is not null
-            ? (PreviewCreator.NameField.Text, PreviewCreator.PasswordField.Text, PreviewCreator.PasswordConfirmField.Text)
-            : (CharCreateControl.NameField?.Text, CharCreateControl.PasswordField?.Text, CharCreateControl.PasswordConfirmField?.Text);
-
-    private (byte HairStyle, Gender Gender, DisplayColor HairColor) ReadCreatorAppearance()
-        => PreviewCreator is not null
-            ? (PreviewCreator.SelectedHairStyle, PreviewCreator.SelectedGender, PreviewCreator.SelectedHairColor)
-            : (CharCreateControl.SelectedHairStyle, CharCreateControl.SelectedGender, CharCreateControl.SelectedHairColor);
-
-    //the primitive creator shows a message in its status line; the legacy one has none, so the popup shows it
-    private void ShowCreatorMessage(string message)
-    {
-        if (PreviewCreator is not null)
-            PreviewCreator.ShowError(message);
-        else
-            LobbyLoginPopupMessage.Show(message);
+        Creator.ShowError(pkt.Message ?? "Character creation failed.");
     }
 
     private void ClearCreatorField(CharCreateFailureField field)
     {
         switch (field)
         {
-            case CharCreateFailureField.Name when PreviewCreator is not null:
-                PreviewCreator.ClearName();
-
-                break;
             case CharCreateFailureField.Name:
-                CharCreateControl.NameField?.Text = string.Empty;
-
-                break;
-            case CharCreateFailureField.Password when PreviewCreator is not null:
-                PreviewCreator.ClearPasswords();
+                Creator.ClearName();
 
                 break;
             case CharCreateFailureField.Password:
-                CharCreateControl.PasswordField?.Text = string.Empty;
-                CharCreateControl.PasswordConfirmField?.Text = string.Empty;
+                Creator.ClearPasswords();
 
                 break;
             case CharCreateFailureField.None:
@@ -918,132 +762,16 @@ public sealed class LobbyLoginScreen : IScreen
 
     private void HandlePasswordChangeMessage(LoginMessagePacket pkt)
     {
-        Connecting = false;
-        ChangingPassword = false;
-
         if ((LoginMessageType)pkt.Type == LoginMessageType.Confirm)
         {
-            HidePasswordForm();
+            PasswordForm.Hide();
             LobbyLoginPopupMessage.Show("Password has been changed.");
 
             return;
         }
 
-        PreviewPassword?.SetBusy(false);
-        ShowPasswordMessage(pkt.Message ?? "Password change failed.");
-    }
-
-    //BRIG-119: the login form that Continue opens is the primitive one under the preview switch, else the legacy one
-    private bool LoginVisible => PreviewLogin?.Visible ?? LoginControl.Visible;
-
-    private void ShowLogin()
-    {
-        if (PreviewLogin is not null)
-            PreviewLogin.Show();
-        else
-            LoginControl.Show();
-    }
-
-    private void HideLogin()
-    {
-        if (PreviewLogin is not null)
-            PreviewLogin.Hide();
-        else
-            LoginControl.Hide();
-    }
-
-    private (string Name, string Password) ReadLoginFields()
-        => PreviewLogin is not null
-            ? (PreviewLogin.NameField.Text, PreviewLogin.PasswordField.Text)
-            : (LoginControl.UsernameField?.Text ?? string.Empty, LoginControl.PasswordField?.Text ?? string.Empty);
-
-    //the legacy form hides while the server answers; the primitive one stays shown and busy
-    private void SetLoginWaiting()
-    {
-        if (PreviewLogin is not null)
-            PreviewLogin.SetBusy(true);
-        else
-            LoginControl.Visible = false;
-    }
-
-    //the primitive form shows a message in its status line; the legacy one has none, so the popup shows it
-    private void ShowLoginMessage(string message)
-    {
-        if (PreviewLogin is not null)
-            PreviewLogin.ShowError(message);
-        else
-            LobbyLoginPopupMessage.Show(message);
-    }
-
-    //the primitive form shows a failure in its status line; the legacy one shows again with the popup over it
-    private void ShowLoginFailure(string message)
-    {
-        if (PreviewLogin is not null)
-        {
-            PreviewLogin.SetBusy(false);
-            PreviewLogin.ClearPassword();
-            PreviewLogin.ShowError(message);
-
-            return;
-        }
-
-        LoginControl.Visible = true;
-
-        if (LoginControl.PasswordField is not null)
-        {
-            LoginControl.PasswordField.Text = string.Empty;
-            LoginControl.PasswordField.IsFocused = true;
-        }
-
-        LobbyLoginPopupMessage.Show(message);
-    }
-
-    //BRIG-119: the password form that Password opens is the primitive one under the preview switch, else the legacy one
-    private bool PasswordFormVisible => PreviewPassword?.Visible ?? PasswordChangeControl.Visible;
-
-    private void ShowPasswordForm()
-    {
-        if (PreviewPassword is not null)
-            PreviewPassword.Show();
-        else
-            PasswordChangeControl.Show();
-    }
-
-    private void HidePasswordForm()
-    {
-        if (PreviewPassword is not null)
-            PreviewPassword.Hide();
-        else
-            PasswordChangeControl.Hide();
-    }
-
-    private (string Name, string Current, string New, string Confirm) ReadPasswordFields()
-        => PreviewPassword is not null
-            ? (PreviewPassword.NameField.Text, PreviewPassword.CurrentPasswordField.Text, PreviewPassword.NewPasswordField.Text,
-                PreviewPassword.ConfirmPasswordField.Text)
-            : (PasswordChangeControl.NameField?.Text ?? string.Empty, PasswordChangeControl.CurrentPasswordField?.Text ?? string.Empty,
-                PasswordChangeControl.NewPasswordField?.Text ?? string.Empty, PasswordChangeControl.ConfirmPasswordField?.Text ?? string.Empty);
-
-    //the primitive form shows a message in its status line; the legacy one has none, so the popup shows it
-    private void ShowPasswordMessage(string message)
-    {
-        if (PreviewPassword is not null)
-            PreviewPassword.ShowError(message);
-        else
-            LobbyLoginPopupMessage.Show(message);
-    }
-
-    private void ClearNewPasswords()
-    {
-        if (PreviewPassword is not null)
-        {
-            PreviewPassword.ClearNewPasswords();
-
-            return;
-        }
-
-        PasswordChangeControl.NewPasswordField?.Text = string.Empty;
-        PasswordChangeControl.ConfirmPasswordField?.Text = string.Empty;
+        PasswordForm.SetBusy(false);
+        PasswordForm.ShowError(pkt.Message ?? "Password change failed.");
     }
 
     private void OnLoginNotice(LoginNotificationPacket pkt)
@@ -1057,7 +785,7 @@ public sealed class LobbyLoginScreen : IScreen
         //returning from world — already accepted the eula this session, skip entirely
         if (ReturningFromWorld)
         {
-            StartPanel.EnableButtons();
+            LobbyReady = true;
 
             return;
         }
@@ -1069,7 +797,7 @@ public sealed class LobbyLoginScreen : IScreen
             {
                 //already accepted this notice, skip display and enable buttons
                 NoticeDebugLog.Write("  checksum cache hit, enabling buttons");
-                StartPanel.EnableButtons();
+                LobbyReady = true;
 
                 return;
             }
@@ -1080,10 +808,14 @@ public sealed class LobbyLoginScreen : IScreen
             return;
         }
 
-        //full response — decompress and display
-        if (data is null or { Length: 0 })
+        //full response — decompress and display. A greeting with no text, or one that does not decompress, has nothing to
+        //accept, so the lobby is ready without it. A zlib stream is at least 7 bytes: a 2-byte header, a deflate body and
+        //a 4-byte checksum
+        if (data is null || (data.Length < 7))
         {
-            NoticeDebugLog.Write("  !!! full response with empty data — UI would be soft-locked");
+            NoticeDebugLog.Write($"  full response with {data?.Length ?? 0} bytes, so no greeting to show");
+            LobbyReady = true;
+
             return;
         }
 
@@ -1093,24 +825,24 @@ public sealed class LobbyLoginScreen : IScreen
             noticeText = DecompressNotice(data);
             NoticeDebugLog.Write($"  decompressed ok, text length={noticeText.Length}");
         }
-        catch (Exception ex)
+        catch (InvalidDataException ex)
         {
-            NoticeDebugLog.Write($"  !!! DecompressNotice threw {ex.GetType().Name}: {ex.Message}");
-            throw;
+            NoticeDebugLog.Write($"  !!! the greeting does not decompress, so no greeting to show: {ex.Message}");
+            LobbyReady = true;
+
+            return;
         }
 
-        NoticeDebugLog.Write($"  calling Show, prior Visible={PreviewGreeting?.Visible ?? LoginNoticeControl.Visible}");
-        if (PreviewGreeting is not null)
-            PreviewGreeting.Show(noticeText);
-        else
-            LoginNoticeControl.Show(noticeText);
-        NoticeDebugLog.Write($"  after Show, Visible={PreviewGreeting?.Visible ?? LoginNoticeControl.Visible}");
+        NoticeDebugLog.Write($"  showing the greeting, prior Visible={Greeting.Visible}");
+        Greeting.Show(noticeText);
+        NoticeDebugLog.Write($"  after Show, Visible={Greeting.Visible}");
     }
 
+    //the greeting hides itself before it raises Accepted
     private void OnLoginAccepted()
     {
-        LoginNoticeControl.Hide();
-        StartPanel.EnableButtons();
+        CachedNoticeCheckSum = ShownNoticeCheckSum;
+        LobbyReady = true;
     }
 
     private void OnLoginCancelled() => Game.Exit();
@@ -1127,7 +859,7 @@ public sealed class LobbyLoginScreen : IScreen
 
         var rawBytes = decompressed.ToArray();
         //retail + Hybrasyl both send standard (inverted) CRC-32 — verified against the retail checksum routine
-        CachedNoticeCheckSum = CRC32.Calculate(rawBytes);
+        ShownNoticeCheckSum = CRC32.Calculate(rawBytes);
 
         var text = Encoding.GetEncoding(949)
                            .GetString(rawBytes);
@@ -1176,7 +908,9 @@ public sealed class LobbyLoginScreen : IScreen
 
     /// <summary>
     ///     Root panel for LobbyLoginScreen. Handles Enter-to-repeat and ServerSelect Escape dismiss
-    ///     at the root level when no focused sub-panel claims keyboard input.
+    ///     at the root level when no focused sub-panel claims keyboard input. A key that a panel on the control stack
+    ///     does not handle bubbles up to here, so Enter repeats only while the stack is empty: no form, greeting,
+    ///     prompt, About or Story is open.
     /// </summary>
     private sealed class LobbyRootPanel : UIPanel
     {
@@ -1198,22 +932,23 @@ public sealed class LobbyLoginScreen : IScreen
 
             //enter — repeat last-clicked button when no sub-control is open
             if ((e.Key == Keys.Enter)
-                && Screen.LastClickedButton is { Enabled: true }
-                && !Screen.LoginVisible
+                && Screen.LastClickedButton is { } button
+                && (Screen.Game.Dispatcher.ControlStackCount == 0)
                 && !Screen.ServerSelectControl.Visible
-                && !Screen.CreatorVisible
-                && !Screen.PasswordFormVisible)
+                && !Screen.Menu.IsWaitingForGreeting)
             {
-                Screen.LastClickedButton.PerformClick();
+                button.PerformClick();
                 e.Handled = true;
 
                 return;
             }
 
-            //escape — dismiss serverselectcontrol when it is visible and nothing else claims focus
+            //escape — close the server list when it is visible and nothing else claims focus. With no server the lobby
+            //cannot go on, so the connection closes, and the offline alert offers Reconnect
             if ((e.Key == Keys.Escape) && Screen.ServerSelectControl.Visible)
             {
                 Screen.ServerSelectControl.Visible = false;
+                Screen.Game.Connection.Disconnect();
                 e.Handled = true;
             }
         }
