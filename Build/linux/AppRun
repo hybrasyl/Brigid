@@ -1,0 +1,5 @@
+#!/bin/sh
+# The bundled codec libraries sit beside libSDL2_mixer.so and find each other through $ORIGIN, so nothing is
+# added to LD_LIBRARY_PATH, which would leak into the browser or anything else the client launches.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/Brigid" "$@"

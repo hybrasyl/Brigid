@@ -30,6 +30,9 @@ System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
     NoticeDebugLog.Write($"stack: {e.Exception.StackTrace}");
 };
 
+//before anything reads AppPaths.AppRoot: GlobalSettings, the launcher config and the client settings
+AppPaths.MigrateLegacyVendorFolder();
+
 //must run before ChaosGame constructs its GraphicsDeviceManager (which initializes SDL and creates the window)
 Sdl.SDL_SetHint(Sdl.SDL_HINT_WINDOWS_DPI_AWARENESS, "permonitorv2");
 Sdl.SDL_SetHint(Sdl.SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");

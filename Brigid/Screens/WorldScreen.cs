@@ -102,6 +102,9 @@ public sealed partial class WorldScreen : IScreen
 
     private int AnimationTick;
     private bool AwaitingMapData;
+    private float MapDataIdleMs;
+    private bool MapDataIncomplete;
+    private int MapDataRowsReceived;
 
     //one modal for the whole board/mail flow (index -> list -> read/compose, Boards and Mail tabs)
     private BoardsModalControl BoardsModal = null!;

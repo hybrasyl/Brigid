@@ -40,11 +40,11 @@ public class SurrogateReproTests
     }
 
     [Fact]
-    public void TextRenderer_MeasureCharWidth_LoneSurrogate()
+    public void TextElement_IndexAtX_LoneSurrogate()
     {
         FontEngine.Initialize(0);
-        // single lone surrogate char — what MeasureCharWidth receives during hit-test/wrap
-        Assert.True(TextRenderer.MeasureCharWidth('\uD83D') >= 0);
+        // a lone surrogate in the text — what the click hit test measures while an emoji is half typed
+        Assert.InRange(new Brigid.Controls.Components.TextElement().IndexAtX("a\uD83Db", 1000, colorCodesEnabled: false), 0, 3);
     }
 
     [Fact]

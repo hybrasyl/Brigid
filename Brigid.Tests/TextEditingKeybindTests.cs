@@ -7,8 +7,7 @@ namespace Brigid.Tests;
 
 // Verifies that the UITextBox / UILabel editor commands actually route through the keybind resolver after the B2
 // migration — driving real controls end-to-end (not just the resolver in isolation). Clipboard commands (copy/cut/
-// paste) touch the OS clipboard and are left to the resolver-level tests; these cover the selection / caret commands
-// whose effect is observable without external state.
+// paste) use the in-memory TestClipboard backend that the test assembly installs, so they need no OS clipboard.
 [Collection("UITextBoxFocus")]
 public class TextEditingKeybindTests
 {

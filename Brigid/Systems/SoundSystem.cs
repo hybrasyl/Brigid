@@ -81,6 +81,12 @@ public sealed class SoundSystem : IDisposable
     private int SfxVolume = SdlMixer.MIX_MAX_VOLUME;
     private long SoundCacheTimestamp;
 
+    /// <summary>
+    ///     True when the SDL2_mixer library, or a codec library it links, could not be loaded, so the client runs
+    ///     without sound. Other audio failures (no output device, <c>Mix_OpenAudio</c> failing) leave this false.
+    /// </summary>
+    public bool MixerLibraryMissing { get; private set; }
+
     public SoundSystem()
     {
         ChannelFinishedDelegate = OnChannelFinished;
@@ -469,6 +475,15 @@ public sealed class SoundSystem : IDisposable
 
     private void InitializeMixer()
     {
+        //the bundled Linux mixer links system codec libraries; probe through the p/invokes' resolver so a missing
+        //one runs silent instead of throwing DllNotFoundException from the first Mix_* call
+        if (!DllResolver.TryResolve(SdlMixer.LIBRARY_NAME))
+        {
+            MixerLibraryMissing = true;
+
+            return;
+        }
+
         if (Sdl.SDL_InitSubSystem(Sdl.SDL_INIT_AUDIO) != 0)
             return;
 
@@ -654,7 +669,7 @@ public sealed class SoundSystem : IDisposable
 
         if (handle == nint.Zero)
         {
-            var path = Path.Combine(DataContext.DataPath, "music", $"{musicId}.mus");
+            var path = DataPathResolver.Resolve(DataContext.DataPath, "music", $"{musicId}.mus");
 
             if (File.Exists(path))
                 handle = SdlMixer.Mix_LoadMUS(path);

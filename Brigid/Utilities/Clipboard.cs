@@ -1,29 +1,66 @@
+#region
+using System.Runtime.InteropServices;
+using Brigid.Networking;
+#endregion
+
 namespace Brigid.Utilities;
 
 /// <summary>
-///     Cross-platform system clipboard access via TextCopy.
+///     System clipboard access through SDL2, which the client already loads. SDL supports X11, Wayland, Windows and
+///     macOS with no external tool. Call it from the game thread.
 /// </summary>
+/// <remarks>
+///     On X11 the client window owns the selection, so text copied from Brigid stays pasteable only while Brigid runs,
+///     unless the desktop runs a clipboard manager.
+/// </remarks>
 public static class Clipboard
 {
-    public static string GetText()
-    {
-        try
-        {
-            return TextCopy.ClipboardService.GetText() ?? string.Empty;
-        } catch
-        {
-            return string.Empty;
-        }
-    }
+    /// <summary>
+    ///     Where the text goes. The test assembly swaps in an in-memory backend, because tests run with no SDL video
+    ///     subsystem and must not write to the clipboard of the person running them.
+    /// </summary>
+    internal static IClipboardBackend Backend { get; set; } = new SdlClipboard();
 
-    public static void SetText(string text)
+    public static string GetText() => Backend.GetText();
+
+    /// <summary>Puts <paramref name="text" /> on the clipboard. Returns false, and logs why, when it is refused.</summary>
+    public static bool SetText(string text) => Backend.SetText(text);
+
+    private sealed class SdlClipboard : IClipboardBackend
     {
-        try
+        public string GetText()
         {
-            TextCopy.ClipboardService.SetText(text);
-        } catch
+            //SDL reports a failed read as empty text, as it does an empty clipboard; an error set by this call tells
+            //them apart
+            Sdl.SDL_ClearError();
+            var text = Sdl.SDL_GetClipboardText();
+
+            var result = text == nint.Zero ? string.Empty : (Marshal.PtrToStringUTF8(text) ?? string.Empty);
+
+            if (text != nint.Zero)
+                Sdl.SDL_free(text);
+
+            if ((result.Length == 0) && Sdl.GetError() is { Length: > 0 } error)
+                NoticeDebugLog.Write($"[clipboard] read failed: {error}");
+
+            return result;
+        }
+
+        public bool SetText(string text)
         {
-            //clipboard unavailable — silently ignore
+            if (Sdl.SDL_SetClipboardText(text) == 0)
+                return true;
+
+            NoticeDebugLog.Write($"[clipboard] write failed: {Sdl.GetError()}");
+
+            return false;
         }
     }
+}
+
+internal interface IClipboardBackend
+{
+    string GetText();
+
+    bool SetText(string text);
 }

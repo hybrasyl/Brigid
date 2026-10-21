@@ -14,13 +14,15 @@ public sealed class AssetPackManifest
 {
     /// <summary>
     ///     Integer, incremented only on breaking schema changes. Client rejects packs declaring a version it doesn't
-    ///     understand.
+    ///     understand. Null when the manifest omits the field or sets it to null. The registry refuses both: an absent
+    ///     version is not an older version.
     /// </summary>
     [JsonPropertyName("schema_version")]
-    public int SchemaVersion { get; init; }
+    public int? SchemaVersion { get; init; }
 
     /// <summary>
-    ///     Unique identifier for this pack. Used for logging and duplicate detection.
+    ///     Identifier for this pack. Required, and used in log messages. The registry does not detect duplicates by this
+    ///     id; it resolves two packs of one <see cref="ContentType" /> by <see cref="Priority" />.
     /// </summary>
     [JsonPropertyName("pack_id")]
     public string PackId { get; init; } = string.Empty;

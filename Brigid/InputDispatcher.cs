@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework.Input;
 
 namespace Brigid;
 
-public sealed class InputDispatcher
+public sealed class InputDispatcher : IDisposable
 {
     private const float DOUBLE_CLICK_MS = 500f;
     private const int DRAG_THRESHOLD_SQ = 16; //4px squared
@@ -71,15 +71,48 @@ public sealed class InputDispatcher
     public static InputDispatcher? Instance { get; private set; }
 
     public InputDispatcher()
+        : this(true) { }
+
+    /// <summary>
+    ///     With <paramref name="registerAsInstance" /> false, the dispatcher does not replace <see cref="Instance" />, so a
+    ///     test can make one without changing the dispatcher that other tests see.
+    /// </summary>
+    internal InputDispatcher(bool registerAsInstance)
     {
-        Instance = this;
+        if (registerAsInstance)
+            Instance = this;
+
         UITextBox.TextBoxFocusGained += OnTextBoxFocusGained;
+        UITextBox.TextBoxFocusLost += OnTextBoxFocusLost;
+    }
+
+    /// <summary>
+    ///     Removes the subscriptions to the static <see cref="UITextBox" /> focus events, and clears
+    ///     <see cref="Instance" /> when it is this dispatcher.
+    /// </summary>
+    public void Dispose()
+    {
+        UITextBox.TextBoxFocusGained -= OnTextBoxFocusGained;
+        UITextBox.TextBoxFocusLost -= OnTextBoxFocusLost;
+
+        if (Instance == this)
+            Instance = null;
     }
 
     /// <summary>
     ///     Routes keyboard events to the newly focused textbox by setting it as the explicit focus target.
     /// </summary>
     private void OnTextBoxFocusGained(UITextBox textBox) => SetExplicitFocus(textBox);
+
+    /// <summary>
+    ///     Releases the explicit focus when the textbox that holds it loses focus. A hidden panel unfocuses its textboxes,
+    ///     and an explicit focus left on one of them blocked every click outside that panel.
+    /// </summary>
+    private void OnTextBoxFocusLost(UITextBox textBox)
+    {
+        if (ExplicitFocusElement == textBox)
+            ClearExplicitFocus();
+    }
 
     //── explicit focus ──
 
@@ -232,29 +265,9 @@ public sealed class InputDispatcher
         //live UI nudge tool (F11 debug layer) — grabs/moves/resizes the element under the cursor against the art
         Controls.Generic.DebugOverlay.UpdateNudge(root, mouseX, mouseY);
 
-        //mouse blocking: when a textbox has explicit focus, restrict mouse events
-        //to the panel containing the focused textbox. clicks outside are consumed.
-        var mouseBlocked = false;
+        ReleaseHiddenExplicitFocus();
 
-        if (ExplicitFocusElement is not null)
-        {
-            var containingPanel = FindContainingStackEntry(ExplicitFocusElement) ?? ExplicitFocusElement.Parent;
-
-            if (containingPanel is not null && !containingPanel.ContainsPoint(mouseX, mouseY))
-            {
-                //the chat bar is exempt from blocking: a click on it must always be deliverable
-                //so it can reclaim focus after a desync (explicit focus stuck on another visible
-                //element while the chat box still renders a caret) — otherwise the recovery
-                //click is consumed right here and the wedge is permanent
-                var chatBar = (UIElement?)ChatInputTextBox?.Parent ?? ChatInputTextBox;
-
-                var overChatBar = chatBar is not null
-                                  && IsEffectivelyVisible(chatBar)
-                                  && chatBar.ContainsPoint(mouseX, mouseY);
-
-                mouseBlocked = !overChatBar;
-            }
-        }
+        var mouseBlocked = IsMouseBlocked(mouseX, mouseY);
 
         if (!mouseBlocked)
         {
@@ -635,10 +648,13 @@ public sealed class InputDispatcher
                 return;
         }
 
-        //phase 1: explicit focus (single target, no bubbling)
-        if (ExplicitFocusElement is not null && IsEffectivelyVisible(ExplicitFocusElement))
+        //phase 1: explicit focus (single target, no bubbling). the element is held in a local: a box that loses focus
+        //during its own dispatch clears ExplicitFocusElement, and phase 1.5 still needs its parent
+        var focused = ExplicitFocusElement;
+
+        if (focused is not null && IsEffectivelyVisible(focused))
         {
-            DispatchSingle(ExplicitFocusElement, e);
+            DispatchSingle(focused, e);
 
             if (e.Handled)
                 return;
@@ -646,14 +662,14 @@ public sealed class InputDispatcher
             //phase 1.5: if the focused element is not a panel, bubble to its immediate
             //parent panel. this lets parent controls handle keys their children don't
             //(e.g. dialogtextentrypanel closes on escape, chat panel unfocuses on escape).
-            if (ExplicitFocusElement is not UIPanel && ExplicitFocusElement!.Parent is { } parentPanel)
+            if (focused is not UIPanel && focused.Parent is { } parentPanel)
             {
                 DispatchSingle(parentPanel, e);
 
                 if (e.Handled)
                     return;
             }
-        } else if (ExplicitFocusElement is not null)
+        } else if (focused is not null)
 
             //explicit focus is no longer visible — clear it
             ClearExplicitFocus();
@@ -661,6 +677,44 @@ public sealed class InputDispatcher
         //phase 2: stack dispatch with bubbling
         var target = TopControl ?? root;
         DispatchBubble(target, e);
+    }
+
+    /// <summary>
+    ///     Clears an explicit focus that is no longer visible. ContainsPoint ignores visibility, so the area of a hidden
+    ///     panel would keep blocking clicks outside it. Runs at the start of each frame; the keyboard path also checks
+    ///     each event, because a key can hide the focused element during the frame.
+    /// </summary>
+    internal void ReleaseHiddenExplicitFocus()
+    {
+        if (ExplicitFocusElement is not null && !IsEffectivelyVisible(ExplicitFocusElement))
+            ClearExplicitFocus();
+    }
+
+    /// <summary>
+    ///     Mouse blocking: when a visible textbox has explicit focus, restrict mouse events to the panel containing the
+    ///     focused textbox; clicks outside are consumed.
+    /// </summary>
+    internal bool IsMouseBlocked(int mouseX, int mouseY)
+    {
+        if (ExplicitFocusElement is null || !IsEffectivelyVisible(ExplicitFocusElement))
+            return false;
+
+        var containingPanel = FindContainingStackEntry(ExplicitFocusElement) ?? ExplicitFocusElement.Parent;
+
+        if (containingPanel is null || containingPanel.ContainsPoint(mouseX, mouseY))
+            return false;
+
+        //the chat bar is exempt from blocking: a click on it must always be deliverable
+        //so it can reclaim focus after a desync (explicit focus stuck on another visible
+        //element while the chat box still renders a caret) — otherwise the recovery
+        //click is consumed right here and the wedge is permanent
+        var chatBar = (UIElement?)ChatInputTextBox?.Parent ?? ChatInputTextBox;
+
+        var overChatBar = chatBar is not null
+                          && IsEffectivelyVisible(chatBar)
+                          && chatBar.ContainsPoint(mouseX, mouseY);
+
+        return !overChatBar;
     }
 
     private static bool IsEffectivelyVisible(UIElement element)

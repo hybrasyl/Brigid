@@ -1,4 +1,5 @@
 #region
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using Brigid.Data.Models;
 #endregion
@@ -27,7 +28,20 @@ public sealed class LocalPlayerSettingsRepository
     public bool IsInitialized => PlayerDirectory is not null;
     public string MacroPath => Path.Combine(PlayerDirectory, MACRO_FILE);
 
-    public string GetFilePath(string fileName) => Path.Combine(PlayerDirectory, fileName);
+    /// <summary>
+    ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a bare,
+    ///     cross-platform file name (see <see cref="MetaFileCache.IsSafeName" />). A caller can pass a server-sent name,
+    ///     and Path.Combine follows a rooted name or ".." out of the folder.
+    /// </summary>
+    public bool TryGetFilePath(string fileName, [NotNullWhen(true)] out string? path)
+    {
+        path = IsInitialized ? CombineBareName(PlayerDirectory, fileName) : null;
+
+        return path is not null;
+    }
+
+    internal static string? CombineBareName(string directory, string fileName)
+        => MetaFileCache.IsSafeName(fileName) ? Path.Combine(directory, fileName) : null;
     public string SkillBookPath => Path.Combine(PlayerDirectory, SKILL_BOOK_FILE);
     public string SpellBookPath => Path.Combine(PlayerDirectory, SPELL_BOOK_FILE);
 
@@ -244,35 +258,40 @@ public sealed class LocalPlayerSettingsRepository
     /// </summary>
     public string[] LoadMacros()
     {
+        string[] lines = [];
+
+        //an unreadable file loads as no macros, and the failure is logged
+        if (File.Exists(MacroPath))
+            DataDiagnostics.Try(() => lines = File.ReadAllLines(MacroPath), "LoadMacros");
+
+        return ParseMacros(lines);
+    }
+
+    /// <summary>
+    ///     Parses Macro.cfg lines into the 10 macro slots. A slot with no line is empty, never null: Initialize writes an
+    ///     empty Macro.cfg for a new character, and the Options macro boxes take these values as their text.
+    /// </summary>
+    internal static string[] ParseMacros(IReadOnlyList<string> lines)
+    {
         var macros = new string[10];
+        Array.Fill(macros, string.Empty);
 
-        try
+        for (var i = 0; i < Math.Min(lines.Count, 10); i++)
         {
-            if (!File.Exists(MacroPath))
-                return macros;
+            var line = lines[i];
 
-            var lines = File.ReadAllLines(MacroPath);
+            //strip 'macron: ' prefix if present
+            var colonIndex = line.IndexOf(':');
 
-            for (var i = 0; i < Math.Min(lines.Length, 10); i++)
-            {
-                var line = lines[i];
+            if (colonIndex >= 0)
+                line = line[(colonIndex + 1)..]
+                    .Trim();
 
-                //strip 'macron: ' prefix if present
-                var colonIndex = line.IndexOf(':');
+            //strip surrounding double quotes
+            if (line is ['"', _, ..] && (line[^1] == '"'))
+                line = line[1..^1];
 
-                if (colonIndex >= 0)
-                    line = line[(colonIndex + 1)..]
-                        .Trim();
-
-                //strip surrounding double quotes
-                if (line is ['"', _, ..] && (line[^1] == '"'))
-                    line = line[1..^1];
-
-                macros[i] = line;
-            }
-        } catch
-        {
-            //return whatever was parsed so far
+            macros[i] = line;
         }
 
         return macros;
@@ -387,6 +406,14 @@ public sealed class LocalPlayerSettingsRepository
     /// </summary>
     public void SaveMacros(string[] macros)
     {
+        var lines = FormatMacros(macros);
+
+        DataDiagnostics.Try(() => File.WriteAllLines(MacroPath, lines), "SaveMacros");
+    }
+
+    /// <summary>Formats the 10 macro slots as Macro.cfg lines; <see cref="ParseMacros" /> reads them back.</summary>
+    internal static string[] FormatMacros(string[] macros)
+    {
         var lines = new string[10];
 
         for (var i = 0; i < 10; i++)
@@ -396,7 +423,7 @@ public sealed class LocalPlayerSettingsRepository
             lines[i] = $"{label}: \"{value}\"";
         }
 
-        DataDiagnostics.Try(() => File.WriteAllLines(MacroPath, lines), "SaveMacros");
+        return lines;
     }
 
     public void SaveSkillChants(List<SkillChantEntry> entries) => SaveChantBook(SkillBookPath, entries);
