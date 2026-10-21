@@ -322,12 +322,21 @@ public abstract class CenteredModalPanel : FramePanel
         //Tab traverses child textboxes (Macros/Friends tabs).
         base.OnKeyDown(e);
 
-        //a modal captures input: swallow every remaining key so world hotkeys that sit above the
-        //control-stack guard (Q/W/E/R panel toggles, Enter chat focus, …) don't fire underneath while it's
-        //open. Focused textboxes still receive their keys — explicit-focus (phase 1) dispatch runs before
-        //this phase-2 handler. Matches retail, where the options popups blocked other actions.
-        e.Handled = true;
+        //a modal captures input: unless it lets keys through, swallow every remaining key so world hotkeys that
+        //sit above the control-stack guard (Q/W/E/R panel toggles, Enter chat focus, …) don't fire underneath
+        //while it's open. Focused textboxes still receive their keys — explicit-focus (phase 1) dispatch runs
+        //before this phase-2 handler. Matches retail, where the options popups blocked other actions.
+        if (!LetsKeysThrough)
+            e.Handled = true;
     }
+
+    /// <summary>
+    ///     False (the default) for a panel that takes every key while it is open. True for a panel that the player uses
+    ///     beside the world, for example the exchange: a key that the panel does not use goes on to the screen. While the
+    ///     panel is on the control stack, the screen's stack guard still blocks the hotkeys below the guard (A, S, D and
+    ///     the others); the keys above it (Enter for chat, Q, W, E, R, Alt+Enter) work.
+    /// </summary>
+    protected virtual bool LetsKeysThrough => false;
 
     //absorb the wheel so it never scrolls the world behind the modal; subclasses with a scroll list override
     //to forward e.Delta to their scroll model before (or instead of) absorbing.

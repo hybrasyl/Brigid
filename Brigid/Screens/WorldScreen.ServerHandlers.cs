@@ -591,6 +591,12 @@ public sealed partial class WorldScreen
 
     private void HandleExchangeClosed(string? message)
     {
+        //a prompt that the exchange opened has nothing to act on after the close
+        ItemAmount.Hide();
+
+        if (GoldForExchange)
+            GoldDrop.Hide();
+
         if (!string.IsNullOrEmpty(message))
             ExchangeResultPopup.Show(message);
     }

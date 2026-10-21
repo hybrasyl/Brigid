@@ -5,6 +5,7 @@ using Brigid.Controls.Scrolling;
 using Brigid.Controls.World.Popups;
 using Brigid.Controls.World.Popups.Boards;
 using Brigid.Controls.World.Popups.Dialog;
+using Brigid.Controls.World.Popups.Exchange;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Controls.World.Popups.Profile;
 using Brigid.Data.AssetPacks;
@@ -46,13 +47,14 @@ public sealed class ThemedModalLayoutTests : IDisposable
 
     //Options is left out: its setting labels read msg.tbl, which a test does not load. It lays out from ContentBounds as
     //the others do
-    public static TheoryData<string> Modals => ["boards", "castable", "keybind", "serverinfo", "certificate", "insecure", "pause", "popup", "itemamount", "goldamount", "textpopup", "profiletext", "abilitydetails", "eventdetails"];
+    public static TheoryData<string> Modals => ["boards", "castable", "keybind", "serverinfo", "certificate", "insecure", "pause", "popup", "itemamount", "goldamount", "textpopup", "profiletext", "abilitydetails", "eventdetails", "exchange"];
 
     [Theory]
     [MemberData(nameof(Modals))]
     public void TheContentLiesInsideTheThemedFrame(string modal)
     {
-        var panel = Create(modal);
+        //a modal can subscribe to static state (the exchange), so each one is disposed
+        using var panel = Create(modal);
         var content = panel.ContentBounds;
 
         Assert.Equal(THEMED_INSET, content.X);
@@ -169,7 +171,9 @@ public sealed class ThemedModalLayoutTests : IDisposable
 
         try
         {
-            return Create(modal).ContentBounds.Size;
+            using var flat = Create(modal);
+
+            return flat.ContentBounds.Size;
         } finally
         {
             AssetPackRegistry.SetUiThemeForTests(Theme);
@@ -192,6 +196,7 @@ public sealed class ThemedModalLayoutTests : IDisposable
         "profiletext" => new SelfProfileTextEditorControl(),
         "abilitydetails" => new AbilityMetadataDetailsControl(),
         "eventdetails" => new EventMetadataDetailsControl(),
+        "exchange"    => new ExchangeControl(new Rectangle(0, 0, 640, 480)),
         _             => throw new ArgumentOutOfRangeException(nameof(modal))
     };
 }

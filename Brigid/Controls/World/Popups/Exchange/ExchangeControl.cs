@@ -3,183 +3,99 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
+using Brigid.Definitions;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.World.Popups.Exchange;
 
 /// <summary>
-///     Exchange/trade panel using _nexch prefab. Thin view that subscribes to
-///     <see cref="Exchange" /> state events. Two-sided layout with up to 4 items per side.
+///     The exchange window (BRIG-126 step 3b), a themed <see cref="CenteredModalPanel" /> in place of the legacy
+///     <c>_nexch</c> prefab. A thin view of the <c>WorldState.Exchange</c> state: two columns, yours (<c>my</c>) on the
+///     left and the other player's (<c>their</c>) on the right. Each column has the name, a list of four item rows with a
+///     vertical and a horizontal scroll bar, and the gold. "Accepted" shows over a column when that side accepted. Accept
+///     and Cancel are on the bottom bar.
+///     <para>
+///         The panel is not modal: the player drags items from the inventory onto it, and the keys that it does not use go
+///         on to the screen (D10). Escape cancels the exchange. The screen sends the packets: <see cref="OnOk" /> accepts,
+///         <see cref="OnCancel" /> cancels, and <see cref="OnGoldClicked" /> opens the gold prompt.
+///     </para>
 /// </summary>
-public sealed class ExchangeControl : PrefabPanel
+public sealed class ExchangeControl : CenteredModalPanel
 {
     private const int MAX_VISIBLE_ITEMS = 4;
     private const int ITEM_ROW_HEIGHT = 32;
 
-    private readonly ScrollBarControl MyHorizontalScroll;
-    private readonly ScrollBarControl MyVerticalScroll;
-    private readonly UIPanel MyItemsContainer;
-    private readonly Rectangle MyExchangeRect;
-    private readonly UILabel? MyIdLabel;
+    private const int COLUMN_W = 240;
+    private const int COLUMN_GAP = 10;
+    private const int HEADER_H = 16;
+    private const int ACCEPTED_W = 70;
+    private const int LIST_INSET = 1;
+    private const int LIST_W = COLUMN_W - BAR;
+    private const int LIST_H = MAX_VISIBLE_ITEMS * ITEM_ROW_HEIGHT + 2 * LIST_INSET;
+    private const int LIST_Y = HEADER_H + 2;
+    private const int GOLD_Y = LIST_Y + LIST_H + BAR + 6;
+    private const int GOLD_H = 18;
+    private const int GOLD_BUTTON_W = 56;
+    private const int ACTION_W = 64;
+    private const int BAR = ScrollBarControl.DEFAULT_WIDTH;
+    private const int CONTENT_W = 2 * COLUMN_W + COLUMN_GAP;
+    private const int CONTENT_H = GOLD_Y + GOLD_H;
 
-    private readonly ExchangeItemControl[] MyItems = new ExchangeItemControl[MAX_VISIBLE_ITEMS];
-    private readonly UILabel? MyMoneyLabel;
-    private readonly Rectangle ViewportBounds;
+    private readonly Side Mine;
+    private readonly Side Theirs;
 
-    private readonly UIImage? YourAckImage;
-    private readonly ScrollBarControl YourHorizontalScroll;
-    private readonly ScrollBarControl YourVerticalScroll;
-    private readonly UIPanel YourItemsContainer;
-    private readonly Rectangle YourExchangeRect;
-    private readonly UILabel? YourIdLabel;
-    private readonly ExchangeItemControl[] YourItems = new ExchangeItemControl[MAX_VISIBLE_ITEMS];
-    private readonly UILabel? YourMoneyLabel;
+    /// <summary>Accept (the legacy OK). It is disabled after a click, until the next exchange starts.</summary>
+    public TextButton OkButton { get; }
 
-    //each of the four bars is a bare model + binder; the scroll offset lives on the model
-    private readonly ScrollBarBinder MyHorizontalBinder;
-    private readonly ScrollModel MyHorizontalModel = new();
-    private readonly ScrollBarBinder MyVerticalBinder;
-    private readonly ScrollModel MyVerticalModel = new();
-    private readonly ScrollBarBinder YourHorizontalBinder;
-    private readonly ScrollModel YourHorizontalModel = new();
-    private readonly ScrollBarBinder YourVerticalBinder;
-    private readonly ScrollModel YourVerticalModel = new();
+    public TextButton CancelButton { get; }
 
-    public UIButton? CancelButton { get; }
-    public UIButton? OkButton { get; }
+    /// <summary>The button that sets your gold. It is disabled after you accept.</summary>
+    public TextButton GoldButton { get; }
 
     public uint OtherUserId => WorldState.Exchange.OtherUserId;
 
-    /// <summary>
-    ///     The player's own name, used for the left side label. Set from WorldScreen after DisplayAisling.
-    /// </summary>
-    private static string PlayerName => WorldState.PlayerName;
-
     public ExchangeControl(Rectangle viewportBounds)
-        : base("_nexch")
+        : base("Exchange", CONTENT_W + 2 * PADDING, TITLE_H + 1 + CONTENT_H + BOTTOM_H, useTheme: true)
     {
-        Name = "Exchange";
-        Visible = false;
-        UsesControlStack = true;
-        ViewportBounds = viewportBounds;
+        Name = "exchange";
+        SetViewportBounds(viewportBounds);
 
-        OkButton = CreateButton("OK");
-        CancelButton = CreateButton("Cancel");
+        var content = ContentBounds;
 
-        if (OkButton is not null)
-            OkButton.Clicked += () =>
-            {
-                OkButton.Enabled = false;
-                OnOk?.Invoke();
-            };
-
-        if (CancelButton is not null)
-            CancelButton.Clicked += () => OnCancel?.Invoke();
-
-        MyIdLabel = CreateLabel("MyID");
-        YourIdLabel = CreateLabel("YourID");
-        MyMoneyLabel = CreateLabel("MyMoney");
-        YourMoneyLabel = CreateLabel("YourMoney");
-
-        MyExchangeRect = GetRect("MyExchange");
-        YourExchangeRect = GetRect("YourExchange");
-
-        YourAckImage = CreateImage("YourACK");
-
-        YourAckImage?.Visible = false;
-
-        //container panels for item clipping — sized to exclude scrollbar area
-        var clipWidth = MyExchangeRect.Width - ScrollBarControl.DEFAULT_WIDTH - 4;
-
-        MyItemsContainer = new UIPanel
+        Mine = new Side(false)
         {
-            Name = "MyItemsContainer",
-            X = MyExchangeRect.X,
-            Y = MyExchangeRect.Y,
-            Width = clipWidth,
-            Height = MyExchangeRect.Height,
-            IsPassThrough = true
+            Name = "my",
+            X = content.X,
+            Y = content.Y
         };
+        AddChild(Mine);
 
-        AddChild(MyItemsContainer);
-
-        YourItemsContainer = new UIPanel
+        Theirs = new Side(true)
         {
-            Name = "YourItemsContainer",
-            X = YourExchangeRect.X,
-            Y = YourExchangeRect.Y,
-            Width = clipWidth,
-            Height = YourExchangeRect.Height,
-            IsPassThrough = true
+            Name = "their",
+            X = content.X + COLUMN_W + COLUMN_GAP,
+            Y = content.Y
         };
+        AddChild(Theirs);
 
-        AddChild(YourItemsContainer);
-
-        //create item controls as children of the container panels
-        CreateItemControls(MyItems, MyItemsContainer);
-        CreateItemControls(YourItems, YourItemsContainer);
-
-        //vertical scrollbars — right edge of each exchange rect
-        MyVerticalScroll = new ScrollBarControl
+        GoldButton = new TextButton("Gold", GOLD_BUTTON_W, GOLD_H)
         {
-            Name = "MyVerticalScroll",
-            X = MyExchangeRect.Right - ScrollBarControl.DEFAULT_WIDTH,
-            Y = MyExchangeRect.Y,
-            Height = MyExchangeRect.Height - ScrollBarControl.DEFAULT_WIDTH
+            Name = "gold_button",
+            X = COLUMN_W - GOLD_BUTTON_W,
+            Y = GOLD_Y
         };
+        GoldButton.Clicked += () => OnGoldClicked?.Invoke();
+        Mine.AddChild(GoldButton);
 
-        MyVerticalBinder = new ScrollBarBinder(MyVerticalModel, MyVerticalScroll);
-        MyVerticalModel.Changed += _ => RefreshVisibleItems(false);
+        //Cancel takes the place of Close, so that closing the window always cancels the exchange
+        CloseButton.Visible = false;
+        CancelButton = AddBottomBarButton("Cancel", ACTION_W, () => OnCancel?.Invoke(), "cancel");
+        OkButton = AddBottomBarButton("Accept", ACTION_W, Accept, "accept");
 
-        AddChild(MyVerticalScroll);
-
-        YourVerticalScroll = new ScrollBarControl
-        {
-            Name = "YourVerticalScroll",
-            X = YourExchangeRect.Right - ScrollBarControl.DEFAULT_WIDTH,
-            Y = YourExchangeRect.Y,
-            Height = YourExchangeRect.Height - ScrollBarControl.DEFAULT_WIDTH
-        };
-
-        YourVerticalBinder = new ScrollBarBinder(YourVerticalModel, YourVerticalScroll);
-        YourVerticalModel.Changed += _ => RefreshVisibleItems(true);
-
-        AddChild(YourVerticalScroll);
-
-        //horizontal scrollbars — bottom edge of each exchange rect
-        MyHorizontalScroll = new ScrollBarControl
-        {
-            Name = "MyHorizontalScroll",
-            Orientation = ScrollOrientation.Horizontal,
-            X = MyExchangeRect.X,
-            Y = MyExchangeRect.Bottom - ScrollBarControl.DEFAULT_WIDTH,
-            Width = MyExchangeRect.Width - ScrollBarControl.DEFAULT_WIDTH,
-            Height = ScrollBarControl.DEFAULT_WIDTH
-        };
-
-        MyHorizontalBinder = new ScrollBarBinder(MyHorizontalModel, MyHorizontalScroll);
-        MyHorizontalModel.Changed += offset => ApplyHorizontalOffset(MyItems, offset);
-
-        AddChild(MyHorizontalScroll);
-
-        YourHorizontalScroll = new ScrollBarControl
-        {
-            Name = "YourHorizontalScroll",
-            Orientation = ScrollOrientation.Horizontal,
-            X = YourExchangeRect.X,
-            Y = YourExchangeRect.Bottom - ScrollBarControl.DEFAULT_WIDTH,
-            Width = YourExchangeRect.Width - ScrollBarControl.DEFAULT_WIDTH,
-            Height = ScrollBarControl.DEFAULT_WIDTH
-        };
-
-        YourHorizontalBinder = new ScrollBarBinder(YourHorizontalModel, YourHorizontalScroll);
-        YourHorizontalModel.Changed += offset => ApplyHorizontalOffset(YourItems, offset);
-
-        AddChild(YourHorizontalScroll);
-
-        //subscribe to state events
         WorldState.Exchange.Started += OnExchangeStarted;
         WorldState.Exchange.ItemAdded += OnExchangeItemAdded;
         WorldState.Exchange.GoldSet += OnExchangeGoldSet;
@@ -187,36 +103,35 @@ public sealed class ExchangeControl : PrefabPanel
         WorldState.Exchange.Closed += OnExchangeClosed;
     }
 
-    private void ClearAllItems()
-    {
-        foreach (var item in MyItems)
-            item.ClearItem();
+    //the exchange is used beside the world: Enter for chat and the other keys above the screen's stack guard still work
+    protected override bool LetsKeysThrough => true;
 
-        foreach (var item in YourItems)
-            item.ClearItem();
+    public event CancelHandler? OnCancel;
+    public event OkHandler? OnOk;
+
+    /// <summary>Raised when the player clicks the gold button. The screen opens the gold prompt over the panel.</summary>
+    public event Action? OnGoldClicked;
+
+    /// <summary>The rows of one side, in the order they show. Internal for the tests.</summary>
+    internal IReadOnlyList<ExchangeItemControl> Rows(bool rightSide) => (rightSide ? Theirs : Mine).Rows;
+
+    /// <summary>The name and the gold text of one side, and whether it shows "Accepted". Internal for the tests.</summary>
+    internal (string Name, string Gold, bool Accepted) SideText(bool rightSide)
+    {
+        var side = rightSide ? Theirs : Mine;
+
+        return (side.NameLabel.Text, side.GoldLabel.Text, side.AcceptedLabel.Visible);
     }
 
-    private static void CreateItemControls(ExchangeItemControl[] items, UIPanel container)
-    {
-        var itemWidth = container.Width;
-
-        for (var i = 0; i < MAX_VISIBLE_ITEMS; i++)
-        {
-            var control = new ExchangeItemControl
-            {
-                Name = $"ExchangeItem{i}",
-                Y = i * ITEM_ROW_HEIGHT,
-                Width = itemWidth
-            };
-
-            control.SetBaseX(0);
-            items[i] = control;
-            container.AddChild(control);
-        }
-    }
+    /// <summary>Scrolls the item list of one side by wheel notches, as the wheel over the list does. Internal for the tests.</summary>
+    internal void WheelList(bool rightSide, int delta) => (rightSide ? Theirs : Mine).Wheel(delta);
 
     public override void Dispose()
     {
+        //a row's icon is the renderer's shared, cached texture, and an image disposes its texture; clear the rows first
+        Mine.Reset();
+        Theirs.Reset();
+
         WorldState.Exchange.Started -= OnExchangeStarted;
         WorldState.Exchange.ItemAdded -= OnExchangeItemAdded;
         WorldState.Exchange.GoldSet -= OnExchangeGoldSet;
@@ -226,164 +141,265 @@ public sealed class ExchangeControl : PrefabPanel
         base.Dispose();
     }
 
-    /// <summary>
-    ///     Returns true if the given screen coordinates are within the MyMoney label area.
-    /// </summary>
-    public bool IsMyMoneyClicked(int mouseX, int mouseY) => MyMoneyLabel?.ContainsPoint(mouseX, mouseY) ?? false;
-
-    public event CancelHandler? OnCancel;
+    //your accept shows at once; the server says nothing back until the exchange completes
+    private void Accept()
+    {
+        OkButton.SetEnabled(false);
+        GoldButton.SetEnabled(false);
+        Mine.AcceptedLabel.Visible = true;
+        OnOk?.Invoke();
+    }
 
     private void OnExchangeClosed(string? message)
     {
-        ClearAllItems();
-        ResetAllScrollbars();
+        Mine.Reset();
+        Theirs.Reset();
         Hide();
     }
 
     private void OnExchangeGoldSet(bool rightSide)
     {
         var amount = rightSide ? WorldState.Exchange.OtherGold : WorldState.Exchange.MyGold;
-        var label = rightSide ? YourMoneyLabel : MyMoneyLabel;
-        label?.Text = amount.ToString("N0");
+        (rightSide ? Theirs : Mine).SetGold(amount);
     }
 
-    private void OnExchangeItemAdded(bool rightSide, byte index)
-    {
-        UpdateVerticalScrollbar(rightSide);
-        UpdateHorizontalScrollbar(rightSide);
-        RefreshVisibleItems(rightSide);
-    }
+    private void OnExchangeItemAdded(bool rightSide, byte index) => (rightSide ? Theirs : Mine).ItemsChanged();
 
-    private void OnExchangeOtherAccepted() => YourAckImage?.Visible = true;
+    private void OnExchangeOtherAccepted() => Theirs.AcceptedLabel.Visible = true;
 
     private void OnExchangeStarted()
     {
-        ClearAllItems();
-        ResetAllScrollbars();
-
-        MyIdLabel?.Text = PlayerName;
-        YourIdLabel?.Text = WorldState.Exchange.OtherUserName;
-        MyMoneyLabel?.Text = "0";
-        YourMoneyLabel?.Text = "0";
-        YourAckImage?.Visible = false;
-
-        OkButton?.Enabled = true;
-
-        //center vertically in viewport
-        Y = ViewportBounds.Y + (ViewportBounds.Height - Height) / 2;
-
+        Mine.Reset();
+        Theirs.Reset();
+        Mine.NameLabel.Text = WorldState.PlayerName;
+        Theirs.NameLabel.Text = WorldState.Exchange.OtherUserName;
+        OkButton.SetEnabled(true);
+        GoldButton.SetEnabled(true);
         Show();
     }
 
-    public event OkHandler? OnOk;
-
     public override void OnKeyDown(KeyDownEvent e)
     {
+        //Escape cancels the exchange, and the screen closes the window when the exchange closes. The base Escape (Hide)
+        //does not run, so the window stays until the exchange closes
         if (e.Key == Keys.Escape)
         {
             OnCancel?.Invoke();
             e.Handled = true;
+
+            return;
         }
+
+        base.OnKeyDown(e);
     }
 
+    //the wheel scrolls the list under the mouse
     public override void OnMouseScroll(MouseScrollEvent e)
     {
-        var mouseX = e.ScreenX;
-        var mouseY = e.ScreenY;
+        foreach (var side in (Side[]) [Mine, Theirs])
+            if (side.ListContains(e.ScreenX, e.ScreenY))
+                side.Wheel(e.Delta);
 
-        //determine which exchange rect the mouse is over; the wheel drives that side's vertical model
-        if (MyItemsContainer.ContainsPoint(mouseX, mouseY))
-        {
-            if (MyVerticalModel.CanScroll)
-                MyVerticalModel.WheelBy(e.Delta);
-
-            e.Handled = true;
-        } else if (YourItemsContainer.ContainsPoint(mouseX, mouseY))
-        {
-            if (YourVerticalModel.CanScroll)
-                YourVerticalModel.WheelBy(e.Delta);
-
-            e.Handled = true;
-        }
+        e.Handled = true;
     }
 
-    private static void ApplyHorizontalOffset(ExchangeItemControl[] items, int offset)
+    /// <summary>
+    ///     One column, in its own coordinates: the name, the "Accepted" mark, the item list with its two bars, and the gold.
+    ///     It takes no mouse input itself; its children do.
+    /// </summary>
+    private sealed class Side : UIPanel
     {
-        foreach (var item in items)
-            item.HorizontalOffset = offset;
-    }
+        private readonly bool RightSide;
+        private readonly ItemList List;
+        private readonly ScrollModel VerticalModel = new();
+        private readonly ScrollModel HorizontalModel = new();
 
-    private void RefreshVisibleItems(bool rightSide)
-    {
-        var items = rightSide ? YourItems : MyItems;
-        var offset = rightSide ? YourVerticalModel.Offset : MyVerticalModel.Offset;
-        var horizontalOffset = rightSide ? YourHorizontalModel.Offset : MyHorizontalModel.Offset;
-        var totalCount = WorldState.Exchange.GetItemCount(rightSide);
+        //kept with the other scroll fields, as ScrollView keeps its binder; the subscriptions keep a binder alive
+        private readonly ScrollBarBinder VerticalBinder;
+        private readonly ScrollBarBinder HorizontalBinder;
 
-        for (var i = 0; i < MAX_VISIBLE_ITEMS; i++)
+        public readonly UILabel NameLabel;
+        public readonly UILabel AcceptedLabel;
+        public readonly UILabel GoldLabel;
+        public readonly ExchangeItemControl[] Rows = new ExchangeItemControl[MAX_VISIBLE_ITEMS];
+
+        public Side(bool rightSide)
         {
-            var dataIndex = (byte)(offset + i);
+            RightSide = rightSide;
+            Width = COLUMN_W;
+            Height = CONTENT_H;
+            IsPassThrough = true;
 
-            if (dataIndex < totalCount)
+            NameLabel = new UILabel
             {
-                var data = WorldState.Exchange.GetItem(rightSide, dataIndex);
+                Name = "name",
+                Width = COLUMN_W - ACCEPTED_W,
+                Height = HEADER_H,
+                VerticalAlignment = VerticalAlignment.Center,
+                PaddingLeft = 0,
+                IsHitTestVisible = false
+            };
+            NameLabel.SetForegroundRole(ThemeRoles.TextTitle);
+            AddChild(NameLabel);
 
-                if (data.HasValue)
+            AcceptedLabel = new UILabel
+            {
+                Name = "accepted",
+                X = COLUMN_W - ACCEPTED_W,
+                Width = ACCEPTED_W,
+                Height = HEADER_H,
+                Text = "Accepted",
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+                PaddingRight = 0,
+                Visible = false,
+                IsHitTestVisible = false
+            };
+            AcceptedLabel.SetForegroundRole(ThemeRoles.TextSelected);
+            AddChild(AcceptedLabel);
+
+            List = new ItemList
+            {
+                Name = "list",
+                Y = LIST_Y,
+                Width = LIST_W,
+                Height = LIST_H,
+                IsPassThrough = true
+            };
+            AddChild(List);
+
+            //the rows sit inside the list's border, which clips them, so that a moved row does not draw over the border
+            var rowArea = new UIPanel
+            {
+                Name = "rows",
+                X = LIST_INSET,
+                Y = LIST_INSET,
+                Width = LIST_W - 2 * LIST_INSET,
+                Height = LIST_H - 2 * LIST_INSET,
+                IsPassThrough = true
+            };
+            List.AddChild(rowArea);
+
+            for (var i = 0; i < MAX_VISIBLE_ITEMS; i++)
+            {
+                var row = new ExchangeItemControl
                 {
-                    items[i]
-                        .SetItem(data.Value.Sprite, data.Value.Color, data.Value.Name ?? string.Empty);
+                    Name = $"row_{i}",
+                    Y = i * ITEM_ROW_HEIGHT,
+                    MinWidth = rowArea.Width
+                };
 
-                    items[i].HorizontalOffset = horizontalOffset;
-
-                    continue;
-                }
+                row.SetBaseX(1);
+                Rows[i] = row;
+                rowArea.AddChild(row);
             }
 
-            items[i]
-                .ClearItem();
+            var verticalBar = new ScrollBarControl
+            {
+                Name = "vertical",
+                X = LIST_W,
+                Y = LIST_Y,
+                Height = LIST_H
+            };
+            AddChild(verticalBar);
+            VerticalBinder = new ScrollBarBinder(VerticalModel, verticalBar);
+            VerticalModel.Changed += _ => Refresh();
+
+            var horizontalBar = new ScrollBarControl
+            {
+                Name = "horizontal",
+                Orientation = ScrollOrientation.Horizontal,
+                Y = LIST_Y + LIST_H,
+                Width = LIST_W,
+                Height = BAR
+            };
+            AddChild(horizontalBar);
+            HorizontalBinder = new ScrollBarBinder(HorizontalModel, horizontalBar);
+            HorizontalModel.Changed += ApplyHorizontalOffset;
+
+            GoldLabel = new UILabel
+            {
+                Name = "gold",
+                Y = GOLD_Y,
+                Width = COLUMN_W - GOLD_BUTTON_W - 6,
+                Height = GOLD_H,
+                VerticalAlignment = VerticalAlignment.Center,
+                PaddingLeft = 0,
+                IsHitTestVisible = false
+            };
+            GoldLabel.SetForegroundRole(ThemeRoles.Text);
+            AddChild(GoldLabel);
         }
 
-        UpdateHorizontalScrollbar(rightSide);
+        public void Reset()
+        {
+            foreach (var row in Rows)
+                row.ClearItem();
+
+            AcceptedLabel.Visible = false;
+            SetGold(0);
+
+            VerticalModel.SetMetrics(0, MAX_VISIBLE_ITEMS);
+            VerticalModel.ScrollToStart();
+            HorizontalModel.SetMetrics(0, 0);
+            HorizontalModel.ScrollToStart();
+            ApplyHorizontalOffset(0);
+        }
+
+        public void SetGold(int amount) => GoldLabel.Text = $"Gold: {amount:N0}";
+
+        public void ItemsChanged()
+        {
+            VerticalModel.SetMetrics(WorldState.Exchange.GetItemCount(RightSide), MAX_VISIBLE_ITEMS);
+            Refresh();
+        }
+
+        public bool ListContains(int screenX, int screenY) => List.ContainsPoint(screenX, screenY);
+
+        public void Wheel(int delta)
+        {
+            if (VerticalModel.CanScroll)
+                VerticalModel.WheelBy(delta);
+        }
+
+        //shows the items from the vertical offset, then sizes the horizontal bar to the widest shown name
+        private void Refresh()
+        {
+            var totalCount = WorldState.Exchange.GetItemCount(RightSide);
+
+            for (var i = 0; i < MAX_VISIBLE_ITEMS; i++)
+            {
+                var dataIndex = VerticalModel.Offset + i;
+
+                if ((dataIndex < totalCount) && WorldState.Exchange.GetItem(RightSide, (byte)dataIndex) is { } data)
+                {
+                    Rows[i].SetItem(data.Sprite, data.Color, data.Name ?? string.Empty);
+                    Rows[i].HorizontalOffset = HorizontalModel.Offset;
+                } else
+                    Rows[i].ClearItem();
+            }
+
+            var widest = 0;
+
+            foreach (var row in Rows)
+                if (row.Visible)
+                    widest = Math.Max(widest, row.EntryWidth);
+
+            //pixel-granular: the offset can go as far as the widest name overflows the list (0 when it fits)
+            HorizontalModel.SetMetrics(widest, LIST_W - 2 * LIST_INSET - 2);
+        }
+
+        private void ApplyHorizontalOffset(int offset)
+        {
+            foreach (var row in Rows)
+                row.HorizontalOffset = offset;
+        }
     }
 
-    private void ResetAllScrollbars()
+    //the well of an item list: a border in the divider colour, which also clips the rows that the horizontal bar moves
+    private sealed class ItemList : UIPanel
     {
-        MyVerticalModel.SetMetrics(0, MAX_VISIBLE_ITEMS);
-        MyVerticalModel.ScrollToStart();
-        YourVerticalModel.SetMetrics(0, MAX_VISIBLE_ITEMS);
-        YourVerticalModel.ScrollToStart();
-
-        MyHorizontalModel.SetMetrics(0, 0);
-        MyHorizontalModel.ScrollToStart();
-        YourHorizontalModel.SetMetrics(0, 0);
-        YourHorizontalModel.ScrollToStart();
-
-        ApplyHorizontalOffset(MyItems, 0);
-        ApplyHorizontalOffset(YourItems, 0);
-    }
-
-    private void UpdateHorizontalScrollbar(bool rightSide)
-    {
-        var items = rightSide ? YourItems : MyItems;
-        var model = rightSide ? YourHorizontalModel : MyHorizontalModel;
-        var rect = rightSide ? YourExchangeRect : MyExchangeRect;
-        var visibleWidth = rect.Width - ScrollBarControl.DEFAULT_WIDTH - 10;
-
-        var maxEntryWidth = 0;
-
-        foreach (var item in items)
-            if (item.Visible && (item.EntryWidth > maxEntryWidth))
-                maxEntryWidth = item.EntryWidth;
-
-        //pixel-granular: Max resolves to the overflow (or 0 when it fits, which re-clamps the offset to 0)
-        model.SetMetrics(maxEntryWidth, visibleWidth);
-    }
-
-    private void UpdateVerticalScrollbar(bool rightSide)
-    {
-        var totalCount = WorldState.Exchange.GetItemCount(rightSide);
-        var model = rightSide ? YourVerticalModel : MyVerticalModel;
-
-        model.SetMetrics(totalCount, MAX_VISIBLE_ITEMS);
+        protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+            => DrawBorderClipped(spriteBatch, bounds, ThemeColor(ThemeRoles.Divider));
     }
 }

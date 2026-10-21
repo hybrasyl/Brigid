@@ -138,6 +138,10 @@ public sealed partial class WorldScreen : IScreen
 
     private ChaosGame Game = null!;
     private GoldAmountControl GoldDrop = null!;
+
+    //true while the gold prompt is open for the exchange's gold, false while it is open for a drop. The exchange can close
+    //while the prompt is open, so the confirm must not then fall through to a drop on the other player
+    private bool GoldForExchange;
     private GroupRecruitPanel GroupBoxViewer = null!;
 
     //true when j was pressed — the next selfprofile response triggers group highlighting instead of opening the panel
@@ -415,9 +419,11 @@ public sealed partial class WorldScreen : IScreen
             //the packets carry the gold as an int
             var amount = (int)Math.Min(confirmed, int.MaxValue);
 
-            if (Exchange.Visible && (GoldDrop.TargetEntityId == Exchange.OtherUserId))
-                Game.Connection.SendExchangeInteraction(ExchangeRequestType.SetGold, Exchange.OtherUserId, goldAmount: amount);
-            else if (GoldDrop.TargetEntityId.HasValue)
+            if (GoldForExchange)
+            {
+                if (WorldState.Exchange.IsActive)
+                    Game.Connection.SendExchangeInteraction(ExchangeRequestType.SetGold, Exchange.OtherUserId, goldAmount: amount);
+            } else if (GoldDrop.TargetEntityId.HasValue)
                 Game.Connection.DropGoldOnCreature(amount, GoldDrop.TargetEntityId.Value);
             else
                 Game.Connection.DropGold(amount, GoldDrop.TargetTileX, GoldDrop.TargetTileY);

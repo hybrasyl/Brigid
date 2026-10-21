@@ -123,6 +123,15 @@ public sealed partial class WorldScreen
             Game.Connection.SendExchangeInteraction(ExchangeRequestType.Cancel, Exchange.OtherUserId);
             WorldState.Exchange.Close();
         };
+
+        //the gold button opens the gold prompt over the exchange; its OnConfirm sends SetGold while the exchange is open
+        Exchange.OnGoldClicked += () =>
+        {
+            GoldForExchange = true;
+            GoldDrop.SetViewportBounds(new Rectangle(Exchange.X, Exchange.Y, Exchange.Width, Exchange.Height));
+            GoldDrop.ShowForTarget(Exchange.OtherUserId, 0, 0);
+            WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
+        };
     }
     #endregion
 
@@ -747,6 +756,7 @@ public sealed partial class WorldScreen
         MarkdownNotice.SetViewportBounds(viewport);
         TextPopup.SetViewportBounds(viewport);
         SelfProfileTextEditor.SetViewportBounds(viewport);
+        Exchange.SetViewportBounds(viewport);
 
         FollowPlayerCamera();
 
