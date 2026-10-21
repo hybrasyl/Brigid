@@ -10,9 +10,9 @@ namespace Brigid.Data.AssetPacks;
 ///     <c>{id}</c> is the integer music id (the value the server sends in <c>SoundArgs.Sound</c> when
 ///     <c>IsMusic</c> is true) and <c>{ext}</c> is one of <c>ogg</c>/<c>mp3</c>/<c>wav</c>/<c>flac</c>/<c>mus</c>.
 ///     A present id replaces the legacy loose <c>{DataPath}/music/{id}.mus</c>; an id with no legacy counterpart is a
-///     new track. <c>mp3</c> is the recommended format: it is guaranteed by the client's bundled SDL2_mixer build
-///     (statically-linked minimp3), whereas <c>ogg</c>/<c>flac</c> need codec libraries not currently shipped and
-///     fall back to the legacy loose file if they fail to decode. The client streams these bytes via
+///     new track. Each bundled SDL2_mixer build decodes <c>mp3</c>, <c>ogg</c>, <c>wav</c> and <c>flac</c> (see
+///     <c>SfxPack</c>). An entry that does not decode falls back to the legacy loose file. The client streams these
+///     bytes via
 ///     <c>Mix_LoadMUS_RW</c>.
 /// </summary>
 public sealed class MusicPack : AudioPack

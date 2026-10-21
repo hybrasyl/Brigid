@@ -10,9 +10,10 @@ namespace Brigid.Systems;
 
 /// <summary>
 ///     Manages sound-effect and background-music playback via SDL2_mixer (with minimp3 compiled directly into the
-///     mixer DLL). SFX are loaded from legend.dat as MP3 bytes, decoded to PCM once via <c>Mix_LoadWAV_RW</c> and
-///     cached as <c>Mix_Chunk</c> pointers; playback uses the mixer's channel pool with per-channel volume. Music
-///     is streamed from disk via <c>Mix_LoadMUS</c>, with cross-map transitions driven by SDL_mixer's built-in
+///     mixer DLL). SFX come from the sound-effect pack, else from legend.dat, are decoded to PCM once via
+///     <c>Mix_LoadWAV_RW</c> and cached as <c>Mix_Chunk</c> pointers; playback uses the mixer's channel pool with
+///     per-channel volume. Music comes from the music pack, else from the loose music files, and streams through
+///     <c>Mix_LoadMUS_RW</c> or <c>Mix_LoadMUS</c>, with cross-map transitions driven by SDL_mixer's built-in
 ///     <c>Mix_FadeOutMusic</c>/<c>Mix_FadeInMusic</c>. When the same sound id is triggered while an earlier
 ///     instance is still audible, the prior live instances are faded out via <c>Mix_FadeOutChannel</c> (per-id
 ///     voice-stealing), matching the retail Dark Ages client's behavior of restarting the single cached Miles
@@ -299,7 +300,17 @@ public sealed class SoundSystem : IDisposable
         //Dispose resets AmbientChannel before closing the mixer, so reaching here means the mixer is live
         if (SdlMixer.Mix_Playing(AmbientChannel) != 0)
         {
-            SdlMixer.Mix_FadeOutChannel(AmbientChannel, FADE_OUT_MS);
+            //the mixer does not fade a channel at volume 0 (Ambience slider at 0), and returns 0. a looping bed then
+            //plays on for ever and keeps its channel, so stop it now. the halt is complete under the audio lock, so
+            //the chunk is free at once and the channel needs no tracking
+            if (SdlMixer.Mix_FadeOutChannel(AmbientChannel, FADE_OUT_MS) == 0)
+            {
+                SdlMixer.Mix_HaltChannel(AmbientChannel);
+                AmbientChannel = -1;
+                PlayingAmbientId = -1;
+
+                return;
+            }
 
             //put the fading channel into the sound-effect channel tracking for the fade. EvictOldest then does not
             //free the chunk until the finish drain removes the channel. Mix_FreeChunk on a chunk that the audio
@@ -358,7 +369,7 @@ public sealed class SoundSystem : IDisposable
                 SoundKeyToChannels.Remove(key);
         }
 
-        //retry an ambient start that failed transiently (channel pool was saturated at the original request)
+        //try again to start a bed that did not start because every channel was busy
         if ((DesiredAmbientId >= 0) && (AmbientChannel < 0) && !AmbientOneShotDone)
             TryStartAmbient();
 
@@ -586,9 +597,9 @@ public sealed class SoundSystem : IDisposable
         }
     }
 
-    //tries to start the desired bed. a missing asset does not change, so clear the desire: then the Update() retry
-    //does not read the pack each frame. a full channel pool or a Mix_PlayChannel error can change, so keep the
-    //desire, and Update() tries again on the next frame
+    //tries to start the desired bed. a missing asset and a play error do not change, so clear the desire: then the
+    //Update() retry does not try each frame. only a full channel pool can change, so then keep the desire, and
+    //Update() tries again on the next frame
     private void TryStartAmbient()
     {
         var chunk = GetOrLoadChunk(SoundKey.Ambient(DesiredAmbientId));
@@ -614,8 +625,13 @@ public sealed class SoundSystem : IDisposable
         //PlayingAmbientId
         var loops = AmbientPackFor(DesiredAmbientId)?.Loops(DesiredAmbientId) == false ? 0 : -1;
 
-        if (SdlMixer.Mix_PlayChannel(channel, chunk, loops) < 0)
+        //the bed fades in over the same time as it fades out, so that a loud loop does not click at the start
+        if (SdlMixer.Mix_FadeInChannelTimed(channel, chunk, loops, FADE_OUT_MS, -1) < 0)
+        {
+            DesiredAmbientId = -1;
+
             return;
+        }
 
         AmbientChannel = channel;
         PlayingAmbientId = DesiredAmbientId;

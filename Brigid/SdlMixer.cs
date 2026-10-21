@@ -89,6 +89,11 @@ internal static partial class SdlMixer
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial int Mix_PlayChannel(int channel, nint chunk, int loops);
 
+    //Mix_FadeInChannel is a C macro for this call with ticks = -1 (no time limit)
+    [LibraryImport(LIBRARY_NAME)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial int Mix_FadeInChannelTimed(int channel, nint chunk, int loops, int ms, int ticks);
+
     [LibraryImport(LIBRARY_NAME)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial int Mix_HaltChannel(int channel);

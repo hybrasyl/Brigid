@@ -11,8 +11,8 @@ namespace Brigid.Data.AssetPacks;
 ///     the archive root, where <c>{id}</c> is the ambient id (1 to 255; 0 means no ambient) and <c>{ext}</c> is one of
 ///     <c>wav</c>/<c>ogg</c>/<c>mp3</c>/<c>flac</c>. An ambient id is a separate number space from the sound-effect id.
 ///     There is no legacy fallback. The client decodes these bytes fully, as it does a sound effect, because the bed
-///     plays on a mixer channel beside the single music stream. Use <c>wav</c> or <c>mp3</c>: the bundled SDL2_mixer
-///     build does not decode <c>ogg</c> or <c>flac</c>, and there is no fallback, so such a bed is silent.
+///     plays on a mixer channel beside the single music stream. Each bundled SDL2_mixer build decodes all four
+///     formats (see <c>SfxPack</c>). An entry that does not decode gives no bed, as there is no fallback.
 ///     <para>
 ///     A bed loops unless the manifest says otherwise. <c>covers.ambient_sounds</c> is keyed by ambient id, and only
 ///     <c>{ "loop": false }</c> changes the default: that bed plays one time.

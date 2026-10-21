@@ -445,9 +445,7 @@ music_{id}.{ext}
   `+`/`-` or surrounding whitespace makes the entry unrecognized. Last writer wins if two extensions
   share an ID.
 - **Extension is enforced**: `AllowedExtensions = { ogg, mp3, wav, flac, mus }` (case-insensitive);
-  anything else is silently not indexed. **`mp3` is recommended** — guaranteed by the client's
-  bundled SDL2_mixer build (statically-linked minimp3). `ogg`/`flac` need codec libraries not
-  currently shipped and fall back to legacy if they fail to decode.
+  anything else is silently not indexed. Each bundled SDL2_mixer build decodes `mp3`, `ogg`, `wav` and `flac` (Windows and macOS: built-in minimp3, stb_vorbis and dr_flac; Linux: `ogg` and `flac` through the system libvorbisfile and libFLAC that the package declares). An entry that does not decode falls back to legacy.
 - API `TryGetMusicBytes(int musicId, out byte[]?)` — **raw bytes, no decode in the data layer.**
 - Overrides `SoundSystem.StartMusic` (`Brigid/Systems/SoundSystem.cs:433`) → legacy loose file
   `{DataPath}/music/{id}.mus`. The pack path pins the `byte[]` (`GCHandle.Alloc(..., Pinned)`) and
@@ -468,7 +466,7 @@ sfx_{id}.{ext}
 
 - Regex: `^sfx_\d+\.(wav|ogg|mp3|flac)$`. Same root-only + plain-digit ID parsing as `music`.
 - **Extension list differs from `music`: no `mus`.** `AllowedExtensions = { wav, ogg, mp3, flac }`.
-  `wav` or `mp3` recommended (WAV natively, MP3 via minimp3); `ogg`/`flac` are not shipped.
+  All four formats decode on every platform (see `music`).
 - API `TryGetSfxBytes(int soundId, out byte[]?)`.
 - Overrides `SoundSystem.LoadChunk` (`Brigid/Systems/SoundSystem.cs:371`) → legacy `legend.dat`
   entry `{soundId}.mp3`. A present-but-undecodable entry falls through to legacy.
