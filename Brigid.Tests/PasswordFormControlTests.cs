@@ -78,9 +78,9 @@ public class PasswordFormControlTests
     }
 
     [Fact]
-    public void WhileBusyTheFormCannotBeSubmittedOrCancelled()
+    public void WhileBusyTheFormCannotBeSubmitted_ButCanBeCancelled()
     {
-        //a reply that arrives after a cancel would go down the login path
+        //the screen ends the wait of a cancelled form: it closes the connection, so the late answer does not arrive
         var form = new PasswordFormControl();
         var oks = 0;
         var cancels = 0;
@@ -92,15 +92,10 @@ public class PasswordFormControlTests
         form.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
 
         Assert.Equal(0, oks);
-        Assert.Equal(0, cancels);
-        Assert.False(form.SubmitButton.Enabled);
-        Assert.False(form.CancelButton.Enabled);
-        Assert.Equal("Changing the password...", form.StatusText);
-
-        form.SetBusy(false);
-        form.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
-
         Assert.Equal(1, cancels);
+        Assert.False(form.SubmitButton.Enabled);
+        Assert.True(form.CancelButton.Enabled);
+        Assert.Equal("Changing the password...", form.StatusText);
     }
 
     [Fact]

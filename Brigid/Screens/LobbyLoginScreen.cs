@@ -27,6 +27,11 @@ public sealed class LobbyLoginScreen : IScreen
 {
     private const string CONNECTION_LOST = "The connection to the server was lost.";
     private const string NOT_CONNECTED = "The client is not connected to the server.";
+    private const string NO_ANSWER = "The server did not answer.";
+    private const string CHOOSE_SERVER = "Close this form, then choose a server.";
+
+    //the longest time that a form waits for the server
+    private const double WAIT_TIMEOUT_MS = 20_000;
 
     //the screen and its menu are made again on every return from the world and after Config; the alert shows once per
     //process
@@ -62,6 +67,9 @@ public sealed class LobbyLoginScreen : IScreen
 
     private IList<ServerEntry> ServerList = [];
     private ServerSelectControl ServerSelectControl = null!;
+
+    //a server table that arrived while a form was open; the server list shows when the form closes
+    private bool ServerListPending;
 
     //the menu button that Enter clicks again
     private TextButton? LastClickedButton;
@@ -281,6 +289,14 @@ public sealed class LobbyLoginScreen : IScreen
             ShowOffline();
         }
 
+        StopWaitsThatTimedOut();
+
+        if (ServerListPending && !AnyFormOpen)
+        {
+            ServerListPending = false;
+            ServerSelectControl.Visible = true;
+        }
+
         Game.Dispatcher.ProcessInput(Root!, gameTime);
 
         //polled after the input, so that a form that the input opens or closes disables or enables the buttons in the
@@ -358,6 +374,9 @@ public sealed class LobbyLoginScreen : IScreen
     #region Button Handlers
     private bool AnyFormOpen => LoginForm.Visible || PasswordForm.Visible || Creator.Visible;
 
+    //a form that timed out stays open while the lobby connects again; with several servers, the list waits for it to close
+    private string NotConnectedMessage => ServerListPending ? CHOOSE_SERVER : NOT_CONNECTED;
+
     private void OnContinueClicked()
     {
         if (Connecting || AnyFormOpen)
@@ -385,7 +404,7 @@ public sealed class LobbyLoginScreen : IScreen
     {
         if (Game.Connection.State != ConnectionState.Login)
         {
-            Creator.ShowError(NOT_CONNECTED);
+            Creator.ShowError(NotConnectedMessage);
 
             return;
         }
@@ -413,13 +432,7 @@ public sealed class LobbyLoginScreen : IScreen
         Game.Connection.CreateCharInitial(name, password);
     }
 
-    //a cancel while the server has not answered leaves the menu usable; the form is not busy after Hide, so the answer, if
-    //it comes, is not handled as a creation answer
-    private void OnCharCreateCancelClicked()
-    {
-        Creator.Hide();
-        AwaitingCharFinalize = false;
-    }
+    private void OnCharCreateCancelClicked() => CloseForm(Creator);
 
     private void OnPasswordClicked()
     {
@@ -453,7 +466,7 @@ public sealed class LobbyLoginScreen : IScreen
         //a change sent with no connection gets no answer, so the form would wait with no way out
         if (Game.Connection.State != ConnectionState.Login)
         {
-            PasswordForm.ShowError(NOT_CONNECTED);
+            PasswordForm.ShowError(NotConnectedMessage);
 
             return;
         }
@@ -462,7 +475,7 @@ public sealed class LobbyLoginScreen : IScreen
         Game.Connection.ChangePassword(name, currentPassword, newPassword);
     }
 
-    private void OnPasswordChangeCancelClicked() => PasswordForm.Hide();
+    private void OnPasswordChangeCancelClicked() => CloseForm(PasswordForm);
 
     private void OnHomepageClicked()
     {
@@ -489,7 +502,7 @@ public sealed class LobbyLoginScreen : IScreen
         //a login sent with no connection gets no answer, so the form would wait with no way out
         if (Game.Connection.State != ConnectionState.Login)
         {
-            LoginForm.ShowError(NOT_CONNECTED);
+            LoginForm.ShowError(NotConnectedMessage);
 
             return;
         }
@@ -506,7 +519,44 @@ public sealed class LobbyLoginScreen : IScreen
             MachineIdentity.ClientId2);
     }
 
-    private void OnLoginCancelClicked() => LoginForm.Hide();
+    private void OnLoginCancelClicked() => CloseForm(LoginForm);
+
+    //closes a form. A form that waits for the server also ends its wait
+    private void CloseForm(LobbyFormPanel form)
+    {
+        var waited = form.IsBusy;
+        form.Hide();
+
+        if (waited)
+            AbandonWait();
+    }
+
+    //a form that waits longer than WAIT_TIMEOUT_MS stays open with an error, and its wait ends
+    private void StopWaitsThatTimedOut()
+    {
+        foreach (var form in (LobbyFormPanel[]) [Creator, PasswordForm, LoginForm])
+            if (form.IsBusy && (form.BusyMs >= WAIT_TIMEOUT_MS))
+            {
+                NoticeDebugLog.Write($"lobby: {form.Name} waited {form.BusyMs:F0} ms with no answer");
+                form.SetBusy(false);
+                form.ShowError(NO_ANSWER);
+                AbandonWait();
+            }
+    }
+
+    //ends a wait for the server. The server does not see a cancel, so its answer would still arrive and go to the next
+    //form that waits (BRIG-117). The screen closes the connection and connects to the lobby again, so that the answer
+    //does not arrive. A login that reached the world keeps its connection: the screen switches to the world
+    private void AbandonWait()
+    {
+        AwaitingCharFinalize = false;
+
+        if (PendingWorldSwitch || (Game.Connection.State == ConnectionState.World))
+            return;
+
+        Game.Connection.Disconnect();
+        BeginLobbyConnect();
+    }
 
     private void OnLobbyLoginPopupMessageOk() => LobbyLoginPopupMessage.Hide();
 
@@ -635,6 +685,7 @@ public sealed class LobbyLoginScreen : IScreen
 
         LobbyReady = false;
         Greeting.Hide();
+        ServerListPending = false;
         ServerSelectControl.Visible = false;
         Menu.SetCovered(false);
         Menu.Alerts.Add(MenuAlerts.Offline(BeginLobbyConnect));
@@ -662,7 +713,12 @@ public sealed class LobbyLoginScreen : IScreen
         if (servers.Count > 1)
         {
             ServerSelectControl.SetServers(servers);
-            ServerSelectControl.Visible = true;
+
+            //the list does not show over a form, for example a form that timed out and connects again
+            if (AnyFormOpen)
+                ServerListPending = true;
+            else
+                ServerSelectControl.Visible = true;
         } else if (servers.Count > 0)
         {
             //auto-select the first (or only) server — the ServerName assignment refreshes the window title via its event

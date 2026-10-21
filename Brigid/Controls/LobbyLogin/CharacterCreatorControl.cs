@@ -24,7 +24,8 @@ namespace Brigid.Controls.LobbyLogin;
 ///     <para>
 ///         Enter is Create, and Escape closes an open drop-down list or else is Cancel. Tab moves between the text fields.
 ///         The status line, the busy state and the keys come from <see cref="LobbyFormPanel" />. The player can cancel while
-///         a creation waits for the server; BRIG-117 tracks the reply that arrives after the cancel.
+///         a creation waits for the server. The screen then closes the connection and connects to the lobby again, so
+///         that the reply does not arrive (BRIG-117).
 ///     </para>
 /// </summary>
 public sealed class CharacterCreatorControl : LobbyFormPanel
@@ -329,9 +330,6 @@ public sealed class CharacterCreatorControl : LobbyFormPanel
                 i);
         }
     }
-
-    //BRIG-116 lets Cancel stop a creation that waits, so that the menu stays usable; BRIG-117 tracks the late reply
-    protected override bool CanCancelWhileBusy => true;
 
     //an open drop-down list closes before Escape cancels the form
     protected override void HandleEscape()

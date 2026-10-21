@@ -4,6 +4,7 @@ using Brigid.Controls.Generic;
 using Brigid.Controls.LobbyLogin;
 using Brigid.Definitions;
 using Brigid.Rendering;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Xunit;
 #endregion
@@ -12,7 +13,8 @@ namespace Brigid.Tests;
 
 /// <summary>
 ///     The BRIG-119 login form: every child is addressable by a lowercase name, the fields keep the legacy limits, Enter in
-///     the name field moves to the password field, and the form cannot be cancelled while the server answers.
+///     the name field moves to the password field, and the form can be cancelled but not submitted while the server
+///     answers.
 /// </summary>
 [Collection("FontEngine")]
 public class LoginFormControlTests
@@ -92,8 +94,9 @@ public class LoginFormControlTests
     }
 
     [Fact]
-    public void WhileBusyTheFormCannotBeSubmittedOrCancelled()
+    public void WhileBusyTheFormCannotBeSubmitted_ButCanBeCancelled()
     {
+        //the screen ends the wait of a cancelled form: it closes the connection, so the late answer does not arrive
         var form = new LoginFormControl();
         var oks = 0;
         var cancels = 0;
@@ -103,20 +106,35 @@ public class LoginFormControlTests
         form.SetBusy(true);
         form.OnKeyDown(new KeyDownEvent { Key = Keys.Enter });
         form.SubmitButton.OnClick(LeftClick());
+
+        Assert.Equal(0, oks);
+        Assert.False(form.SubmitButton.Enabled);
+        Assert.True(form.CancelButton.Enabled);
+        Assert.Equal("Logging in...", form.StatusText);
+
         form.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
         form.CancelButton.OnClick(LeftClick());
 
-        Assert.Equal(0, oks);
-        Assert.Equal(0, cancels);
-        Assert.False(form.SubmitButton.Enabled);
-        Assert.False(form.CancelButton.Enabled);
-        Assert.Equal("Logging in...", form.StatusText);
+        Assert.Equal(2, cancels);
+    }
+
+    [Fact]
+    public void BusyMsCountsTheWait_AndStartsAgainWithTheNextWait()
+    {
+        var form = new LoginFormControl();
+        var second = new GameTime(TimeSpan.Zero, TimeSpan.FromSeconds(1));
+
+        form.Update(second);
+        Assert.Equal(0, form.BusyMs);
+
+        form.SetBusy(true);
+        form.Update(second);
+        form.SetBusy(true);
+        form.Update(second);
+        Assert.Equal(2000, form.BusyMs);
 
         form.SetBusy(false);
-        form.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
-
-        Assert.Equal(1, cancels);
-        Assert.True(form.CancelButton.Enabled);
+        Assert.Equal(0, form.BusyMs);
     }
 
     [Fact]

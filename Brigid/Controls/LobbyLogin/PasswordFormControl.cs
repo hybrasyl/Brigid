@@ -9,9 +9,10 @@ namespace Brigid.Controls.LobbyLogin;
 ///     (<c>_npw</c>) and keeps its flow: the screen reads the name, the current password and the new password for the
 ///     password-change packet, and checks the confirm field.
 ///     <para>
-///         Enter changes the password, and Escape cancels. While the screen waits for the server, Change and Cancel are
-///         disabled, and Escape does nothing. A failure shows in the status line. The legacy form let the player cancel while
-///         it waited; a reply that arrived after the cancel then went down the login path.
+///         Enter changes the password, and Escape cancels. While the screen waits for the server, Change is disabled. A
+///         failure shows in the status line. The legacy form let the player cancel while it waited, and a reply that arrived
+///         after the cancel then went down the login path. Now the screen closes the connection when the player cancels a
+///         change that waits, and connects to the lobby again.
 ///     </para>
 /// </summary>
 public sealed class PasswordFormControl : LobbyFormPanel

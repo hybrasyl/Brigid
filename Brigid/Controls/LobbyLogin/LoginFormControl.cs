@@ -9,13 +9,12 @@ namespace Brigid.Controls.LobbyLogin;
 ///     keeps its flow: the screen reads the name and the password for the login packet.
 ///     <para>
 ///         Enter in the name field moves the cursor to the password field, as in the legacy form. Enter anywhere else logs
-///         in, and Escape cancels. While the screen waits for the server, the form stays shown, Log In and Cancel are
-///         disabled, and Escape does nothing. A failure shows in the status line.
+///         in, and Escape cancels. While the screen waits for the server, the form stays shown and Log In is disabled. A
+///         failure shows in the status line.
 ///     </para>
 ///     <para>
-///         The legacy form hid itself while it waited, so a login could not be cancelled. A cancel that the server does not
-///         see would leave its answer to go down the wrong path: an accepted login would still enter the world. So the form
-///         keeps the <see cref="LobbyFormPanel" /> default and cannot cancel while it is busy.
+///         The legacy form hid itself while it waited, so a login could not be cancelled. The server does not see a cancel,
+///         so the screen closes the connection when the player cancels a login that waits, and connects to the lobby again.
 ///     </para>
 /// </summary>
 public sealed class LoginFormControl : LobbyFormPanel

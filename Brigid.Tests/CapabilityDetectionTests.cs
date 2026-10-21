@@ -17,6 +17,8 @@ namespace Brigid.Tests;
 ///     what gives a later STARTTLS upgrade a seam where nothing else owns the stream and no peer byte
 ///     has been buffered past the frame.
 /// </summary>
+//changes the static GameClient timeouts, so it does not run beside the tests that wait for a greeting or an upgrade
+[Collection("GameClientTimeouts")]
 public class CapabilityDetectionTests
 {
     private static readonly PacketCodec Codec = new();

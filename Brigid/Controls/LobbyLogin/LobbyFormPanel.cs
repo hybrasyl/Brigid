@@ -15,8 +15,10 @@ namespace Brigid.Controls.LobbyLogin;
 ///     <para>
 ///         The screen does the work: <see cref="OnOk" /> asks it to check the fields and send the packet, and
 ///         <see cref="OnCancel" /> asks it to hide the form. While the screen waits for the server it calls
-///         <see cref="SetBusy" />, which disables the submit button and shows the busy text. Validation and server messages
-///         show in the status line, not in a popup.
+///         <see cref="SetBusy" />, which disables the submit button and shows the busy text. Cancel stays enabled: the
+///         screen ends a wait that the player cancels, and a wait that is too long. <see cref="BusyMs" /> gives the time
+///         that the form waits.
+///         Validation and server messages show in the status line, not in a popup.
 ///     </para>
 ///     <para>
 ///         Enter submits, except Alt+Enter, which changes the window size. Escape cancels. Tab moves between the text fields.
@@ -48,6 +50,9 @@ public abstract class LobbyFormPanel : CenteredModalPanel
 
     /// <summary>True while the screen waits for the server to answer. The submit button is disabled.</summary>
     public bool IsBusy { get; private set; }
+
+    /// <summary>The time in milliseconds since the form became busy, or 0 when it is not busy.</summary>
+    public double BusyMs { get; private set; }
 
     /// <summary>Raised when the player presses the submit button (or Enter). The screen checks the fields and sends the packet.</summary>
     public event OkHandler? OnOk;
@@ -174,25 +179,27 @@ public abstract class LobbyFormPanel : CenteredModalPanel
     }
 
     /// <summary>
-    ///     True when the player can cancel while the form is busy. False by default: Cancel is disabled and Escape does
-    ///     nothing. The server does not see a cancel, so its answer to the request still arrives after the form closes, and the
-    ///     screen can then handle that answer as the answer to a different request (BRIG-117). A form opts in only when the
-    ///     screen handles that answer.
-    /// </summary>
-    protected virtual bool CanCancelWhileBusy => false;
-
-    /// <summary>
     ///     Sets the state that waits for the server: the submit button is disabled, and the status line shows the busy text.
-    ///     Clearing it enables the submit button and leaves the status line as it is.
+    ///     Cancel stays enabled. Clearing it enables the submit button and leaves the status line as it is.
     /// </summary>
     public void SetBusy(bool busy)
     {
+        if (busy != IsBusy)
+            BusyMs = 0;
+
         IsBusy = busy;
         SubmitButton.SetEnabled(!busy);
-        CancelButton.SetEnabled(!busy || CanCancelWhileBusy);
 
         if (busy)
             ShowStatus(BusyText);
+    }
+
+    public override void Update(GameTime gameTime)
+    {
+        if (IsBusy)
+            BusyMs += gameTime.ElapsedGameTime.TotalMilliseconds;
+
+        base.Update(gameTime);
     }
 
     /// <summary>Asks the screen to submit the form. Does nothing while the form is busy.</summary>
@@ -202,12 +209,8 @@ public abstract class LobbyFormPanel : CenteredModalPanel
             OnOk?.Invoke();
     }
 
-    /// <summary>Asks the screen to cancel the form. Does nothing while the form is busy and cannot cancel.</summary>
-    protected void Cancel()
-    {
-        if (!IsBusy || CanCancelWhileBusy)
-            OnCancel?.Invoke();
-    }
+    /// <summary>Asks the screen to cancel the form, also while it is busy.</summary>
+    protected void Cancel() => OnCancel?.Invoke();
 
     /// <summary>Clears <paramref name="field" /> and puts the cursor in it.</summary>
     protected static void ClearAndFocus(UITextBox field)

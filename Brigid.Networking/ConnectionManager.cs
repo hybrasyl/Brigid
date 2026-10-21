@@ -201,7 +201,9 @@ public sealed class ConnectionManager : IDisposable
             });
 
     /// <summary>
-    ///     Connects to the lobby server, performs the Version/ConnectionInfo handshake.
+    ///     Connects to the lobby server, performs the Version/ConnectionInfo handshake. A newer connect or
+    ///     <see cref="Disconnect" /> stops this connect: it then returns with no change to <see cref="State" /> and no
+    ///     <see cref="OnError" />.
     /// </summary>
     public async Task ConnectToLobbyAsync(
         string host,
@@ -209,36 +211,68 @@ public sealed class ConnectionManager : IDisposable
         ushort clientVersion,
         CancellationToken ct = default)
     {
-        //a new lobby session has no server until the server table names it
-        ServerName = string.Empty;
-        State = ConnectionState.Connecting;
-        Client.ResetCrypto();
-        Client.SetSequence(0);
+        int hop;
+        Task connect;
 
-        //set all acceptconnection handler state before connectasync starts the receive loop.
-        LobbyClientVersion = clientVersion;
-        PendingLobbyVersion = true;
-        PendingTargetState = ConnectionState.Lobby;
-        LobbyHost = host;
+        using (HopLock.EnterScope())
+        {
+            hop = NextHop();
 
-        //a session starting over has no hop to retry. Left set, a redirect abandoned earlier would be
-        //re-followed by the next certificate the user accepts at the lobby.
-        LastRedirect = null;
+            //a new lobby session has no server until the server table names it
+            ServerName = string.Empty;
+            State = ConnectionState.Connecting;
+            Client.ResetCrypto();
+            Client.SetSequence(0);
+
+            //set all acceptconnection handler state before connectasync starts the receive loop.
+            LobbyClientVersion = clientVersion;
+            PendingLobbyVersion = true;
+            PendingTargetState = ConnectionState.Lobby;
+            LobbyHost = host;
+
+            //a session starting over has no hop to retry. Left set, a redirect abandoned earlier would be
+            //re-followed by the next certificate the user accepts at the lobby.
+            LastRedirect = null;
+
+            //the lobby is the only server-first hop: its 0x7E greeting carries the capability marker,
+            //and is read before the pumps start so an upgrade has a clean seam. ConnectAsync returns at once, so it
+            //starts under the lock, and a stale hop cannot start a connect between the check and the call
+            connect = Client.ConnectAsync(host, port, true, host, ct);
+        }
 
         try
         {
-            //the lobby is the only server-first hop: its 0x7E greeting carries the capability marker,
-            //and is read before the pumps start so an upgrade has a clean seam.
-            await Client.ConnectAsync(host, port, true, host, ct);
-            ReportTransport(host, ConnectionState.Lobby);
+            await connect;
+
+            using (HopLock.EnterScope())
+                if (IsCurrentHop(hop))
+                    ReportTransport(host, ConnectionState.Lobby);
         } catch (Exception ex)
         {
-            PendingLobbyVersion = false;
-            State = ConnectionState.Disconnected;
+            using (HopLock.EnterScope())
+            {
+                if (!IsCurrentHop(hop))
+                    return;
+
+                PendingLobbyVersion = false;
+                State = ConnectionState.Disconnected;
+            }
+
             NoticeDebugLog.Write($"!!! lobby connect failed: {ex.GetType().Name}: {ex.Message}");
             OnError?.Invoke($"Failed to connect to lobby: {ex.Message}");
         }
     }
+
+    //each connect (the lobby, a redirect hop) takes a new number, and Disconnect takes one too. A connect that resumes
+    //after a newer number was taken does nothing: it does not change the state or raise OnError. HopLock makes a check
+    //and the step after it (a connect start, a state change) one step, so that a Disconnect cannot come between them.
+    //StateChanged, OnTransportEstablished and OnDisconnected can fire while HopLock is held; the lock is re-entrant
+    private readonly Lock HopLock = new();
+    private int HopGeneration;
+
+    private int NextHop() => Interlocked.Increment(ref HopGeneration);
+
+    private bool IsCurrentHop(int hop) => Volatile.Read(ref HopGeneration) == hop;
 
     /// <summary>
     ///     Sends the finalized character creation request (appearance choices) to the login server.
@@ -343,6 +377,7 @@ public sealed class ConnectionManager : IDisposable
         PendingRedirect = null;
         LastRedirect = redirect;
 
+        var hop = NextHop();
         State = ConnectionState.Connecting;
 
         //lobby→login uses empty keysaltseed (falls back to "default"), login→world uses character name
@@ -356,28 +391,47 @@ public sealed class ConnectionManager : IDisposable
 
         try
         {
-            await Client.ConnectAsync(
-                redirect.EndPoint.Address.ToString(),
-                redirect.EndPoint.Port,
-                false,
-                identity);
+            Task connect;
+
+            using (HopLock.EnterScope())
+            {
+                if (!IsCurrentHop(hop))
+                    return;
+
+                connect = Client.ConnectAsync(redirect.EndPoint.Address.ToString(), redirect.EndPoint.Port, false, identity);
+            }
+
+            await connect;
         } catch (Exception ex)
         {
-            State = ConnectionState.Disconnected;
+            using (HopLock.EnterScope())
+            {
+                if (!IsCurrentHop(hop))
+                    return;
+
+                State = ConnectionState.Disconnected;
+            }
+
             NoticeDebugLog.Write($"!!! redirect connect failed: {ex.GetType().Name}: {ex.Message}");
             OnError?.Invoke($"Failed to connect after redirect: {ex.Message}");
 
             return;
         }
 
-        //kept until here so a certificate refused on this hop can be trusted and the same hop retried;
-        //restarting from the lobby would cost the user their credentials a second time.
-        LastRedirect = null;
-        ReportTransport(identity, redirect.TargetState);
+        using (HopLock.EnterScope())
+        {
+            if (!IsCurrentHop(hop))
+                return;
 
-        //send clientjoin immediately after connecting.
-        //not all servers send acceptconnection before expecting this packet.
-        State = PendingTargetState;
+            //kept until here so a certificate refused on this hop can be trusted and the same hop retried;
+            //restarting from the lobby would cost the user their credentials a second time.
+            LastRedirect = null;
+            ReportTransport(identity, redirect.TargetState);
+
+            //send clientjoin immediately after connecting.
+            //not all servers send acceptconnection before expecting this packet.
+            State = PendingTargetState;
+        }
 
         Client.Send(
             new Cli.ClientJoinPacket
@@ -469,10 +523,25 @@ public sealed class ConnectionManager : IDisposable
             new TransportEstablished(identity, Client.Negotiated is not null, target));
 
     /// <summary>
-    ///     Drops the current connection. For a caller that has decided not to proceed — a refused
-    ///     downgrade warning — rather than for error paths, which tear down through the client already.
+    ///     Drops the current connection. For a caller that has decided not to proceed — a refused downgrade warning, a
+    ///     lobby wait that the player cancels — rather than for error paths, which tear down through the client already.
+    ///     A connect that is in progress stops and reports nothing, the packets that the game loop did not handle yet
+    ///     are dropped, and a state of <see cref="ConnectionState.Connecting" /> becomes
+    ///     <see cref="ConnectionState.Disconnected" />.
     /// </summary>
-    public void Disconnect() => Client.Disconnect();
+    public void Disconnect()
+    {
+        using (HopLock.EnterScope())
+        {
+            NextHop();
+            Client.Disconnect();
+
+            //HandleDisconnected keeps Connecting, because a connect closes the old connection first; a stopped connect
+            //does not come back to change the state
+            if (State == ConnectionState.Connecting)
+                State = ConnectionState.Disconnected;
+        }
+    }
 
     /// <summary>
     ///     Sends an echo probe and reports the round-trip time when its reply arrives. Returns false
