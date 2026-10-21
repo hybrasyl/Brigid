@@ -223,6 +223,58 @@ public sealed class GroupWindowTests : IDisposable
         Assert.Equal(1, closes);
     }
 
+    //HTOO-64 and BRIG-6: the editor and the viewer use the same fields, so a row-order fault cancels on a round trip.
+    //These two tests pin the order of the rows against the class names, one direction each
+    [Fact]
+    public void EachClassRowSendsTheCapOfItsOwnClass()
+    {
+        byte[]? caps = null;
+        Window.RecruitPanel.OnCreateGroupBox += (_, _, _, _, warriors, wizards, rogues, priests, monks)
+            => caps = [warriors, wizards, rogues, priests, monks];
+
+        Window.ShowMembers();
+        Window.ClickTab(1);
+        string[] classes = ["Warrior", "Wizard", "Rogue", "Priest", "Monk"];
+
+        for (var i = 0; i < classes.Length; i++)
+        {
+            Assert.Equal(classes[i], Window.RecruitPanel.FindChild<UILabel>($"class_{i}")!.Text);
+            Window.RecruitPanel.WantedCountFields[i].Text = (i + 1).ToString();
+        }
+
+        Action("begin").PerformClick();
+
+        Assert.Equal([1, 2, 3, 4, 5], caps);
+    }
+
+    [Fact]
+    public void EachClassRowShowsTheCountsOfItsOwnClass()
+    {
+        var info = new GroupRecruitInfo
+        {
+            RecruiterName = "Sabrael",
+            GroupName = "Order",
+            Note = string.Empty,
+            StartingLevel = 1,
+            EndingLevel = 99,
+            WarriorsWanted = 1,
+            WizardsWanted = 2,
+            RoguesWanted = 3,
+            PriestsWanted = 4,
+            MonksWanted = 5,
+            CurrentWarriors = 6,
+            CurrentWizards = 7,
+            CurrentRogues = 8,
+            CurrentPriests = 9,
+            CurrentMonks = 10
+        };
+
+        Viewer.ShowAsViewer("Sabrael", info);
+
+        Assert.Equal(["1", "2", "3", "4", "5"], Viewer.Form.WantedCountFields.Select(field => field.Text));
+        Assert.Equal(["6", "7", "8", "9", "10"], Viewer.Form.CurrentCounts.Select(count => count.Current));
+    }
+
     [Fact]
     public void YourBoxShowsModifyAndReset_ModifyStaysOpen_ResetRemovesAndCloses()
     {
