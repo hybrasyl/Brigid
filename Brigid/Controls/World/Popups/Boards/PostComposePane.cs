@@ -93,7 +93,7 @@ internal sealed class PostComposePane : UIPanel
             MaxLength = BODY_MAX_LENGTH,
             IsTabStop = true
         };
-        BodyBox.SetForegroundRole(ThemeRoles.InputText, TextColors.Default);
+        BodyBox.SetForegroundRole(ThemeRoles.InputText);
 
         Fields.AddChild(BodyBox);
 
@@ -124,7 +124,7 @@ internal sealed class PostComposePane : UIPanel
             IsHitTestVisible = false
         };
 
-        label.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
+        label.SetForegroundRole(ThemeRoles.TextTitle);
         Fields.AddChild(label);
 
         return label;
@@ -145,12 +145,12 @@ internal sealed class PostComposePane : UIPanel
             Width = width,
             Height = FIELD_H,
             MaxLength = maxLength,
-            FocusedBackgroundColor = DialogPalette.RowHoverFill,
+            FocusedBackgroundColor = DialogPalette.InputFocus,
             VerticalAlignment = VerticalAlignment.Center,
             IsTabStop = true
         };
 
-        box.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+        box.SetForegroundRole(ThemeRoles.InputText);
         Fields.AddChild(box);
 
         return box;
@@ -182,11 +182,11 @@ internal sealed class PostComposePane : UIPanel
         PartyLabel.Text = isMail ? "To" : "By";
         PartyBox.Text = party ?? string.Empty;
         PartyBox.IsReadOnly = !editable;
-        //a fixed recipient or author reads as plain text, not as a field
+        //a fixed recipient or author is in the less prominent text colour, so that it does not read as a field
         if (editable)
-            PartyBox.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+            PartyBox.SetForegroundRole(ThemeRoles.InputText);
         else
-            PartyBox.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+            PartyBox.SetForegroundRole(ThemeRoles.TextDisabled);
         PartyBox.IsTabStop = editable;
 
         SubjectBox.Text = string.Empty;

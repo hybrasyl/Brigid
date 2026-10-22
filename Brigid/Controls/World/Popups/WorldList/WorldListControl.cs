@@ -29,7 +29,6 @@ namespace Brigid.Controls.World.Popups.WorldList;
 public sealed class WorldListControl : FramePanel
 {
     private const int TAB_COUNT = 9;
-    private const int STATUS_ICON_COUNT = 8;
     private const int SCROLLBAR_W = 16;
 
     //── layout ──
@@ -71,10 +70,7 @@ public sealed class WorldListControl : FramePanel
     private const int TOTAL_LABEL_W = 120;
 
     //── colors (frame/tab/row palette shared via DialogPalette; CountIdleColor is list-specific) ──
-    private static readonly Color DividerColor = DialogPalette.Divider;
-    private static readonly Color TitleColor = DialogPalette.Title;
     private static readonly Color RowHoverFill = DialogPalette.RowHoverFill;
-    private static readonly Color SelectedTextColor = DialogPalette.SelectedText;
     private static readonly Color CountIdleColor = new(150, 152, 164);
 
     private readonly SelectableTab[] Filters = new SelectableTab[TAB_COUNT];
@@ -89,7 +85,6 @@ public sealed class WorldListControl : FramePanel
     private readonly int[] CountWidth = new int[TAB_COUNT];
     private readonly int[] CountWidthBold = new int[TAB_COUNT];
     private readonly NameRow[] Rows = new NameRow[VISIBLE_ROWS];
-    private readonly Texture2D?[] StatusIcons = new Texture2D?[STATUS_ICON_COUNT];
 
     private readonly UILabel TotalNumLabel;
 
@@ -122,8 +117,6 @@ public sealed class WorldListControl : FramePanel
         Height = PANEL_HEIGHT;
         UseTheme = true;
 
-        //social-status icons from _nemots.spf (frame 0 of each group) — cache-owned by UiRenderer, so not disposed here
-        LoadStatusIcons();
         Array.Fill(CountText, "0");
 
         var titleLabel = new UILabel
@@ -136,7 +129,7 @@ public sealed class WorldListControl : FramePanel
             Text = "Aislings",
             IsHitTestVisible = false
         };
-        titleLabel.SetForegroundRole(ThemeRoles.TextTitle, TitleColor);
+        titleLabel.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(titleLabel);
 
         //── total readout ──
@@ -151,7 +144,7 @@ public sealed class WorldListControl : FramePanel
             Text = "World",
             IsHitTestVisible = false
         };
-        totalLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        totalLabel.SetForegroundRole(ThemeRoles.Text);
         AddChild(totalLabel);
 
         //right-aligned to the count column's right edge so the world total lines up vertically with the per-filter counts
@@ -165,7 +158,7 @@ public sealed class WorldListControl : FramePanel
             Text = "0",
             IsHitTestVisible = false
         };
-        TotalNumLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        TotalNumLabel.SetForegroundRole(ThemeRoles.Text);
         AddChild(TotalNumLabel);
 
         //── filter column ── (counts are drawn in Draw, right-aligned inside the count box)
@@ -252,14 +245,6 @@ public sealed class WorldListControl : FramePanel
         ];
     }
 
-    private void LoadStatusIcons()
-    {
-        var cache = UiRenderer.Instance!;
-
-        for (var i = 0; i < STATUS_ICON_COUNT; i++)
-            StatusIcons[i] = cache.GetSpfTexture("_nemots.spf", i);
-    }
-
     public override void Draw(SpriteBatch spriteBatch)
     {
         base.Draw(spriteBatch);
@@ -274,7 +259,7 @@ public sealed class WorldListControl : FramePanel
 
         //no-fill boxes give the count column and the name list their own frames — the gap between them reads as the
         //vertical separator between counts and names.
-        var divider = ThemeColor(ThemeRoles.Divider, DividerColor);
+        var divider = ThemeColor(ThemeRoles.Divider);
         DrawBorderClipped(spriteBatch, new Rectangle(ContentX + COUNT_BOX_X, ContentY + BODY_Y, COUNT_BOX_W, BODY_H), divider);
         DrawBorderClipped(spriteBatch, new Rectangle(ContentX + LIST_BOX_X, ContentY + BODY_Y, LIST_BOX_W, BODY_H), divider);
 
@@ -285,7 +270,7 @@ public sealed class WorldListControl : FramePanel
         => DrawRectClipped(
             spriteBatch,
             new Rectangle(ContentX + PADDING, ContentY + localY, PANEL_WIDTH - 2 * PADDING, 1),
-            ThemeColor(ThemeRoles.Divider, DividerColor));
+            ThemeColor(ThemeRoles.Divider));
 
     //the screen position that the layout constants count from
     private int ContentX => ScreenX + ContentOffset;
@@ -298,7 +283,7 @@ public sealed class WorldListControl : FramePanel
     {
         var rightEdge = ContentX + COUNT_RIGHT_EDGE;
         var baseY = ContentY + BODY_Y + (FILTER_STRIDE - TextRenderer.CHAR_HEIGHT) / 2;
-        var selectedColor = ThemeColor(ThemeRoles.TextSelected, SelectedTextColor);
+        var selectedColor = ThemeColor(ThemeRoles.TextSelected);
         var idleColor = ThemeColor(ThemeRoles.TextDisabled, CountIdleColor);
 
         for (var i = 0; i < TAB_COUNT; i++)
@@ -409,7 +394,7 @@ public sealed class WorldListControl : FramePanel
             if (position < FilteredEntries.Count)
             {
                 var entry = FilteredEntries[position];
-                row.SetEntry(entry, StatusIconFor(entry), NameColorFor(entry));
+                row.SetEntry(entry, NameColorFor(entry));
                 row.Visible = true;
             } else
             {
@@ -495,12 +480,6 @@ public sealed class WorldListControl : FramePanel
                 ? LegendColors.Lime
                 : MapWorldListColor(entry.Color);
 
-    private Texture2D? StatusIconFor(WorldListEntry entry)
-    {
-        var idx = (int)entry.SocialStatus;
-
-        return (idx >= 0) && (idx < StatusIcons.Length) ? StatusIcons[idx] : null;
-    }
 
     private static Color MapWorldListColor(WorldListColor color)
     {
@@ -579,7 +558,7 @@ public sealed class WorldListControl : FramePanel
     {
         private const int NAME_W = 130;
 
-        private readonly UIImage Icon;
+        private readonly StatusIcon Icon;
         private readonly UILabel NameLabel;
         private readonly UILabel TitleLabel;
         private bool Hovered;
@@ -594,8 +573,9 @@ public sealed class WorldListControl : FramePanel
             Height = LIST_ROW_H;
 
             //display-only children so the row stays the deepest hit-test target (reliable OnMouseLeave for hover fill)
-            Icon = new UIImage
+            Icon = new StatusIcon
             {
+                Name = "status_icon",
                 X = 0,
                 Y = (LIST_ROW_H - ICON_SIZE) / 2,
                 Width = ICON_SIZE,
@@ -626,17 +606,16 @@ public sealed class WorldListControl : FramePanel
                 VerticalAlignment = VerticalAlignment.Center,
                 IsHitTestVisible = false
             };
-            TitleLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+            TitleLabel.SetForegroundRole(ThemeRoles.Text);
 
             AddChild(Icon);
             AddChild(NameLabel);
             AddChild(TitleLabel);
         }
 
-        public void SetEntry(WorldListEntry entry, Texture2D? statusIcon, Color nameColor)
+        public void SetEntry(WorldListEntry entry, Color nameColor)
         {
-            Icon.Texture = statusIcon;
-            Icon.Visible = statusIcon is not null;
+            Icon.Visible = Icon.Show(entry.SocialStatus, StatusIcon.NemotsFrame);
             NameLabel.ForegroundColor = nameColor;
             NameLabel.Text = entry.Name;
             TitleLabel.Text = entry.Title ?? string.Empty;
@@ -645,7 +624,8 @@ public sealed class WorldListControl : FramePanel
 
         public void Clear()
         {
-            Icon.Texture = null;
+            Icon.Status = null;
+            Icon.LegacyTexture = null;
             Icon.Visible = false;
             NameLabel.Text = string.Empty;
             TitleLabel.Text = string.Empty;

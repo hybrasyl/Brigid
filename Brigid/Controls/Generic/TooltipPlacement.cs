@@ -1,9 +1,9 @@
-namespace Brigid.Controls.World.Popups;
+namespace Brigid.Controls.Generic;
 
 /// <summary>
 ///     Shared cursor-anchored placement for hover tooltips: sits 15px down-right of the cursor, flips to the cursor's
 ///     left when the box would overflow the right edge, and clamps vertically to the virtual viewport. One home for the
-///     rule so <see cref="ItemTooltipControl" /> and the from-scratch bank tooltip can't drift apart.
+///     rule for every <see cref="TooltipFrame" />.
 /// </summary>
 internal static class TooltipPlacement
 {

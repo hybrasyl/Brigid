@@ -364,7 +364,7 @@ public sealed class CharacterCreatorControl : LobbyFormPanel
         protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
         {
             DrawRectClipped(spriteBatch, bounds, DialogPalette.SlotFill);
-            DrawBorderClipped(spriteBatch, bounds, ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
+            DrawBorderClipped(spriteBatch, bounds, ThemeColor(ThemeRoles.Divider));
 
             if (Frame is null)
                 return;

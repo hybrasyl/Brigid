@@ -21,7 +21,6 @@ namespace Brigid.Controls.Components;
 public sealed class InputSlotPane : UIPanel
 {
     private static readonly Color SlotFill = DialogPalette.SlotFill;
-    private static readonly Color SlotBorder = DialogPalette.Divider;
 
     public override void Draw(SpriteBatch spriteBatch)
     {
@@ -46,6 +45,6 @@ public sealed class InputSlotPane : UIPanel
                 : TryDrawThemePart(spriteBatch, ThemeRoles.InputSlot, slot))
             return;
 
-        DrawBorderedRect(spriteBatch, slot, SlotFill, ThemeColor(ThemeRoles.Divider, SlotBorder));
+        DrawBorderedRect(spriteBatch, slot, SlotFill, ThemeColor(ThemeRoles.Divider));
     }
 }

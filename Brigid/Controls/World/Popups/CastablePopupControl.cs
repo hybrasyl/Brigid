@@ -144,14 +144,14 @@ public sealed class CastablePopupControl : CenteredModalPanel
                 Height = LINE_H,
                 MaxLength = CHANT_MAX_LENGTH,
                 Visible = false,
-                FocusedBackgroundColor = DialogPalette.RowHoverFill,
+                FocusedBackgroundColor = DialogPalette.InputFocus,
                 VerticalAlignment = VerticalAlignment.Center,
                 //lets Tab/Shift+Tab traverse the lines through the panel's own tab-stop walk; without it the
                 //focused box swallows Tab outright.
                 IsTabStop = true
             };
 
-            TextInputs[i].SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+            TextInputs[i].SetForegroundRole(ThemeRoles.InputText);
             content.AddChild(TextInputs[i]);
         }
 

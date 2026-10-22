@@ -3,176 +3,144 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Data.Models;
-using Brigid.Extensions;
 using Brigid.Rendering;
 using Brigid.Systems;
-using Brigid.ViewModel;
-using Chaos.Extensions.Common;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.World.Popups.Profile;
 
 /// <summary>
-///     Detail popup for a skill/spell entry (_nui_ske prefab). Shows icon, name, level, stat requirements, prerequisites,
-///     and description. Dismisses on any click or Escape.
+///     The detail popup for a skill or spell entry in the status book (BRIG-122): the icon, the level line, the
+///     prerequisites, the five stat requirements with their captions, and the description. A requirement that the player
+///     meets is white, and one that the player does not meet is red; these colours carry meaning, so they stay literal.
 /// </summary>
-public sealed class AbilityMetadataDetailsControl : PrefabPanel
+public sealed class AbilityMetadataDetailsControl : StatusBookDetailsPanel
 {
-    private readonly UILabel? ConLabel;
-    private readonly UILabel? DescLabel;
-    private readonly UILabel? DexLabel;
-    private readonly UIImage? IconImage;
-    private readonly UILabel? IntLabel;
-    private readonly UILabel? LevelLabel;
-    private readonly UILabel? NameLabel;
-    private readonly UILabel? StrLabel;
-    private readonly UILabel? Sub1Label;
-    private readonly UILabel? Sub2Label;
-    private readonly UILabel? WisLabel;
+    private const int STAT_COUNT = 5;
+
+    private readonly UILabel LevelLabel;
+    private readonly UILabel PreReqCaption;
+    private readonly UILabel PreReq1Label;
+    private readonly UILabel PreReq2Label;
+    private readonly UILabel[] StatCaptions;
+    private readonly UILabel[] StatValues;
 
     public AbilityMetadataDetailsControl()
-        : base("_nui_ske")
+        : base("abilitydetails", 3, ROW_H)
     {
-        Visible = false;
-        IsModal = true;
-        UsesControlStack = true;
+        //each label is made here with a literal name, so that the primitives report can read it
+        LevelLabel = AddRow(new UILabel { Name = "level" });
+        PreReqCaption = AddCaption(new UILabel { Name = "prereq_caption", Text = "Requires" });
+        PreReq1Label = AddRow(new UILabel { Name = "prereq1" });
+        PreReq2Label = AddRow(new UILabel { Name = "prereq2" });
 
-        IconImage = CreateImage("ICON");
-        LevelLabel = CreateLabel("LEV");
-        LevelLabel?.ForegroundColor = LegendColors.White;
-        StrLabel = CreateLabel("STR");
-        StrLabel?.ForegroundColor = LegendColors.White;
-        StrLabel?.PaddingLeft = 0;
-        StrLabel?.PaddingRight = 0;
-        
-        IntLabel = CreateLabel("INT");
-        IntLabel?.ForegroundColor = LegendColors.White;
-        IntLabel?.PaddingLeft = 0;
-        IntLabel?.PaddingRight = 0;
-        
-        WisLabel = CreateLabel("WIS");
-        WisLabel?.ForegroundColor = LegendColors.White;
-        WisLabel?.PaddingLeft = 0;
-        WisLabel?.PaddingRight = 0;
-        
-        ConLabel = CreateLabel("CON");
-        ConLabel?.ForegroundColor = LegendColors.White;
-        ConLabel?.PaddingLeft = 0;
-        ConLabel?.PaddingRight = 0;
-        
-        DexLabel = CreateLabel("DEX");
-        DexLabel?.ForegroundColor = LegendColors.White;
-        DexLabel?.PaddingLeft = 0;
-        DexLabel?.PaddingRight = 0;
-        
-        NameLabel = CreateLabel("NAME");
-        NameLabel?.ForegroundColor = LegendColors.White;
-        Sub1Label = CreateLabel("SUB1");
-        Sub1Label?.ForegroundColor = LegendColors.White;
-        Sub2Label = CreateLabel("SUB2");
-        Sub2Label?.ForegroundColor = LegendColors.White;
-        DescLabel = CreateLabel("DESC");
-        DescLabel?.ForegroundColor = LegendColors.White;
-        DescLabel?.WordWrap = true;
+        StatCaptions =
+        [
+            AddCaption(new UILabel { Name = "str_caption", Text = "STR" }),
+            AddCaption(new UILabel { Name = "int_caption", Text = "INT" }),
+            AddCaption(new UILabel { Name = "wis_caption", Text = "WIS" }),
+            AddCaption(new UILabel { Name = "con_caption", Text = "CON" }),
+            AddCaption(new UILabel { Name = "dex_caption", Text = "DEX" })
+        ];
+
+        StatValues =
+        [
+            AddRow(new UILabel { Name = "str" }),
+            AddRow(new UILabel { Name = "int" }),
+            AddRow(new UILabel { Name = "wis" }),
+            AddRow(new UILabel { Name = "con" }),
+            AddRow(new UILabel { Name = "dex" })
+        ];
+
+        LayoutContent();
     }
 
-    /// <summary>
-    ///     Populates and shows the detail view for the given ability entry.
-    /// </summary>
+    //the level line and the prerequisites beside the icon, and the five stats in a row below it
+    protected override void LayoutContent()
+    {
+        base.LayoutContent();
+
+        var requiresW = CaptionWidth(PreReqCaption);
+
+        PlaceRow(LevelLabel, HeaderX, HeaderY, HeaderWidth);
+        PlaceRow(PreReqCaption, HeaderX, HeaderY + ROW_H, requiresW);
+        PlaceRow(PreReq1Label, HeaderX + requiresW, HeaderY + ROW_H, HeaderWidth - requiresW);
+        PlaceRow(PreReq2Label, HeaderX + requiresW, HeaderY + 2 * ROW_H, HeaderWidth - requiresW);
+
+        var content = ContentBounds;
+        var cellW = content.Width / STAT_COUNT;
+        var captionW = CaptionWidth(StatCaptions);
+
+        for (var i = 0; i < STAT_COUNT; i++)
+        {
+            var cellX = content.X + i * cellW;
+
+            PlaceRow(StatCaptions[i], cellX, BodyY, captionW);
+            PlaceRow(StatValues[i], cellX + captionW, BodyY, cellW - captionW);
+        }
+    }
+
+    /// <summary>Shows the popup for <paramref name="entry" />, centered in <paramref name="viewport" />.</summary>
     public void ShowEntry(AbilityMetadataEntry entry, Rectangle viewport)
     {
-        this.CenterIn(viewport);
+        Populate(entry);
 
+        var icon = AbilityRequirements.ResolveIcon(entry);
+        Icon.Texture = icon.Texture;
+        Icon.TextureOffset = new Vector2(icon.OffsetX, icon.OffsetY);
+
+        ShowEntry(entry.Name, entry.Description, viewport);
+    }
+
+    /// <summary>Sets the rows and their requirement colours for <paramref name="entry" />. Internal for the tests.</summary>
+    internal void Populate(AbilityMetadataEntry entry)
+    {
         var attrs = WorldState.Attributes.Current;
 
-        NameLabel?.Text = entry.Name;
-
-        if (LevelLabel is not null)
+        if (entry.RequiresMaster)
         {
-            if (entry.RequiresMaster)
-            {
-                LevelLabel.Text = "master";
-                LevelLabel.ForegroundColor = WorldState.IsMaster ? LegendColors.White : DialogPalette.RequirementUnmet;
-            } else if (entry.AbilityLevel > 0)
-            {
-                LevelLabel.Text = $"ability {entry.AbilityLevel}";
-                LevelLabel.ForegroundColor = AbilityRequirements.RequirementColor(entry.AbilityLevel, attrs?.Ability);
-            } else
-            {
-                LevelLabel.Text = $"level {entry.Level}";
-                LevelLabel.ForegroundColor = AbilityRequirements.RequirementColor(entry.Level, attrs?.Level);
-            }
+            LevelLabel.Text = "master";
+            ShowRequirement(LevelLabel, WorldState.IsMaster);
+        } else if (entry.AbilityLevel > 0)
+        {
+            LevelLabel.Text = $"ability {entry.AbilityLevel}";
+            ShowRequirement(LevelLabel, AbilityRequirements.IsMet(entry.AbilityLevel, attrs?.Ability));
+        } else
+        {
+            LevelLabel.Text = $"level {entry.Level}";
+            ShowRequirement(LevelLabel, AbilityRequirements.IsMet(entry.Level, attrs?.Level));
         }
 
-        if (StrLabel is not null)
-        {
-            StrLabel.Text = entry.Str.ToString();
-            StrLabel.ForegroundColor = AbilityRequirements.RequirementColor(entry.Str, attrs?.Str);
-        }
+        SetPreReq(PreReq1Label, entry.PreReq1Name, entry.PreReq1Level);
+        SetPreReq(PreReq2Label, entry.PreReq2Name, entry.PreReq2Level);
+        PreReqCaption.Visible = (PreReq1Label.Text.Length > 0) || (PreReq2Label.Text.Length > 0);
 
-        if (IntLabel is not null)
-        {
-            IntLabel.Text = entry.Int.ToString();
-            IntLabel.ForegroundColor = AbilityRequirements.RequirementColor(entry.Int, attrs?.Int);
-        }
-
-        if (WisLabel is not null)
-        {
-            WisLabel.Text = entry.Wis.ToString();
-            WisLabel.ForegroundColor = AbilityRequirements.RequirementColor(entry.Wis, attrs?.Wis);
-        }
-
-        if (ConLabel is not null)
-        {
-            ConLabel.Text = entry.Con.ToString();
-            ConLabel.ForegroundColor = AbilityRequirements.RequirementColor(entry.Con, attrs?.Con);
-        }
-
-        if (DexLabel is not null)
-        {
-            DexLabel.Text = entry.Dex.ToString();
-            DexLabel.ForegroundColor = AbilityRequirements.RequirementColor(entry.Dex, attrs?.Dex);
-        }
-
-        if (Sub1Label is not null)
-        {
-            Sub1Label.Text = AbilityRequirements.FormatPreReq(entry.PreReq1Name, entry.PreReq1Level);
-            Sub1Label.ForegroundColor = AbilityRequirements.RequirementColor(AbilityRequirements.HasPreRequisite(entry.PreReq1Name, entry.PreReq1Level));
-        }
-
-        if (Sub2Label is not null)
-        {
-            Sub2Label.Text = AbilityRequirements.FormatPreReq(entry.PreReq2Name, entry.PreReq2Level);
-            Sub2Label.ForegroundColor = AbilityRequirements.RequirementColor(AbilityRequirements.HasPreRequisite(entry.PreReq2Name, entry.PreReq2Level));
-        }
-
-        DescLabel?.Text = entry.Description;
-
-        if (IconImage is not null)
-        {
-            var icon = AbilityRequirements.ResolveIcon(entry);
-            IconImage.Texture = icon.Texture;
-            IconImage.TextureOffset = new Vector2(icon.OffsetX, icon.OffsetY);
-        }
-
-        Show();
+        SetStat(0, entry.Str, attrs?.Str);
+        SetStat(1, entry.Int, attrs?.Int);
+        SetStat(2, entry.Wis, attrs?.Wis);
+        SetStat(3, entry.Con, attrs?.Con);
+        SetStat(4, entry.Dex, attrs?.Dex);
     }
 
-    public override void OnKeyDown(KeyDownEvent e)
+    private static void SetPreReq(UILabel label, string? name, byte level)
     {
-        if (e.Key is Keys.Escape or Keys.Enter)
-        {
-            Hide();
-            e.Handled = true;
-        }
+        label.Text = AbilityRequirements.FormatPreReq(name, level);
+        ShowRequirement(label, AbilityRequirements.HasPreRequisite(name, level));
     }
 
-    public override void OnClick(ClickEvent e)
+    private void SetStat(int index, int required, int? current)
     {
-        Hide();
-        e.Handled = true;
+        StatValues[index].Text = required.ToString();
+        ShowRequirement(StatValues[index], AbilityRequirements.IsMet(required, current));
+    }
+
+    //a met requirement is ordinary text, so it takes the theme's text colour; only an unmet one carries meaning
+    private static void ShowRequirement(UILabel label, bool met)
+    {
+        if (met)
+            label.SetForegroundRole(ThemeRoles.Text);
+        else
+            label.ForegroundColor = DialogPalette.RequirementUnmet;
     }
 }

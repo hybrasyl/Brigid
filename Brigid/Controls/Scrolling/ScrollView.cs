@@ -51,7 +51,7 @@ public sealed class ScrollView : UIPanel
 
         Bar = new ScrollBarControl
         {
-            Name = "ScrollBar",
+            Name = "scrollbar",
             Orientation = orientation,
             //always draw on top so content children (added after the bar) can't overpaint the strip
             ZIndex = int.MaxValue

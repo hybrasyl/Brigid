@@ -119,7 +119,7 @@ public sealed partial class WorldScreen
         //gold bag (slot 0) — show the gold amount popup
         if (slot == 0)
         {
-            GoldDrop.CenterVerticallyIn(viewport);
+            GoldDrop.SetViewportBounds(viewport);
             GoldDrop.ShowForTarget(droppedOnEntity ? entity!.Id : null, tileX, tileY);
             WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
 
@@ -1030,7 +1030,7 @@ public sealed partial class WorldScreen
         {
             //any movement intent dismisses the door context menu. right-click-driven movement is
             //already covered by the outside-click guard in OnRootMouseDown; this path catches
-            //keyboard movement (arrows + zxcv).
+            //keyboard movement that the open menu does not take (with no text box focused, it takes Up and Down to select a row).
             if (DoorContext.Visible)
                 DoorContext.Hide();
 
@@ -1089,8 +1089,8 @@ public sealed partial class WorldScreen
     /// </summary>
     private void OnRootMouseDown(MouseDownEvent e)
     {
-        //door context menu dismisses on any click outside its bounds — clicks on the menu itself
-        //are consumed by DoorContextMenu.OnClick and never reach here. swallow the event so the
+        //door context menu dismisses on any click outside its bounds — presses on the menu itself
+        //are consumed by PopupMenu.OnMouseDown and never reach here. swallow the event so the
         //same click doesn't ALSO kick off pathfinding/attack on the tile underneath.
         if (DoorContext.Visible && !DoorContext.ContainsPoint(e.ScreenX, e.ScreenY))
         {
@@ -1176,16 +1176,6 @@ public sealed partial class WorldScreen
     {
         if (e.Button != MouseButton.Left)
             return;
-
-        //exchange gold-click coordination — clicking the money label opens the gold amount popup
-        if (Exchange.Visible && Exchange.IsMyMoneyClicked(e.ScreenX, e.ScreenY))
-        {
-            GoldDrop.ShowForTarget(Exchange.OtherUserId, 0, 0);
-            WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
-            e.Handled = true;
-
-            return;
-        }
 
         //cast mode — target selection or cancel
         if (CastingSystem.IsTargeting)

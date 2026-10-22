@@ -138,7 +138,8 @@ public sealed partial class WorldScreen : IScreen
 
     private ChaosGame Game = null!;
     private GoldAmountControl GoldDrop = null!;
-    private GroupRecruitPanel GroupBoxViewer = null!;
+
+    private GroupBoxViewerControl GroupBoxViewer = null!;
 
     //true when j was pressed — the next selfprofile response triggers group highlighting instead of opening the panel
     private bool GroupHighlightRequested;
@@ -316,6 +317,7 @@ public sealed partial class WorldScreen : IScreen
         HotkeyHelp = new HotkeyHelpControl();
 
         GroupPanel = new GroupTabControl();
+        GroupPanel.SetViewportBounds(WorldHud.ViewportBounds);
 
         GroupPanel.MembersPanel.OnKick += name =>
         {
@@ -393,7 +395,8 @@ public sealed partial class WorldScreen : IScreen
             //in-progress typing in the recruit fields.
         };
 
-        GroupBoxViewer = new GroupRecruitPanel(true);
+        GroupBoxViewer = new GroupBoxViewerControl();
+        GroupBoxViewer.SetViewportBounds(WorldHud.ViewportBounds);
 
         GroupBoxViewer.OnRequestJoin += name => Game.Connection.SendGroupInvite(ClientGroupSwitch.RequestToJoin, name);
 
@@ -410,19 +413,24 @@ public sealed partial class WorldScreen : IScreen
             ZIndex = 2
         };
 
-        GoldDrop.OnConfirm += amount =>
+        GoldDrop.OnConfirm += confirmed =>
         {
-            if (Exchange.Visible && (GoldDrop.TargetEntityId == Exchange.OtherUserId))
-                Game.Connection.SendExchangeInteraction(ExchangeRequestType.SetGold, Exchange.OtherUserId, goldAmount: (int)amount);
-            else if (GoldDrop.TargetEntityId.HasValue)
-                Game.Connection.DropGoldOnCreature((int)amount, GoldDrop.TargetEntityId.Value);
+            //the packets carry the gold as an int
+            var amount = (int)Math.Min(confirmed, int.MaxValue);
+
+            if (GoldDrop.ForExchange)
+            {
+                if (WorldState.Exchange.IsActive)
+                    Game.Connection.SendExchangeInteraction(ExchangeRequestType.SetGold, Exchange.OtherUserId, goldAmount: amount);
+            } else if (GoldDrop.TargetEntityId.HasValue)
+                Game.Connection.DropGoldOnCreature(amount, GoldDrop.TargetEntityId.Value);
             else
-                Game.Connection.DropGold((int)amount, GoldDrop.TargetTileX, GoldDrop.TargetTileY);
+                Game.Connection.DropGold(amount, GoldDrop.TargetTileX, GoldDrop.TargetTileY);
         };
 
         //match retail: while the gold amount popup is open, the HUD description bar shows what's
         //being operated on even though nothing is hovered. clear it when the popup closes.
-        GoldDrop.Closed += () => WorldHud.SetDescription(null);
+        GoldDrop.OnClose += () => WorldHud.SetDescription(null);
 
         ItemAmount = new ItemAmountControl
         {
@@ -438,7 +446,7 @@ public sealed partial class WorldScreen : IScreen
                 (byte)Math.Min(amount, byte.MaxValue));
         };
 
-        ItemAmount.Closed += () => WorldHud.SetDescription(null);
+        ItemAmount.OnClose += () => WorldHud.SetDescription(null);
 
         //ZIndex 10 = the top modal tier, and no SetViewportBounds — like the Options modal it centers on the
         //window rather than the play area, which is smaller than the modal.
@@ -524,6 +532,7 @@ public sealed partial class WorldScreen : IScreen
         {
             ZIndex = 3
         };
+        SelfProfileTextEditor.SetViewportBounds(WorldHud.ViewportBounds);
 
         SelfProfileTextEditor.OnSave += text =>
         {
@@ -548,16 +557,14 @@ public sealed partial class WorldScreen : IScreen
             Game.Connection.SendSocialStatus(status);
             StatusBook.SetEmoticonState((byte)status, UiComponentRepository.GetSocialStatusName(status));
 
-            var emoteIcon = UiRenderer.Instance?.GetEpfTexture("emot000.epf", (int)status * 3);
-
-            if (emoteIcon is not null)
-                UpdateHuds(HudOps.SetEmoteIcon, emoteIcon);
+            UpdateHuds(HudOps.SetEmoteStatus, status);
         };
 
         TextPopup = new TextPopupControl
         {
             ZIndex = 2
         };
+        TextPopup.SetViewportBounds(viewport);
 
         MarkdownNotice = new MarkdownView(viewport)
         {
@@ -663,6 +670,10 @@ public sealed partial class WorldScreen : IScreen
 
         WireHudPanels(SmallHud);
         WireHudPanels(LargeHud);
+
+        //with new status art, the HUDs show the status at once; with none, they keep the prefab frame until a pick
+        if (StatusIcon.HasArt(SocialStatusPicker.CurrentStatus))
+            UpdateHuds(HudOps.SetEmoteStatus, SocialStatusPicker.CurrentStatus);
 
         //build ui atlas after all hud controls are constructed
         UiRenderer.Instance?.BuildAtlas();

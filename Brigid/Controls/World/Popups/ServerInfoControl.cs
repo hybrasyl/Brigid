@@ -91,7 +91,7 @@ public sealed class ServerInfoControl : CenteredModalPanel
         if (color is { } literal)
             label.ForegroundColor = literal;
         else
-            label.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
+            label.SetForegroundRole(ThemeRoles.Text);
 
         AddChild(label);
         y += ROW_H;
@@ -115,7 +115,7 @@ public sealed class ServerInfoControl : CenteredModalPanel
         if (secure)
             TransportRow.ForegroundColor = LegendColors.Lime;
         else
-            TransportRow.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+            TransportRow.SetForegroundRole(ThemeRoles.Text);
 
         DialectRow.Text = negotiated is { } resolution
             ? $"Dialect:    {resolution.Dialect} ({resolution.Mode})"
@@ -129,7 +129,7 @@ public sealed class ServerInfoControl : CenteredModalPanel
         if (certificate is null)
         {
             TrustRow.Text = "Certificate: none — this connection is not encrypted.";
-            TrustRow.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
+            TrustRow.SetForegroundRole(ThemeRoles.Text);
 
             SubjectRow.Text = string.Empty;
             IssuerRow.Text = string.Empty;
@@ -164,7 +164,7 @@ public sealed class ServerInfoControl : CenteredModalPanel
     public void SetLatency(TimeSpan roundTrip)
     {
         LatencyRow.Text = $"Round trip: {roundTrip.TotalMilliseconds:0.0} ms";
-        LatencyRow.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
+        LatencyRow.SetForegroundRole(ThemeRoles.Text);
         PingButton.SetEnabled(true);
     }
 
@@ -176,7 +176,7 @@ public sealed class ServerInfoControl : CenteredModalPanel
     public void SetLatencyUnavailable(string reason, bool canRetry)
     {
         LatencyRow.Text = $"Round trip: {reason}";
-        LatencyRow.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
+        LatencyRow.SetForegroundRole(ThemeRoles.Text);
         PingButton.SetEnabled(canRetry);
     }
 }

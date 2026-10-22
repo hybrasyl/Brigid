@@ -112,7 +112,7 @@ public sealed class VirtualizedListView<TItem, TRow> : UIPanel
 
         Bar = new ScrollBarControl
         {
-            Name = "ScrollBar",
+            Name = "scrollbar",
             ZIndex = int.MaxValue,
             X = bounds.Width - ScrollBarControl.DEFAULT_WIDTH,
             Y = 0,

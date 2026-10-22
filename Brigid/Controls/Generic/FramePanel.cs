@@ -9,7 +9,8 @@ namespace Brigid.Controls.Generic;
 
 /// <summary>
 ///     A primitive framed box: the <see cref="DialogPalette" /> frame fill and border, or the theme's
-///     <see cref="ThemeRoles.FramePanel" /> art when the panel is themed. Content goes in with <c>AddChild</c>.
+///     <see cref="ThemeRoles.FramePanel" /> art when the panel is themed. A subclass draws another part through
+///     <see cref="FrameRole" />, for example <see cref="ThemeRoles.FramePopup" />. Content goes in with <c>AddChild</c>.
 ///     <see cref="Components.CenteredModalPanel" />, the menu alerts and the Story view are framed with it.
 /// </summary>
 public class FramePanel : UIPanel
@@ -21,10 +22,18 @@ public class FramePanel : UIPanel
     private const int FLAT_BORDER = 1;
 
     /// <summary>
-    ///     The width of the frame border: 1 px for the flat frame, or the slice of the <see cref="ThemeRoles.FramePanel" />
-    ///     art when the panel is themed. The icy-steel frame, for example, has an 11 px border with its corner rivets.
+    ///     The theme part of the frame: <see cref="ThemeRoles.FramePanel" />. A small floating frame, for example a
+    ///     <see cref="PopupMenu" />, uses <see cref="ThemeRoles.FramePopup" />. With no part, the panel draws the flat frame.
+    ///     An override returns a constant: <see cref="GrowAroundContent" /> can read it in the base constructor, before
+    ///     the fields of the subclass are set.
     /// </summary>
-    public int FrameBorder => TryGetThemeBorder(ThemeRoles.FramePanel, out var border) ? Math.Max(FLAT_BORDER, border) : FLAT_BORDER;
+    protected virtual string FrameRole => ThemeRoles.FramePanel;
+
+    /// <summary>
+    ///     The width of the frame border: 1 px for the flat frame, or the slice of the <see cref="FrameRole" /> art when the
+    ///     panel is themed. The icy-steel frame, for example, has an 11 px border with its corner rivets.
+    /// </summary>
+    public int FrameBorder => TryGetThemeBorder(FrameRole, out var border) ? Math.Max(FLAT_BORDER, border) : FLAT_BORDER;
 
     /// <summary>
     ///     The distance from the panel edge to its content: <paramref name="padding" /> for the flat frame, or more when the
@@ -76,11 +85,11 @@ public class FramePanel : UIPanel
     private bool Grown;
 
     //the flat border is part of the look
-    protected internal override Color? DrawnBorderColor => BorderColor is { } border ? ThemeColor(ThemeRoles.Border, border) : null;
+    protected internal override Color? DrawnBorderColor => BorderColor is null ? null : ThemeColor(ThemeRoles.Border);
 
     protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
     {
-        if (TryDrawThemePart(spriteBatch, ThemeRoles.FramePanel, bounds))
+        if (TryDrawThemePart(spriteBatch, FrameRole, bounds))
             return;
 
         base.DrawChrome(spriteBatch, bounds);

@@ -1,162 +1,104 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Data;
-using Brigid.Extensions;
-using Brigid.Utilities;
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Input;
+using Brigid.Controls.Generic;
+using Brigid.Definitions;
+using Brigid.Rendering;
 #endregion
 
 namespace Brigid.Controls.World.Popups.Profile;
 
 /// <summary>
-///     Screen-centered popup editor for the player's profile text. Uses DialogFrame compositing for the border/background.
-///     Contains a multiline UITextBox for editing and OK/Cancel buttons. OK saves and fires OnSave; Cancel discards
-///     changes.
+///     The editor for the player's profile text (BRIG-122). A primitive <see cref="CenteredModalPanel" /> that takes the
+///     theme: a multiline text box on an <see cref="InputSlotPane" />, and Save and Cancel on the bottom bar.
+///     <para>
+///         The text box has the size of the box in the editor before BRIG-122 (174 by 152), and it refuses text that does
+///         not fit in it, so the editor takes the same text as before. The text that fits also depends on the font face.
+///         Save hides the editor and raises <see cref="OnSave" />. Cancel and Escape hide it with no change. Enter starts a
+///         new line.
+///     </para>
 /// </summary>
-public sealed class SelfProfileTextEditorControl : UIPanel
+public sealed class SelfProfileTextEditorControl : CenteredModalPanel
 {
-    private const int TOTAL_WIDTH = 200;
-    private const int TOTAL_HEIGHT = 200;
-    private const int INSET_LEFT = 13;
-    private const int INSET_RIGHT = 13;
-    private const int INSET_TOP = 9;
-    private const int INSET_BOTTOM = 6;
+    private const int PANEL_W = 200;
+    private const int ACTION_W = 64;
 
-    //butt001.epf frame indices — 2 frames per button (normal/pressed)
-    private const int OK_NORMAL = 15;
-    private const int OK_PRESSED = 16;
-    private const int CANCEL_NORMAL = 21;
-    private const int CANCEL_PRESSED = 22;
+    //the text box of the editor before BRIG-122: 174 by 152, 256 characters
+    private const int TEXT_W = 174;
+    private const int TEXT_H = 152;
+    private const int MAX_LENGTH = 256;
 
-    private const int BUTTON_GAP = 2;
-
-    private readonly UIButton CancelButton;
-    private readonly UIButton OkButton;
+    private readonly InputSlotPane EditorPane;
     private readonly UITextBox TextBox;
-
-    public SelfProfileTextEditorControl()
-    {
-        Name = "ProfileTextEditor";
-        Visible = false;
-        UsesControlStack = true;
-        IsModal = true;
-        Width = TOTAL_WIDTH;
-        Height = TOTAL_HEIGHT;
-
-        //composite background with dialogframe border
-        using var bgTile = DataContext.UserControls.GetSpfImage("DlgBack2.spf");
-
-        if (bgTile is not null)
-        {
-            using var composite = DialogFrame.Composite(bgTile, TOTAL_WIDTH, TOTAL_HEIGHT);
-
-            if (composite is not null)
-                Background = TextureConverter.ToTexture2D(composite);
-        }
-
-        //button textures from butt001.epf
-        var cache = UiRenderer.Instance!;
-        var okNormalTex = cache.GetEpfTexture("butt001.epf", OK_NORMAL);
-        var okPressedTex = cache.GetEpfTexture("butt001.epf", OK_PRESSED);
-        var cancelNormalTex = cache.GetEpfTexture("butt001.epf", CANCEL_NORMAL);
-        var cancelPressedTex = cache.GetEpfTexture("butt001.epf", CANCEL_PRESSED);
-
-        var btnHeight = okNormalTex.Height;
-        var buttonY = TOTAL_HEIGHT - INSET_BOTTOM - btnHeight;
-
-        //ok button — bottom-left
-        OkButton = new UIButton
-        {
-            Name = "OK",
-            X = INSET_LEFT,
-            Y = buttonY,
-            Width = okNormalTex.Width,
-            Height = btnHeight,
-            NormalTexture = okNormalTex,
-            PressedTexture = okPressedTex
-        };
-        OkButton.Clicked += Confirm;
-        AddChild(OkButton);
-
-        //cancel button — bottom-right
-        CancelButton = new UIButton
-        {
-            Name = "Cancel",
-            X = TOTAL_WIDTH - INSET_RIGHT - cancelNormalTex.Width,
-            Y = buttonY,
-            Width = cancelNormalTex.Width,
-            Height = cancelNormalTex.Height,
-            NormalTexture = cancelNormalTex,
-            PressedTexture = cancelPressedTex
-        };
-        CancelButton.Clicked += Cancel;
-        AddChild(CancelButton);
-
-        //multiline textbox fills the area between top inset and buttons
-        var textBoxHeight = buttonY - BUTTON_GAP - INSET_TOP;
-
-        TextBox = new UITextBox
-        {
-            Name = "Editor",
-            X = INSET_LEFT,
-            Y = INSET_TOP,
-            Width = TOTAL_WIDTH - INSET_LEFT - INSET_RIGHT,
-            Height = textBoxHeight,
-            IsMultiLine = true,
-            ClampToVisibleArea = true,
-            BackgroundColor = Color.Black,
-            FocusedBackgroundColor = Color.Black,
-            ForegroundColor = Color.White,
-            MaxLength = 256
-        };
-        AddChild(TextBox);
-
-        this.CenterOnScreen();
-    }
-
-    private void Cancel() => Hide();
-
-    private void Confirm()
-    {
-        OnSave?.Invoke(TextBox.Text);
-        Hide();
-    }
-
-    public override void Dispose()
-    {
-        Background?.Dispose();
-        Background = null;
-
-        base.Dispose();
-    }
-
-    public void Hide()
-    {
-        InputDispatcher.Instance?.RemoveControl(this);
-        TextBox.IsFocused = false;
-        Visible = false;
-    }
 
     public event ProfileTextSavedHandler? OnSave;
 
+    public SelfProfileTextEditorControl()
+        //SetContentHeight sets the height
+        : base("Profile", PANEL_W, 0, useTheme: true)
+    {
+        Name = "profiletext";
+        IsModal = true;
+
+        //Cancel takes the place of Close; Save sits left of it
+        CloseButton.Visible = false;
+        AddBottomBarButton("Cancel", ACTION_W, Hide, "cancel");
+        AddBottomBarButton("Save", ACTION_W, Save, "save");
+
+        EditorPane = new InputSlotPane { Name = "editor" };
+
+        TextBox = new UITextBox
+        {
+            Name = "text",
+            X = 0,
+            Y = 0,
+            Width = TEXT_W,
+            Height = TEXT_H,
+            IsMultiLine = true,
+            ClampToVisibleArea = true,
+            MaxLength = MAX_LENGTH,
+            FocusedBackgroundColor = DialogPalette.InputFocus
+        };
+        TextBox.SetForegroundRole(ThemeRoles.InputText);
+        EditorPane.AddChild(TextBox);
+        AddChild(EditorPane);
+
+        SetContentHeight(TEXT_H + 2 * PADDING);
+        LayoutContent();
+    }
+
+    //the text box is centered in the content area
+    protected override void LayoutContent()
+    {
+        var content = ContentBounds;
+
+        EditorPane.X = content.X + (content.Width - TEXT_W) / 2;
+        EditorPane.Y = content.Y + PADDING;
+        EditorPane.Width = TEXT_W;
+        EditorPane.Height = TEXT_H;
+    }
+
+    /// <summary>Shows the editor with <paramref name="text" />, the cursor at the start.</summary>
     public void Show(string text)
     {
         TextBox.Text = text;
         TextBox.CursorPosition = 0;
         TextBox.ScrollOffset = 0;
+
+        base.Show();
         TextBox.IsFocused = true;
-        this.CenterOnScreen();
-        InputDispatcher.Instance?.PushControl(this);
-        Visible = true;
     }
 
-    public override void OnKeyDown(KeyDownEvent e)
+    public override void Hide()
     {
-        if (e.Key == Keys.Escape)
-        {
-            Cancel();
-            e.Handled = true;
-        }
+        base.Hide();
+        TextBox.IsFocused = false;
+    }
+
+    private void Save()
+    {
+        var text = TextBox.Text;
+
+        Hide();
+        OnSave?.Invoke(text);
     }
 }

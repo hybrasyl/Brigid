@@ -318,6 +318,7 @@ public sealed class ChaosGame : Game
 
         DebugOverlay.EndFrame();
         ThemeArt.EndFrame();
+        BuiltInArt.EndFrame();
     }
 
     protected override void EndDraw()
@@ -552,7 +553,11 @@ public sealed class ChaosGame : Game
     ///     launch, or chosen in <see cref="LauncherScreen" />): loads the data context, client settings, fonts, and
     ///     cursor, then switches to the lobby/login screen. Called exactly once.
     /// </summary>
-    public void FinishAssetInitialization()
+    /// <param name="launcherChoices">
+    ///     The settings that the player chose in the launcher, or null. They replace the saved settings once the settings
+    ///     load, before the theme is selected.
+    /// </param>
+    public void FinishAssetInitialization(LauncherChoices? launcherChoices = null)
     {
         GlobalSettings.InitializeAssetData();
 
@@ -561,6 +566,10 @@ public sealed class ChaosGame : Game
         AppPaths.SetServerScope(GlobalSettings.LobbyHost);
         DataDiagnostics.Try(() => Directory.CreateDirectory(MetaFilePath), "create metafile dir");
         ClientSettings.Load();
+
+        if (launcherChoices is not null)
+            ClientSettings.Apply(launcherChoices);
+
         AssetPackRegistry.SelectUiTheme(ClientSettings.UiTheme);
         //load keybind overrides (DataPath was resolved during config/launcher setup); pure defaults if absent.
         Keybinds.Load();
@@ -856,6 +865,10 @@ public sealed class ChaosGame : Game
             //numpad 0 — restore all sub-toggles (escape hatch after muting individual layers)
             if (InputBuffer.WasKeyPressed(Keys.NumPad0))
                 DebugOverlay.ShowUiBoxes = DebugOverlay.ShowUiNames = DebugOverlay.ShowWorld = DebugOverlay.ShowPerf = true;
+
+            //ctrl+g — the primitive gallery: the reference sheet for the flat look, or for the installed theme
+            if ((InputBuffer.IsKeyHeld(Keys.LeftControl) || InputBuffer.IsKeyHeld(Keys.RightControl)) && InputBuffer.WasKeyPressed(Keys.G))
+                PrimitiveGallery.Toggle(Screens.ActiveScreen?.Root);
         }
 
         //f12 — screenshot

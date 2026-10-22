@@ -1,6 +1,7 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Hud.Panel.Slots;
 using Brigid.Controls.World.ViewPort;
@@ -80,6 +81,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
     public ChatInputControl ChatInput { get; }
     public EffectBarControl EffectBar { get; }
     public UIButton? EmoteButton { get; }
+    public StatusIcon? EmoteStatusIcon { get; }
     public UIButton? ExpandButton { get; }
     public UIButton? GroupButton { get; }
     public UIButton? GroupIndicator { get; }
@@ -210,6 +212,22 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
 
         ScreenshotButton = CreateButton("CShot");
         EmoteButton = CreateButton("BTN_EMOT");
+
+        //the status icon over the emote button, for new status art; the legacy frame stays the button's own texture
+        if (EmoteButton is not null)
+        {
+            EmoteStatusIcon = new StatusIcon
+            {
+                Name = "emote_status",
+                X = EmoteButton.X,
+                Y = EmoteButton.Y,
+                Width = EmoteButton.Width,
+                Height = EmoteButton.Height,
+                IsHitTestVisible = false,
+                Visible = false
+            };
+            AddChild(EmoteStatusIcon);
+        }
         SettingsButton = CreateButton("BTN_SETTING");
         CharScreenshotButton = CreateButton("BTN_SCREENSHOT");
 

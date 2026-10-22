@@ -331,11 +331,11 @@ public delegate void CreateGroupBoxHandler(
     string note,
     byte minLevel,
     byte maxLevel,
-    byte classMax0,
-    byte classMax1,
-    byte classMax2,
-    byte classMax3,
-    byte classMax4);
+    byte maxWarriors,
+    byte maxWizards,
+    byte maxRogues,
+    byte maxPriests,
+    byte maxMonks);
 
 /// <summary>
 ///     A group box removal was requested.

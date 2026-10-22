@@ -1,7 +1,9 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Data.AssetPacks;
 using Brigid.Rendering;
+using System.Reflection;
 using Microsoft.Xna.Framework;
 using Xunit;
 #endregion
@@ -11,7 +13,8 @@ namespace Brigid.Tests;
 /// <summary>
 ///     The BRIG-120 theme roles of the primitives: a themed control draws in the theme colour of its role, an unthemed
 ///     control or a theme with no such colour gives the fallback, and setting the colour directly clears the role. A
-///     focused text box takes its fill from the theme, and leaves slot art uncovered.
+///     focused text box takes its fill from the theme, and leaves slot art uncovered. Each colour role has one flat value
+///     (BRIG-122 D4), which a role with no fallback and a primitive with no theme colour use.
 /// </summary>
 [Collection("FontEngine")]
 public sealed class ThemeRoleTests : IDisposable
@@ -167,9 +170,82 @@ public sealed class ThemeRoleTests : IDisposable
         Assert.False(ThemeArt.TryGetSliceBorder("frame.panel", out _));
     }
 
-    private static UITextBox FocusedBox(UIPanel parent)
+    [Fact]
+    public void AThemedTextBoxWithNoThemeFocusColourTakesTheFlatFocusColour()
     {
-        var box = new UITextBox { FocusedBackgroundColor = FocusFill };
+        InstallTheme();
+        var themed = FocusedBox(new UIPanel { UseTheme = true }, Color.White);
+        Assert.Equal(DialogPalette.InputFocus, themed.DrawnBackgroundColor);
+        themed.IsFocused = false;
+
+        var unthemed = FocusedBox(new UIPanel(), Color.White);
+        Assert.Equal(Color.White, unthemed.DrawnBackgroundColor);
+        unthemed.IsFocused = false;
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ARoleWithNoFallbackDrawsInTheFlatValueOfTheRole(bool themed)
+    {
+        //the test theme has no text colour, so a themed label also draws the flat value
+        InstallTheme();
+        var label = InPanel(new UILabel { Text = "Text" }, themed);
+        label.SetForegroundRole(ThemeRoles.Text);
+
+        label.ApplyForegroundRole();
+
+        Assert.Equal(DialogPalette.Text, label.DrawnForegroundColor);
+    }
+
+    public static TheoryData<string> ColourRoles() => new(ThemeRoles.Colours);
+
+    [Theory]
+    [MemberData(nameof(ColourRoles))]
+    public void EveryColourRoleHasAFlatValue(string role) => DialogPalette.ForRole(role);
+
+    [Fact]
+    public void EveryOtherRoleIsNotAColourRole()
+    {
+        var others = typeof(ThemeRoles)
+                     .GetFields(BindingFlags.Public | BindingFlags.Static)
+                     .Where(field => field.IsLiteral)
+                     .Select(field => (string)field.GetRawConstantValue()!)
+                     .Except(ThemeRoles.Colours);
+
+        Assert.All(others, role => Assert.Throws<ArgumentOutOfRangeException>(() => DialogPalette.ForRole(role)));
+    }
+
+    [Fact]
+    public void FlatPrimitivesDrawTheBorderOfTheirRoles()
+    {
+        var border = DialogPalette.ForRole(ThemeRoles.Border);
+
+        Assert.Equal(border, InPanel(new CheckBox(), themed: true).DrawnBorderColor);
+        Assert.Equal(border, InPanel(new FramePanel(), themed: true).DrawnBorderColor);
+
+        var button = InPanel(new TextButton("OK", 40, 16), themed: true);
+        Assert.Equal(border, button.DrawnBorderColor);
+
+        button.Enabled = false;
+        Assert.Equal(DialogPalette.ForRole(ThemeRoles.Divider), button.DrawnBorderColor);
+    }
+
+    [Fact]
+    public void AFlatTabDrawsTheBorderAndSelectedColoursOfItsRoles()
+    {
+        var tab = InPanel(new SelectableTab("Tab", 40, 16), themed: true);
+        Assert.Equal(DialogPalette.ForRole(ThemeRoles.Border), tab.DrawnBorderColor);
+
+        tab.IsSelected = true;
+        Assert.Equal(DialogPalette.ForRole(ThemeRoles.TextSelected), tab.DrawnBorderColor);
+    }
+
+    private static UITextBox FocusedBox(UIPanel parent) => FocusedBox(parent, FocusFill);
+
+    private static UITextBox FocusedBox(UIPanel parent, Color focusFill)
+    {
+        var box = new UITextBox { FocusedBackgroundColor = focusFill };
         parent.AddChild(box);
         box.IsFocused = true;
 

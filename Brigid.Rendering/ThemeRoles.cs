@@ -27,6 +27,14 @@ public static class ThemeRoles
     public const string ScrollUpPressed = "scrollbar.up.pressed";
     public const string ScrollDown = "scrollbar.down";
     public const string ScrollDownPressed = "scrollbar.down.pressed";
+    public const string ScrollHTrack = "scrollbar.htrack";
+    public const string ScrollHThumb = "scrollbar.hthumb";
+    public const string ScrollHThumbHover = "scrollbar.hthumb.hover";
+    public const string ScrollHThumbPressed = "scrollbar.hthumb.pressed";
+    public const string ScrollLeft = "scrollbar.left";
+    public const string ScrollLeftPressed = "scrollbar.left.pressed";
+    public const string ScrollRight = "scrollbar.right";
+    public const string ScrollRightPressed = "scrollbar.right.pressed";
     public const string InputSlot = "input.slot";
     public const string InputSlotFocus = "input.slot.focus";
     public const string CheckBoxNormal = "checkbox.normal";
@@ -35,6 +43,19 @@ public static class ThemeRoles
     public const string SliderTrack = "slider.track";
     public const string SliderFill = "slider.fill";
     public const string SliderThumb = "slider.thumb";
+    public const string FrameSign = "frame.sign";
+    public const string FramePopup = "frame.popup";
+
+    //content roles: icons, drawn on every host through IconArt, not only on a themed host
+    //social status icons, one image for each status
+    public const string StatusAwake = "icon.status.awake";
+    public const string StatusDoNotDisturb = "icon.status.do_not_disturb";
+    public const string StatusDayDreaming = "icon.status.daydreaming";
+    public const string StatusNeedGroup = "icon.status.need_group";
+    public const string StatusGrouped = "icon.status.grouped";
+    public const string StatusLoneHunter = "icon.status.lone_hunter";
+    public const string StatusGroupHunting = "icon.status.group_hunting";
+    public const string StatusNeedHelp = "icon.status.need_help";
 
     //colours
     public const string Text = "text";
@@ -51,4 +72,17 @@ public static class ThemeRoles
 
     //fonts
     public const string TitleFont = "title";
+
+    /// <summary>The colour roles, in the order that the primitive gallery shows them.</summary>
+    public static readonly string[] Colours =
+    [
+        Text, TextDisabled, TextSelected, TextTitle, TextError, Divider, Border, RowHover, RowSelected, InputText, InputFocus
+    ];
+
+    /// <summary>The social status icon parts, indexed by the wire value of the status (awake is 0).</summary>
+    public static readonly string[] StatusIcons =
+    [
+        StatusAwake, StatusDoNotDisturb, StatusDayDreaming, StatusNeedGroup, StatusGrouped, StatusLoneHunter, StatusGroupHunting,
+        StatusNeedHelp
+    ];
 }

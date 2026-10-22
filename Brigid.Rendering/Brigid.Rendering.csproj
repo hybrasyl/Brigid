@@ -8,6 +8,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <EmbeddedResource Include="Resources\BuiltIn\*.png" LogicalName="Brigid.Rendering.BuiltIn.%(Filename)%(Extension)"/>
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="Chaos.DarkAges"/>
         <PackageReference Include="Markdig"/>
         <PackageReference Include="MonoGame.Framework.DesktopGL"/>

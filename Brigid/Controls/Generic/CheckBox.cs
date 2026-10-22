@@ -16,8 +16,7 @@ namespace Brigid.Controls.Generic;
 ///     <para>
 ///         Setting <see cref="Checked" /> directly is silent — <see cref="CheckedChanged" /> fires only on a
 ///         user click. That lets a consumer mirror external state (e.g. a <c>UserOptions</c> toggle) into the
-///         box without the change echoing back as a user toggle. Fill is palette-driven (idle/hover);
-///         <c>BorderColor</c> and <see cref="CheckColor" /> may be overridden, and are the fallbacks of the theme colours.
+///         box without the change echoing back as a user toggle. Fill is palette-driven (idle/hover).
 ///     </para>
 ///     <para>
 ///         A themed box draws the <see cref="ThemeRoles.CheckBoxNormal" /> or <see cref="ThemeRoles.CheckBoxHover" /> part
@@ -39,9 +38,6 @@ public sealed class CheckBox : UIElement
 
     public bool Checked { get; set; }
 
-    /// <summary>The fill drawn for the check when <see cref="Checked" /> (defaults to the palette's selected accent).</summary>
-    public Color CheckColor { get; set; } = DialogPalette.SelectedText;
-
     public CheckBox()
     {
         Width = DEFAULT_SIZE;
@@ -51,7 +47,18 @@ public sealed class CheckBox : UIElement
     }
 
     //the flat border is part of the look
-    protected internal override Color? DrawnBorderColor => BorderColor is { } border ? ThemeColor(ThemeRoles.Border, border) : null;
+    protected internal override Color? DrawnBorderColor => BorderColor is null ? null : ThemeColor(ThemeRoles.Border);
+
+    /// <summary>
+    ///     Shows the hover look, or not, with no mouse, for the primitive gallery. The check box then takes no mouse input,
+    ///     so that the mouse does not set the state again.
+    /// </summary>
+    internal void ShowState(bool hovered)
+    {
+        IsHitTestVisible = false;
+        Hovered = hovered;
+        RefreshFill();
+    }
 
     private void RefreshFill() => BackgroundColor = Hovered ? DialogPalette.ButtonHoverFill : DialogPalette.ButtonIdleFill;
 
@@ -76,7 +83,7 @@ public sealed class CheckBox : UIElement
             return;
 
         var inner = new Rectangle(ScreenX + CHECK_INSET, ScreenY + CHECK_INSET, Width - 2 * CHECK_INSET, Height - 2 * CHECK_INSET);
-        DrawRectClipped(spriteBatch, inner, ThemeColor(ThemeRoles.TextSelected, CheckColor));
+        DrawRectClipped(spriteBatch, inner, ThemeColor(ThemeRoles.TextSelected));
     }
 
     public override void ResetInteractionState()

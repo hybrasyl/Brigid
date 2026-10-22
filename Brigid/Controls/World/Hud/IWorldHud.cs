@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Controls.World.Hud.Panel;
 using Microsoft.Xna.Framework;
 #endregion
@@ -23,6 +24,7 @@ public interface IWorldHud
     ChatInputControl ChatInput { get; }
     EffectBarControl EffectBar { get; }
     UIButton? EmoteButton { get; }
+    StatusIcon? EmoteStatusIcon { get; }
     UIButton? ExpandButton { get; }
     ExtendedStatsPanel ExtendedStatsPanel { get; }
     UIButton? GroupButton { get; }

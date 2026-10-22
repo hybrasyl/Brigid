@@ -87,7 +87,7 @@ internal sealed class PostListPane : UIPanel
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false
         };
-        HeaderLabel.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
+        HeaderLabel.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(HeaderLabel);
 
         ListView = new VirtualizedListView<MailEntry, PostRowView>(
@@ -347,7 +347,7 @@ internal sealed class PostListPane : UIPanel
                 else if (entry.IsHighlighted)
                     label.ForegroundColor = Color.Yellow;
                 else
-                    label.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+                    label.SetForegroundRole(ThemeRoles.Text);
             }
 
             BackgroundColor = selected ? BoardPalette.RowSelectedFill : null;

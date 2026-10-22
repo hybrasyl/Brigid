@@ -24,11 +24,11 @@ namespace Brigid.Controls.World.Popups.Dialog;
 ///     centered title, a vertical strip of text category tabs on the left (paginated by a tab &lt;/&gt; pager), item
 ///     rows (icon + name + right-aligned count) on the right (paginated by a separate item &lt;/&gt; pager), and a
 ///     bottom bar with the gold readout and an OK button. Owned by <see cref="NpcSessionControl" />, which reuses the
-///     retail pacing latch and response dispatch. Hover details are drawn by <see cref="BankItemTooltip" /> (Phase 3).
+///     retail pacing latch and response dispatch. The item and category tooltips are <see cref="TooltipFrame" />s.
 ///     <para>
 ///         The panel takes the theme (BRIG-120): the frame art, the tab parts on the categories, and the role colours. The
-///         gold readout stays gold. The tooltips stay flat, as the item tooltip does: a tooltip draws outside the panel,
-///         where the theme art is clipped, and flat text keeps it readable on its flat fill. A themed frame that is wider
+///         gold readout stays gold. The tooltips take the theme's <c>frame.popup</c> part (BRIG-125); they have no parent,
+///         so that the panel does not clip them, and the panel draws them over its content. A themed frame that is wider
 ///         than the flat one grows the panel, and the content moves in by <see cref="ContentOffset" />.
 ///     </para>
 /// </summary>
@@ -55,16 +55,12 @@ public sealed class BankShopPanel : FramePanel
     private const int MAX_VISIBLE_TABS = VISIBLE_ROWS;
 
     //── colors ──
-    private static readonly Color TooltipFill = new(6, 8, 14, 245);
-    private static readonly Color TooltipBorder = new(150, 126, 78);
-    private static readonly Color TooltipHeading = new(226, 202, 120);
-    private const int TOOLTIP_WIDTH = 190;
-    private const int TOOLTIP_PAD = 6;
+    //the largest text width of the item tooltip, and of the category tooltip, which does not wrap
+    private const int TOOLTIP_TEXT_W = 178;
+    private const int CATEGORY_TOOLTIP_TEXT_W = 400;
 
-    private static readonly Color TitleColor = DialogPalette.Title;
     private static readonly Color RowHoverFill = DialogPalette.RowHoverFill;
     private static readonly Color RowSelectedFill = DialogPalette.RowSelectedFill;
-    private static readonly Color SelectedTextColor = DialogPalette.SelectedText;
 
     private readonly List<string> Categories = [];
     private readonly List<MerchantEntry> Entries = [];
@@ -92,12 +88,14 @@ public sealed class BankShopPanel : FramePanel
     private int SelectedIndex = -1;
 
     //hover tooltip state — HoveredSlot is the visible row slot (-1 = none); the absolute entry index is derived from it
-    //on demand in Draw. The tooltip content (wrapped lines + box height) is cached against that index so Draw never
-    //rebuilds it per frame.
+    //on demand in Draw. The item tooltip's lines are set once for that index, so Draw does not set them each frame.
     private int HoveredSlot = -1;
-    private List<(string Text, Color Color)>? TooltipLines;
-    private int TooltipHeight;
+    //the tooltips have no parent, so that the panel does not clip them; the panel draws them over its content. They
+    //are not in the control tree, so a tree walk does not find their names
+    private readonly TooltipFrame ItemTooltip = new(TOOLTIP_TEXT_W) { Name = "itemtooltip" };
+    private readonly TooltipFrame CategoryTooltip = new(CATEGORY_TOOLTIP_TEXT_W) { Name = "categorytooltip" };
     private int TooltipCachedIndex = -1;
+    private string? CategoryTooltipText;
 
     //category-tab hover: HoveredCategory is the full name to show (set only when the tab label was truncated)
     private int HoveredTabSlot = -1;
@@ -130,7 +128,7 @@ public sealed class BankShopPanel : FramePanel
             HorizontalAlignment = HorizontalAlignment.Center,
             IsHitTestVisible = false
         };
-        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle, TitleColor);
+        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(TitleLabel);
 
         //category tab strip (vertical, aligned 1:1 with the item rows)
@@ -223,7 +221,7 @@ public sealed class BankShopPanel : FramePanel
             ShrinkToFit = false,
             IsHitTestVisible = false
         };
-        PageLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        PageLabel.SetForegroundRole(ThemeRoles.Text);
         AddChild(PageLabel);
 
         ItemPrevButton = new TextButton("<", 16, 18)
@@ -319,14 +317,15 @@ public sealed class BankShopPanel : FramePanel
             DrawLineTooltip(spriteBatch, category);
     }
 
-    private static void DrawLineTooltip(SpriteBatch spriteBatch, string text)
+    private void DrawLineTooltip(SpriteBatch spriteBatch, string text)
     {
-        var width = TextRenderer.MeasureWidth(text) + 2 * TOOLTIP_PAD;
-        var height = TextRenderer.CHAR_HEIGHT + 2 * TOOLTIP_PAD;
-        var (x, y) = TooltipPlacement.CursorAnchored(InputBuffer.MouseX, InputBuffer.MouseY, width, height);
+        if (text != CategoryTooltipText)
+        {
+            CategoryTooltip.SetLines([TooltipLine.Themed(text, ThemeRoles.Text)]);
+            CategoryTooltipText = text;
+        }
 
-        DrawBorderedRect(spriteBatch, new Rectangle(x, y, width, height), TooltipFill, TooltipBorder);
-        TextRenderer.DrawText(spriteBatch, new Vector2(x + TOOLTIP_PAD, y + TOOLTIP_PAD), text, LegendColors.White);
+        DrawAtCursor(spriteBatch, CategoryTooltip);
     }
 
     private void DrawTooltip(SpriteBatch spriteBatch, int index)
@@ -334,50 +333,42 @@ public sealed class BankShopPanel : FramePanel
         if (index != TooltipCachedIndex)
             BuildTooltip(Entries[index], index);
 
-        var (x, y) = TooltipPlacement.CursorAnchored(InputBuffer.MouseX, InputBuffer.MouseY, TOOLTIP_WIDTH, TooltipHeight);
-        DrawBorderedRect(spriteBatch, new Rectangle(x, y, TOOLTIP_WIDTH, TooltipHeight), TooltipFill, TooltipBorder);
-
-        var textY = y + TOOLTIP_PAD;
-
-        foreach (var (text, color) in TooltipLines!)
-        {
-            TextRenderer.DrawText(spriteBatch, new Vector2(x + TOOLTIP_PAD, textY), text, color);
-            textY += TextRenderer.CHAR_HEIGHT;
-        }
+        DrawAtCursor(spriteBatch, ItemTooltip);
     }
 
-    //builds the wrapped tooltip lines + box height for one entry, once, when the hovered item changes — the entry is
-    //immutable, so there's no reason to re-wrap/re-measure it on every frame the cursor rests on the row.
+    //a tooltip has no parent, so its position is in screen coordinates and nothing clips it
+    private static void DrawAtCursor(SpriteBatch spriteBatch, TooltipFrame tooltip)
+    {
+        tooltip.PlaceAtCursor(InputBuffer.MouseX, InputBuffer.MouseY);
+        tooltip.Visible = true;
+        tooltip.Draw(spriteBatch);
+    }
+
+    //sets the tooltip lines for one entry, once, when the hovered item changes; the tooltip wraps them. The name and
+    //"Description:" are headings in the title colour
     private void BuildTooltip(MerchantEntry entry, int index)
     {
-        var lines = new List<(string Text, Color Color)>();
-
-        //item name heading first, wrapped to the box width (always shown, even for items with no metadata)
-        foreach (var wrapped in TextRenderer.WrapText(entry.Name, TOOLTIP_WIDTH - 2 * TOOLTIP_PAD))
-            lines.Add((wrapped, TooltipHeading));
+        var lines = new List<TooltipLine> { TooltipLine.Themed(entry.Name, ThemeRoles.TextTitle) };
 
         if (entry.Class is { } cls)
         {
             var name = (BaseClass)cls == BaseClass.Peasant ? "all class" : ((BaseClass)cls).ToString();
-            lines.Add(($"Class: {name}", LegendColors.White));
+            lines.Add(TooltipLine.Themed($"Class: {name}", ThemeRoles.Text));
         }
 
         if (entry.Level is { } lvl)
-            lines.Add(($"Level: {(lvl == 0 ? "no limit" : lvl.ToString())}", LegendColors.White));
+            lines.Add(TooltipLine.Themed($"Level: {(lvl == 0 ? "no limit" : lvl.ToString())}", ThemeRoles.Text));
 
         if (entry.Weight is { } weight)
-            lines.Add(($"Weight: {weight}", LegendColors.White));
+            lines.Add(TooltipLine.Themed($"Weight: {weight}", ThemeRoles.Text));
 
         if (!string.IsNullOrWhiteSpace(entry.Description))
         {
-            lines.Add(("Description:", TooltipHeading));
-
-            foreach (var wrapped in TextRenderer.WrapText(entry.Description, TOOLTIP_WIDTH - 2 * TOOLTIP_PAD))
-                lines.Add((wrapped, LegendColors.White));
+            lines.Add(TooltipLine.Themed("Description:", ThemeRoles.TextTitle));
+            lines.Add(TooltipLine.Themed(entry.Description, ThemeRoles.Text));
         }
 
-        TooltipLines = lines;
-        TooltipHeight = 2 * TOOLTIP_PAD + lines.Count * TextRenderer.CHAR_HEIGHT;
+        ItemTooltip.SetLines(lines);
         TooltipCachedIndex = index;
     }
 
@@ -813,9 +804,9 @@ public sealed class BankShopPanel : FramePanel
         private void SetTextRole(UILabel label)
         {
             if (IsSelected)
-                label.SetForegroundRole(ThemeRoles.TextSelected, SelectedTextColor);
+                label.SetForegroundRole(ThemeRoles.TextSelected);
             else
-                label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+                label.SetForegroundRole(ThemeRoles.Text);
         }
 
         public override void OnMouseEnter()

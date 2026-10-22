@@ -194,23 +194,48 @@ _nui_fm.txt
   Images referenced by controls:
     _nui_fm.epf/.spf     — Tab page background
 
+_nui_ske.txt
+  Class:    (retired) — replaced by AbilityMetadataDetailsControl on StatusBookDetailsPanel
+  File:     Controls/World/Popups/Profile/AbilityMetadataDetailsControl.cs (primitive, no prefab)
+  Purpose:  Skill/spell detail popup — icon, level, prerequisites, stat requirements, description
+  Images referenced by controls:
+    (not catalogued while the panel was live)
+
+_nui_eve.txt
+  Class:    (retired) — replaced by EventMetadataDetailsControl on StatusBookDetailsPanel
+  File:     Controls/World/Popups/Profile/EventMetadataDetailsControl.cs (primitive, no prefab)
+  Purpose:  Event detail popup — state icon, level range, prerequisite, reward, description
+  Images referenced by controls:
+    (not catalogued while the panel was live)
+  Also manually loaded:
+    leicon.epf           — Event state icons (content; still loaded by the primitive popup)
+
 # ── World Popups & Dialogs ─────────────────────────────────────────────────────
 
 _nexch.txt
-  Class:    ExchangeControl : PrefabPanel
-  File:     Controls/World/Popups/ExchangeControl.cs
+  Class:    (retired) — replaced by ExchangeControl on CenteredModalPanel
+  File:     Controls/World/Popups/Exchange/ExchangeControl.cs (primitive, no prefab)
   Purpose:  Exchange/trade dialog — two-sided item grids (4 each), gold, OK/Cancel/ACK
   Images referenced by controls:
     _nexch.epf/.spf      — Anchor background
     _nbtn.epf/.spf       — OK/Cancel button frames
 
 _nmoney.txt
-  Class:    GoldExchangeControl : PrefabPanel
-  File:     Controls/World/Popups/GoldExchangeControl.cs
-  Purpose:  Gold exchange input — amount textbox, OK/Cancel
+  Class:    (retired) — replaced by GoldAmountControl on AmountPromptPanel
+  File:     Controls/World/Popups/GoldAmountControl.cs (primitive, no prefab)
+  Purpose:  Gold amount input (drop and exchange) — amount textbox, OK/Cancel
   Images referenced by controls:
     _nmoney.epf/.spf     — Anchor background
     _nbtn.epf/.spf       — OK/Cancel button frames
+
+litemex.txt
+  Class:    (retired) — replaced by ItemAmountControl on AmountPromptPanel
+  File:     Controls/World/Popups/ItemAmountControl.cs (primitive, no prefab)
+  Purpose:  Stackable item amount input for an exchange — amount textbox, OK/Cancel
+  Images referenced by controls:
+    (not catalogued while the panel was live)
+  Also manually loaded:
+    butt001.epf          — Custom OK/Cancel buttons (retired with the panel)
 
 _nbdlist.txt
   Class:    (retired) — replaced by BoardsModalControl's BoardIndexPane
@@ -269,8 +294,8 @@ _nmails.txt
     _nbtn.epf/.spf       — Send/Cancel button frames
 
 _ngcdlg0.txt
-  Class:    GroupTab : PrefabPanel
-  File:     Controls/World/Popups/GroupTab.cs
+  Class:    (retired) — replaced by GroupTab, the Members tab of GroupTabControl
+  File:     Controls/World/Popups/GroupTab.cs (primitive, no prefab)
   Purpose:  Group member list tab — 13 member slots computed from USER0 and USER1 anchor rects (stride 22), each with a per-row kick button. OK closes the parent tab container.
   Images referenced by controls:
     _ngcdlg0.epf/.spf    — Anchor background
@@ -278,8 +303,8 @@ _ngcdlg0.txt
     B_BTN0 (prefab entry) — 3-frame kick button texture set: 0=normal, 1=pressed, 2=disabled
 
 _ngcmain.txt
-  Class:    GroupTabControl : PrefabPanel
-  File:     Controls/World/Popups/GroupTabControl.cs
+  Class:    (retired) — replaced by GroupTabControl on CenteredModalPanel
+  File:     Controls/World/Popups/GroupTabControl.cs (primitive, no prefab)
   Purpose:  Tabbed container for the group window. Hosts GroupTab (members, TAB0) and GroupRecruitPanel (recruit, TAB1). Close button on the header.
   Images referenced by controls:
     _ngcdlg0.epf/.spf    — Anchor background (shared — _ngcmain.spf does not exist)
@@ -287,8 +312,8 @@ _ngcmain.txt
     _ngcbtns.epf/.spf    — Small (normal) tab button frames (2 frames at 69×20)
 
 _ngcdlg1.txt
-  Class:    GroupRecruitPanel : PrefabPanel
-  File:     Controls/World/Popups/GroupRecruitPanel.cs
+  Class:    (retired) — replaced by the GroupRecruitPanel form, in GroupTabControl and GroupBoxViewerControl
+  File:     Controls/World/Popups/GroupRecruitPanel.cs (primitive, no prefab)
   Purpose:  Group recruitment dialog with three modes — OwnerNew / OwnerEdit / Viewer. Mode governs which of BTN_BEGIN / BTN_MODIFY / BTN_RESET / BTN_QUERY_JOIN / BTN_CANCEL is visible. All action buttons share the same screen coordinates and are toggled via visibility.
   Controls referenced by prefab:
     TITLE                — group box title (editable in owner modes, locked in viewer; max 18 chars)
@@ -303,9 +328,9 @@ _ngcdlg1.txt
     _ngcbtn.epf/.spf     — 15-frame button set: 5 buttons × 3 states (indices 0-2 Modify, 3-5 Reset, 6-8 Begin, 9-11 QueryJoin, 12-14 Cancel)
 
 lgcpane.txt
-  Class:    GroupBox : UIPanel (world-space overhead banner, not a popup)
-  File:     Controls/World/ViewPort/GroupBox.cs
-  Purpose:  103×19 recruitment banner drawn above an Aisling with a non-empty GroupBoxText. Rendered via EntityOverlayManager at -74 px above the entity sprite anchor. Hover state tints the title rect blue (retail blit-mode 0x7a); click sends 0x2E/5 ViewGroupBox to the server.
+  Class:    (retired) — replaced by GroupBox on FramePanel (the frame.popup part)
+  File:     Controls/World/ViewPort/GroupBox.cs (primitive, no prefab or image)
+  Purpose:  (legacy) 103×19 recruitment banner drawn above an Aisling with a non-empty GroupBoxText; the primitive keeps the 97×13 title area and puts the frame around it. Rendered via EntityOverlayManager at -74 px above the entity sprite anchor. Hover state tints the title rect blue (retail blit-mode 0x7a); click sends 0x2E/5 ViewGroupBox to the server.
   Images referenced by controls:
     gc_pane2.epf/.spf    — 103×19 wooden-frame pane image
 
@@ -462,14 +487,24 @@ scroll.epf
   Palette:    gui 0
 
 dlgframe.epf
-  Loaded by:  DialogFrame.cs:115  (GetEpfImages); composited by DialogFrame.Composite for TextPopupControl, SelfProfileTextEditorControl, ItemTooltipControl and MarkdownView
+  Loaded by:  DialogFrame.cs:115  (GetEpfImages); composited by DialogFrame.Composite for MarkdownView (the item tooltip is a TooltipFrame since BRIG-125)
   Purpose:    Dialog frame 9-patch borders (corners + edges for scalable dialogs)
   Palette:    gui 0
 
+popupbox.epf
+  Loaded by:  (none — the world context menus are PopupMenus that draw the frame.popup theme part, BRIG-125)
+  Purpose:    The frame of the aisling and door context menus
+  Palette:    gui 0
+
 butt001.epf
-  Loaded by:  TextPopupControl.cs:70-71, ItemAmountControl.cs:49-66, SelfProfileTextEditorControl.cs:60-63  (GetEpfTexture)
+  Loaded by:  (none — every popup that drew it is rebuilt as a primitive, the last one in BRIG-122)
   Purpose:    Standard button spritesheet — OK/Cancel/Yes/No in normal+pressed states
   Palette:    gui 0
+
+woodbk.epf
+  Loaded by:  TextPopupControl.cs:171  (GetLegendEpfImage, from legend.dat)
+  Purpose:    The wooden sign background of the WoodenBoard text popup
+  Fallback:   Drawn only when the theme has no frame.sign part (BRIG-122)
 
 spelled.epf
   Loaded by:  EffectBarControl.cs:44  (GetEpfImages)
@@ -477,8 +512,9 @@ spelled.epf
   Palette:    gui 0  (note: loaded via GetEpfImages which auto-selects via prefix)
 
 emot000.epf
-  Loaded by:  SocialStatusControl.cs:65  (GetEpfImages)
+  Loaded by:  SocialStatusControl.cs:74  (GetEpfTexture); WorldScreen HudOps.SetEmoteStatus (the HUD emote button)
   Purpose:    Emoticon/social status icons (8 frames for 8 status types)
+  Fallback:   The HUD emote button reads it only when there is no icon.status.* theme part or built-in image (BRIG-122)
   Palette:    gui 0
 
 legends.epf
@@ -506,7 +542,7 @@ spell001.epf
 # ── SPF Files (from Setoa) ─────────────────────────────────────────────────────
 
 DlgBack2.spf
-  Loaded by:  TextPopupControl.cs:101, SelfProfileTextEditorControl.cs:48  (GetSpfImage), FramedDialogPanelBase.cs:188  (GetSpfTexture)
+  Loaded by:  FramedDialogPanelBase.cs:188  (GetSpfTexture)
   Purpose:    Dialog background tile — tiled to fill scalable dialog bodies
   Palette:    Embedded (SPF self-contained)
 
@@ -531,8 +567,9 @@ _nui_nat.spf
   Palette:    Embedded
 
 _nemots.spf
-  Loaded by:  SelfProfileEquipmentTab.cs:175  (TextureConverter.LoadSpfTextures)
-  Purpose:    Emoticon status icons for equipment paperdoll (8 frames)
+  Loaded by:  SelfProfileEquipmentTab, OtherProfileEquipmentTab, WorldListControl  (UiRenderer.GetSpfTexture, per frame)
+  Purpose:    Emoticon status icons for equipment paperdoll and the Aisling list (8 frames)
+  Fallback:   Read only when there is no icon.status.* theme part or built-in image (StatusIcon, BRIG-122)
   Palette:    Embedded
 
 _nsettb.spf
@@ -638,17 +675,18 @@ msg.tbl
 # SECTION 5: SUMMARY — QUICK REFERENCE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Control .txt files:        38 total (17 retired — see the (retired) markers in Section 1)
+# Control .txt files:        44 total (26 retired — see the (retired) markers in Section 1)
 #   Login flow:              _nsvr
 #   Main HUD:                _nbk_s, _nstatus
 #   Self-profile tabs:       _nui, _nui_eq, _nui_sk, _nui_dr, _nui_ev, _nui_al, _nui_fm
-#   Popups/dialogs:          _nexch, _nmoney, _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane, lnpcd, _nhotkem, _nhotkey
-#   Retired (primitive now): _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook,
-#                            _noptdlg, _nmacro, _nsett, _nfriend, _nstart, _nlogin, _ncreate, _nagree, _npw
+#   Popups/dialogs:          lnpcd, _nhotkem, _nhotkey
+#   Retired (primitive now): _nmoney, litemex, _nui_ske, _nui_eve, _nbdlist, _narlist, _narti, _nartin, _nmaill, _nmailr, _nmails, lssbook,
+#                            _noptdlg, _nmacro, _nsett, _nfriend, _nstart, _nlogin, _ncreate, _nagree, _npw, _nexch,
+#                            _ngcmain, _ngcdlg0, _ngcdlg1, lgcpane
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm
 #
-# Standalone EPF files:      10 (mouse, scroll, dlgframe, butt001, spelled, emot000, legends, skill001, skill003, spell001)
+# Standalone EPF files:      10 loaded (mouse, scroll, dlgframe, spelled, emot000, woodbk, legends, skill001, skill003, spell001); butt001 and popupbox are catalogued but no longer loaded
 # Standalone SPF files:      15 (_nchatbk, _ninvs3, _nui_tb1, _nui_nat, _nemots, _nsettb, _nusersb, _nloadb0/1/2, DlgBack2, _nhk_bk, _nhk_m, _nhke00-13)
 # Palette files:             2  (gui multi-palette, gui06)
 # Data files:                1  (msg.tbl)

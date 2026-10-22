@@ -1,203 +1,156 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using DALib.Networking.Packets.Server;
-using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
+using Microsoft.Xna.Framework;
 #endregion
 
 namespace Brigid.Controls.World.Popups;
 
 /// <summary>
-///     Tabbed group window using _ngcmain prefab. Tab 0 = group member list, Tab 1 = group recruitment config. Hosts
-///     <see cref="GroupTab" /> and <see cref="GroupRecruitPanel" /> as child panels swapped by tab selection.
+///     The group window (BRIG-126 step 3c), a themed <see cref="CenteredModalPanel" /> in place of the legacy
+///     <c>_ngcmain</c> prefab. Two tabs: Members (<see cref="GroupTab" />) and Recruit (<see cref="GroupRecruitPanel" />).
+///     The bottom bar shows Close, and on the Recruit tab the actions of the form's mode: Begin, or Modify and Reset.
+///     Close only closes the window; it does not remove your group box. Another player's group box shows in
+///     <see cref="GroupBoxViewerControl" />.
+///     <para>
+///         The window sits at the top left of the HUD viewport (D11). It is not modal, and the keys that it does not use go
+///         on to the screen (D10).
+///     </para>
 /// </summary>
-public sealed class GroupTabControl : PrefabPanel
+public sealed class GroupTabControl : CenteredModalPanel
 {
+    private const int TAB_W = 72;
+    private const int TAB_H = 18;
+    private const int PANE_GAP = 4;
+    private const int ACTION_W = 56;
+    private const int PANE_W = GroupRecruitPanel.FORM_W;
+    private const int PANE_H = GroupTab.HEIGHT > GroupRecruitPanel.FORM_H ? GroupTab.HEIGHT : GroupRecruitPanel.FORM_H;
+    private const int CONTENT_H = TAB_H + PANE_GAP + PANE_H;
+
+    private const int MEMBERS_TAB = 0;
+    private const int RECRUIT_TAB = 1;
+
+    private readonly TabStrip Tabs;
+    private readonly TextButton ResetButton;
+    private readonly TextButton ModifyButton;
+    private readonly TextButton BeginButton;
+
     public GroupTab MembersPanel { get; }
     public GroupRecruitPanel RecruitPanel { get; }
 
-    private UIButton? Tab0Button { get; }
-    private UIButton? Tab1Button { get; }
-
-    public GroupTabControl()
-        : base("_ngcmain", false)
-    {
-        Name = "GroupMain";
-        Visible = false;
-        UsesControlStack = true;
-        X = 0;
-        Y = 0;
-
-        var cache = UiRenderer.Instance!;
-
-        //tab buttons — prefab image is _ngcbtnb.spf (selected/big), swap to selectedtexture
-        //and load _ngcbtns.spf (normal/small) from tab0_s/tab1_s prefab entries as normaltexture
-        Tab0Button = CreateButton("TAB0");
-
-        if (Tab0Button is not null)
-        {
-            Tab0Button.CenterTexture = true;
-            Tab0Button.SelectedTexture = Tab0Button.NormalTexture;
-            Tab0Button.NormalTexture = cache.GetPrefabTexture("_ngcmain", "TAB0_S", 0);
-            Tab0Button.Clicked += () => SwitchTab(0);
-        }
-
-        Tab1Button = CreateButton("TAB1");
-
-        if (Tab1Button is not null)
-        {
-            Tab1Button.CenterTexture = true;
-            Tab1Button.SelectedTexture = Tab1Button.NormalTexture;
-            Tab1Button.NormalTexture = cache.GetPrefabTexture("_ngcmain", "TAB1_S", 0);
-            Tab1Button.Clicked += () =>
-            {
-                SwitchTab(1);
-                OnRecruitTabOpened?.Invoke();
-            };
-        }
-
-        //create child panels — positioned at dlgframe rect (0,0 within the main container).
-        //UsesControlStack is forced false for these nested instances: they're always wrapped
-        //by GroupTabControl and must not push independently. If they did, SwitchTab(0)'s
-        //MembersPanel.Show() call would push MembersPanel onto the InputDispatcher control
-        //stack at construction time, which permanently trips the WorldScreen stack guard
-        //in OnRootKeyDown and disables game hotkeys (Y, T, J, B, F1-F10, A/S/D/F/G/H, etc.)
-        //until the user opens-and-closes the group window once. Only the top-level
-        //GroupTabControl participates in the control stack.
-        MembersPanel = new GroupTab();
-        MembersPanel.Visible = true;
-        MembersPanel.UsesControlStack = false;
-
-        RecruitPanel = new GroupRecruitPanel();
-        RecruitPanel.Visible = false;
-        RecruitPanel.UsesControlStack = false;
-
-        AddChild(MembersPanel);
-        AddChild(RecruitPanel);
-
-        //wire close events from child panels
-        MembersPanel.OnClose += () =>
-        {
-            Hide();
-            OnClose?.Invoke();
-        };
-
-        RecruitPanel.OnClose += () =>
-        {
-            Hide();
-            OnClose?.Invoke();
-        };
-
-        SwitchTab(0);
-    }
-
-    public override void Dispose()
-    {
-        MembersPanel.Dispose();
-        RecruitPanel.Dispose();
-
-        base.Dispose();
-    }
-
-    public override void Draw(SpriteBatch spriteBatch)
-    {
-        if (!Visible)
-            return;
-
-        base.Draw(spriteBatch);
-    }
-
-    public event CloseHandler? OnClose;
-
     /// <summary>
-    ///     Fired when the user clicks the recruit tab button. Subscribers decide whether to send
-    ///     a self-ViewGroupBox query (when HasActiveGroupBox is true) so the panel populates from
-    ///     the authoritative server state instead of showing a stale OwnerNew blank form.
+    ///     Raised when the player opens the Recruit tab. The screen asks the server for your group box when you have one, so
+    ///     that the form shows the server's values in place of a blank form.
     /// </summary>
     public event Action? OnRecruitTabOpened;
 
-    /// <summary>
-    ///     Shows the window on the members tab.
-    /// </summary>
+    public GroupTabControl()
+        : base("Group", PANE_W + 2 * PADDING, TITLE_H + 1 + CONTENT_H + BOTTOM_H, useTheme: true)
+    {
+        Name = "group";
+
+        var content = ContentBounds;
+        var paneY = content.Y + TAB_H + PANE_GAP;
+
+        Tabs = new TabStrip(["Members", "Recruit"], TAB_W, TAB_H)
+        {
+            Name = "tabs",
+            X = content.X,
+            Y = content.Y
+        };
+        Tabs.TabClicked += OnTabClicked;
+        AddChild(Tabs);
+
+        MembersPanel = new GroupTab(PANE_W)
+        {
+            Name = "members",
+            X = content.X,
+            Y = paneY
+        };
+        AddChild(MembersPanel);
+
+        RecruitPanel = new GroupRecruitPanel
+        {
+            Name = "recruit",
+            X = content.X,
+            Y = paneY
+        };
+        RecruitPanel.OnClose += Hide;
+        RecruitPanel.ModeChanged += ShowActions;
+        AddChild(RecruitPanel);
+
+        //packed right to left after Close, so that the bar reads Modify, Reset, Close
+        ResetButton = AddBottomBarButton("Reset", ACTION_W, RecruitPanel.RemoveBox, "reset");
+        ModifyButton = AddBottomBarButton("Modify", ACTION_W, RecruitPanel.ModifyBox, "modify");
+        BeginButton = AddBottomBarButton("Begin", ACTION_W, RecruitPanel.BeginBox, "begin");
+
+        SwitchTab(MEMBERS_TAB);
+    }
+
+    //the window is used beside the world: Enter for chat and the other keys above the screen's stack guard still work
+    protected override bool LetsKeysThrough => true;
+
+    //the top left of the HUD viewport, as the legacy window (D11)
+    protected override Point PositionIn(Rectangle viewport) => viewport.Location;
+
+    /// <summary>The index of the tab that shows: 0 for Members, 1 for Recruit. Internal for the tests.</summary>
+    internal int SelectedTab => Tabs.SelectedIndex;
+
+    /// <summary>Clicks a tab, as the mouse does. Internal for the tests.</summary>
+    internal void ClickTab(int index) => OnTabClicked(index);
+
+    /// <summary>Shows the window on the Members tab, with a new Recruit form.</summary>
     public void ShowMembers()
     {
-        //prime the recruit panel to OwnerNew defaults once per panel-open. If the
-        //user later switches to TAB1 with HasActiveGroupBox==true, the
-        //OnRecruitTabOpened handler sends ViewGroupBox(self) and the server's
-        //ShowGroupBox(self) response overrides to OwnerEdit via ShowRecruitOwnerEdit.
-        //Priming here (not on every TAB1 click) preserves in-progress typing when
-        //the user toggles between tabs within a single panel session.
+        //each open resets the form; a change of tab keeps the text. When you have a group box, the Recruit tab asks the
+        //server for it, and ShowRecruitOwnerEdit fills the form
         RecruitPanel.ShowAsOwner();
-        SwitchTab(0);
+        SwitchTab(MEMBERS_TAB);
         Show();
     }
 
-    /// <summary>
-    ///     Shows the window on the recruit tab in owner-edit mode, populated from server data.
-    /// </summary>
+    /// <summary>Shows the window on the Recruit tab, to change your group box with the values from the server.</summary>
     public void ShowRecruitOwnerEdit(GroupRecruitInfo info)
     {
-        SwitchTab(1);
         RecruitPanel.ShowAsOwnerEdit(info);
+        SwitchTab(RECRUIT_TAB);
         Show();
     }
 
-    /// <summary>
-    ///     Shows the window on the recruit tab in viewer mode, populated from server data.
-    /// </summary>
-    public void ShowRecruitViewer(string sourceName, GroupRecruitInfo info)
+    private void OnTabClicked(int index)
     {
-        SwitchTab(1);
-        RecruitPanel.ShowAsViewer(sourceName, info);
-        Show();
+        if (index == Tabs.SelectedIndex)
+            return;
+
+        SwitchTab(index);
+
+        if (index == RECRUIT_TAB)
+            OnRecruitTabOpened?.Invoke();
     }
 
-    private void SwitchTab(int tab)
+    //a hidden tab drops its focus and its pressed state
+    private void SwitchTab(int index)
     {
-        if (tab == 0)
-        {
-            //reset interaction state on the outgoing panel to clear any focused textbox
-            RecruitPanel.ResetInteractionState();
-            RecruitPanel.Hide();
-            MembersPanel.Show();
-        } else
-        {
-            MembersPanel.ResetInteractionState();
-            MembersPanel.Hide();
-            RecruitPanel.Show();
-        }
-
-        if (Tab0Button is not null)
-        {
-            Tab0Button.IsSelected = tab == 0;
-            Tab0Button.ZIndex = tab == 0 ? 1 : -1;
-        }
-
-        if (Tab1Button is not null)
-        {
-            Tab1Button.IsSelected = tab == 1;
-            Tab1Button.ZIndex = tab == 1 ? 1 : -1;
-        }
+        Tabs.SetSelected(index);
+        MembersPanel.Visible = index == MEMBERS_TAB;
+        RecruitPanel.Visible = index == RECRUIT_TAB;
+        ShowActions();
     }
 
-    public override void OnKeyDown(KeyDownEvent e)
+    private void ShowActions()
     {
-        if (e.Key == Keys.Escape)
+        if (Tabs.SelectedIndex != RECRUIT_TAB)
         {
-            Hide();
-            OnClose?.Invoke();
-            e.Handled = true;
+            SetBottomBarActions();
+
+            return;
         }
-    }
 
-    public override void Hide()
-    {
-        //ensure both children are also removed from the control stack so they don't
-        //orphan above a hidden parent — SwitchTab only pushes one child at a time,
-        //but closing the window should clear both regardless of which tab was active.
-        MembersPanel.Hide();
-        RecruitPanel.Hide();
-
-        base.Hide();
+        //the window shows only your own group box; the viewer mode is for GroupBoxViewerControl
+        if (RecruitPanel.Mode == GroupRecruitMode.OwnerEdit)
+            SetBottomBarActions(ModifyButton, ResetButton);
+        else
+            SetBottomBarActions(BeginButton);
     }
 }

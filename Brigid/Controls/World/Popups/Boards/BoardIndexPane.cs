@@ -78,7 +78,7 @@ internal sealed class BoardIndexPane : UIPanel
         if (row.Selected)
             label.ForegroundColor = BoardPalette.SelectedText;
         else
-            label.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+            label.SetForegroundRole(ThemeRoles.Text);
     }
 
     /// <summary>Populates the pane and selects the first board (matching the legacy panel).</summary>

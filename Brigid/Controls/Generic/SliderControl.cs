@@ -14,8 +14,8 @@ namespace Brigid.Controls.Generic;
 ///     <para>
 ///         A themed slider draws the <see cref="ThemeRoles.SliderTrack" />, <see cref="ThemeRoles.SliderFill" /> and
 ///         <see cref="ThemeRoles.SliderThumb" /> parts. A piece with no part has the flat look: a dark groove with its
-///         outline in <see cref="ThemeRoles.Border" />, an amber fill (<see cref="ThemeRoles.TextSelected" /> when themed),
-///         and a flat thumb.
+///         outline in the <see cref="ThemeRoles.Border" /> colour, a fill in the
+///         <see cref="ThemeRoles.TextSelected" /> colour, and a flat thumb.
 ///     </para>
 ///     <para>
 ///         <see cref="ValueChanged" /> is raised only when the player changes the value. <see cref="SetValue" /> is silent,
@@ -33,8 +33,6 @@ public sealed class SliderControl : UIPanel
     private const int GROOVE_H = 4;
 
     private static readonly Color GrooveColor = new(18, 18, 22, 235);
-    private static readonly Color GrooveBorder = new(150, 150, 160, 255);
-    private static readonly Color FillColor = new(186, 162, 110, 255);
 
     private bool Dragging;
 
@@ -85,16 +83,16 @@ public sealed class SliderControl : UIPanel
         if (!TryDrawThemePart(spriteBatch, ThemeRoles.SliderTrack, themedTrack))
         {
             DrawRectClipped(spriteBatch, track, GrooveColor);
-            DrawBorderClipped(spriteBatch, track, ThemeColor(ThemeRoles.Border, GrooveBorder));
+            DrawBorderClipped(spriteBatch, track, ThemeColor(ThemeRoles.Border));
         }
 
         if ((fill.Width > 0) && !TryDrawThemePart(spriteBatch, ThemeRoles.SliderFill, themedFill))
-            DrawRectClipped(spriteBatch, fill, ThemeColor(ThemeRoles.TextSelected, FillColor));
+            DrawRectClipped(spriteBatch, fill, ThemeColor(ThemeRoles.TextSelected));
 
         if (!TryDrawThemePart(spriteBatch, ThemeRoles.SliderThumb, thumb))
         {
             DrawRectClipped(spriteBatch, thumb, DialogPalette.ButtonHoverFill);
-            DrawBorderClipped(spriteBatch, thumb, ThemeColor(ThemeRoles.Border, GrooveBorder));
+            DrawBorderClipped(spriteBatch, thumb, ThemeColor(ThemeRoles.Border));
         }
     }
 

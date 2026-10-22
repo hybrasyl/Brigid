@@ -46,7 +46,7 @@ public sealed class SelectableTab : UIPanel
         Width = width;
         Height = height;
         BackgroundColor = DialogPalette.TabIdleFill;
-        BorderColor = DialogPalette.TabIdleBorder;
+        BorderColor = DialogPalette.FrameBorder;
 
         Label = new UILabel
         {
@@ -69,9 +69,9 @@ public sealed class SelectableTab : UIPanel
 
     //the flat border is part of the look: the outline when idle, the selection accent when selected
     protected internal override Color? DrawnBorderColor
-        => BorderColor is not { } border ? null
-            : IsSelected ? ThemeColor(ThemeRoles.TextSelected, border)
-            : ThemeColor(ThemeRoles.Border, border);
+        => BorderColor is null ? null
+            : IsSelected ? ThemeColor(ThemeRoles.TextSelected)
+            : ThemeColor(ThemeRoles.Border);
 
     //a selected tab with no tab.selected part uses tab.normal; with no theme the tab keeps its flat look
     protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
@@ -87,12 +87,11 @@ public sealed class SelectableTab : UIPanel
     private void RefreshVisual()
     {
         BackgroundColor = IsSelected ? DialogPalette.TabSelectedFill : DialogPalette.TabIdleFill;
-        BorderColor = IsSelected ? DialogPalette.TabSelectedBorder : DialogPalette.TabIdleBorder;
         //the label takes the theme colour at draw time, because the tab takes the theme from its parent
         if (IsSelected)
-            Label.SetForegroundRole(ThemeRoles.TextSelected, DialogPalette.SelectedText);
+            Label.SetForegroundRole(ThemeRoles.TextSelected);
         else
-            Label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+            Label.SetForegroundRole(ThemeRoles.Text);
     }
 
     public override void OnMouseEnter() => Hovered?.Invoke();

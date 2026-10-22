@@ -25,18 +25,11 @@ public sealed class MarkdownBlock : UIElement
 
     private static readonly Color CodeColor = LegendColors.PaleSilver;
     private static readonly Color ListMarkerColor = LegendColors.Silver;
-    private static readonly Color RuleColor = LegendColors.DimGray;
     private static readonly Color CodeBackgroundColor = new(0, 0, 0, 150);
 
     private string Source = string.Empty;
     private int LayoutGeneration = -1;
     private int LayoutWidth = -1;
-
-    /// <summary>The colour of body text when no theme colour applies.</summary>
-    public Color BodyColor { get; set; } = LegendColors.White;
-
-    /// <summary>The colour of headings when no theme colour applies.</summary>
-    public Color HeadingColor { get; set; } = LegendColors.Gold;
 
     /// <summary>
     ///     When true, a leading level-1 heading is not drawn and goes to <see cref="MarkdownLayout.Title" />, for a host
@@ -130,11 +123,11 @@ public sealed class MarkdownBlock : UIElement
             DrawRectClipped(
                 spriteBatch,
                 new Rectangle(originX + rule.X, originY + rule.Y, rule.Width, rule.Height),
-                ThemeColor(ThemeRoles.Divider, RuleColor));
+                ThemeColor(ThemeRoles.Divider));
         }
 
-        var body = ThemeColor(ThemeRoles.Text, BodyColor);
-        var heading = ThemeColor(ThemeRoles.TextTitle, HeadingColor);
+        var body = ThemeColor(ThemeRoles.Text);
+        var heading = ThemeColor(ThemeRoles.TextTitle);
 
         foreach (var span in layout.Spans)
         {

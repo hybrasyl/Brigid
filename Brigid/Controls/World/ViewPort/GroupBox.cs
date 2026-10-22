@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Rendering.Utility;
+using Brigid.Controls.Generic;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -8,106 +9,90 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Brigid.Controls.World.ViewPort;
 
 /// <summary>
-///     Group recruitment text banner rendered as a gc_pane2.spf panel frame with centered text. Displayed above aisling
-///     entities that have an active GroupBox. Always visible while text is non-empty.
+///     The group box over a recruiting aisling (BRIG-126): the group title, centred in a small frame. The frame is
+///     the theme's <see cref="ThemeRoles.FramePopup" /> part, else the flat frame; it replaces the legacy 103 by 19
+///     <c>gc_pane2.spf</c> pane, and the title area keeps the legacy size. The title takes the
+///     <see cref="ThemeRoles.Text" /> role. While the mouse is on the box, the title area takes the
+///     <see cref="ThemeRoles.RowHover" /> fill. A click on the box shows the group box viewer.
+///     <para>
+///         The box is not in the control tree: <c>EntityOverlayManager</c> places it, draws it and hit-tests it (the click
+///         and the hover). A themed frame with a wide border makes the box larger, so the manager reads
+///         <see cref="UIElement.Width" /> and <see cref="UIElement.Height" /> after <see cref="UpdateText" />, which sizes
+///         the box for the current theme.
+///     </para>
 /// </summary>
-public sealed class GroupBox : UIPanel
+public sealed class GroupBox : FramePanel
 {
-    //gc_pane2.spf is 103x19 — wooden frame with teal interior
-    public const int PANEL_WIDTH = 103;
-    public const int PANEL_HEIGHT = 19;
+    /// <summary>The width of the title area, as the legacy title rect (3,3)-(100,16).</summary>
+    internal const int TITLE_WIDTH = 97;
 
-    //title rect from lgcpane.txt: (3,3)-(100,16), 97x13 text area
-    private const int TITLE_X = 3;
-    private const int TITLE_Y = 3;
-    private const int TITLE_WIDTH = 97;
-    private const int TITLE_HEIGHT = 13;
+    /// <summary>The height of the title area.</summary>
+    internal const int TITLE_HEIGHT = 13;
 
-    private static readonly Color NormalFillColor = new(
-        0,
-        0,
-        0,
-        128);
-
-    private static readonly Color HoverFillColor = new(
-        0,
-        0,
-        120,
-        90);
-
-    private static Texture2D? NormalPanelTexture;
-    private static Texture2D? HoverPanelTexture;
-    private static bool PanelTexturesInitialized;
+    /// <summary>The least space between the edge and the title; <see cref="FramePanel" /> adds the border and a gap.</summary>
+    internal const int PADDING = 3;
 
     private readonly UILabel Label;
+
     public bool IsHovered { get; set; }
 
     public uint EntityId { get; }
 
+    /// <summary>The title that the box shows. Internal for the tests.</summary>
+    internal string Text => Label.Text;
+
+    /// <summary>The area in the frame: the title, and the hover fill. Internal for the tests.</summary>
+    internal Rectangle TextBounds => new(Label.X, Label.Y, Label.Width, Label.Height);
+
     public GroupBox(uint entityId)
     {
         EntityId = entityId;
-        Width = PANEL_WIDTH;
-        Height = PANEL_HEIGHT;
+        UseTheme = true;
 
         Label = new UILabel
         {
-            X = TITLE_X,
-            Y = TITLE_Y,
-            Width = TITLE_WIDTH,
-            Height = TITLE_HEIGHT,
+            Name = "title",
             PaddingLeft = 1,
             PaddingTop = 1,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            ForegroundColor = new Color(187, 187, 187)
+            HorizontalAlignment = HorizontalAlignment.Center
         };
-
+        Label.SetForegroundRole(ThemeRoles.Text);
         AddChild(Label);
+
+        Fit();
     }
 
-    /// <summary>
-    ///     Loads gc_pane2.spf and fills the TITLE rect interior with the given semi-transparent color, producing a banner
-    ///     texture with a readable text backdrop.
-    /// </summary>
-    private static Texture2D BuildPanelTexture(Color titleFill)
+    protected override string FrameRole => ThemeRoles.FramePopup;
+
+    /// <summary>Sets the title, and sizes the box for the current theme.</summary>
+    public void UpdateText(string text)
     {
-        var source = UiRenderer.Instance!.GetSpfTexture("gc_pane2.spf");
-
-        if ((source.Width < PANEL_WIDTH) || (source.Height < PANEL_HEIGHT))
-            return source;
-
-        using var scope = new PixelBufferScope(source);
-        ImageUtil.FillRect(scope.Pixels, scope.Width, scope.Height, TITLE_X, TITLE_Y, TITLE_WIDTH, TITLE_HEIGHT, titleFill);
-
-        var tex = new Texture2D(ChaosGame.Device, scope.Width, scope.Height);
-        scope.CommitTo(tex);
-        return tex;
+        Label.Text = text;
+        Fit();
     }
 
-    public override void Draw(SpriteBatch spriteBatch)
+    //the title area keeps the legacy size, and the frame goes around it: 105 by 21 with the flat frame
+    private void Fit()
     {
-        if (!Visible)
-            return;
+        var inset = InsetFor(PADDING);
 
-        if (!PanelTexturesInitialized)
-        {
-            PanelTexturesInitialized = true;
-            NormalPanelTexture = BuildPanelTexture(NormalFillColor);
-            HoverPanelTexture = BuildPanelTexture(HoverFillColor);
-        }
-
-        //draw the panel frame — swap texture based on hover state
-        var panel = IsHovered ? HoverPanelTexture : NormalPanelTexture;
-
-        if (panel is not null && !panel.IsDisposed)
-            DrawTexture(spriteBatch, panel, new Vector2(ScreenX, ScreenY), Color.White);
-
-        //draw children (label)
-        base.Draw(spriteBatch);
+        Width = TITLE_WIDTH + 2 * inset;
+        Height = TITLE_HEIGHT + 2 * inset;
+        Label.X = inset;
+        Label.Y = inset;
+        Label.Width = TITLE_WIDTH;
+        Label.Height = TITLE_HEIGHT;
     }
 
-    /// <summary>
-    ///     Updates the displayed text.
-    /// </summary>
-    public void UpdateText(string text) => Label.Text = text;
+    //the hover fill draws over the frame and under the title
+    protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+    {
+        base.DrawChrome(spriteBatch, bounds);
+
+        if (IsHovered)
+            DrawRectClipped(
+                spriteBatch,
+                new Rectangle(bounds.X + Label.X, bounds.Y + Label.Y, Label.Width, Label.Height),
+                ThemeColor(ThemeRoles.RowHover));
+    }
 }

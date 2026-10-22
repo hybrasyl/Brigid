@@ -168,13 +168,13 @@ public sealed class EntityOverlayManager
             groupBox.UpdateText(entity.GroupBoxText);
             groupBox.IsHovered = hoveredGroupBoxId == entity.Id;
 
-            //position panel centered on entity, bottom edge at y offset
+            //position panel centered on entity, bottom edge at y offset; UpdateText sized it for the current theme
             var tileWorld = Camera.TileToWorld(entity.TileX, entity.TileY, mapHeight);
             var entityWorldX = tileWorld.X + DaLibConstants.HALF_TILE_WIDTH + entity.VisualOffset.X;
             var entityWorldY = tileWorld.Y + DaLibConstants.HALF_TILE_HEIGHT + entity.VisualOffset.Y - GROUP_BOX_Y_OFFSET;
 
             var screenPos = camera.WorldToScreen(
-                new Vector2(entityWorldX - GroupBox.PANEL_WIDTH / 2f, entityWorldY - GroupBox.PANEL_HEIGHT));
+                new Vector2(entityWorldX - groupBox.Width / 2f, entityWorldY - groupBox.Height));
 
             groupBox.X = (int)screenPos.X;
             groupBox.Y = (int)screenPos.Y;
@@ -258,8 +258,8 @@ public sealed class EntityOverlayManager
             var rect = new Rectangle(
                 groupBox.ScreenX,
                 groupBox.ScreenY,
-                GroupBox.PANEL_WIDTH,
-                GroupBox.PANEL_HEIGHT);
+                groupBox.Width,
+                groupBox.Height);
 
             if (!rect.Contains(viewportX, viewportY))
                 continue;

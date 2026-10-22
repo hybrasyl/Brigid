@@ -123,6 +123,14 @@ public sealed partial class WorldScreen
             Game.Connection.SendExchangeInteraction(ExchangeRequestType.Cancel, Exchange.OtherUserId);
             WorldState.Exchange.Close();
         };
+
+        //the gold button opens the gold prompt over the exchange; its OnConfirm sends SetGold while the exchange is open
+        Exchange.OnGoldClicked += () =>
+        {
+            GoldDrop.SetViewportBounds(Exchange.Bounds);
+            GoldDrop.ShowForExchange();
+            WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
+        };
     }
     #endregion
 
@@ -745,6 +753,14 @@ public sealed partial class WorldScreen
         PauseMenu.SetViewportBounds(viewport);
         WorldList.SetViewportBounds(viewport);
         MarkdownNotice.SetViewportBounds(viewport);
+        TextPopup.SetViewportBounds(viewport);
+        SelfProfileTextEditor.SetViewportBounds(viewport);
+        Exchange.SetViewportBounds(viewport);
+        //a prompt over the exchange moves with it; a prompt for a drop stays in the viewport
+        GoldDrop.SetViewportBounds(GoldDrop.ForExchange ? Exchange.Bounds : viewport);
+        ItemAmount.SetViewportBounds(Exchange.Bounds);
+        GroupPanel.SetViewportBounds(viewport);
+        GroupBoxViewer.SetViewportBounds(viewport);
 
         FollowPlayerCamera();
 
@@ -835,13 +851,13 @@ public sealed partial class WorldScreen
         public static readonly Action<IWorldHud, string> ShowPersistentMessage =
             static (h, msg) => h.ShowPersistentMessage(msg);
 
-        public static readonly Action<IWorldHud, Texture2D> SetEmoteIcon = static (h, icon) =>
+        //the legacy status icons are the first of each three frames of emot000.epf; read only when there is no new art
+        public static readonly Action<IWorldHud, SocialStatus> SetEmoteStatus = static (h, status) =>
         {
-            if (h.EmoteButton is null)
+            if (h.EmoteButton is null || h.EmoteStatusIcon is null)
                 return;
 
-            h.EmoteButton.NormalTexture = icon;
-            h.EmoteButton.SelectedTexture = icon;
+            h.EmoteStatusIcon.ShowOn(h.EmoteButton, status, () => UiRenderer.Instance?.GetEpfTexture("emot000.epf", (byte)status * 3));
         };
 
         public static readonly Action<IWorldHud, byte, EffectColor> SetEffect =

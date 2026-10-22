@@ -110,7 +110,6 @@ public sealed class StoryView : UIPanel
             Name = "text",
             X = FRAME_PADDING,
             Y = FRAME_PADDING,
-            HeadingColor = DialogPalette.Title,
             IsHitTestVisible = false
         };
 
@@ -281,7 +280,7 @@ public sealed class StoryView : UIPanel
     public override void Draw(SpriteBatch spriteBatch)
     {
         Counter.ForegroundColor = ThemeColor(ThemeRoles.Text, DialogPalette.StatusText);
-        PlaceholderHeading.ForegroundColor = ThemeColor(ThemeRoles.TextTitle, DialogPalette.Title);
+        PlaceholderHeading.ForegroundColor = ThemeColor(ThemeRoles.TextTitle);
         PlaceholderDetail.ForegroundColor = ThemeColor(ThemeRoles.Text, DialogPalette.StatusText);
 
         base.Draw(spriteBatch);

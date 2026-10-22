@@ -55,6 +55,6 @@ public sealed class DisplayTitle : UIElement
             Size,
             FontStyle.Display);
 
-        engine.DrawLine(spriteBatch, Text, position, ThemeColor(ThemeRoles.TextTitle, DialogPalette.MenuTitle), ClipRect, Size, FontStyle.Display);
+        engine.DrawLine(spriteBatch, Text, position, ThemeColor(ThemeRoles.TextTitle), ClipRect, Size, FontStyle.Display);
     }
 }

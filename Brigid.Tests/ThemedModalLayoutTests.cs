@@ -1,11 +1,15 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.Scrolling;
 using Brigid.Controls.World.Popups;
 using Brigid.Controls.World.Popups.Boards;
 using Brigid.Controls.World.Popups.Dialog;
+using Brigid.Controls.World.Popups.Exchange;
 using Brigid.Controls.World.Popups.Options;
+using Brigid.Controls.World.Popups.Profile;
 using Brigid.Data.AssetPacks;
+using Brigid.Definitions;
 using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Xunit;
@@ -43,13 +47,14 @@ public sealed class ThemedModalLayoutTests : IDisposable
 
     //Options is left out: its setting labels read msg.tbl, which a test does not load. It lays out from ContentBounds as
     //the others do
-    public static TheoryData<string> Modals => ["boards", "castable", "keybind", "serverinfo", "certificate", "insecure", "pause", "popup"];
+    public static TheoryData<string> Modals => ["boards", "castable", "keybind", "serverinfo", "certificate", "insecure", "pause", "popup", "itemamount", "goldamount", "textpopup", "profiletext", "abilitydetails", "eventdetails", "exchange", "group", "groupbox"];
 
     [Theory]
     [MemberData(nameof(Modals))]
     public void TheContentLiesInsideTheThemedFrame(string modal)
     {
-        var panel = Create(modal);
+        //a modal can subscribe to static state (the exchange), so each one is disposed
+        using var panel = Create(modal);
         var content = panel.ContentBounds;
 
         Assert.Equal(THEMED_INSET, content.X);
@@ -67,6 +72,43 @@ public sealed class ThemedModalLayoutTests : IDisposable
             Assert.True(child.X + child.Width <= content.Right, $"{modal}: {child.Name} ends right of the content");
             Assert.True(child.Y + child.Height <= content.Bottom, $"{modal}: {child.Name} ends below the content");
         }
+    }
+
+    [Fact]
+    public void TheThemedGroupWindowFitsTheSmallHudViewport()
+    {
+        //the small HUD's MAP rect (_nbk_s) is 308 px tall, and the window sits at its top
+        using var window = new GroupTabControl();
+
+        Assert.True(window.Height <= 308, $"the group window is {window.Height} px tall");
+    }
+
+    [Fact]
+    public void TheTextPopupSignKeepsTheRetailSizeInsideAThemedFrame()
+    {
+        var popup = new TextPopupControl();
+        var scroll = popup.FindChild<ScrollView>("text")!;
+        var grow = 2 * (THEMED_INSET - FLAT_PADDING);
+
+        popup.Show("Framed.");
+
+        Assert.Equal(360 + grow, popup.Width);
+        Assert.Equal(180 + grow, popup.Height);
+
+        popup.Show("A sign.", PopupStyle.Wooden);
+
+        //the sign is the retail 360 by 180, with the text 16 px in at the sides, 12 px from the top and 32 px from the bottom
+        Assert.Equal(360, popup.Width);
+        Assert.Equal(180, popup.Height);
+        Assert.Equal(new Rectangle(16, 12, 328, 136), new Rectangle(scroll.X, scroll.Y, scroll.Width, scroll.Height));
+        Assert.Equal((ChaosGame.VIRTUAL_WIDTH - 360) / 2, popup.X);
+
+        popup.Show("Framed again.");
+
+        Assert.Equal(360 + grow, popup.Width);
+        Assert.Equal((ChaosGame.VIRTUAL_WIDTH - popup.Width) / 2, popup.X);
+        Assert.True(scroll.Y >= popup.ContentBounds.Y);
+        Assert.True(scroll.Y + scroll.Height <= popup.ContentBounds.Bottom);
     }
 
     [Fact]
@@ -138,7 +180,9 @@ public sealed class ThemedModalLayoutTests : IDisposable
 
         try
         {
-            return Create(modal).ContentBounds.Size;
+            using var flat = Create(modal);
+
+            return flat.ContentBounds.Size;
         } finally
         {
             AssetPackRegistry.SetUiThemeForTests(Theme);
@@ -155,6 +199,15 @@ public sealed class ThemedModalLayoutTests : IDisposable
         "insecure"    => new InsecureConnectionPromptControl(),
         "pause"       => new PauseMenuControl(),
         "popup"       => new OkPopupMessageControl("Notice", showCancel: true),
+        "itemamount"  => new ItemAmountControl(),
+        "goldamount"  => new GoldAmountControl(),
+        "textpopup"   => new TextPopupControl(),
+        "profiletext" => new SelfProfileTextEditorControl(),
+        "abilitydetails" => new AbilityMetadataDetailsControl(),
+        "eventdetails" => new EventMetadataDetailsControl(),
+        "exchange"    => new ExchangeControl(new Rectangle(0, 0, 640, 480)),
+        "group"       => new GroupTabControl(),
+        "groupbox"    => new GroupBoxViewerControl(),
         _             => throw new ArgumentOutOfRangeException(nameof(modal))
     };
 }

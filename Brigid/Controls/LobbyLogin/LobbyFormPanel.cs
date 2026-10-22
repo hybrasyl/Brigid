@@ -93,7 +93,7 @@ public abstract class LobbyFormPanel : CenteredModalPanel
             WordWrap = true,
             IsHitTestVisible = false
         };
-        Status.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+        Status.SetForegroundRole(ThemeRoles.Text);
         AddChild(Status);
     }
 
@@ -108,11 +108,11 @@ public abstract class LobbyFormPanel : CenteredModalPanel
             Height = ROW_H,
             MaxLength = maxLength,
             IsMasked = masked,
-            FocusedBackgroundColor = DialogPalette.RowHoverFill,
+            FocusedBackgroundColor = DialogPalette.InputFocus,
             IsTabStop = true
         };
 
-        box.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+        box.SetForegroundRole(ThemeRoles.InputText);
         TextFields.Add(box);
         pane.AddChild(box);
 
@@ -134,7 +134,7 @@ public abstract class LobbyFormPanel : CenteredModalPanel
             IsHitTestVisible = false
         };
 
-        label.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+        label.SetForegroundRole(ThemeRoles.Text);
         parent.AddChild(label);
     }
 
@@ -173,9 +173,9 @@ public abstract class LobbyFormPanel : CenteredModalPanel
         Status.Text = message;
 
         if (isError)
-            Status.SetForegroundRole(ThemeRoles.TextError, DialogPalette.ErrorText);
+            Status.SetForegroundRole(ThemeRoles.TextError);
         else
-            Status.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
+            Status.SetForegroundRole(ThemeRoles.Text);
     }
 
     /// <summary>

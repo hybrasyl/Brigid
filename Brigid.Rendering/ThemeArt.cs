@@ -88,6 +88,23 @@ public static class ThemeArt
     public static void EndFrame() => Textures.EndFrame();
 
     /// <summary>
+    ///     True when the installed theme has a part for <paramref name="role" /> whose image decodes. A part that is listed
+    ///     but has no usable image gives false, so that the caller can use its fallback.
+    /// </summary>
+    public static bool HasUsablePart(string role)
+    {
+        var pack = AssetPackRegistry.GetUiThemePack();
+
+        if (pack is null)
+            return false;
+
+        if (!ReferenceEquals(pack, CachedPack))
+            ResetForPack(pack);
+
+        return GetSource(pack, role) is not null;
+    }
+
+    /// <summary>
     ///     Draws the part for <paramref name="role" /> into a logical rectangle, clipped to <paramref name="clip" />. When
     ///     the theme has no usable part for the role, it draws <paramref name="fallbackRole" /> instead (for example
     ///     <c>button.normal</c> for a missing <c>button.hover</c>). Call from the native UI pass, where the batch transform
@@ -115,10 +132,28 @@ public static class ThemeArt
         if (texture is null)
             return false;
 
+        DrawNative(spriteBatch, texture, native, clip, scaleX, scaleY, tint);
+
+        return true;
+    }
+
+    /// <summary>
+    ///     Draws a texture that was composited at the native size of <paramref name="native" />, clipped to the logical
+    ///     <paramref name="clip" />, with the inverse of the pass scale, so one texel lands on one screen pixel.
+    /// </summary>
+    internal static void DrawNative(
+        SpriteBatch spriteBatch,
+        Texture2D texture,
+        Rectangle native,
+        Rectangle clip,
+        float scaleX,
+        float scaleY,
+        Color? tint = null)
+    {
         var visible = Rectangle.Intersect(native, ThemeLayout.ToNative(clip, scaleX, scaleY));
 
         if ((visible.Width <= 0) || (visible.Height <= 0))
-            return true;
+            return;
 
         var source = new Rectangle(visible.X - native.X, visible.Y - native.Y, visible.Width, visible.Height);
 
@@ -132,8 +167,6 @@ public static class ThemeArt
             new Vector2(1f / scaleX, 1f / scaleY),
             SpriteEffects.None,
             0f);
-
-        return true;
     }
 
     /// <summary>

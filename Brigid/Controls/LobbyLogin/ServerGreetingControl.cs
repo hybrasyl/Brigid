@@ -30,7 +30,7 @@ public sealed class ServerGreetingControl : CenteredModalPanel
     private readonly ScrollView BodyScroll;
 
     //the FontEngine generation the scroll range was read at; a resize or a face change wraps the text again
-    private int ScrollGeneration = -1;
+    private readonly FontGenerationStamp Wrapped = new();
 
     public TextButton OkButton { get; }
     public TextButton CancelButton { get; }
@@ -95,7 +95,7 @@ public sealed class ServerGreetingControl : CenteredModalPanel
         Body.Text = text;
         BodyScroll.Sync();
         BodyScroll.ScrollToStart();
-        ScrollGeneration = FontEngine.Instance.Generation;
+        Wrapped.Mark();
 
         base.Show();
     }
@@ -103,11 +103,11 @@ public sealed class ServerGreetingControl : CenteredModalPanel
     public override void Update(GameTime gameTime)
     {
         //a new wrap changes the number of lines, so the scroll range is read again
-        if (Visible && (ScrollGeneration != FontEngine.Instance.Generation))
+        if (Visible && Wrapped.Changed)
         {
             Body.Text = Body.Text;
             BodyScroll.Sync();
-            ScrollGeneration = FontEngine.Instance.Generation;
+            Wrapped.Mark();
         }
 
         base.Update(gameTime);
@@ -115,7 +115,7 @@ public sealed class ServerGreetingControl : CenteredModalPanel
 
     public override void Draw(SpriteBatch spriteBatch)
     {
-        Body.ForegroundColor = ThemeColor(ThemeRoles.Text, TextColors.Default);
+        Body.ForegroundColor = ThemeColor(ThemeRoles.Text);
 
         base.Draw(spriteBatch);
     }

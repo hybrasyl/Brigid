@@ -11,7 +11,7 @@ namespace Brigid.Controls.Components;
 
 /// <summary>
 ///     Base for from-scratch (asset-free) centered modals in the modernized-dialog family: a
-///     <see cref="DialogPalette" />-framed panel, centered on the viewport, with a title band, a bottom
+///     <see cref="DialogPalette" />-framed panel, centered on the viewport (unless a subclass overrides <see cref="PositionIn" />), with a title band, a bottom
 ///     action bar (a <see cref="TextButton" /> Close plus any subclass buttons), Escape-to-dismiss,
 ///     control-stack participation, and click/wheel absorption so input never leaks to the world behind it.
 ///     Non-modal in the visual sense (no dimmed backdrop) — it matches the existing
@@ -45,7 +45,7 @@ public abstract class CenteredModalPanel : FramePanel
     //bottom-bar buttons in creation order (Close first), so RelayoutBottomBar can re-pack them.
     private readonly List<TextButton> BottomBarButtons = [];
 
-    //the viewport the panel centers within; defaults to the full virtual screen until SetViewportBounds runs.
+    //the viewport the panel is placed within; defaults to the full virtual screen until SetViewportBounds runs.
     private Rectangle Viewport = new(0, 0, ChaosGame.VIRTUAL_WIDTH, ChaosGame.VIRTUAL_HEIGHT);
 
     //the inset the title, the dividers and the bottom bar were last placed for
@@ -106,7 +106,7 @@ public abstract class CenteredModalPanel : FramePanel
         }
 
         LaidOutInset = Inset;
-        CenterInViewport();
+        PlaceInViewport();
 
         TitleLabel = new UILabel
         {
@@ -119,7 +119,7 @@ public abstract class CenteredModalPanel : FramePanel
             Text = title,
             IsHitTestVisible = false
         };
-        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
+        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(TitleLabel);
 
         CloseButton = AddBottomBarButton("Close", CLOSE_W, Hide, "close");
@@ -183,17 +183,48 @@ public abstract class CenteredModalPanel : FramePanel
 
     protected void SetTitle(string title) => TitleLabel.Text = title;
 
-    /// <summary>Re-centers the panel within an arbitrary viewport rect (typically the HUD's play area).</summary>
+    //false while a subclass shows a second look with its own chrome
+    private bool TitleBandShown = true;
+
+    /// <summary>
+    ///     True (the default) when the panel shows its title band and the two dividers. A subclass with a second look that
+    ///     draws its own chrome (the text popup's wooden sign) sets it to false. The bottom-bar buttons do not change; the
+    ///     subclass hides them itself.
+    /// </summary>
+    protected bool ShowsTitleBand
+    {
+        get => TitleBandShown;
+
+        set
+        {
+            TitleBandShown = value;
+            TitleLabel.Visible = value;
+        }
+    }
+
+    /// <summary>Places the panel again within an arbitrary viewport rect (typically the HUD's play area).</summary>
     public void SetViewportBounds(Rectangle viewport)
     {
         Viewport = viewport;
-        CenterInViewport();
+        PlaceInViewport();
     }
 
-    private void CenterInViewport()
+    /// <summary>
+    ///     The position of the panel in <paramref name="viewport" />. The default centers the panel. A subclass that sits at
+    ///     a different place overrides it; for example, the group window returns the top left of the viewport.
+    /// </summary>
+    protected virtual Point PositionIn(Rectangle viewport)
+        => new(viewport.X + (viewport.Width - Width) / 2, viewport.Y + (viewport.Height - Height) / 2);
+
+    /// <summary>
+    ///     Puts the panel at its <see cref="PositionIn" /> place in its viewport again, for a subclass that changes its size
+    ///     while it is open.
+    /// </summary>
+    protected void PlaceInViewport()
     {
-        X = Viewport.X + (Viewport.Width - Width) / 2;
-        Y = Viewport.Y + (Viewport.Height - Height) / 2;
+        var position = PositionIn(Viewport);
+        X = position.X;
+        Y = position.Y;
     }
 
     /// <summary>
@@ -223,14 +254,14 @@ public abstract class CenteredModalPanel : FramePanel
     /// <summary>
     ///     Sets the panel height so that <see cref="ContentBounds" /> is <paramref name="contentHeight" /> px tall, for a
     ///     modal that fits its height to its content; such a modal can give 0 as the constructor height. The bottom bar moves
-    ///     with the bottom edge, and the panel is centered again. The top of <see cref="ContentBounds" /> does not move, but
+    ///     with the bottom edge, and the panel is placed in its viewport again. The top of <see cref="ContentBounds" /> does not move, but
     ///     its bottom does, so place the content again after this call.
     /// </summary>
     protected void SetContentHeight(int contentHeight)
     {
         Height = ContentTop + contentHeight + ChromeOffset + BOTTOM_H;
         PlaceBottomBarRow();
-        CenterInViewport();
+        PlaceInViewport();
     }
 
     /// <summary>
@@ -254,7 +285,7 @@ public abstract class CenteredModalPanel : FramePanel
             return;
 
         EnsureFrameLayout();
-        CenterInViewport();
+        PlaceInViewport();
         InputDispatcher.Instance?.PushControl(this);
         Visible = true;
     }
@@ -274,7 +305,7 @@ public abstract class CenteredModalPanel : FramePanel
     {
         base.Draw(spriteBatch);
 
-        if (!Visible)
+        if (!Visible || !ShowsTitleBand)
             return;
 
         //dividers framing the title band and the bottom action bar (drawn over the fill, inset by PADDING like
@@ -287,7 +318,7 @@ public abstract class CenteredModalPanel : FramePanel
         => DrawRectClipped(
             spriteBatch,
             new Rectangle(ScreenX + Inset, ScreenY + localY, Width - 2 * Inset, 1),
-            ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
+            ThemeColor(ThemeRoles.Divider));
 
     public override void OnKeyDown(KeyDownEvent e)
     {
@@ -302,12 +333,21 @@ public abstract class CenteredModalPanel : FramePanel
         //Tab traverses child textboxes (Macros/Friends tabs).
         base.OnKeyDown(e);
 
-        //a modal captures input: swallow every remaining key so world hotkeys that sit above the
-        //control-stack guard (Q/W/E/R panel toggles, Enter chat focus, …) don't fire underneath while it's
-        //open. Focused textboxes still receive their keys — explicit-focus (phase 1) dispatch runs before
-        //this phase-2 handler. Matches retail, where the options popups blocked other actions.
-        e.Handled = true;
+        //a modal captures input: unless it lets keys through, swallow every remaining key so world hotkeys that
+        //sit above the control-stack guard (Q/W/E/R panel toggles, Enter chat focus, …) don't fire underneath
+        //while it's open. Focused textboxes still receive their keys — explicit-focus (phase 1) dispatch runs
+        //before this phase-2 handler. Matches retail, where the options popups blocked other actions.
+        if (!LetsKeysThrough)
+            e.Handled = true;
     }
+
+    /// <summary>
+    ///     False (the default) for a panel that takes every key while it is open. True for a panel that the player uses
+    ///     beside the world, for example the exchange: a key that the panel does not use goes on to the screen. While the
+    ///     panel is on the control stack, the screen's stack guard still blocks the hotkeys below the guard (A, S, D and
+    ///     the others); the keys above it (Enter for chat, Q, W, E, R, Alt+Enter) work.
+    /// </summary>
+    protected virtual bool LetsKeysThrough => false;
 
     //absorb the wheel so it never scrolls the world behind the modal; subclasses with a scroll list override
     //to forward e.Delta to their scroll model before (or instead of) absorbing.

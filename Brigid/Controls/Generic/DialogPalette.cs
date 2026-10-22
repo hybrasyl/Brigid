@@ -1,4 +1,5 @@
 #region
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 #endregion
 
@@ -30,11 +31,10 @@ internal static class DialogPalette
     //vertical text tabs
     public static readonly Color TabIdleFill = new(24, 26, 34);
     public static readonly Color TabSelectedFill = new(74, 58, 22);
-    public static readonly Color TabIdleBorder = new(80, 70, 44);
-    public static readonly Color TabSelectedBorder = new(210, 176, 96);
 
-    //ability requirements the player does not meet
-    public static readonly Color RequirementUnmet = LegendColors.Scarlet;
+    //ability requirements the player does not meet: the scarlet of the legacy legend palette (LegendColor.Scarlet), as a
+    //literal, so that it needs no dat file and has its value before the palette loads
+    public static readonly Color RequirementUnmet = new(203, 0, 23);
 
     //the dark box behind a text field or a preview
     public static readonly Color SlotFill = new(0, 0, 0, 205);
@@ -48,10 +48,35 @@ internal static class DialogPalette
     public static readonly Color ButtonPressFill = new(74, 58, 22);
     public static readonly Color DisabledText = new(96, 96, 96);
 
-    //the main menu title and status line
-    public static readonly Color MenuTitle = new(242, 240, 232);
+    //the main menu title shadow and status line
     public static readonly Color TitleShadow = new(0, 0, 0, 153);
     public static readonly Color StatusText = new(176, 180, 192);
     public static readonly Color UpdateLink = Color.Red;
     public static readonly Color UpdateLinkHover = Color.OrangeRed;
+
+    //the flat text colour: plain text and the text in a field
+    public static readonly Color Text = Color.White;
+
+    //the fill of a focused text field
+    public static readonly Color InputFocus = RowHoverFill;
+
+    /// <summary>
+    ///     The flat value of a <c>ui_theme</c> colour role: the one colour that every control uses for <paramref name="role" />
+    ///     when it is not themed or the theme does not set that colour (BRIG-122 D4).
+    /// </summary>
+    public static Color ForRole(string role) => role switch
+    {
+        ThemeRoles.Text         => Text,
+        ThemeRoles.TextDisabled => DisabledText,
+        ThemeRoles.TextSelected => SelectedText,
+        ThemeRoles.TextTitle    => Title,
+        ThemeRoles.TextError    => ErrorText,
+        ThemeRoles.Divider      => Divider,
+        ThemeRoles.Border       => FrameBorder,
+        ThemeRoles.RowHover     => RowHoverFill,
+        ThemeRoles.RowSelected  => RowSelectedFill,
+        ThemeRoles.InputText    => Text,
+        ThemeRoles.InputFocus   => InputFocus,
+        _                       => throw new ArgumentOutOfRangeException(nameof(role), role, "not a ui_theme colour role")
+    };
 }

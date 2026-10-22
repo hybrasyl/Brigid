@@ -119,7 +119,6 @@ public sealed class AlertsPanel : FramePanel
             Y = BODY_TOP,
             Width = Width - 2 * PADDING,
             Height = MIN_HEIGHT - BODY_TOP - PADDING / 2 - ACTION_HEIGHT - PADDING,
-            HeadingColor = DialogPalette.Title,
             TextSize = TEXT_SIZE,
             IsHitTestVisible = false
         };

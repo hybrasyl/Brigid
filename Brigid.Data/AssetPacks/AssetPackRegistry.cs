@@ -95,6 +95,9 @@ public static class AssetPackRegistry
     private static string? SelectedUiThemeId;
     private static UiThemePack? ActiveUiTheme;
 
+    /// <summary>The <c>UiTheme</c> selection that makes no theme active: the flat look, with themes installed.</summary>
+    public const string NO_UI_THEME = "none";
+
     /// <summary>
     ///     Scans <see cref="AppPaths.AssetsDir" /> for <c>*.datf</c> files and registers each pack by its declared
     ///     content type. Ensures the directory exists and migrates any legacy <c>{DataPath}/hybrasyl-data/</c> packs
@@ -344,18 +347,36 @@ public static class AssetPackRegistry
     public static UiThemePack? GetUiThemePack() => ActiveUiTheme;
 
     /// <summary>
-    ///     Selects the active UI theme by its <c>pack_id</c> (case ignored). Null or blank selects the first installed
-    ///     theme, and so does an id that no installed theme has. Call it after <see cref="Initialize" />: a selection made
-    ///     before its pack registers takes effect when the pack registers, but it first logs that the theme is not installed.
+    ///     Selects the active UI theme by its <c>pack_id</c> (case ignored); see <see cref="ResolveUiTheme" />. Call it
+    ///     after <see cref="Initialize" />: a selection made before its pack registers takes effect when the pack
+    ///     registers, but it first logs that the theme is not installed.
     /// </summary>
     public static void SelectUiTheme(string? packId)
     {
         SelectedUiThemeId = string.IsNullOrWhiteSpace(packId) ? null : packId;
         UpdateActiveUiTheme();
 
-        if (SelectedUiThemeId is not null && !string.Equals(ActiveUiTheme?.Manifest.PackId, SelectedUiThemeId, StringComparison.OrdinalIgnoreCase))
+        if (SelectedUiThemeId is not null
+            && !IsNoUiTheme(SelectedUiThemeId)
+            && !string.Equals(ActiveUiTheme?.Manifest.PackId, SelectedUiThemeId, StringComparison.OrdinalIgnoreCase))
             LogWarning($"the selected ui_theme '{SelectedUiThemeId}' is not installed; using {(ActiveUiTheme is null ? "the flat look" : $"'{ActiveUiTheme.Manifest.PackId}'")}");
     }
+
+    /// <summary>
+    ///     The theme that a selection gives: null or blank gives the first installed theme ("Automatic"), and so does an
+    ///     id that no installed theme has; <see cref="NO_UI_THEME" /> gives no theme; any other id gives the installed
+    ///     theme with that <c>pack_id</c> (case ignored). Null when no theme applies.
+    /// </summary>
+    public static UiThemePack? ResolveUiTheme(string? selection)
+    {
+        if (IsNoUiTheme(selection))
+            return null;
+
+        return UiThemePacks.FirstOrDefault(pack => string.Equals(pack.Manifest.PackId, selection, StringComparison.OrdinalIgnoreCase))
+               ?? UiThemePacks.FirstOrDefault();
+    }
+
+    private static bool IsNoUiTheme(string? selection) => string.Equals(selection?.Trim(), NO_UI_THEME, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     ///     Makes <paramref name="pack" /> the active theme without registering it, or makes no theme active when it is
@@ -364,9 +385,7 @@ public static class AssetPackRegistry
     /// </summary>
     internal static void SetUiThemeForTests(UiThemePack? pack) => ActiveUiTheme = pack;
 
-    private static void UpdateActiveUiTheme()
-        => ActiveUiTheme = UiThemePacks.FirstOrDefault(pack => string.Equals(pack.Manifest.PackId, SelectedUiThemeId, StringComparison.OrdinalIgnoreCase))
-                           ?? UiThemePacks.FirstOrDefault();
+    private static void UpdateActiveUiTheme() => ActiveUiTheme = ResolveUiTheme(SelectedUiThemeId);
 
     private static void TryRegisterPack(string path)
     {
@@ -376,30 +395,15 @@ public static class AssetPackRegistry
         {
             archive = ZipFile.OpenRead(path);
 
-            var manifestEntry = archive.GetEntry(MANIFEST_ENTRY_NAME);
-
-            if (manifestEntry is null)
+            if (ReadManifest(archive, out var problem) is not { } manifest)
             {
-                LogWarning($"pack {Path.GetFileName(path)} is missing {MANIFEST_ENTRY_NAME}; skipping");
+                LogWarning($"pack {Path.GetFileName(path)} {problem}; skipping");
                 archive.Dispose();
 
                 return;
             }
 
-            AssetPackManifest? manifest;
-
-            using (var manifestStream = manifestEntry.Open())
-                manifest = JsonSerializer.Deserialize<AssetPackManifest>(manifestStream);
-
-            if (manifest is null)
-            {
-                LogWarning($"pack {Path.GetFileName(path)} has empty or invalid manifest; skipping");
-                archive.Dispose();
-
-                return;
-            }
-
-            if (GetManifestRejection(manifest) is { } rejection)
+            if (GetRegistrationRejection(manifest, GetDuplicateRejection) is { } rejection)
             {
                 LogWarning($"pack {Path.GetFileName(path)} {rejection}; skipping");
                 archive.Dispose();
@@ -407,11 +411,7 @@ public static class AssetPackRegistry
                 return;
             }
 
-            if (!TryRegisterByContentType(archive, manifest))
-            {
-                LogWarning($"pack {Path.GetFileName(path)} has unknown content_type='{manifest.ContentType}'; skipping");
-                archive.Dispose();
-            }
+            TryRegisterByContentType(archive, manifest);
         }
         catch (Exception ex)
         {
@@ -421,6 +421,106 @@ public static class AssetPackRegistry
         }
     }
 
+    //the manifest of an open pack, or null with the reason
+    private static AssetPackManifest? ReadManifest(ZipArchive archive, out string? problem)
+    {
+        var manifestEntry = archive.GetEntry(MANIFEST_ENTRY_NAME);
+
+        if (manifestEntry is null)
+        {
+            problem = $"is missing {MANIFEST_ENTRY_NAME}";
+
+            return null;
+        }
+
+        using var manifestStream = manifestEntry.Open();
+        var manifest = JsonSerializer.Deserialize<AssetPackManifest>(manifestStream);
+        problem = manifest is null ? "has empty or invalid manifest" : null;
+
+        return manifest;
+    }
+
+    /// <summary>
+    ///     The manifests of the installed <c>ui_theme</c> packs, in the order of <see cref="UiThemePacks" />. After
+    ///     <see cref="Initialize" /> they are the registered themes. Before it (the launcher), they come from a scan of
+    ///     <see cref="AppPaths.AssetsDir" /> that opens no pack for use; see <see cref="ScanUiThemes(string)" />.
+    /// </summary>
+    public static List<AssetPackManifest> ScanUiThemes()
+        => Initialized ? [.. UiThemePacks.Select(pack => pack.Manifest)] : ScanUiThemes(AppPaths.AssetsDir);
+
+    /// <summary>
+    ///     The manifests of the <c>ui_theme</c> packs in <paramref name="dir" /> that registration accepts, in the order of
+    ///     <see cref="UiThemePacks" />: by priority, then file name. It reads only each manifest, and applies the checks of
+    ///     registration through <see cref="GetRegistrationRejection" />. A folder that is absent or cannot be read gives an
+    ///     empty list. Internal for the tests.
+    ///     <para>
+    ///         Two packs can differ from the registered list. A pack whose content fails when it loads is listed, and it
+    ///         keeps its <c>pack_id</c> from a later pack with the same id. On the first start after an upgrade, the themes
+    ///         that are still in the legacy <c>hybrasyl-data</c> folder are not listed; <see cref="Initialize" /> moves them
+    ///         to the assets folder.
+    ///     </para>
+    /// </summary>
+    internal static List<AssetPackManifest> ScanUiThemes(string dir)
+    {
+        var themes = new List<AssetPackManifest>();
+        var packIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!Directory.Exists(dir))
+            return themes;
+
+        List<string> paths;
+
+        try
+        {
+            paths = [.. InRegistrationOrder(EnumeratePackFiles(dir))];
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogWarning($"cannot list the asset-pack folder '{dir}' for the themes: {ex.Message}");
+
+            return themes;
+        }
+
+        foreach (var path in paths)
+        {
+            try
+            {
+                using var archive = ZipFile.OpenRead(path);
+
+                if ((ReadManifest(archive, out _) is not { } manifest)
+                    || (GetRegistrationRejection(manifest, other => packIds.Contains(other.PackId) ? "has a pack_id that an earlier pack has" : null) is not null))
+                    continue;
+
+                packIds.Add(manifest.PackId);
+
+                if (manifest.ContentType == "ui_theme")
+                    themes.Add(manifest);
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+            {
+                //registration logs this pack when the assets load
+            }
+        }
+
+        //a stable sort, so equal priorities keep the file-name order, as registration does
+        return [.. themes.OrderByDescending(manifest => manifest.Priority)];
+    }
+
+    /// <summary>
+    ///     Returns why registration refuses a pack, or null when it accepts it: <see cref="GetManifestRejection" />, then a
+    ///     content type that has no factory, then <paramref name="duplicateOf" />, which says why the <c>pack_id</c> is
+    ///     taken. Registration and <see cref="ScanUiThemes(string)" /> both use it, so the launcher lists the themes that
+    ///     registration accepts.
+    /// </summary>
+    private static string? GetRegistrationRejection(AssetPackManifest manifest, Func<AssetPackManifest, string?> duplicateOf)
+    {
+        if (GetManifestRejection(manifest) is { } rejection)
+            return rejection;
+
+        if (string.IsNullOrEmpty(manifest.ContentType) || !Factories.ContainsKey(manifest.ContentType))
+            return $"has unknown content_type='{manifest.ContentType}'";
+
+        return duplicateOf(manifest);
+    }
+
     /// <summary>The <c>*.datf</c> files directly in <paramref name="dir" />, whatever the case of the extension.</summary>
     internal static IEnumerable<string> EnumeratePackFiles(string dir) => Directory.EnumerateFiles(dir, "*.datf", PackFileSearch);
 
@@ -428,7 +528,8 @@ public static class AssetPackRegistry
     ///     Returns why the registry refuses a manifest, or null when it accepts it. The registry accepts schema versions 1
     ///     through <see cref="SUPPORTED_SCHEMA_VERSION" />. It refuses an absent, zero or negative <c>schema_version</c>
     ///     and an absent <c>pack_id</c>, as Creidhne and Taliesin also do. It also refuses a blank <c>pack_id</c>, which
-    ///     the two editors accept.
+    ///     the two editors accept, the reserved id <see cref="NO_UI_THEME" />, and a <c>ui_theme</c> id that is not
+    ///     <see cref="IsUiThemeId" />.
     /// </summary>
     internal static string? GetManifestRejection(AssetPackManifest manifest)
     {
@@ -444,8 +545,21 @@ public static class AssetPackRegistry
         if (string.IsNullOrWhiteSpace(manifest.PackId))
             return "has no pack_id";
 
+        if (string.Equals(manifest.PackId.Trim(), NO_UI_THEME, StringComparison.OrdinalIgnoreCase))
+            return $"has pack_id '{manifest.PackId}', which is reserved (UiTheme: {NO_UI_THEME} selects the flat look)";
+
+        if ((manifest.ContentType == "ui_theme") && !IsUiThemeId(manifest.PackId))
+            return $"has pack_id '{manifest.PackId}', which a ui_theme cannot have (use only letters, digits, '-' and '_')";
+
         return null;
     }
+
+    /// <summary>
+    ///     True when <paramref name="packId" /> is a valid <c>ui_theme</c> id: only ASCII letters, digits, <c>-</c> and
+    ///     <c>_</c>. The settings file keeps the selected id on one trimmed line, so an id with a space or a control character
+    ///     does not come back the same. Taliesin makes ids of this form.
+    /// </summary>
+    private static bool IsUiThemeId(string packId) => packId.All(c => char.IsAsciiLetterOrDigit(c) || (c is '-' or '_'));
 
     /// <summary>
     ///     Single consolidated registration path. Looks up a factory for the declared content type, warns about the keys
@@ -517,7 +631,35 @@ public static class AssetPackRegistry
         => paths.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ThenBy(Path.GetFileName, StringComparer.Ordinal);
 
     /// <summary>Registers an archive as if it came from a file. For tests only.</summary>
-    internal static bool RegisterForTest(ZipArchive archive, AssetPackManifest manifest) => TryRegisterByContentType(archive, manifest);
+    internal static bool RegisterForTest(ZipArchive archive, AssetPackManifest manifest)
+    {
+        if (GetDuplicateRejection(manifest) is { } duplicate)
+        {
+            LogWarning($"pack '{manifest.PackId}' {duplicate}; skipping");
+            archive.Dispose();
+
+            return false;
+        }
+
+        return TryRegisterByContentType(archive, manifest);
+    }
+
+    /// <summary>
+    ///     Returns why the registry refuses a pack whose <c>pack_id</c> a registered pack already has (case ignored, across
+    ///     every content type), or null. The pack registered first, in file-name order, stays, also when the second pack
+    ///     has a higher priority: two packs with one id are usually two copies of one pack, and the warning tells the
+    ///     player to remove one. A <c>ui_theme</c> pack is selected by its id, so two packs with one id would make the
+    ///     selection depend on the file names.
+    /// </summary>
+    private static string? GetDuplicateRejection(AssetPackManifest manifest)
+    {
+        foreach (var list in Packs.Values)
+            foreach (var pack in list)
+                if (string.Equals(pack.Manifest.PackId, manifest.PackId, StringComparison.OrdinalIgnoreCase))
+                    return $"has pack_id '{manifest.PackId}', which the registered {pack.Manifest.ContentType} pack '{pack.Manifest.PackId}' already has";
+
+        return null;
+    }
 
     /// <summary>
     ///     Disposes every pack and empties the registry, so that a test starts clean. For tests only. It marks the

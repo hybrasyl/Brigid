@@ -15,8 +15,11 @@ namespace Brigid.Controls.Generic;
 ///     VisibleItems/Orientation/OnValueChanged) is unchanged from the legacy sprite version — Value is item-granular.
 ///     <para>
 ///         A themed vertical bar draws the <c>ui_theme</c> parts <c>scrollbar.track</c>, <c>scrollbar.thumb</c> (with
-///         <c>.hover</c> and <c>.pressed</c>), <c>scrollbar.up</c> and <c>scrollbar.down</c> (with <c>.pressed</c>). Each
-///         piece that the theme does not have keeps its own look. A horizontal bar is not themed.
+///         <c>.hover</c> and <c>.pressed</c>), <c>scrollbar.up</c> and <c>scrollbar.down</c> (with <c>.pressed</c>). A themed
+///         horizontal bar draws its own parts (BRIG-126): <c>scrollbar.htrack</c>, <c>scrollbar.hthumb</c> (with
+///         <c>.hover</c> and <c>.pressed</c>), <c>scrollbar.left</c> and <c>scrollbar.right</c> (with <c>.pressed</c>); the
+///         vertical art is drawn upright, so a horizontal bar does not use it. Each piece that the theme does not have keeps
+///         its own look.
 ///     </para>
 /// </summary>
 public sealed class ScrollBarControl : UIElement
@@ -111,13 +114,9 @@ public sealed class ScrollBarControl : UIElement
             DrawThumb(spriteBatch, MainRect(thumbOffset, thumbSize));
     }
 
-    //the theme parts apply to a vertical bar only; the art is drawn upright
-    private bool TryDrawPart(SpriteBatch spriteBatch, string role, Rectangle bounds, string? fallbackRole = null)
-        => !IsHorizontal && TryDrawThemePart(spriteBatch, role, bounds, fallbackRole);
-
     private void DrawTrack(SpriteBatch spriteBatch, Rectangle trackRect)
     {
-        if (TryDrawPart(spriteBatch, ThemeRoles.ScrollTrack, trackRect))
+        if (TryDrawThemePart(spriteBatch, TrackRole(IsHorizontal), trackRect))
             return;
 
         DrawRectClipped(spriteBatch, trackRect, TrackColor);
@@ -126,13 +125,14 @@ public sealed class ScrollBarControl : UIElement
 
     private void DrawThumb(SpriteBatch spriteBatch, Rectangle thumbRect)
     {
-        var role = (ActiveZone == ScrollZone.Thumb) || Dragging
-            ? ThemeRoles.ScrollThumbPressed
-            : HoveredZone == ScrollZone.Thumb ? ThemeRoles.ScrollThumbHover : ThemeRoles.ScrollThumb;
+        var (role, normal) = ThumbRoles(IsHorizontal, (ActiveZone == ScrollZone.Thumb) || Dragging, HoveredZone == ScrollZone.Thumb);
 
-        var inset = new Rectangle(thumbRect.X + THEMED_THUMB_INSET, thumbRect.Y, thumbRect.Width - 2 * THEMED_THUMB_INSET, thumbRect.Height);
+        //the themed thumb sits in from the long edges of the track, which are the top and bottom of a horizontal bar
+        var inset = IsHorizontal
+            ? new Rectangle(thumbRect.X, thumbRect.Y + THEMED_THUMB_INSET, thumbRect.Width, thumbRect.Height - 2 * THEMED_THUMB_INSET)
+            : new Rectangle(thumbRect.X + THEMED_THUMB_INSET, thumbRect.Y, thumbRect.Width - 2 * THEMED_THUMB_INSET, thumbRect.Height);
 
-        if (TryDrawPart(spriteBatch, role, inset, ThemeRoles.ScrollThumb))
+        if (TryDrawThemePart(spriteBatch, role, inset, normal))
             return;
 
         //primitive proportional bar (a fixed grip sprite can't scale cleanly); shares the wood outline
@@ -147,11 +147,9 @@ public sealed class ScrollBarControl : UIElement
         var decrement = zone == ScrollZone.DecArrow;
         var pressed = ActiveZone == zone;
 
-        var role = decrement
-            ? (pressed ? ThemeRoles.ScrollUpPressed : ThemeRoles.ScrollUp)
-            : (pressed ? ThemeRoles.ScrollDownPressed : ThemeRoles.ScrollDown);
+        var (role, normal) = ArrowRoles(IsHorizontal, decrement, pressed);
 
-        if (TryDrawPart(spriteBatch, role, button, decrement ? ThemeRoles.ScrollUp : ThemeRoles.ScrollDown))
+        if (TryDrawThemePart(spriteBatch, role, button, normal))
             return;
 
         if (!UseSprites)
@@ -174,6 +172,33 @@ public sealed class ScrollBarControl : UIElement
 
         DrawTexture(spriteBatch, GetFrame(frame), new Vector2(button.X, button.Y), Color.White);
     }
+
+    /// <summary>The theme part of the track. Internal for the tests.</summary>
+    internal static string TrackRole(bool horizontal) => horizontal ? ThemeRoles.ScrollHTrack : ThemeRoles.ScrollTrack;
+
+    /// <summary>The theme part of the thumb in its state, and the normal part that a missing state uses. Internal for the tests.</summary>
+    internal static (string Role, string Normal) ThumbRoles(bool horizontal, bool pressed, bool hovered)
+    {
+        var normal = horizontal ? ThemeRoles.ScrollHThumb : ThemeRoles.ScrollThumb;
+
+        if (pressed)
+            return (horizontal ? ThemeRoles.ScrollHThumbPressed : ThemeRoles.ScrollThumbPressed, normal);
+
+        return (hovered ? horizontal ? ThemeRoles.ScrollHThumbHover : ThemeRoles.ScrollThumbHover : normal, normal);
+    }
+
+    /// <summary>
+    ///     The theme part of an arrow button: the decrement arrow is left or up, the increment arrow right or down. The
+    ///     normal part is what a missing pressed state uses. Internal for the tests.
+    /// </summary>
+    internal static (string Role, string Normal) ArrowRoles(bool horizontal, bool decrement, bool pressed)
+        => (horizontal, decrement) switch
+        {
+            (true, true) => (pressed ? ThemeRoles.ScrollLeftPressed : ThemeRoles.ScrollLeft, ThemeRoles.ScrollLeft),
+            (true, false) => (pressed ? ThemeRoles.ScrollRightPressed : ThemeRoles.ScrollRight, ThemeRoles.ScrollRight),
+            (false, true) => (pressed ? ThemeRoles.ScrollUpPressed : ThemeRoles.ScrollUp, ThemeRoles.ScrollUp),
+            (false, false) => (pressed ? ThemeRoles.ScrollDownPressed : ThemeRoles.ScrollDown, ThemeRoles.ScrollDown)
+        };
 
     private static Texture2D GetFrame(int index) => UiRenderer.Instance!.GetEpfTexture(SCROLL_EPF, index);
 

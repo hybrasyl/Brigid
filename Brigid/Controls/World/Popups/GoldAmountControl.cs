@@ -1,121 +1,42 @@
-#region
-using Brigid.Controls.Components;
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Input;
-#endregion
-
 namespace Brigid.Controls.World.Popups;
 
 /// <summary>
-///     Gold drop/exchange popup using _nmoney prefab. Stores the pending drop target (entity or tile)
-///     so the caller only needs to show it and subscribe to OnConfirm.
+///     The gold amount prompt (BRIG-122). Shown when the player drops gold on the ground or on an entity, or puts gold in
+///     an exchange. It keeps the target, so that the caller only shows it and handles <see cref="AmountPromptPanel.OnConfirm" />.
 /// </summary>
-public sealed class GoldAmountControl : PrefabPanel
+public sealed class GoldAmountControl : AmountPromptPanel
 {
-    /// <summary>
-    ///     Entity ID to drop gold on, or null for ground drop.
-    /// </summary>
+    private const int MAX_DIGITS = 10;
+
+    /// <summary>True when the gold goes into the open exchange, not onto the ground or an entity.</summary>
+    public bool ForExchange { get; private set; }
+
+    /// <summary>The entity to drop the gold on, or null to drop it on the ground.</summary>
     public uint? TargetEntityId { get; private set; }
 
     public int TargetTileX { get; private set; }
     public int TargetTileY { get; private set; }
-    public UITextBox? AmountTextBox { get; }
-    public UIButton? CancelButton { get; }
-    public UIButton? OkButton { get; }
 
     public GoldAmountControl()
-        : base("_nmoney")
-    {
-        Name = "GoldExchange";
-        Visible = false;
-        UsesControlStack = true;
+        : base("goldamount", "Gold", "How much gold?", MAX_DIGITS) { }
 
-        OkButton = CreateButton("OK");
-        CancelButton = CreateButton("Cancel");
-        AmountTextBox = CreateTextBox("Text", 10);
-
-        //replace any existing text display with a label showing the prompt
-        var titleLabel = CreateLabel("Title");
-
-        titleLabel?.ForegroundColor = Color.White;
-        titleLabel?.Text = "Gold amount to drop?";
-
-        if (OkButton is not null)
-            OkButton.Clicked += Confirm;
-
-        if (CancelButton is not null)
-            CancelButton.Clicked += Cancel;
-    }
-
-    private void Cancel() => Hide();
-
-    private void Confirm()
-    {
-        var text = AmountTextBox?.Text ?? string.Empty;
-
-        Hide();
-
-        if (!uint.TryParse(text, out var amount) || (amount == 0))
-            return;
-
-        OnConfirm?.Invoke(amount);
-    }
-
-    /// <summary>
-    ///     Fired when the user confirms a gold amount. Parameter is the parsed amount.
-    /// </summary>
-    public event AmountConfirmedHandler? OnConfirm;
-
-    /// <summary>
-    ///     Fired after the popup transitions from visible to hidden via any close path (OK, Cancel, ESC).
-    ///     Used to clear ambient state set while the popup was open (e.g. the HUD description bar).
-    /// </summary>
-    public event Action? Closed;
-
-    public override void Hide()
-    {
-        var wasVisible = Visible;
-
-        base.Hide();
-
-        if (wasVisible)
-            Closed?.Invoke();
-    }
-
-    public override void Show()
-    {
-        if (AmountTextBox is not null)
-        {
-            AmountTextBox.Text = string.Empty;
-            AmountTextBox.IsFocused = true;
-        }
-
-        base.Show();
-    }
-
+    /// <summary>Shows the prompt for a drop on <paramref name="entityId" />, or on the tile when the entity is null.</summary>
     public void ShowForTarget(uint? entityId, int tileX, int tileY)
     {
+        ForExchange = false;
         TargetEntityId = entityId;
         TargetTileX = tileX;
         TargetTileY = tileY;
         Show();
     }
 
-    public override void OnKeyDown(KeyDownEvent e)
+    /// <summary>Shows the prompt for gold to put in the open exchange.</summary>
+    public void ShowForExchange()
     {
-        switch (e.Key)
-        {
-            case Keys.Escape:
-                Hide();
-                e.Handled = true;
-
-                break;
-
-            case Keys.Enter:
-                Confirm();
-                e.Handled = true;
-
-                break;
-        }
+        ForExchange = true;
+        TargetEntityId = null;
+        TargetTileX = 0;
+        TargetTileY = 0;
+        Show();
     }
 }
