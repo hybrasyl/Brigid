@@ -350,17 +350,6 @@ public sealed class CharacterCreatorControl : LobbyFormPanel
         }
     }
 
-    //an open drop-down list closes before Escape cancels the form
-    protected override void HandleEscape()
-    {
-        if (Species.IsOpen || BodyFrame.IsOpen)
-        {
-            Species.Close();
-            BodyFrame.Close();
-        } else
-            Cancel();
-    }
-
     public override void Dispose()
     {
         Appearance.Changed -= OnAppearanceChanged;

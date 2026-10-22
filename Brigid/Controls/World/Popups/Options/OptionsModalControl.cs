@@ -10,7 +10,6 @@ using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.World.Popups.Options;
@@ -377,20 +376,6 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
         CommitTab(Active);
         base.Hide();
-    }
-
-    //an open theme list closes before Escape closes the window
-    public override void OnKeyDown(KeyDownEvent e)
-    {
-        if ((e.Key == Keys.Escape) && ThemeChoice.IsOpen)
-        {
-            ThemeChoice.Close();
-            e.Handled = true;
-
-            return;
-        }
-
-        base.OnKeyDown(e);
     }
 
     // ── settings binding ──

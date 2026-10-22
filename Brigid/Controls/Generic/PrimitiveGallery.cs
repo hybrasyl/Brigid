@@ -1,12 +1,10 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Scrolling;
-using Brigid.Definitions;
 using Brigid.Rendering;
 using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.Generic;
@@ -442,20 +440,5 @@ public sealed class PrimitiveGallery : CenteredModalPanel
             DrawRectClipped(spriteBatch, screen, ThemeColor(ThemeRoles.Colours[i]));
             DrawBorderClipped(spriteBatch, screen, DialogPalette.Text);
         }
-    }
-
-    public override void OnKeyDown(KeyDownEvent e)
-    {
-        //Escape closes an open drop-down list first
-        if ((e.Key == Keys.Escape) && DropDownSample.IsOpen)
-        {
-            DropDownSample.Close();
-            e.Handled = true;
-
-            return;
-        }
-
-        //the base closes the gallery on Escape and takes every other key
-        base.OnKeyDown(e);
     }
 }
