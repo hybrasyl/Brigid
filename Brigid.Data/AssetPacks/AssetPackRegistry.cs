@@ -130,9 +130,10 @@ public static class AssetPackRegistry
         try
         {
             Directory.CreateDirectory(packDir);
-        } catch
+        } catch (Exception ex)
         {
-            //best effort — if the dir can't be created, the enumerate below simply finds nothing
+            //best effort — if the dir can't be created, the check below finds no folder and the client starts with no packs
+            LogWarning($"cannot create the asset-pack folder '{packDir}': {ex.GetType().Name}: {ex.Message}");
         }
 
         TryMigrateLegacyPacks(packDir);

@@ -88,7 +88,9 @@ public class UIPanel : UIElement
 
     /// <summary>
     ///     Draws the flat look of the panel: the background fill and the 1px border. A themed control that has no part for
-    ///     its role, and must not fall back to its base's part, calls it.
+    ///     its role, and must not fall back to its base's part, calls it. A <c>FramePanel</c> that only draws another part
+    ///     overrides <c>FrameRole</c> instead; that override also sets the frame border, and so the themed layout, which
+    ///     the wooden sign must not change.
     /// </summary>
     protected void DrawFlatChrome(SpriteBatch spriteBatch, Rectangle bounds)
     {

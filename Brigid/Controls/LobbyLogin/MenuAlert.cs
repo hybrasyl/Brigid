@@ -16,7 +16,7 @@ public static class MenuAlerts
     public const string LEGACY_IMPORT_ID = "legacyimport";
     public const string OFFLINE_ID = "offline";
     public const string GREETING_UNREADABLE_ID = "greetingunreadable";
-    public const string ASSETS_UNREADABLE_ID = "assetsunreadable";
+    public const string ASSETS_UNLISTABLE_ID = "assetsunlistable";
 
     /// <summary>The install command for each distribution family, in display order.</summary>
     public static IReadOnlyList<(string Distro, string Command)> InstallCommands { get; } =
@@ -57,9 +57,9 @@ public static class MenuAlerts
     ///     Tells the player that Brigid could not list its assets folder, so it runs with no asset packs: no theme and no
     ///     pack art (BRIG-129). The fix is on the player's computer, so the alert names the folder.
     /// </summary>
-    public static MenuAlert AssetsUnreadable(string folder)
+    public static MenuAlert AssetsUnlistable(string folder)
         => new(
-            ASSETS_UNREADABLE_ID,
+            ASSETS_UNLISTABLE_ID,
             "No Packs",
             $"**Brigid could not read its assets folder,** so it runs with no asset packs: no theme and no pack art.\n\nCheck that your user account can open `{folder}`, then start Brigid again.",
             [new MenuAlertAction("Dismiss")]);

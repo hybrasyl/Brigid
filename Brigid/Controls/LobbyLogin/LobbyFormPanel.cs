@@ -195,7 +195,7 @@ public abstract class LobbyFormPanel : CenteredModalPanel
         foreach (var field in TextFields)
             field.IsReadOnly = busy;
 
-        OnBusyChanged(busy);
+        ApplyBusy(busy);
 
         if (busy)
             ShowStatus(BusyText);
@@ -206,7 +206,7 @@ public abstract class LobbyFormPanel : CenteredModalPanel
     ///     an override gives the same result each time. A form with other inputs that must not change while it waits
     ///     overrides it.
     /// </summary>
-    protected virtual void OnBusyChanged(bool busy) { }
+    protected virtual void ApplyBusy(bool busy) { }
 
     public override void Update(GameTime gameTime)
     {

@@ -581,7 +581,7 @@ public sealed class LobbyLoginScreen : IScreen
             return;
 
         AssetsAlertAdded = true;
-        Menu.Alerts.Add(MenuAlerts.AssetsUnreadable(folder));
+        Menu.Alerts.Add(MenuAlerts.AssetsUnlistable(folder));
     }
 
     //── legacy character-data import offer, until the player decides ──

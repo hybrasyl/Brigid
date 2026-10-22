@@ -160,7 +160,7 @@ public sealed class InputDispatcher : IDisposable
     ///     <para>
     ///         With <paramref name="keepTextFocus" />, a focused text box keeps its focus, so the player can still type in it,
     ///         and the removal of the panel changes no focus. Use it for a small entry that only needs the keys the text box
-    ///         lets through, such as Escape (an open <see cref="DropDown" /> list). With any other focus, the push is as
+    ///         lets through, such as Escape (an open <c>DropDown</c> list). With any other focus, the push is as
     ///         usual.
     ///     </para>
     /// </summary>

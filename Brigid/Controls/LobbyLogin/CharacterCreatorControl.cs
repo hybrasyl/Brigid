@@ -281,7 +281,7 @@ public sealed class CharacterCreatorControl : LobbyFormPanel
     public void ClearName() => ClearAndFocus(NameField);
 
     //the look does not change while the server checks the character, so the character that it creates is the one shown
-    protected override void OnBusyChanged(bool busy)
+    protected override void ApplyBusy(bool busy)
     {
         Look.Enabled = !busy;
 

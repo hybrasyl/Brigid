@@ -30,8 +30,6 @@ internal static class ProfilePortrait
             image.Texture = TextureConverter.ToTexture2D(decoded);
     }
 
-    /// <summary>
-    ///     The decoded portrait, or null when <paramref name="data" /> is empty or does not decode. Internal for the tests.
-    /// </summary>
-    internal static SKImage? Decode(byte[]? data) => data is { Length: > 0 } ? SKImage.FromEncodedData(data) : null;
+    /// <summary>The decoded portrait, or null when <paramref name="data" /> is empty or does not decode.</summary>
+    public static SKImage? Decode(byte[]? data) => data is { Length: > 0 } ? SKImage.FromEncodedData(data) : null;
 }

@@ -202,11 +202,11 @@ public class AlertsPanelTests
 
     //BRIG-129: an assets folder that cannot be listed shows an alert that names the folder
     [Fact]
-    public void TheUnreadableAssetsAlertNamesTheFolder_AndDismisses()
+    public void TheUnlistableAssetsAlertNamesTheFolder_AndDismisses()
     {
         var panel = new AlertsPanel();
 
-        panel.Add(MenuAlerts.AssetsUnreadable(@"C:\packs"));
+        panel.Add(MenuAlerts.AssetsUnlistable(@"C:\packs"));
 
         var alert = Assert.Single(panel.Alerts);
         Assert.Contains(@"`C:\packs`", alert.Body);
