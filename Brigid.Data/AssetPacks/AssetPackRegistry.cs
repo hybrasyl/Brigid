@@ -95,6 +95,9 @@ public static class AssetPackRegistry
     private static string? SelectedUiThemeId;
     private static UiThemePack? ActiveUiTheme;
 
+    /// <summary>The <c>UiTheme</c> selection that makes no theme active: the flat look, with themes installed.</summary>
+    public const string NO_UI_THEME = "none";
+
     /// <summary>
     ///     Scans <see cref="AppPaths.AssetsDir" /> for <c>*.datf</c> files and registers each pack by its declared
     ///     content type. Ensures the directory exists and migrates any legacy <c>{DataPath}/hybrasyl-data/</c> packs
@@ -344,18 +347,36 @@ public static class AssetPackRegistry
     public static UiThemePack? GetUiThemePack() => ActiveUiTheme;
 
     /// <summary>
-    ///     Selects the active UI theme by its <c>pack_id</c> (case ignored). Null or blank selects the first installed
-    ///     theme, and so does an id that no installed theme has. Call it after <see cref="Initialize" />: a selection made
-    ///     before its pack registers takes effect when the pack registers, but it first logs that the theme is not installed.
+    ///     Selects the active UI theme by its <c>pack_id</c> (case ignored); see <see cref="ResolveUiTheme" />. Call it
+    ///     after <see cref="Initialize" />: a selection made before its pack registers takes effect when the pack
+    ///     registers, but it first logs that the theme is not installed.
     /// </summary>
     public static void SelectUiTheme(string? packId)
     {
         SelectedUiThemeId = string.IsNullOrWhiteSpace(packId) ? null : packId;
         UpdateActiveUiTheme();
 
-        if (SelectedUiThemeId is not null && !string.Equals(ActiveUiTheme?.Manifest.PackId, SelectedUiThemeId, StringComparison.OrdinalIgnoreCase))
+        if (SelectedUiThemeId is not null
+            && !IsNoUiTheme(SelectedUiThemeId)
+            && !string.Equals(ActiveUiTheme?.Manifest.PackId, SelectedUiThemeId, StringComparison.OrdinalIgnoreCase))
             LogWarning($"the selected ui_theme '{SelectedUiThemeId}' is not installed; using {(ActiveUiTheme is null ? "the flat look" : $"'{ActiveUiTheme.Manifest.PackId}'")}");
     }
+
+    /// <summary>
+    ///     The theme that a selection gives: null or blank gives the first installed theme ("Automatic"), and so does an
+    ///     id that no installed theme has; <see cref="NO_UI_THEME" /> gives no theme; any other id gives the installed
+    ///     theme with that <c>pack_id</c> (case ignored). Null when no theme applies.
+    /// </summary>
+    public static UiThemePack? ResolveUiTheme(string? selection)
+    {
+        if (IsNoUiTheme(selection))
+            return null;
+
+        return UiThemePacks.FirstOrDefault(pack => string.Equals(pack.Manifest.PackId, selection, StringComparison.OrdinalIgnoreCase))
+               ?? UiThemePacks.FirstOrDefault();
+    }
+
+    private static bool IsNoUiTheme(string? selection) => string.Equals(selection?.Trim(), NO_UI_THEME, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     ///     Makes <paramref name="pack" /> the active theme without registering it, or makes no theme active when it is
@@ -364,9 +385,7 @@ public static class AssetPackRegistry
     /// </summary>
     internal static void SetUiThemeForTests(UiThemePack? pack) => ActiveUiTheme = pack;
 
-    private static void UpdateActiveUiTheme()
-        => ActiveUiTheme = UiThemePacks.FirstOrDefault(pack => string.Equals(pack.Manifest.PackId, SelectedUiThemeId, StringComparison.OrdinalIgnoreCase))
-                           ?? UiThemePacks.FirstOrDefault();
+    private static void UpdateActiveUiTheme() => ActiveUiTheme = ResolveUiTheme(SelectedUiThemeId);
 
     private static void TryRegisterPack(string path)
     {
@@ -451,6 +470,9 @@ public static class AssetPackRegistry
 
         if (string.IsNullOrWhiteSpace(manifest.PackId))
             return "has no pack_id";
+
+        if (string.Equals(manifest.PackId.Trim(), NO_UI_THEME, StringComparison.OrdinalIgnoreCase))
+            return $"has pack_id '{manifest.PackId}', which is reserved (UiTheme: {NO_UI_THEME} selects the flat look)";
 
         return null;
     }

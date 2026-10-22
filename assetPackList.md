@@ -67,6 +67,7 @@ Per file, in order; any failure skips **that pack only** and logs to `notice-deb
 | `schema_version >= 1`                     | `pack {name} declares schema_version=N which is not a valid version; skipping` |
 | `schema_version <= 1`                     | `pack {name} declares schema_version=N which is newer than supported (1); skipping` |
 | `pack_id` present and not blank           | `pack {name} has no pack_id; skipping`                                   |
+| `pack_id` is not `none` (reserved for `UiTheme: none`) | `pack {name} has pack_id 'none', which is reserved (...); skipping` |
 | `pack_id` not already registered (any type, case ignored) | `pack {name} has pack_id '...', which the registered {type} pack '...' already has; skipping` |
 | `content_type` matches a factory key      | `pack {name} has unknown content_type='...'; skipping`                   |
 
@@ -590,7 +591,7 @@ primitives (`TextButton`, `SelectableTab`, `CenteredModalPanel`). It does not re
 primitive with no theme part keeps its flat `DialogPalette` look. A control uses the theme only when
 `UIElement.UseTheme` is true on it or on the nearest parent that sets it.
 
-**One theme is active.** Several themes can be installed (`UiThemePacks`, in priority order, then by file name), but themes are alternatives, not layers. `GetUiThemePack()` returns the theme whose `pack_id` the player selected (`UiTheme:` in `brigid.cfg`, through `SelectUiTheme` at startup; case ignored), else the first theme. A selected id that is not installed logs a warning and uses the first theme. A part, colour or font that the active theme does not have takes the flat look, never another theme's. `CoverageKeys` is empty, so two themes give no shared-key warning. There is no theme picker in the client yet: edit `brigid.cfg`.
+**One theme is active.** Several themes can be installed (`UiThemePacks`, in priority order, then by file name), but themes are alternatives, not layers. `GetUiThemePack()` returns the theme whose `pack_id` the player selected (`UiTheme:` in `brigid.cfg`, through `SelectUiTheme` at startup; case ignored), else the first theme ("Automatic"). `UiTheme: none` (`NO_UI_THEME`) makes no theme active, so the flat look shows with themes installed. A selected id that is not installed logs a warning and uses the first theme. A part, colour or font that the active theme does not have takes the flat look, never another theme's. `CoverageKeys` is empty, so two themes give no shared-key warning. The player chooses in Options → Settings → Theme (`ThemePicker`): Automatic, each installed theme by its manifest `name` (else its `pack_id`), and None. The choice applies the next time Brigid starts; a live swap is BRIG-133.
 
 `theme.json` at the ZIP root names each part, colour and font by **role**, not by panel or control,
 so every themed button gets the same `button.normal` art. Roles ignore case.

@@ -3,12 +3,14 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Data;
+using Brigid.Data.AssetPacks;
 using Brigid.Rendering;
 using Brigid.Systems;
 using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.World.Popups.Options;
@@ -65,6 +67,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
     private readonly UILabel[] SettingLabels = new UILabel[UserOptions.SETTING_COUNT];
     private readonly string[] SettingBaseNames = new string[UserOptions.SETTING_COUNT];
     private TextButton FontButton = null!;
+    private ThemePicker ThemeChoice = null!;
 
     private readonly UITextBox[] MacroBoxes = new UITextBox[MACRO_COUNT];
 
@@ -139,10 +142,27 @@ public sealed class OptionsModalControl : CenteredModalPanel
     {
         var content = new UIPanel { X = pane.X, Y = pane.Y, Width = pane.Width, Height = pane.Height };
 
+        //the theme row is first, so that its open list covers the setting rows below it and stays inside the pane
+        ThemeChoice = new ThemePicker(
+            pane.Width,
+            CheckBox.DEFAULT_SIZE,
+            ThemeEntries(),
+            ClientSettings.UiTheme,
+            static value => ReferenceEquals(AssetPackRegistry.ResolveUiTheme(value), AssetPackRegistry.GetUiThemePack()))
+        {
+            Name = "theme",
+            X = 0,
+            Y = 0,
+            ZIndex = 1
+        };
+
+        ThemeChoice.ThemeChosen += ChooseTheme;
+        content.AddChild(ThemeChoice);
+
         for (var i = 0; i < UserOptions.SETTING_COUNT; i++)
         {
             var index = i;
-            var rowY = i * SETTING_ROW_H;
+            var rowY = (i + 1) * SETTING_ROW_H;
 
             var check = new CheckBox { X = 0, Y = rowY };
             check.CheckedChanged += _ => ToggleSetting(index);
@@ -168,7 +188,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
         FontButton = new TextButton($"Font : {FontEngine.Instance.ActiveFontName}", 220, 16)
         {
             X = 0,
-            Y = UserOptions.SETTING_COUNT * SETTING_ROW_H + 4
+            Y = (UserOptions.SETTING_COUNT + 1) * SETTING_ROW_H + 2
         };
         FontButton.Clicked += CycleFont;
         content.AddChild(FontButton);
@@ -359,6 +379,20 @@ public sealed class OptionsModalControl : CenteredModalPanel
         base.Hide();
     }
 
+    //an open theme list closes before Escape closes the window
+    public override void OnKeyDown(KeyDownEvent e)
+    {
+        if ((e.Key == Keys.Escape) && ThemeChoice.IsOpen)
+        {
+            ThemeChoice.Close();
+            e.Handled = true;
+
+            return;
+        }
+
+        base.OnKeyDown(e);
+    }
+
     // ── settings binding ──
 
     private void ToggleSetting(int index)
@@ -422,6 +456,36 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
         SettingBaseNames[index] = name;
         RefreshLabel(index);
+    }
+
+    /// <summary>
+    ///     The theme entries: Automatic (the first installed theme), each installed theme by its display name, and None
+    ///     (the flat look). Two themes with the same display name show their <c>pack_id</c> too. Internal for the tests.
+    /// </summary>
+    internal static List<ThemePicker.Entry> ThemeEntries()
+    {
+        var themes = AssetPackRegistry.UiThemePacks.Select(pack => pack.Manifest).ToList();
+
+        var shared = themes.GroupBy(manifest => manifest.DisplayName, StringComparer.OrdinalIgnoreCase)
+                           .Where(group => group.Count() > 1)
+                           .Select(group => group.Key)
+                           .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return
+        [
+            new ThemePicker.Entry(null, "Automatic"),
+            .. themes.Select(manifest => new ThemePicker.Entry(
+                manifest.PackId,
+                shared.Contains(manifest.DisplayName) ? $"{manifest.DisplayName} ({manifest.PackId})" : manifest.DisplayName)),
+            new ThemePicker.Entry(AssetPackRegistry.NO_UI_THEME, "None")
+        ];
+    }
+
+    //the choice applies the next time Brigid starts; the picker shows a hint until then
+    private static void ChooseTheme(string? value)
+    {
+        ClientSettings.UiTheme = value;
+        ClientSettings.Save();
     }
 
     private void CycleFont()

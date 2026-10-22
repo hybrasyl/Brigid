@@ -35,4 +35,10 @@ public class AssetPackManifestValidationTests
     [InlineData("""{ "schema_version": 1, "pack_id": "icy-steel", "content_type": "ui_theme" }""", "icy-steel")]
     public void TheDisplayNameIsTheName_ElseThePackId(string json, string expected)
         => Assert.Equal(expected, JsonSerializer.Deserialize<AssetPackManifest>(json)!.DisplayName);
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData(" NONE ")]
+    public void ThePackIdNoneIsReserved(string packId)
+        => Assert.Contains("which is reserved", Reject($$"""{ "schema_version": 1, "pack_id": "{{packId}}", "content_type": "ui_theme" }"""));
 }
