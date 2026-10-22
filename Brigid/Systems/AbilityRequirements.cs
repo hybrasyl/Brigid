@@ -17,12 +17,8 @@ namespace Brigid.Systems;
 /// </summary>
 internal static class AbilityRequirements
 {
-    /// <summary>White when the player's <paramref name="current" /> value meets <paramref name="required" />, else scarlet.</summary>
-    public static Color RequirementColor(int required, int? current)
-        => current >= required ? DialogPalette.Text : DialogPalette.RequirementUnmet;
-
-    /// <summary>White when the requirement is met, else scarlet.</summary>
-    public static Color RequirementColor(bool met) => met ? DialogPalette.Text : DialogPalette.RequirementUnmet;
+    /// <summary>True when the player's <paramref name="current" /> value meets <paramref name="required" />.</summary>
+    public static bool IsMet(int required, int? current) => current >= required;
 
     /// <summary>"{name} {level}", or empty when there is no prerequisite.</summary>
     public static string FormatPreReq(string? name, byte level) => name is null ? string.Empty : $"{name} {level}";

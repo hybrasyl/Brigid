@@ -76,7 +76,7 @@ public sealed class GroupWindowTests : IDisposable
         Assert.Equal("group", Window.Name);
         UiAssert.NamedTree(Window);
 
-        Assert.Equal("group_box", Viewer.Name);
+        Assert.Equal("groupbox", Viewer.Name);
         UiAssert.NamedTree(Viewer);
     }
 
@@ -238,7 +238,7 @@ public sealed class GroupWindowTests : IDisposable
 
         for (var i = 0; i < classes.Length; i++)
         {
-            Assert.Equal(classes[i], Window.RecruitPanel.FindChild<UILabel>($"class_{i}")!.Text);
+            Assert.Equal(classes[i], Window.RecruitPanel.FindChild<UILabel>($"{classes[i].ToLowerInvariant()}_caption")!.Text);
             Window.RecruitPanel.WantedCountFields[i].Text = (i + 1).ToString();
         }
 

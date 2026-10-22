@@ -318,6 +318,7 @@ public sealed class ChaosGame : Game
 
         DebugOverlay.EndFrame();
         ThemeArt.EndFrame();
+        BuiltInArt.EndFrame();
     }
 
     protected override void EndDraw()
@@ -552,12 +553,11 @@ public sealed class ChaosGame : Game
     ///     launch, or chosen in <see cref="LauncherScreen" />): loads the data context, client settings, fonts, and
     ///     cursor, then switches to the lobby/login screen. Called exactly once.
     /// </summary>
-    /// <param name="uiThemeChosen">
-    ///     True when the player chose a theme in the launcher. The choice then replaces the saved
-    ///     <see cref="ClientSettings.UiTheme" /> and is saved, before the theme is selected.
+    /// <param name="launcherChoices">
+    ///     The settings that the player chose in the launcher, or null. They replace the saved settings once the settings
+    ///     load, before the theme is selected.
     /// </param>
-    /// <param name="uiTheme">The theme that the player chose in the launcher (null for Automatic).</param>
-    public void FinishAssetInitialization(bool uiThemeChosen = false, string? uiTheme = null)
+    public void FinishAssetInitialization(LauncherChoices? launcherChoices = null)
     {
         GlobalSettings.InitializeAssetData();
 
@@ -567,12 +567,8 @@ public sealed class ChaosGame : Game
         DataDiagnostics.Try(() => Directory.CreateDirectory(MetaFilePath), "create metafile dir");
         ClientSettings.Load();
 
-        //the launcher cannot save a setting before the settings load, so its theme choice is saved here
-        if (uiThemeChosen)
-        {
-            ClientSettings.UiTheme = uiTheme;
-            ClientSettings.Save();
-        }
+        if (launcherChoices is not null)
+            ClientSettings.Apply(launcherChoices);
 
         AssetPackRegistry.SelectUiTheme(ClientSettings.UiTheme);
         //load keybind overrides (DataPath was resolved during config/launcher setup); pure defaults if absent.

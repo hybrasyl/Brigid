@@ -52,6 +52,9 @@ public sealed class PrimitiveGallery : CenteredModalPanel
 
     private readonly DropDown DropDownSample;
 
+    //the overlay layers as they were when the gallery opened; Dispose puts them back once
+    private (bool UiBoxes, bool UiNames, bool World, bool Perf)? SavedLayers;
+
     private PrimitiveGallery()
         : base("Primitive Gallery", PANEL_W, PANEL_H, useTheme: true)
     {
@@ -317,7 +320,8 @@ public sealed class PrimitiveGallery : CenteredModalPanel
     ///     Opens the gallery on <paramref name="root" />, or closes it when it is open there. Does nothing with no root (the
     ///     launcher screen). Opening it takes the focus from a text box (the chat), so that the gallery gets the keys and
     ///     the clicks, and turns off the debug overlay layers (the element boxes and names, the stats and the readouts), so
-    ///     that a screenshot shows only the gallery. Closing it puts the layers back as they were when it opened.
+    ///     that a screenshot shows only the gallery. The layers come back as they were when it opened, when the gallery is
+    ///     disposed: a close removes and disposes it, and a screen change disposes it with its root.
     /// </summary>
     public static void Toggle(UIPanel? root)
     {
@@ -334,17 +338,24 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         UITextBox.CurrentlyFocused?.IsFocused = false;
         InputDispatcher.Instance?.ClearExplicitFocus();
 
-        var layers = DebugOverlay.Layers;
+        var gallery = new PrimitiveGallery { ZIndex = 50, SavedLayers = DebugOverlay.Layers };
         DebugOverlay.Layers = (false, false, false, false);
-
-        var gallery = new PrimitiveGallery { ZIndex = 50 };
-        gallery.OnClose += () => DebugOverlay.Layers = layers;
         root.AddChild(gallery);
         gallery.Show();
     }
 
     //the gallery is made again on each open, so a close removes it from its parent
     private void Remove() => Parent?.RemoveChild(PANEL_NAME);
+
+    public override void Dispose()
+    {
+        if (SavedLayers is { } layers)
+            DebugOverlay.Layers = layers;
+
+        SavedLayers = null;
+
+        base.Dispose();
+    }
 
     //a section header, in the title colour
     private void AddHeader(UILabel label, int x, int y)

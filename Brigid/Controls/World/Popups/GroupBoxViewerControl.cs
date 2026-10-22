@@ -28,7 +28,7 @@ public sealed class GroupBoxViewerControl : CenteredModalPanel
     public GroupBoxViewerControl()
         : base("Group Box", GroupRecruitPanel.FORM_W + 2 * PADDING, TITLE_H + 1 + GroupRecruitPanel.FORM_H + BOTTOM_H, useTheme: true)
     {
-        Name = "group_box";
+        Name = "groupbox";
 
         var content = ContentBounds;
 

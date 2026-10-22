@@ -403,7 +403,7 @@ public static class AssetPackRegistry
                 return;
             }
 
-            if (GetManifestRejection(manifest) is { } rejection)
+            if (GetRegistrationRejection(manifest, GetDuplicateRejection) is { } rejection)
             {
                 LogWarning($"pack {Path.GetFileName(path)} {rejection}; skipping");
                 archive.Dispose();
@@ -411,19 +411,7 @@ public static class AssetPackRegistry
                 return;
             }
 
-            if (GetDuplicateRejection(manifest) is { } duplicate)
-            {
-                LogWarning($"pack {Path.GetFileName(path)} {duplicate}; skipping");
-                archive.Dispose();
-
-                return;
-            }
-
-            if (!TryRegisterByContentType(archive, manifest))
-            {
-                LogWarning($"pack {Path.GetFileName(path)} has unknown content_type='{manifest.ContentType}'; skipping");
-                archive.Dispose();
-            }
+            TryRegisterByContentType(archive, manifest);
         }
         catch (Exception ex)
         {
@@ -462,10 +450,15 @@ public static class AssetPackRegistry
 
     /// <summary>
     ///     The manifests of the <c>ui_theme</c> packs in <paramref name="dir" /> that registration accepts, in the order of
-    ///     <see cref="UiThemePacks" />: by priority, then file name. It reads only each manifest, with the checks of
-    ///     registration: the manifest, the schema version, the <c>pack_id</c>, a known content type, and a
-    ///     <c>pack_id</c> that an earlier pack of any type has. A pack that fails later, when it loads, is in the list.
-    ///     A folder that is absent or cannot be read gives an empty list. Internal for the tests.
+    ///     <see cref="UiThemePacks" />: by priority, then file name. It reads only each manifest, and applies the checks of
+    ///     registration through <see cref="GetRegistrationRejection" />. A folder that is absent or cannot be read gives an
+    ///     empty list. Internal for the tests.
+    ///     <para>
+    ///         Two packs can differ from the registered list. A pack whose content fails when it loads is listed, and it
+    ///         keeps its <c>pack_id</c> from a later pack with the same id. On the first start after an upgrade, the themes
+    ///         that are still in the legacy <c>hybrasyl-data</c> folder are not listed; <see cref="Initialize" /> moves them
+    ///         to the assets folder.
+    ///     </para>
     /// </summary>
     internal static List<AssetPackManifest> ScanUiThemes(string dir)
     {
@@ -494,11 +487,10 @@ public static class AssetPackRegistry
                 using var archive = ZipFile.OpenRead(path);
 
                 if ((ReadManifest(archive, out _) is not { } manifest)
-                    || (GetManifestRejection(manifest) is not null)
-                    || manifest.ContentType is null
-                    || !Factories.ContainsKey(manifest.ContentType)
-                    || !packIds.Add(manifest.PackId))
+                    || (GetRegistrationRejection(manifest, other => packIds.Contains(other.PackId) ? "has a pack_id that an earlier pack has" : null) is not null))
                     continue;
+
+                packIds.Add(manifest.PackId);
 
                 if (manifest.ContentType == "ui_theme")
                     themes.Add(manifest);
@@ -510,6 +502,23 @@ public static class AssetPackRegistry
 
         //a stable sort, so equal priorities keep the file-name order, as registration does
         return [.. themes.OrderByDescending(manifest => manifest.Priority)];
+    }
+
+    /// <summary>
+    ///     Returns why registration refuses a pack, or null when it accepts it: <see cref="GetManifestRejection" />, then a
+    ///     content type that has no factory, then <paramref name="duplicateOf" />, which says why the <c>pack_id</c> is
+    ///     taken. Registration and <see cref="ScanUiThemes(string)" /> both use it, so the launcher lists the themes that
+    ///     registration accepts.
+    /// </summary>
+    private static string? GetRegistrationRejection(AssetPackManifest manifest, Func<AssetPackManifest, string?> duplicateOf)
+    {
+        if (GetManifestRejection(manifest) is { } rejection)
+            return rejection;
+
+        if (string.IsNullOrEmpty(manifest.ContentType) || !Factories.ContainsKey(manifest.ContentType))
+            return $"has unknown content_type='{manifest.ContentType}'";
+
+        return duplicateOf(manifest);
     }
 
     /// <summary>The <c>*.datf</c> files directly in <paramref name="dir" />, whatever the case of the extension.</summary>

@@ -1,6 +1,5 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Controls.Generic;
 using Brigid.Data;
 using Brigid.Data.AssetPacks;
 using Brigid.Definitions;
@@ -23,8 +22,8 @@ namespace Brigid.Screens;
 ///     <see cref="ChaosGame.FinishAssetInitialization" />, which loads the assets and continues to the lobby.
 ///     <para>
 ///         The theme choice is the one of Options, Settings (<see cref="ClientSettings.UiTheme" />). At startup the
-///         settings are not loaded yet, so the choice goes to <see cref="ChaosGame.FinishAssetInitialization" />, which
-///         saves it and applies it as the packs load. From the main menu the packs are loaded, so the choice is saved at
+///         settings are not loaded yet, so the choice goes in a <see cref="LauncherChoices" /> to
+///         <see cref="ChaosGame.FinishAssetInitialization" />, which saves it and applies it as the packs load. From the main menu the packs are loaded, so the choice is saved at
 ///         once and applies at the next start.
 ///     </para>
 /// </summary>
@@ -84,7 +83,7 @@ public sealed class LauncherScreen : IScreen
     private bool Completed;
 
     //the theme entries and the chosen value; ThemeChosen is set by a choice at startup, which Connect hands on
-    private List<ThemePicker.Entry> ThemeEntries = [];
+    private List<UiThemeChoices.Entry> ThemeEntries = [];
     private string? ThemeValue;
     private bool ThemeChosen;
 
@@ -124,7 +123,7 @@ public sealed class LauncherScreen : IScreen
 
         RevalidateAssetPath();
 
-        ThemeEntries = ThemePicker.EntriesFor(AssetPackRegistry.ScanUiThemes());
+        ThemeEntries = UiThemeChoices.EntriesFor(AssetPackRegistry.ScanUiThemes());
         ThemeValue = OpenedFromMainMenu ? ClientSettings.UiTheme : ClientSettings.ReadSavedUiTheme();
     }
 
@@ -620,7 +619,7 @@ public sealed class LauncherScreen : IScreen
         Completed = true;
 
         //replaces this screen (UnloadContent + Dispose) with the lobby screen — must be the last thing we do
-        Game.FinishAssetInitialization(ThemeChosen, ThemeValue);
+        Game.FinishAssetInitialization(ThemeChosen ? new LauncherChoices(ThemeValue) : null);
     }
 
     #endregion
@@ -679,13 +678,13 @@ public sealed class LauncherScreen : IScreen
         }
 
         var labelBox = new Rectangle(ThemeButton.X, ThemeButton.Y, ThemeButton.Width - 18 - hintWidth, ThemeButton.Height);
-        DrawClippedEnd(ThemeEntries[ThemePicker.IndexOf(ThemeEntries, ThemeValue)].Label, labelBox, Color.White, TEXT_SIZE);
+        DrawClippedEnd(ThemeEntries[UiThemeChoices.IndexOf(ThemeEntries, ThemeValue)].Label, labelBox, Color.White, TEXT_SIZE);
         DrawDownTriangle(ThemeButton.Right - 14, ThemeButton.Y + 10, LabelColor);
     }
 
     private void DrawThemeDropdownList()
     {
-        var selected = ThemePicker.IndexOf(ThemeEntries, ThemeValue);
+        var selected = UiThemeChoices.IndexOf(ThemeEntries, ThemeValue);
 
         foreach (var (row, index) in ThemeRows)
         {

@@ -48,6 +48,10 @@ public static class BuiltInArt
     /// </summary>
     public static bool TryDraw(SpriteBatch spriteBatch, string role, Rectangle bounds, Rectangle clip, Color? tint = null)
     {
+        //most roles have no image, so stop before the cache lookup and its closure
+        if (GetSource(role) is null)
+            return false;
+
         var (scaleX, scaleY) = FontEngine.Instance.NativeScale;
         var native = ThemeLayout.ToNative(bounds, scaleX, scaleY);
 
@@ -73,6 +77,12 @@ public static class BuiltInArt
 
         return true;
     }
+
+    /// <summary>
+    ///     Call once at the end of each frame, after the last batch has drawn: textures that the cache evicted in the frame,
+    ///     and that are over its byte budget, are disposed at once.
+    /// </summary>
+    public static void EndFrame() => Textures.EndFrame();
 
     private static SKImage? GetSource(string role)
     {

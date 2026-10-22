@@ -86,6 +86,19 @@ public sealed class PrimitiveGalleryTests : IDisposable
     }
 
     [Fact]
+    public void DisposingTheRootRestoresTheOverlayLayers()
+    {
+        var root = Root();
+        DebugOverlay.Layers = (false, true, true, false);
+        PrimitiveGallery.Toggle(root);
+
+        //a screen change disposes its root, and the gallery with it, without a close
+        root.Dispose();
+
+        Assert.Equal((false, true, true, false), DebugOverlay.Layers);
+    }
+
+    [Fact]
     public void ToggleWithNoRootDoesNothing() => PrimitiveGallery.Toggle(null);
 
     [Fact]

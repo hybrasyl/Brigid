@@ -53,6 +53,7 @@ public sealed class TextPopupControl : CenteredModalPanel
         : base("Message", PANEL_W, PANEL_H, useTheme: true)
     {
         Name = "textpopup";
+        IsModal = true;
         FramedWidth = Width;
         FramedHeight = Height;
 

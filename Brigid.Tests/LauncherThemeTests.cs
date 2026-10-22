@@ -1,7 +1,6 @@
 #region
 using System.IO.Compression;
 using System.Text;
-using Brigid.Controls.Generic;
 using Brigid.Data.AssetPacks;
 using Brigid.Systems;
 using Xunit;
@@ -82,18 +81,18 @@ public sealed class LauncherThemeTests : IDisposable
         WritePack("a-wood.datf", Manifest("ui_theme", "wood", name: "Wood"));
         WritePack("b-stone.datf", Manifest("ui_theme", "stone"));
 
-        Assert.Equal(["Automatic", "Wood", "stone", "None"], ThemePicker.EntriesFor(AssetPackRegistry.ScanUiThemes(Root)).Select(entry => entry.Label));
+        Assert.Equal(["Automatic", "Wood", "stone", "None"], UiThemeChoices.EntriesFor(AssetPackRegistry.ScanUiThemes(Root)).Select(entry => entry.Label));
     }
 
     [Fact]
     public void IndexOfFindsTheSavedValueAndElseAutomatic()
     {
-        ThemePicker.Entry[] entries = [new(null, "Automatic"), new("stone", "Stone"), new(AssetPackRegistry.NO_UI_THEME, "None")];
+        UiThemeChoices.Entry[] entries = [new(null, "Automatic"), new("stone", "Stone"), new(AssetPackRegistry.NO_UI_THEME, "None")];
 
-        Assert.Equal(1, ThemePicker.IndexOf(entries, " STONE "));
-        Assert.Equal(2, ThemePicker.IndexOf(entries, "none"));
-        Assert.Equal(0, ThemePicker.IndexOf(entries, "wood"));
-        Assert.Equal(0, ThemePicker.IndexOf(entries, null));
+        Assert.Equal(1, UiThemeChoices.IndexOf(entries, " STONE "));
+        Assert.Equal(2, UiThemeChoices.IndexOf(entries, "none"));
+        Assert.Equal(0, UiThemeChoices.IndexOf(entries, "wood"));
+        Assert.Equal(0, UiThemeChoices.IndexOf(entries, null));
     }
 
     [Fact]

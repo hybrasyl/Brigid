@@ -45,6 +45,16 @@ public static class ClientSettings
         string.IsNullOrEmpty(GlobalSettings.DataPath) ? null : Path.Combine(GlobalSettings.DataPath, LEGACY_FILE_NAME);
 
     /// <summary>
+    ///     Replaces the saved settings with the choices made in the launcher, and saves. Call it after <see cref="Load" />,
+    ///     which would otherwise replace them.
+    /// </summary>
+    public static void Apply(LauncherChoices choices)
+    {
+        UiTheme = choices.UiTheme;
+        Save();
+    }
+
+    /// <summary>
     ///     The <c>UiTheme</c> value saved in <c>brigid.cfg</c>, read without <see cref="Load" />: the launcher shows it
     ///     before the settings load. Null when the file, the line or the value is absent, or the file cannot be read.
     /// </summary>

@@ -501,13 +501,18 @@ butt001.epf
   Purpose:    Standard button spritesheet — OK/Cancel/Yes/No in normal+pressed states
   Palette:    gui 0
 
+woodbk.epf
+  Loaded by:  TextPopupControl.cs:171  (GetLegendEpfImage, from legend.dat)
+  Purpose:    The wooden sign background of the WoodenBoard text popup
+  Fallback:   Drawn only when the theme has no frame.sign part (BRIG-122)
+
 spelled.epf
   Loaded by:  EffectBarControl.cs:44  (GetEpfImages)
   Purpose:    Active effect/buff bar background icons
   Palette:    gui 0  (note: loaded via GetEpfImages which auto-selects via prefix)
 
 emot000.epf
-  Loaded by:  SocialStatusControl.cs:65  (GetEpfImages); WorldScreen HudOps.SetEmoteStatus (the HUD emote button)
+  Loaded by:  SocialStatusControl.cs:74  (GetEpfTexture); WorldScreen HudOps.SetEmoteStatus (the HUD emote button)
   Purpose:    Emoticon/social status icons (8 frames for 8 status types)
   Fallback:   The HUD emote button reads it only when there is no icon.status.* theme part or built-in image (BRIG-122)
   Palette:    gui 0
@@ -681,7 +686,7 @@ msg.tbl
 #   HUD sub-controls:        lback, lemot, _nusers
 #   Loading:                 _nload, _nloadm
 #
-# Standalone EPF files:      9 loaded (mouse, scroll, dlgframe, spelled, emot000, legends, skill001, skill003, spell001); butt001 and popupbox are catalogued but no longer loaded
+# Standalone EPF files:      10 loaded (mouse, scroll, dlgframe, spelled, emot000, woodbk, legends, skill001, skill003, spell001); butt001 and popupbox are catalogued but no longer loaded
 # Standalone SPF files:      15 (_nchatbk, _ninvs3, _nui_tb1, _nui_nat, _nemots, _nsettb, _nusersb, _nloadb0/1/2, DlgBack2, _nhk_bk, _nhk_m, _nhke00-13)
 # Palette files:             2  (gui multi-palette, gui06)
 # Data files:                1  (msg.tbl)

@@ -1,7 +1,9 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Data.Models;
+using Brigid.Rendering;
 using Brigid.Systems;
 using Microsoft.Xna.Framework;
 #endregion
@@ -99,15 +101,15 @@ public sealed class AbilityMetadataDetailsControl : StatusBookDetailsPanel
         if (entry.RequiresMaster)
         {
             LevelLabel.Text = "master";
-            LevelLabel.ForegroundColor = AbilityRequirements.RequirementColor(WorldState.IsMaster);
+            ShowRequirement(LevelLabel, WorldState.IsMaster);
         } else if (entry.AbilityLevel > 0)
         {
             LevelLabel.Text = $"ability {entry.AbilityLevel}";
-            LevelLabel.ForegroundColor = AbilityRequirements.RequirementColor(entry.AbilityLevel, attrs?.Ability);
+            ShowRequirement(LevelLabel, AbilityRequirements.IsMet(entry.AbilityLevel, attrs?.Ability));
         } else
         {
             LevelLabel.Text = $"level {entry.Level}";
-            LevelLabel.ForegroundColor = AbilityRequirements.RequirementColor(entry.Level, attrs?.Level);
+            ShowRequirement(LevelLabel, AbilityRequirements.IsMet(entry.Level, attrs?.Level));
         }
 
         SetPreReq(PreReq1Label, entry.PreReq1Name, entry.PreReq1Level);
@@ -124,12 +126,21 @@ public sealed class AbilityMetadataDetailsControl : StatusBookDetailsPanel
     private static void SetPreReq(UILabel label, string? name, byte level)
     {
         label.Text = AbilityRequirements.FormatPreReq(name, level);
-        label.ForegroundColor = AbilityRequirements.RequirementColor(AbilityRequirements.HasPreRequisite(name, level));
+        ShowRequirement(label, AbilityRequirements.HasPreRequisite(name, level));
     }
 
     private void SetStat(int index, int required, int? current)
     {
         StatValues[index].Text = required.ToString();
-        StatValues[index].ForegroundColor = AbilityRequirements.RequirementColor(required, current);
+        ShowRequirement(StatValues[index], AbilityRequirements.IsMet(required, current));
+    }
+
+    //a met requirement is ordinary text, so it takes the theme's text colour; only an unmet one carries meaning
+    private static void ShowRequirement(UILabel label, bool met)
+    {
+        if (met)
+            label.SetForegroundRole(ThemeRoles.Text);
+        else
+            label.ForegroundColor = DialogPalette.RequirementUnmet;
     }
 }

@@ -6,6 +6,7 @@ using Brigid.Controls.Generic;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Data.AssetPacks;
 using Brigid.Rendering;
+using Brigid.Systems;
 using Microsoft.Xna.Framework;
 using Xunit;
 #endregion
@@ -22,7 +23,7 @@ public sealed class ThemePickerTests : IDisposable
 {
     private const int ROW_H = 14;
 
-    private static readonly ThemePicker.Entry[] Entries =
+    private static readonly UiThemeChoices.Entry[] Entries =
     [
         new(null, "Automatic"),
         new("stone", "Stone Hall"),

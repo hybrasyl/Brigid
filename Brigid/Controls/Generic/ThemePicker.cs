@@ -1,10 +1,9 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Data.AssetPacks;
 using Brigid.Definitions;
 using Brigid.Rendering;
+using Brigid.Systems;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 #endregion
 
 namespace Brigid.Controls.Generic;
@@ -26,13 +25,10 @@ public sealed class ThemePicker : UIPanel
     private const int CHOICE_W = 180;
     private const int GAP = 8;
 
-    private readonly Entry[] Entries;
+    private readonly UiThemeChoices.Entry[] Entries;
     private readonly Func<string?, bool> IsActive;
     private readonly UILabel Label;
     private readonly UILabel Hint;
-
-    /// <summary>One entry: the stored value (null for the default) and the text that the list shows.</summary>
-    public readonly record struct Entry(string? Value, string Label);
 
     /// <summary>Raised when the player chooses an entry, with its value.</summary>
     public event Action<string?>? ThemeChosen;
@@ -48,10 +44,10 @@ public sealed class ThemePicker : UIPanel
 
     /// <param name="width">Width of the row.</param>
     /// <param name="rowHeight">Height of the row, and of the drop-down box and its list rows.</param>
-    /// <param name="entries">The entries, in order. The first entry is the default.</param>
+    /// <param name="entries">The entries, in order (<see cref="UiThemeChoices.EntriesFor" />). The first entry is the default.</param>
     /// <param name="stored">The stored value. A value that no entry has (case ignored) selects the first entry.</param>
     /// <param name="isActive">True when the theme of a value is the active theme.</param>
-    public ThemePicker(int width, int rowHeight, IReadOnlyList<Entry> entries, string? stored, Func<string?, bool> isActive)
+    public ThemePicker(int width, int rowHeight, IReadOnlyList<UiThemeChoices.Entry> entries, string? stored, Func<string?, bool> isActive)
     {
         Width = width;
         Height = rowHeight;
@@ -74,7 +70,7 @@ public sealed class ThemePicker : UIPanel
         };
 
         Choice = new DropDown(Entries.Select(entry => entry.Label).ToArray(), CHOICE_W, rowHeight) { Name = "choice", X = LABEL_W, Y = 0 };
-        Choice.SetSelected(IndexOf(Entries, stored));
+        Choice.SetSelected(UiThemeChoices.IndexOf(Entries, stored));
         Choice.SelectionChanged += OnSelectionChanged;
 
         Hint = new UILabel
@@ -92,49 +88,13 @@ public sealed class ThemePicker : UIPanel
             IsHitTestVisible = false
         };
 
+        Label.SetForegroundRole(ThemeRoles.Text);
+        Hint.SetForegroundRole(ThemeRoles.TextDisabled);
+
         AddChild(Label);
         AddChild(Hint);
         AddChild(Choice);
         UpdateHint();
-    }
-
-    /// <summary>
-    ///     The entries for <paramref name="themes" />, in their order: Automatic (the first theme), each theme by its display
-    ///     name, and None (the flat look). Two themes with the same display name show their <c>pack_id</c> too.
-    /// </summary>
-    public static List<Entry> EntriesFor(IEnumerable<AssetPackManifest> themes)
-    {
-        var list = themes.ToList();
-
-        var shared = list.GroupBy(manifest => manifest.DisplayName, StringComparer.OrdinalIgnoreCase)
-                         .Where(group => group.Count() > 1)
-                         .Select(group => group.Key)
-                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        return
-        [
-            new Entry(null, "Automatic"),
-            .. list.Select(manifest => new Entry(
-                manifest.PackId,
-                shared.Contains(manifest.DisplayName) ? $"{manifest.DisplayName} ({manifest.PackId})" : manifest.DisplayName)),
-            new Entry(AssetPackRegistry.NO_UI_THEME, "None")
-        ];
-    }
-
-    /// <summary>
-    ///     The index of the entry with the stored value (case ignored). A value that no entry has, or no value, gives the
-    ///     first entry.
-    /// </summary>
-    public static int IndexOf(IReadOnlyList<Entry> entries, string? stored)
-    {
-        if (string.IsNullOrWhiteSpace(stored))
-            return 0;
-
-        for (var i = 0; i < entries.Count; i++)
-            if (string.Equals(entries[i].Value, stored.Trim(), StringComparison.OrdinalIgnoreCase))
-                return i;
-
-        return 0;
     }
 
     /// <summary>Closes the open list, for example on Escape.</summary>
@@ -153,15 +113,6 @@ public sealed class ThemePicker : UIPanel
         Height = Choice.Height;
 
         base.Update(gameTime);
-    }
-
-    public override void Draw(SpriteBatch spriteBatch)
-    {
-        //the theme can come from a parent, which can change after construction, so the colours are resolved per draw
-        Label.ForegroundColor = ThemeColor(ThemeRoles.Text);
-        Hint.ForegroundColor = ThemeColor(ThemeRoles.TextDisabled);
-
-        base.Draw(spriteBatch);
     }
 
     private void OnSelectionChanged(int index)

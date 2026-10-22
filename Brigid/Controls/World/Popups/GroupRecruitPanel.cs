@@ -57,8 +57,6 @@ public sealed class GroupRecruitPanel : UIPanel
     /// <summary>The height of the form.</summary>
     public const int FORM_H = TOTAL_Y + FIELD_H;
 
-    private static readonly string[] ClassNames = ["Warrior", "Wizard", "Rogue", "Priest", "Monk"];
-
     private readonly UITextBox[] WantedFields = new UITextBox[NUM_CLASSES];
     private readonly UILabel[] CurrentLabels = new UILabel[NUM_CLASSES];
     private readonly UILabel CurrentHeader;
@@ -91,26 +89,6 @@ public sealed class GroupRecruitPanel : UIPanel
         Height = FORM_H;
         IsPassThrough = true;
 
-        AddCaption("title_caption", "Title", 0, 0, LABEL_W);
-        AddCaption("note_caption", "Note", 0, NOTE_Y, LABEL_W);
-        AddCaption("level_caption", "Level", 0, LEVEL_Y, LABEL_W);
-        AddCaption("level_to", "to", LABEL_W + COUNT_W, LEVEL_Y, TO_W, HorizontalAlignment.Center);
-
-        AddCaption("class_header", "Class", 0, HEADER_Y, LABEL_W, height: HEADER_H, role: ThemeRoles.TextTitle);
-        AddCaption("wanted_header", "Wanted", WANTED_X, HEADER_Y, COLUMN_W, height: HEADER_H, role: ThemeRoles.TextTitle);
-        CurrentHeader = AddCaption("current_header", "In group", CURRENT_X, HEADER_Y, COLUMN_W, height: HEADER_H, role: ThemeRoles.TextTitle);
-
-        for (var i = 0; i < NUM_CLASSES; i++)
-        {
-            var rowY = CLASS_Y + i * CLASS_ROW_H;
-            AddCaption($"class_{i}", ClassNames[i], 0, rowY, WANTED_X);
-            CurrentLabels[i] = AddCaption($"current_{i}", string.Empty, CURRENT_X, rowY, COUNT_W);
-        }
-
-        TotalLabel = AddCaption("total_caption", "Total", 0, TOTAL_Y, WANTED_X);
-        TotalWantedLabel = AddCaption("total_wanted", string.Empty, WANTED_X, TOTAL_Y, COUNT_W);
-        TotalCurrentLabel = AddCaption("total_current", string.Empty, CURRENT_X, TOTAL_Y, COUNT_W);
-
         //the fields draw on input slots; the pane covers the form and takes no mouse input itself
         var fields = new InputSlotPane
         {
@@ -120,15 +98,32 @@ public sealed class GroupRecruitPanel : UIPanel
             IsPassThrough = true
         };
 
-        TitleField = AddField(fields, "group_title", LABEL_W, 0, FORM_W - LABEL_W, FIELD_H, 18);
-        ExtraField = AddField(fields, "note", LABEL_W, NOTE_Y, FORM_W - LABEL_W, NOTE_H, 60);
+        AddCaption(new UILabel { Name = "title_caption", Text = "Title" }, 0, 0, LABEL_W);
+        AddCaption(new UILabel { Name = "note_caption", Text = "Note" }, 0, NOTE_Y, LABEL_W);
+        AddCaption(new UILabel { Name = "level_caption", Text = "Level" }, 0, LEVEL_Y, LABEL_W);
+        AddCaption(new UILabel { Name = "level_to", Text = "to" }, LABEL_W + COUNT_W, LEVEL_Y, TO_W, HorizontalAlignment.Center);
+
+        AddCaption(new UILabel { Name = "class_header", Text = "Class" }, 0, HEADER_Y, LABEL_W, height: HEADER_H, role: ThemeRoles.TextTitle);
+        AddCaption(new UILabel { Name = "wanted_header", Text = "Wanted" }, WANTED_X, HEADER_Y, COLUMN_W, height: HEADER_H, role: ThemeRoles.TextTitle);
+        CurrentHeader = AddCaption(new UILabel { Name = "current_header", Text = "In group" }, CURRENT_X, HEADER_Y, COLUMN_W, height: HEADER_H, role: ThemeRoles.TextTitle);
+
+        //one row for each class, in the order of the group box packet: warrior, wizard, rogue, priest, monk
+        AddClassRow(fields, 0, new UILabel { Name = "warrior_caption", Text = "Warrior" }, new UITextBox { Name = "warrior_wanted" }, new UILabel { Name = "warrior_current" });
+        AddClassRow(fields, 1, new UILabel { Name = "wizard_caption", Text = "Wizard" }, new UITextBox { Name = "wizard_wanted" }, new UILabel { Name = "wizard_current" });
+        AddClassRow(fields, 2, new UILabel { Name = "rogue_caption", Text = "Rogue" }, new UITextBox { Name = "rogue_wanted" }, new UILabel { Name = "rogue_current" });
+        AddClassRow(fields, 3, new UILabel { Name = "priest_caption", Text = "Priest" }, new UITextBox { Name = "priest_wanted" }, new UILabel { Name = "priest_current" });
+        AddClassRow(fields, 4, new UILabel { Name = "monk_caption", Text = "Monk" }, new UITextBox { Name = "monk_wanted" }, new UILabel { Name = "monk_current" });
+
+        TotalLabel = AddCaption(new UILabel { Name = "total_caption", Text = "Total" }, 0, TOTAL_Y, WANTED_X);
+        TotalWantedLabel = AddCaption(new UILabel { Name = "total_wanted" }, WANTED_X, TOTAL_Y, COUNT_W);
+        TotalCurrentLabel = AddCaption(new UILabel { Name = "total_current" }, CURRENT_X, TOTAL_Y, COUNT_W);
+
+        TitleField = AddField(fields, new UITextBox { Name = "group_title", MaxLength = 18 }, LABEL_W, 0, FORM_W - LABEL_W, FIELD_H);
+        ExtraField = AddField(fields, new UITextBox { Name = "note", MaxLength = 60 }, LABEL_W, NOTE_Y, FORM_W - LABEL_W, NOTE_H);
         ExtraField.IsMultiLine = true;
         ExtraField.ClampToVisibleArea = true;
-        MinLevelField = AddField(fields, "level_min", LABEL_W, LEVEL_Y, COUNT_W, FIELD_H, 2, true);
-        MaxLevelField = AddField(fields, "level_max", LABEL_W + COUNT_W + TO_W, LEVEL_Y, COUNT_W, FIELD_H, 2, true);
-
-        for (var i = 0; i < NUM_CLASSES; i++)
-            WantedFields[i] = AddField(fields, $"wanted_{i}", WANTED_X, CLASS_Y + i * CLASS_ROW_H, COUNT_W, FIELD_H, 2, true);
+        MinLevelField = AddField(fields, new UITextBox { Name = "level_min", MaxLength = 2, DigitsOnly = true }, LABEL_W, LEVEL_Y, COUNT_W, FIELD_H);
+        MaxLevelField = AddField(fields, new UITextBox { Name = "level_max", MaxLength = 2, DigitsOnly = true }, LABEL_W + COUNT_W + TO_W, LEVEL_Y, COUNT_W, FIELD_H);
 
         AddChild(fields);
 
@@ -137,9 +132,22 @@ public sealed class GroupRecruitPanel : UIPanel
         ShowAsOwner();
     }
 
+    //the class name, the wanted count field and the count in the group, on one row
+    private void AddClassRow(UIPanel pane, int index, UILabel caption, UITextBox wanted, UILabel current)
+    {
+        var rowY = CLASS_Y + index * CLASS_ROW_H;
+
+        AddCaption(caption, 0, rowY, WANTED_X);
+        CurrentLabels[index] = AddCaption(current, CURRENT_X, rowY, COUNT_W);
+
+        wanted.MaxLength = 2;
+        wanted.DigitsOnly = true;
+        WantedFields[index] = AddField(pane, wanted, WANTED_X, rowY, COUNT_W, FIELD_H);
+    }
+
+    //places a caption that the caller made and named, and gives it its colour role
     private UILabel AddCaption(
-        string name,
-        string text,
+        UILabel label,
         int x,
         int y,
         int width,
@@ -147,48 +155,30 @@ public sealed class GroupRecruitPanel : UIPanel
         int height = FIELD_H,
         string role = ThemeRoles.Text)
     {
-        var label = new UILabel
-        {
-            Name = name,
-            X = x,
-            Y = y,
-            Width = width,
-            Height = height,
-            Text = text,
-            HorizontalAlignment = alignment,
-            VerticalAlignment = VerticalAlignment.Center,
-            PaddingLeft = 0,
-            PaddingRight = 0,
-            IsHitTestVisible = false
-        };
+        label.X = x;
+        label.Y = y;
+        label.Width = width;
+        label.Height = height;
+        label.HorizontalAlignment = alignment;
+        label.VerticalAlignment = VerticalAlignment.Center;
+        label.PaddingLeft = 0;
+        label.PaddingRight = 0;
+        label.IsHitTestVisible = false;
         label.SetForegroundRole(role);
         AddChild(label);
 
         return label;
     }
 
-    private static UITextBox AddField(
-        UIPanel pane,
-        string name,
-        int x,
-        int y,
-        int width,
-        int height,
-        int maxLength,
-        bool digitsOnly = false)
+    //places a field that the caller made and named, on the input slot pane
+    private static UITextBox AddField(UIPanel pane, UITextBox field, int x, int y, int width, int height)
     {
-        var field = new UITextBox
-        {
-            Name = name,
-            X = x,
-            Y = y,
-            Width = width,
-            Height = height,
-            MaxLength = maxLength,
-            DigitsOnly = digitsOnly,
-            IsTabStop = true,
-            FocusedBackgroundColor = DialogPalette.InputFocus
-        };
+        field.X = x;
+        field.Y = y;
+        field.Width = width;
+        field.Height = height;
+        field.IsTabStop = true;
+        field.FocusedBackgroundColor = DialogPalette.InputFocus;
         field.SetForegroundRole(ThemeRoles.InputText);
         pane.AddChild(field);
 

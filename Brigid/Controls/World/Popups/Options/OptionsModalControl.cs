@@ -458,8 +458,8 @@ public sealed class OptionsModalControl : CenteredModalPanel
         RefreshLabel(index);
     }
 
-    /// <summary>The theme entries for the registered themes (<see cref="ThemePicker.EntriesFor" />). Internal for the tests.</summary>
-    internal static List<ThemePicker.Entry> ThemeEntries() => ThemePicker.EntriesFor(AssetPackRegistry.UiThemePacks.Select(pack => pack.Manifest));
+    /// <summary>The theme entries for the registered themes (<see cref="UiThemeChoices.EntriesFor" />). Internal for the tests.</summary>
+    internal static List<UiThemeChoices.Entry> ThemeEntries() => UiThemeChoices.EntriesFor(AssetPackRegistry.UiThemePacks.Select(pack => pack.Manifest));
 
     //the choice applies the next time Brigid starts; the picker shows a hint until then
     private static void ChooseTheme(string? value)
