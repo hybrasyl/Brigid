@@ -139,8 +139,6 @@ public sealed partial class WorldScreen : IScreen
     private ChaosGame Game = null!;
     private GoldAmountControl GoldDrop = null!;
 
-    //true while the gold prompt is open for the exchange's gold, false while it is open for a drop. The exchange can close
-    //while the prompt is open, so the confirm must not then fall through to a drop on the other player
     private GroupBoxViewerControl GroupBoxViewer = null!;
 
     //true when j was pressed — the next selfprofile response triggers group highlighting instead of opening the panel
