@@ -118,6 +118,36 @@ public class LoginFormControlTests
         Assert.Equal(2, cancels);
     }
 
+    //BRIG-143: a key pressed just after OK changed the password that the form showed after a refused login
+    [Fact]
+    public void WhileBusyTheFieldsTakeNoText_AndTakeItAgainAtTheirCursorAfterTheWait()
+    {
+        var form = new LoginFormControl();
+        form.PasswordField.Text = "secret";
+        form.PasswordField.IsFocused = true;
+        form.PasswordField.CursorPosition = 3;
+        form.PasswordField.ClearSelection();
+
+        try
+        {
+            form.SetBusy(true);
+            form.PasswordField.OnTextInput(new TextInputEvent { Character = 'x' });
+            form.PasswordField.OnKeyDown(new KeyDownEvent { Key = Keys.Back });
+
+            Assert.True(form.NameField.IsReadOnly);
+            Assert.Equal("secret", form.PasswordField.Text);
+
+            form.SetBusy(false);
+            form.PasswordField.OnTextInput(new TextInputEvent { Character = 'x' });
+
+            Assert.False(form.NameField.IsReadOnly);
+            Assert.Equal("secxret", form.PasswordField.Text);
+        } finally
+        {
+            form.PasswordField.IsFocused = false;
+        }
+    }
+
     [Fact]
     public void BusyMsCountsTheWait_AndStartsAgainWithTheNextWait()
     {

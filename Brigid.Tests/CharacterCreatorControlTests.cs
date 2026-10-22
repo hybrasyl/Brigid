@@ -284,5 +284,24 @@ public class CharacterCreatorControlTests
         creator.PasswordField.IsFocused = false;
     }
 
+    //BRIG-143: the look does not change while the server checks the character
+    [Fact]
+    public void WhileBusyTheLookControlsTakeNoInput()
+    {
+        var creator = new CharacterCreatorControl();
+        var look = creator.FindChild<UIPanel>("look")!;
+        creator.Species.Open();
+
+        creator.SetBusy(true);
+
+        Assert.False(look.Enabled);
+        Assert.False(creator.Species.IsOpen);
+        Assert.True(creator.FindChild<UITextBox>("name")!.IsReadOnly);
+
+        creator.SetBusy(false);
+
+        Assert.True(look.Enabled);
+    }
+
     private static ClickEvent LeftClick() => new() { Button = MouseButton.Left };
 }
