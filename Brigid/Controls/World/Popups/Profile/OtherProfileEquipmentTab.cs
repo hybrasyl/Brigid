@@ -6,7 +6,6 @@ using Chaos.DarkAges.Definitions;
 using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using SkiaSharp;
 using SocialStatus = Chaos.DarkAges.Definitions.SocialStatus;
 #endregion
 
@@ -314,22 +313,7 @@ public sealed class OtherProfileEquipmentTab : PrefabPanel
         TitleLabel?.Text = title;
     }
 
-    public void SetPortrait(byte[]? portraitData)
-    {
-        if (PortraitImage is null)
-            return;
-
-        PortraitImage.Texture?.Dispose();
-        PortraitImage.Texture = null;
-
-        if (portraitData is { Length: > 0 })
-        {
-            using var skImage = SKImage.FromEncodedData(portraitData);
-
-            if (skImage is not null)
-                PortraitImage.Texture = TextureConverter.ToTexture2D(skImage);
-        }
-    }
+    public void SetPortrait(byte[]? portraitData) => ProfilePortrait.Show(PortraitImage, portraitData);
 
     public void SetProfileText(string text)
     {

@@ -44,6 +44,7 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
     private readonly UIImage? PaperdollImage;
 
     //portrait and profile text
+    private readonly UIImage? PortraitImage;
     private readonly UILabel? PortraitTextLabel;
 
     //equipment slot rendering: maps equipmentslot to its visual state
@@ -152,7 +153,7 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
         PaperdollImage = CreateImage("HumanImage");
 
         //portrait and profile text
-        CreateImage("Portrait");
+        PortraitImage = CreateImage("Portrait");
         PortraitTextLabel = CreateLabel("PortraitText");
 
         if (PortraitTextLabel is not null)
@@ -360,6 +361,12 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
         TitleLabel?.ForegroundColor = LegendColors.White;
         TitleLabel?.Text = title;
     }
+
+    /// <summary>
+    ///     Shows the player's own portrait, which the client reads from the local character folder, as the retail client
+    ///     does (BRIG-106). Empty data, or data that does not decode, shows no portrait.
+    /// </summary>
+    public void SetPortrait(byte[]? portraitData) => ProfilePortrait.Show(PortraitImage, portraitData);
 
     /// <summary>
     ///     Sets the profile text on the display label.
