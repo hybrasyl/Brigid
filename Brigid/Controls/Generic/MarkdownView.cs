@@ -182,7 +182,7 @@ public sealed class MarkdownView : UIPanel
 
     //the legacy frame border, or the border of the theme's frame art when that is wider
     private int FrameInset
-        => HasThemePart(ThemeRoles.FramePanel) && TryGetThemeBorder(ThemeRoles.FramePanel, out var border)
+        => TryGetThemeBorder(ThemeRoles.FramePanel, out var border)
             ? Math.Max(FRAME_INSET, border)
             : FRAME_INSET;
 

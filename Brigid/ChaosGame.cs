@@ -316,6 +316,7 @@ public sealed class ChaosGame : Game
         base.Draw(gameTime);
 
         DebugOverlay.EndFrame();
+        ThemeArt.EndFrame();
     }
 
     protected override void EndDraw()

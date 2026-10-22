@@ -144,6 +144,30 @@ public sealed class ThemeRoleTests : IDisposable
         flatSlot.IsFocused = false;
     }
 
+    [Fact]
+    public void AFocusedTextBoxKeepsItsFocusFill_WhenTheSlotArtIsListedButAbsent()
+    {
+        InstallTheme(parts: """ "input.slot": { "file": "missing.png" } """);
+        var box = FocusedBox(new InputSlotPane { UseTheme = true });
+
+        Assert.Equal(FocusFill, box.DrawnBackgroundColor);
+
+        box.IsFocused = false;
+    }
+
+    [Fact]
+    public void APartIsUsableOnlyWhenItsImageDecodes_AndOnlyThenGivesABorder()
+    {
+        InstallTheme(parts: """ "input.slot": { "file": "slot.png", "slice": [3, 3, 3, 3] }, "frame.panel": { "file": "missing.png", "slice": [44, 44, 44, 44] } """);
+
+        Assert.True(ThemeArt.HasPart("input.slot"));
+        Assert.True(ThemeArt.TryGetSliceBorder("input.slot", out var border));
+        Assert.Equal(3, border);
+
+        Assert.False(ThemeArt.HasPart("frame.panel"));
+        Assert.False(ThemeArt.TryGetSliceBorder("frame.panel", out _));
+    }
+
     private static UITextBox FocusedBox(UIPanel parent)
     {
         var box = new UITextBox { FocusedBackgroundColor = FocusFill };

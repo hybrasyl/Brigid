@@ -16,7 +16,11 @@ public class ThemeTextureCacheTests
     private readonly List<string> Created = [];
     private readonly List<string> Disposed = [];
 
-    private ThemeTextureCache<string, string> NewCache(int capacity) => new(capacity, () => Now, Disposed.Add);
+    private ThemeTextureCache<string, string> NewCache(int capacity, long byteBudget = long.MaxValue)
+        => new(capacity, byteBudget, SizeOf, () => Now, Disposed.Add);
+
+    //a key "name:size" stands for a texture of that many bytes
+    private static long SizeOf(string value) => value.Contains(':') ? long.Parse(value[(value.IndexOf(':') + 1)..]) : 1;
 
     private string? Get(ThemeTextureCache<string, string> cache, string key)
         => cache.GetOrCreate(
@@ -125,5 +129,118 @@ public class ThemeTextureCacheTests
         Now += ThemeTextureCache<string, string>.DisposeDelayMs;
         Get(cache, "c");
         Assert.Equal(["a", "b"], Disposed.Order());
+    }
+
+    [Fact]
+    public void EvictsTheLeastRecentlyUsedWhenOverTheByteBudget()
+    {
+        var cache = NewCache(256, 100);
+
+        Get(cache, "background@800x600:40");
+        Now += 16;
+        Get(cache, "background@820x615:40");
+        Now += 16;
+        Get(cache, "background@840x630:40");
+
+        Assert.Equal(1, cache.Count);
+        Assert.Equal(40, cache.Bytes);
+        Assert.Empty(Disposed);
+
+        Now += ThemeTextureCache<string, string>.DisposeDelayMs;
+        Get(cache, "background@840x630:40");
+
+        Assert.Equal(["background@800x600:40", "background@820x615:40"], Disposed.Order());
+    }
+
+    [Fact]
+    public void AResizeKeepsTheSmallPartsThatEachFrameUses()
+    {
+        var cache = NewCache(256, 100);
+
+        //each frame of a resize draws the background at a new size, and the same small button
+        for (var size = 0; size < 20; size++)
+        {
+            Get(cache, $"background@{size}:30");
+            Get(cache, "button:1");
+            Now += 16;
+        }
+
+        Assert.Single(Created, "button:1");
+        Assert.True(cache.Bytes <= 100);
+    }
+
+    [Fact]
+    public void KeepsTheEntryJustAdded_WhenItAloneIsOverTheBudget()
+    {
+        var cache = NewCache(256, 10);
+
+        Assert.Equal("huge:50", Get(cache, "huge:50"));
+        Assert.Equal(1, cache.Count);
+
+        Get(cache, "huge2:50");
+
+        Assert.Equal(1, cache.Count);
+        Assert.Equal(50, cache.Bytes);
+    }
+
+    [Fact]
+    public void ClearEmptiesTheBytes()
+    {
+        var cache = NewCache(256, 100);
+        Get(cache, "background:40");
+
+        cache.Clear();
+
+        Assert.Equal(0, cache.Bytes);
+    }
+
+    [Fact]
+    public void AtTheEndOfAFrame_DisposesTheWaitingValues_WhenTheyAreOverTheBudget()
+    {
+        var cache = NewCache(256, 100);
+
+        //a resize: each frame draws the background at a new size, and the cache evicts the one before
+        for (var size = 0; size < 6; size++)
+        {
+            Get(cache, $"background@{size}:60");
+            Now += 16;
+            cache.EndFrame();
+        }
+
+        //far less than the dispose delay has passed, but the waiting values went at the end of their frames
+        Assert.True(cache.PendingBytes <= 100);
+        Assert.NotEmpty(Disposed);
+    }
+
+    [Fact]
+    public void WithinItsFrame_AnEvictedValueIsNotDisposed_EvenOverTheBudget()
+    {
+        var cache = NewCache(256, 50);
+
+        Get(cache, "background@1:60");
+        cache.EndFrame();
+        Get(cache, "background@2:60");
+        Get(cache, "background@3:60");
+
+        //background@2 was evicted in this frame: a batch can still draw it, so it waits
+        Assert.DoesNotContain("background@2:60", Disposed);
+
+        cache.EndFrame();
+
+        Assert.Contains("background@2:60", Disposed);
+    }
+
+    [Fact]
+    public void UnderTheBudget_TheWaitingValuesKeepTheDelay()
+    {
+        var cache = NewCache(256, 100);
+
+        Get(cache, "background@1:40");
+        Get(cache, "background@2:40");
+        Get(cache, "background@3:40");
+        cache.EndFrame();
+
+        Assert.Empty(Disposed);
+        Assert.Equal(80, cache.PendingBytes);
     }
 }

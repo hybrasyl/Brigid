@@ -270,6 +270,32 @@ public class ThemeLayoutTests
         Assert.Equal(SKColors.Red, pixels.GetPixel(2, 39));
     }
 
+    [Fact]
+    public void Composite_ClampsASliceWiderThanTheImage_AsTheLayoutDoes()
+    {
+        using var source = Quadrants(30, 10);
+        var wide = new UiThemePart("frame.png", new SKRectI(20, 10, 20, 10), UiThemeFit.Stretch, false);
+        var clamped = new UiThemePart("frame.png", ThemeLayout.ClampInsets(wide.Slice!.Value, 30, 30), UiThemeFit.Stretch, false);
+
+        Assert.Equal(new SKRectI(15, 10, 15, 10), clamped.Slice);
+
+        using var wideImage = ThemeArt.Composite(wide, source, 100, 60, 1f, 1f);
+        using var clampedImage = ThemeArt.Composite(clamped, source, 100, 60, 1f, 1f);
+        using var widePixels = SKBitmap.FromImage(wideImage);
+        using var clampedPixels = SKBitmap.FromImage(clampedImage);
+
+        Assert.Equal(clampedPixels.Pixels, widePixels.Pixels);
+    }
+
+    [Fact]
+    public void Composite_ReturnsNull_WhenTheSurfaceCannotBeMade()
+    {
+        using var source = Quadrants(30, 10);
+        var part = new UiThemePart("frame.png", new SKRectI(10, 10, 10, 10), UiThemeFit.Stretch, false);
+
+        Assert.Null(ThemeArt.Composite(part, source, 70000, 70000, 1f, 1f));
+    }
+
     //a square image with a solid corner block of each colour and a grey cross between them
     private static SKImage Quadrants(int size, int corner)
     {
@@ -297,14 +323,21 @@ public class ThemeLayoutTests
     }
 
     [Theory]
-    //the icy-steel frame: a 44 art px slice at density 4
-    [InlineData(44, 44, 44, 44, 4f, 11)]
+    //a slice that fits its image is its widest inset in logical pixels: the icy-steel frame, 44 art px at density 4
+    [InlineData(44, 44, 44, 44, 128, 128, 4f, 11)]
     //the widest side counts, and a part pixel rounds up
-    [InlineData(10, 24, 10, 24, 4f, 6)]
-    [InlineData(9, 9, 9, 9, 4f, 3)]
-    [InlineData(0, 0, 0, 0, 2f, 0)]
-    public void ASliceBorderIsItsWidestInsetInLogicalPixels(int left, int top, int right, int bottom, float density, int expected)
-        => Assert.Equal(expected, ThemeLayout.SliceBorder(new SKRectI(left, top, right, bottom), density));
+    [InlineData(10, 24, 10, 24, 128, 128, 4f, 6)]
+    [InlineData(9, 9, 9, 9, 128, 128, 4f, 3)]
+    [InlineData(0, 0, 0, 0, 128, 128, 2f, 0)]
+    //two opposite insets wider than the image shrink in proportion, as in NineSlice: 90 and 30 on 100 px are 75 and 25
+    [InlineData(90, 0, 30, 0, 100, 100, 4f, 19)]
+    //insets wider than the image shrink to it, as the draw shrinks them: 200 and 200 on 100 px are 50 each
+    [InlineData(200, 200, 200, 200, 100, 100, 2f, 25)]
+    //a wide slice on a large image, or the largest slice at the lowest density, stops at the cap
+    [InlineData(200, 200, 200, 200, 512, 512, 1f, ThemeLayout.MAX_SLICE_BORDER)]
+    [InlineData(16384, 16384, 16384, 16384, 65536, 65536, 0.25f, ThemeLayout.MAX_SLICE_BORDER)]
+    public void ALayoutSliceBorderIsClampedToTheImageAndCapped(int left, int top, int right, int bottom, int width, int height, float density, int expected)
+        => Assert.Equal(expected, ThemeLayout.LayoutSliceBorder(new SKRectI(left, top, right, bottom), width, height, density));
 
     [Theory]
     //the flat 1 px frame keeps the panel's own padding

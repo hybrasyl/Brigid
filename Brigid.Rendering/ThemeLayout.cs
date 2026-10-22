@@ -30,13 +30,40 @@ internal static class ThemeLayout
     }
 
     /// <summary>
+    ///     The most logical pixels that the border art of a sliced part takes in layout. The test themes use 6 to 11. A
+    ///     wider slice still draws, but the content of a frame keeps clear of only this much of it.
+    /// </summary>
+    public const int MAX_SLICE_BORDER = 32;
+
+    /// <summary>
+    ///     Clamps nine-slice insets to the image: a negative inset becomes 0, and when two opposite insets are wider than
+    ///     the image together, both shrink in proportion. The draw and the layout both start from this, so they agree.
+    /// </summary>
+    public static SKRectI ClampInsets(SKRectI insets, int imageWidth, int imageHeight)
+    {
+        var (left, right) = ClampPair(insets.Left, insets.Right, imageWidth);
+        var (top, bottom) = ClampPair(insets.Top, insets.Bottom, imageHeight);
+
+        return new SKRectI(left, top, right, bottom);
+    }
+
+    /// <summary>
+    ///     The border that layout uses for a nine-slice part, in logical pixels: the widest inset after
+    ///     <see cref="ClampInsets" />, divided by the density and rounded up, and at most <see cref="MAX_SLICE_BORDER" />.
+    ///     So a slice that is wider than its image, or very wide at a low density, cannot push a panel off the screen.
+    /// </summary>
+    public static int LayoutSliceBorder(SKRectI slice, int imageWidth, int imageHeight, float density)
+    {
+        var insets = ClampInsets(slice, imageWidth, imageHeight);
+        var widest = Math.Max(Math.Max(insets.Left, insets.Top), Math.Max(insets.Right, insets.Bottom));
+
+        return Math.Min(MAX_SLICE_BORDER, (int)Math.Ceiling(widest / density));
+    }
+
+    /// <summary>
     ///     Scales a nine-slice inset from art pixels to output pixels and rounds it to whole pixels, so that the seams
     ///     between pieces fall on pixel edges.
     /// </summary>
-    /// <summary>The widest inset of a nine-slice in logical pixels: the widest art inset divided by the density, rounded up.</summary>
-    public static int SliceBorder(SKRectI slice, float density)
-        => (int)Math.Ceiling(Math.Max(Math.Max(slice.Left, slice.Top), Math.Max(slice.Right, slice.Bottom)) / density);
-
     public static SKRectI ScaleInsets(SKRectI insets, float scaleX, float scaleY)
         => new(
             (int)MathF.Round(insets.Left * scaleX),

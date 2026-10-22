@@ -586,6 +586,8 @@ so every themed button gets the same `button.normal` art. Roles ignore case.
   `[left, top, right, bottom]`, each from 0 to 16384; the corners keep their shape and the edges
   and centre stretch, or repeat when `tile` is `true`. `fit` — `stretch` (default), `cover` or
   `contain`, for a part with no `slice`.
+- **Layout uses at most 32 logical px of a slice** (`ThemeLayout.MAX_SLICE_BORDER`). A frame keeps its content clear of the widest inset, divided by `density`, after the insets are clamped to the image as the draw clamps them. A wider slice still draws, but content can then sit on the outer part of the art. The test themes use 6 to 11.
+- A part whose image entry is absent or does not decode is not usable: it draws the flat look, gives no frame border, and a control that asks whether the part exists (`HasPart`) gets false.
 - `colors.*` — exactly `#RRGGBB` or `#AARRGGBB` (alpha first, unlike CSS `#RRGGBBAA`).
 - `fonts.*` — a TTF or OTF entry.
 - A part, colour or font that is not valid is skipped and logged through `DataDiagnostics.Log`;

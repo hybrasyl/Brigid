@@ -376,9 +376,10 @@ public abstract class UIElement : IDisposable
         => IsThemed && ThemeArt.TryDraw(spriteBatch, role, bounds, ClipRect, fallbackRole);
 
     /// <summary>
-    ///     True when the element is themed and the theme lists a part for <paramref name="role" />. A control uses it to
-    ///     decide its layout before the draw, for example to show a placeholder where art is absent. A part that is listed
-    ///     but does not decode still gives true; <see cref="TryDrawThemePart" /> then draws nothing.
+    ///     True when the element is themed and the theme has a usable part for <paramref name="role" /> (see
+    ///     <see cref="ThemeArt.HasPart" />). A control uses it to decide its layout before the draw, for example to show a
+    ///     placeholder where art is absent. A part that the theme lists but whose image entry is absent or does not decode
+    ///     gives false, as it draws the flat look.
     /// </summary>
     protected bool HasThemePart(string role) => IsThemed && ThemeArt.HasPart(role);
 

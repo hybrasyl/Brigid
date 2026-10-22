@@ -24,10 +24,18 @@ public static class ThemeArt
     //each role, native size and pass scale is one entry; the bound covers a busy themed screen at two pass scales
     private const int MAX_CACHED_TEXTURES = 256;
 
+    //the live textures stay below this; a full-window part at 3840×2160 is about 33 MB. During a resize, the sizes that
+    //the cache evicts wait for dispose too, and EndFrame lets them go when they are over this
+    private const long MAX_CACHED_BYTES = 256L * 1024 * 1024;
+
     private static readonly Dictionary<string, SourcePart?> Sources = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly ThemeTextureCache<(string Role, int Width, int Height, float ScaleX, float ScaleY), Texture2D> Textures =
-        new(MAX_CACHED_TEXTURES, static () => Environment.TickCount64, static texture => texture.Dispose());
+        new(MAX_CACHED_TEXTURES,
+            MAX_CACHED_BYTES,
+            static texture => (long)texture.Width * texture.Height * 4,
+            static () => Environment.TickCount64,
+            static texture => texture.Dispose());
 
     private static UiThemePack? CachedPack;
 
@@ -49,26 +57,35 @@ public static class ThemeArt
     }
 
     /// <summary>
-    ///     Gets the widest nine-slice inset of a part in logical pixels: the art inset divided by the theme density, rounded
-    ///     up. A frame's border art is that wide, so content inside the frame keeps clear of it. False for a part with no
-    ///     slice, or with no theme.
+    ///     Gets the widest nine-slice inset of a part in logical pixels, as <see cref="ThemeLayout.LayoutSliceBorder" />
+    ///     gives it: clamped to the image, and at most <see cref="ThemeLayout.MAX_SLICE_BORDER" />. A frame's border art
+    ///     is that wide, so content inside the frame keeps clear of it. False with no theme, for a part with no slice, and
+    ///     for a part whose image is absent or does not decode, because that part draws the flat look.
     /// </summary>
     public static bool TryGetSliceBorder(string role, out int border)
     {
         border = 0;
 
-        if (AssetPackRegistry.GetUiThemePack()?.Theme is not { } theme
-            || !theme.Parts.TryGetValue(role, out var part)
-            || part.Slice is not { } slice)
+        if (ActivePack() is not { } pack || GetSource(pack, role) is not { Part.Slice: { } slice } source)
             return false;
 
-        border = ThemeLayout.SliceBorder(slice, theme.Density);
+        border = ThemeLayout.LayoutSliceBorder(slice, source.Image.Width, source.Image.Height, pack.Theme.Density);
 
         return true;
     }
 
-    /// <summary>True when the installed theme lists a part for <paramref name="role" />.</summary>
-    public static bool HasPart(string role) => AssetPackRegistry.GetUiThemePack()?.Theme.Parts.ContainsKey(role) == true;
+    /// <summary>
+    ///     True when the installed theme has a part for <paramref name="role" /> whose image entry is present and whose
+    ///     header decodes. The pixels decode later, at the first draw.
+    /// </summary>
+    public static bool HasPart(string role) => ActivePack() is { } pack && GetSource(pack, role) is not null;
+
+    /// <summary>
+    ///     Call once at the end of each frame, after the last sprite batch ends. A texture that the cache evicted before
+    ///     then is no longer in a batch, so when the textures that wait for dispose are over the memory budget, they go
+    ///     at once.
+    /// </summary>
+    public static void EndFrame() => Textures.EndFrame();
 
     /// <summary>
     ///     Draws the part for <paramref name="role" /> into a logical rectangle, clipped to <paramref name="clip" />. When
@@ -147,13 +164,10 @@ public static class ThemeArt
 
     private static Texture2D? GetTexture(string role, int width, int height, float scaleX, float scaleY)
     {
-        var pack = AssetPackRegistry.GetUiThemePack();
+        var pack = ActivePack();
 
         if (pack is null)
             return null;
-
-        if (!ReferenceEquals(pack, CachedPack))
-            ResetForPack(pack);
 
         return Textures.GetOrCreate(
             (role, width, height, scaleX, scaleY),
@@ -175,8 +189,26 @@ public static class ThemeArt
                     scaleY / theme.Density,
                     source.Part.Filter ?? theme.Filter);
 
+                if (composite is null)
+                {
+                    DataDiagnostics.Log?.Invoke($"[asset-pack] ui_theme '{pack.Manifest.PackId}': part '{role}' cannot be drawn at {width}x{height}");
+
+                    return null;
+                }
+
                 return TextureConverter.ToTexture2D(composite);
             });
+    }
+
+    //the active theme pack, or null. A change of theme empties the caches first
+    private static UiThemePack? ActivePack()
+    {
+        var pack = AssetPackRegistry.GetUiThemePack();
+
+        if (pack is not null && !ReferenceEquals(pack, CachedPack))
+            ResetForPack(pack);
+
+        return pack;
     }
 
     private static SourcePart? GetSource(UiThemePack pack, string role)
@@ -204,9 +236,10 @@ public static class ThemeArt
 
     /// <summary>
     ///     Composites one part at the output size. <paramref name="artScaleX" /> and <paramref name="artScaleY" /> are
-    ///     output pixels for each art pixel; they size the nine-slice insets.
+    ///     output pixels for each art pixel; they size the nine-slice insets. Null when SkiaSharp cannot make a surface of
+    ///     that size.
     /// </summary>
-    internal static SKImage Composite(
+    internal static SKImage? Composite(
         UiThemePart part,
         SKImage image,
         int width,
@@ -220,6 +253,10 @@ public static class ThemeArt
 
         var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var surface = SKSurface.Create(info);
+
+        if (surface is null)
+            return null;
+
         var canvas = surface.Canvas;
         canvas.Clear(SKColors.Transparent);
 
@@ -242,6 +279,10 @@ public static class ThemeArt
         float artScaleY,
         SKSamplingOptions sampling)
     {
+        //the layout clamps the insets in the same way (ThemeLayout.LayoutSliceBorder), so the border that it keeps clear
+        //is the border that the draw makes
+        insets = ThemeLayout.ClampInsets(insets, image.Width, image.Height);
+
         //reduce the whole image first when it shrinks a lot, so the corners are filtered, not sampled
         using var reduced = Reduce(image, artScaleX, artScaleY, out var reducedScaleX, out var reducedScaleY);
         var sourceImage = reduced ?? image;
