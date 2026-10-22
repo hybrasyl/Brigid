@@ -45,6 +45,49 @@ public static class ClientSettings
         string.IsNullOrEmpty(GlobalSettings.DataPath) ? null : Path.Combine(GlobalSettings.DataPath, LEGACY_FILE_NAME);
 
     /// <summary>
+    ///     The <c>UiTheme</c> value saved in <c>brigid.cfg</c>, read without <see cref="Load" />: the launcher shows it
+    ///     before the settings load. Null when the file, the line or the value is absent, or the file cannot be read.
+    /// </summary>
+    public static string? ReadSavedUiTheme() => ReadSavedUiTheme(FilePath);
+
+    /// <summary>The <c>UiTheme</c> value saved in the settings file at <paramref name="path" />. Internal for the tests.</summary>
+    internal static string? ReadSavedUiTheme(string path)
+    {
+        if (!File.Exists(path))
+            return null;
+
+        try
+        {
+            foreach (var line in File.ReadLines(path))
+                if (TrySplit(line, out var key, out var value) && (key == "UiTheme"))
+                    return value.Length > 0 ? value : null;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            //Load reads the file again when the assets load, and uses its defaults if it still cannot
+        }
+
+        return null;
+    }
+
+    //a "Key: Value" line, both trimmed
+    private static bool TrySplit(string line, out string key, out string value)
+    {
+        var colonIndex = line.IndexOf(':');
+
+        if (colonIndex < 0)
+        {
+            key = value = string.Empty;
+
+            return false;
+        }
+
+        key = line[..colonIndex].Trim();
+        value = line[(colonIndex + 1)..].Trim();
+
+        return true;
+    }
+
+    /// <summary>
     ///     Loads settings into static properties. Reads the per-user <c>brigid.cfg</c>; on first run (before it exists)
     ///     falls back to the legacy <c>Darkages.cfg</c> and migrates it to the new location. Uses defaults if neither
     ///     file exists or the file is corrupt.
@@ -62,16 +105,8 @@ public static class ClientSettings
         {
             foreach (var line in File.ReadLines(loadPath))
             {
-                var colonIndex = line.IndexOf(':');
-
-                if (colonIndex < 0)
+                if (!TrySplit(line, out var key, out var value))
                     continue;
-
-                var key = line[..colonIndex]
-                    .Trim();
-
-                var value = line[(colonIndex + 1)..]
-                    .Trim();
 
                 switch (key)
                 {

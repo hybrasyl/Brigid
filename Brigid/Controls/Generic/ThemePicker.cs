@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Data.AssetPacks;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using Microsoft.Xna.Framework;
@@ -73,7 +74,7 @@ public sealed class ThemePicker : UIPanel
         };
 
         Choice = new DropDown(Entries.Select(entry => entry.Label).ToArray(), CHOICE_W, rowHeight) { Name = "choice", X = LABEL_W, Y = 0 };
-        Choice.SetSelected(IndexOf(stored));
+        Choice.SetSelected(IndexOf(Entries, stored));
         Choice.SelectionChanged += OnSelectionChanged;
 
         Hint = new UILabel
@@ -95,6 +96,45 @@ public sealed class ThemePicker : UIPanel
         AddChild(Hint);
         AddChild(Choice);
         UpdateHint();
+    }
+
+    /// <summary>
+    ///     The entries for <paramref name="themes" />, in their order: Automatic (the first theme), each theme by its display
+    ///     name, and None (the flat look). Two themes with the same display name show their <c>pack_id</c> too.
+    /// </summary>
+    public static List<Entry> EntriesFor(IEnumerable<AssetPackManifest> themes)
+    {
+        var list = themes.ToList();
+
+        var shared = list.GroupBy(manifest => manifest.DisplayName, StringComparer.OrdinalIgnoreCase)
+                         .Where(group => group.Count() > 1)
+                         .Select(group => group.Key)
+                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return
+        [
+            new Entry(null, "Automatic"),
+            .. list.Select(manifest => new Entry(
+                manifest.PackId,
+                shared.Contains(manifest.DisplayName) ? $"{manifest.DisplayName} ({manifest.PackId})" : manifest.DisplayName)),
+            new Entry(AssetPackRegistry.NO_UI_THEME, "None")
+        ];
+    }
+
+    /// <summary>
+    ///     The index of the entry with the stored value (case ignored). A value that no entry has, or no value, gives the
+    ///     first entry.
+    /// </summary>
+    public static int IndexOf(IReadOnlyList<Entry> entries, string? stored)
+    {
+        if (string.IsNullOrWhiteSpace(stored))
+            return 0;
+
+        for (var i = 0; i < entries.Count; i++)
+            if (string.Equals(entries[i].Value, stored.Trim(), StringComparison.OrdinalIgnoreCase))
+                return i;
+
+        return 0;
     }
 
     /// <summary>Closes the open list, for example on Escape.</summary>
@@ -128,18 +168,6 @@ public sealed class ThemePicker : UIPanel
     {
         UpdateHint();
         ThemeChosen?.Invoke(Entries[index].Value);
-    }
-
-    private int IndexOf(string? stored)
-    {
-        if (string.IsNullOrWhiteSpace(stored))
-            return 0;
-
-        for (var i = 0; i < Entries.Length; i++)
-            if (string.Equals(Entries[i].Value, stored.Trim(), StringComparison.OrdinalIgnoreCase))
-                return i;
-
-        return 0;
     }
 
     private void UpdateHint() => Hint.Visible = (Choice.SelectedIndex >= 0) && !IsActive(Entries[Choice.SelectedIndex].Value);

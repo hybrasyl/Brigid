@@ -395,24 +395,9 @@ public static class AssetPackRegistry
         {
             archive = ZipFile.OpenRead(path);
 
-            var manifestEntry = archive.GetEntry(MANIFEST_ENTRY_NAME);
-
-            if (manifestEntry is null)
+            if (ReadManifest(archive, out var problem) is not { } manifest)
             {
-                LogWarning($"pack {Path.GetFileName(path)} is missing {MANIFEST_ENTRY_NAME}; skipping");
-                archive.Dispose();
-
-                return;
-            }
-
-            AssetPackManifest? manifest;
-
-            using (var manifestStream = manifestEntry.Open())
-                manifest = JsonSerializer.Deserialize<AssetPackManifest>(manifestStream);
-
-            if (manifest is null)
-            {
-                LogWarning($"pack {Path.GetFileName(path)} has empty or invalid manifest; skipping");
+                LogWarning($"pack {Path.GetFileName(path)} {problem}; skipping");
                 archive.Dispose();
 
                 return;
@@ -446,6 +431,85 @@ public static class AssetPackRegistry
             LogWarning($"failed to open pack {Path.GetFileName(path)}: {ex.GetType().Name}: {ex.Message}");
             archive?.Dispose();
         }
+    }
+
+    //the manifest of an open pack, or null with the reason
+    private static AssetPackManifest? ReadManifest(ZipArchive archive, out string? problem)
+    {
+        var manifestEntry = archive.GetEntry(MANIFEST_ENTRY_NAME);
+
+        if (manifestEntry is null)
+        {
+            problem = $"is missing {MANIFEST_ENTRY_NAME}";
+
+            return null;
+        }
+
+        using var manifestStream = manifestEntry.Open();
+        var manifest = JsonSerializer.Deserialize<AssetPackManifest>(manifestStream);
+        problem = manifest is null ? "has empty or invalid manifest" : null;
+
+        return manifest;
+    }
+
+    /// <summary>
+    ///     The manifests of the installed <c>ui_theme</c> packs, in the order of <see cref="UiThemePacks" />. After
+    ///     <see cref="Initialize" /> they are the registered themes. Before it (the launcher), they come from a scan of
+    ///     <see cref="AppPaths.AssetsDir" /> that opens no pack for use; see <see cref="ScanUiThemes(string)" />.
+    /// </summary>
+    public static List<AssetPackManifest> ScanUiThemes()
+        => Initialized ? [.. UiThemePacks.Select(pack => pack.Manifest)] : ScanUiThemes(AppPaths.AssetsDir);
+
+    /// <summary>
+    ///     The manifests of the <c>ui_theme</c> packs in <paramref name="dir" /> that registration accepts, in the order of
+    ///     <see cref="UiThemePacks" />: by priority, then file name. It reads only each manifest, with the checks of
+    ///     registration: the manifest, the schema version, the <c>pack_id</c>, a known content type, and a
+    ///     <c>pack_id</c> that an earlier pack of any type has. A pack that fails later, when it loads, is in the list.
+    ///     A folder that is absent or cannot be read gives an empty list. Internal for the tests.
+    /// </summary>
+    internal static List<AssetPackManifest> ScanUiThemes(string dir)
+    {
+        var themes = new List<AssetPackManifest>();
+        var packIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!Directory.Exists(dir))
+            return themes;
+
+        List<string> paths;
+
+        try
+        {
+            paths = [.. InRegistrationOrder(EnumeratePackFiles(dir))];
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogWarning($"cannot list the asset-pack folder '{dir}' for the themes: {ex.Message}");
+
+            return themes;
+        }
+
+        foreach (var path in paths)
+        {
+            try
+            {
+                using var archive = ZipFile.OpenRead(path);
+
+                if ((ReadManifest(archive, out _) is not { } manifest)
+                    || (GetManifestRejection(manifest) is not null)
+                    || manifest.ContentType is null
+                    || !Factories.ContainsKey(manifest.ContentType)
+                    || !packIds.Add(manifest.PackId))
+                    continue;
+
+                if (manifest.ContentType == "ui_theme")
+                    themes.Add(manifest);
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or JsonException)
+            {
+                //registration logs this pack when the assets load
+            }
+        }
+
+        //a stable sort, so equal priorities keep the file-name order, as registration does
+        return [.. themes.OrderByDescending(manifest => manifest.Priority)];
     }
 
     /// <summary>The <c>*.datf</c> files directly in <paramref name="dir" />, whatever the case of the extension.</summary>

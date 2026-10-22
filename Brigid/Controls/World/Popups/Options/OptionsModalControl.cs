@@ -458,28 +458,8 @@ public sealed class OptionsModalControl : CenteredModalPanel
         RefreshLabel(index);
     }
 
-    /// <summary>
-    ///     The theme entries: Automatic (the first installed theme), each installed theme by its display name, and None
-    ///     (the flat look). Two themes with the same display name show their <c>pack_id</c> too. Internal for the tests.
-    /// </summary>
-    internal static List<ThemePicker.Entry> ThemeEntries()
-    {
-        var themes = AssetPackRegistry.UiThemePacks.Select(pack => pack.Manifest).ToList();
-
-        var shared = themes.GroupBy(manifest => manifest.DisplayName, StringComparer.OrdinalIgnoreCase)
-                           .Where(group => group.Count() > 1)
-                           .Select(group => group.Key)
-                           .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        return
-        [
-            new ThemePicker.Entry(null, "Automatic"),
-            .. themes.Select(manifest => new ThemePicker.Entry(
-                manifest.PackId,
-                shared.Contains(manifest.DisplayName) ? $"{manifest.DisplayName} ({manifest.PackId})" : manifest.DisplayName)),
-            new ThemePicker.Entry(AssetPackRegistry.NO_UI_THEME, "None")
-        ];
-    }
+    /// <summary>The theme entries for the registered themes (<see cref="ThemePicker.EntriesFor" />). Internal for the tests.</summary>
+    internal static List<ThemePicker.Entry> ThemeEntries() => ThemePicker.EntriesFor(AssetPackRegistry.UiThemePacks.Select(pack => pack.Manifest));
 
     //the choice applies the next time Brigid starts; the picker shows a hint until then
     private static void ChooseTheme(string? value)

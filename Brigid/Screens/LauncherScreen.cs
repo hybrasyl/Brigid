@@ -1,6 +1,8 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Data;
+using Brigid.Data.AssetPacks;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using Brigid.Systems;
@@ -16,9 +18,15 @@ namespace Brigid.Screens;
 ///     Launcher / connect screen shown on every normal startup (skipped only when env vars fully specify a valid setup;
 ///     see <see cref="GlobalSettings.ShowLauncher" />). Renders entirely without Dark Ages assets, through
 ///     <see cref="SystemTextPainter" /> (OS-typeface text and solid rectangles), so it can run before any <c>.dat</c> is
-///     loaded. Lets the user pick a saved server (or add one), choose the asset folder via the native
-///     <see cref="FolderPicker" />, and connect. On connect it persists <see cref="LauncherConfig" /> and calls
+///     loaded. Lets the user pick a saved server (or add one), choose the UI theme, choose the asset folder via the
+///     native <see cref="FolderPicker" />, and connect. On connect it persists <see cref="LauncherConfig" /> and calls
 ///     <see cref="ChaosGame.FinishAssetInitialization" />, which loads the assets and continues to the lobby.
+///     <para>
+///         The theme choice is the one of Options, Settings (<see cref="ClientSettings.UiTheme" />). At startup the
+///         settings are not loaded yet, so the choice goes to <see cref="ChaosGame.FinishAssetInitialization" />, which
+///         saves it and applies it as the packs load. From the main menu the packs are loaded, so the choice is saved at
+///         once and applies at the next start.
+///     </para>
 /// </summary>
 public sealed class LauncherScreen : IScreen
 {
@@ -26,6 +34,7 @@ public sealed class LauncherScreen : IScreen
     {
         Main,
         Dropdown,
+        ThemeDropdown,
         ResolutionDropdown,
         AddServer
     }
@@ -44,6 +53,7 @@ public sealed class LauncherScreen : IScreen
     private const int FIELD_GAP = 14;
     private const int HINT_GAP = 4;
     private const int MAX_PORT_DIGITS = 5;
+    private const string RESTART_HINT = "Restart to apply";
 
     private static readonly Rectangle Panel = new(110, 90, 420, 290);
     private static readonly Color Backdrop = new(10, 12, 20);
@@ -63,6 +73,7 @@ public sealed class LauncherScreen : IScreen
     private readonly Rectangle[] AddFieldBounds = new Rectangle[3];
     private readonly List<(Rectangle Row, Rectangle Remove, ServerEntry Entry)> DropdownRows = [];
     private readonly List<(Rectangle Row, int Multiplier)> ResolutionRows = [];
+    private readonly List<(Rectangle Row, int Index)> ThemeRows = [];
 
     private ChaosGame Game = null!;
 
@@ -71,6 +82,11 @@ public sealed class LauncherScreen : IScreen
     private string AssetPath = "";
     private bool AssetPathValid;
     private bool Completed;
+
+    //the theme entries and the chosen value; ThemeChosen is set by a choice at startup, which Connect hands on
+    private List<ThemePicker.Entry> ThemeEntries = [];
+    private string? ThemeValue;
+    private bool ThemeChosen;
 
     //Browse is armed on press and fires on release; see HandleMouse
     private bool AssetButtonArmed;
@@ -83,6 +99,7 @@ public sealed class LauncherScreen : IScreen
 
     //recomputed each frame from current state
     private Rectangle DropdownButton;
+    private Rectangle ThemeButton;
     private Rectangle ResolutionButton;
     private Rectangle AssetButton;
     private Rectangle ConnectButton;
@@ -106,6 +123,9 @@ public sealed class LauncherScreen : IScreen
             : GlobalSettings.DataPath;
 
         RevalidateAssetPath();
+
+        ThemeEntries = ThemePicker.EntriesFor(AssetPackRegistry.ScanUiThemes());
+        ThemeValue = OpenedFromMainMenu ? ClientSettings.UiTheme : ClientSettings.ReadSavedUiTheme();
     }
 
     public void LoadContent(GraphicsDevice graphicsDevice) => Painter.LoadContent(graphicsDevice);
@@ -163,8 +183,9 @@ public sealed class LauncherScreen : IScreen
     private void Layout()
     {
         DropdownButton = new Rectangle(Panel.X + 90, Panel.Y + 52, Panel.Right - 20 - (Panel.X + 90), ROW_HEIGHT);
-        AssetButton = new Rectangle(Panel.Right - 100, Panel.Y + 150, 80, ROW_HEIGHT);
-        ResolutionButton = new Rectangle(Panel.X + 90, Panel.Y + 186, Panel.Right - 20 - (Panel.X + 90), ROW_HEIGHT);
+        ThemeButton = new Rectangle(Panel.X + 90, Panel.Y + 86, Panel.Right - 20 - (Panel.X + 90), ROW_HEIGHT);
+        AssetButton = new Rectangle(Panel.Right - 100, Panel.Y + 156, 80, ROW_HEIGHT);
+        ResolutionButton = new Rectangle(Panel.X + 90, Panel.Y + 192, Panel.Right - 20 - (Panel.X + 90), ROW_HEIGHT);
         ConnectButton = new Rectangle(Panel.Right - 120, Panel.Bottom - 40, 100, 26);
 
         //clickable box + label at the bottom-left; toggles LauncherConfig.SuppressLauncher
@@ -175,6 +196,7 @@ public sealed class LauncherScreen : IScreen
             ReturnButton = new Rectangle(Panel.Right - 172, Panel.Y + 10, 160, 22);
 
         DropdownRows.Clear();
+        ThemeRows.Clear();
         ResolutionRows.Clear();
 
         if (CurrentMode == Mode.Dropdown)
@@ -190,6 +212,17 @@ public sealed class LauncherScreen : IScreen
             }
 
             AddRow = new Rectangle(DropdownButton.X, y, DropdownButton.Width, ROW_HEIGHT);
+        }
+
+        if (CurrentMode == Mode.ThemeDropdown)
+        {
+            var y = ThemeButton.Bottom;
+
+            for (var i = 0; i < ThemeEntries.Count; i++)
+            {
+                ThemeRows.Add((new Rectangle(ThemeButton.X, y, ThemeButton.Width, ROW_HEIGHT), i));
+                y += ROW_HEIGHT;
+            }
         }
 
         if (CurrentMode == Mode.ResolutionDropdown)
@@ -269,6 +302,11 @@ public sealed class LauncherScreen : IScreen
 
                     break;
 
+                case Mode.ThemeDropdown:
+                    HandleThemeDropdownClick(cursor);
+
+                    break;
+
                 case Mode.ResolutionDropdown:
                     HandleResolutionDropdownClick(cursor);
 
@@ -309,6 +347,13 @@ public sealed class LauncherScreen : IScreen
             return;
         }
 
+        if (ThemeButton.Contains(cursor))
+        {
+            CurrentMode = Mode.ThemeDropdown;
+
+            return;
+        }
+
         //data folder is locked when summoned from the main menu — it can only change at startup
         if (!OpenedFromMainMenu && AssetButton.Contains(cursor))
         {
@@ -336,6 +381,29 @@ public sealed class LauncherScreen : IScreen
         //(re-news every repository, leaking the prior instances). Return to Main Menu is the only exit in that mode.
         if (!OpenedFromMainMenu && ConnectButton.Contains(cursor) && CanConnect())
             Connect();
+    }
+
+    private void HandleThemeDropdownClick(Point cursor)
+    {
+        //clicking the button again closes the open dropdown
+        if (ThemeButton.Contains(cursor))
+        {
+            CurrentMode = Mode.Main;
+
+            return;
+        }
+
+        foreach (var (row, index) in ThemeRows)
+            if (row.Contains(cursor))
+            {
+                ChooseTheme(ThemeEntries[index].Value);
+                CurrentMode = Mode.Main;
+
+                return;
+            }
+
+        //click anywhere else closes the dropdown
+        CurrentMode = Mode.Main;
     }
 
     private void HandleResolutionDropdownClick(Point cursor)
@@ -517,6 +585,19 @@ public sealed class LauncherScreen : IScreen
         CurrentMode = Mode.Main;
     }
 
+    //from the main menu the settings are loaded, so the choice is saved now; at startup Connect hands it on
+    private void ChooseTheme(string? value)
+    {
+        ThemeValue = value;
+
+        if (OpenedFromMainMenu)
+        {
+            ClientSettings.UiTheme = value;
+            ClientSettings.Save();
+        } else
+            ThemeChosen = true;
+    }
+
     private void RevalidateAssetPath() => AssetPathValid = DataContext.IsValidDataDirectory(AssetPath?.Trim());
 
     private bool CanConnect() => LauncherConfig.GetSelectedServer() is not null && AssetPathValid;
@@ -539,7 +620,7 @@ public sealed class LauncherScreen : IScreen
         Completed = true;
 
         //replaces this screen (UnloadContent + Dispose) with the lobby screen — must be the last thing we do
-        Game.FinishAssetInitialization();
+        Game.FinishAssetInitialization(ThemeChosen, ThemeValue);
     }
 
     #endregion
@@ -559,6 +640,7 @@ public sealed class LauncherScreen : IScreen
         DrawClippedEnd(selected?.Display ?? "(no servers - add one)", labelBox, selected is null ? BadColor : Color.White, TEXT_SIZE);
         DrawDownTriangle(DropdownButton.Right - 14, DropdownButton.Y + 10, LabelColor);
 
+        DrawThemeRow();
         DrawAssetRow();
         DrawResolutionRow();
         DrawSkipLauncherCheckbox();
@@ -573,8 +655,44 @@ public sealed class LauncherScreen : IScreen
         if (CurrentMode == Mode.Dropdown)
             DrawDropdownList();
 
+        if (CurrentMode == Mode.ThemeDropdown)
+            DrawThemeDropdownList();
+
         if (CurrentMode == Mode.ResolutionDropdown)
             DrawResolutionDropdownList();
+    }
+
+    private void DrawThemeRow()
+    {
+        Painter.DrawText("Theme", new Vector2(Panel.X + 20, Painter.TextTop(ThemeButton, TEXT_SIZE)), LabelColor, TEXT_SIZE);
+
+        Painter.FillRect(ThemeButton, FieldFill);
+        Painter.BorderRect(ThemeButton, FieldBorder);
+
+        //from the main menu the packs are loaded, so a choice that is not the active theme waits for the next start
+        var hintWidth = 0;
+
+        if (OpenedFromMainMenu && !ReferenceEquals(AssetPackRegistry.ResolveUiTheme(ThemeValue), AssetPackRegistry.GetUiThemePack()))
+        {
+            hintWidth = (int)MathF.Ceiling(Painter.Measure(RESTART_HINT, HINT_SIZE)) + 8;
+            Painter.DrawText(RESTART_HINT, new Vector2(ThemeButton.Right - 22 - hintWidth + 8, Painter.TextTop(ThemeButton, HINT_SIZE)), LabelColor, HINT_SIZE);
+        }
+
+        var labelBox = new Rectangle(ThemeButton.X, ThemeButton.Y, ThemeButton.Width - 18 - hintWidth, ThemeButton.Height);
+        DrawClippedEnd(ThemeEntries[ThemePicker.IndexOf(ThemeEntries, ThemeValue)].Label, labelBox, Color.White, TEXT_SIZE);
+        DrawDownTriangle(ThemeButton.Right - 14, ThemeButton.Y + 10, LabelColor);
+    }
+
+    private void DrawThemeDropdownList()
+    {
+        var selected = ThemePicker.IndexOf(ThemeEntries, ThemeValue);
+
+        foreach (var (row, index) in ThemeRows)
+        {
+            Painter.FillRect(row, index == selected ? FieldFocusFill : FieldFill);
+            Painter.BorderRect(row, FieldBorder);
+            DrawClippedEnd(ThemeEntries[index].Label, row, Color.White, TEXT_SIZE);
+        }
     }
 
     private void DrawResolutionRow()
@@ -604,7 +722,7 @@ public sealed class LauncherScreen : IScreen
 
     private void DrawAssetRow()
     {
-        var labelY = Panel.Y + 118;
+        var labelY = Panel.Y + 128;
         var pathBox = new Rectangle(Panel.X + 20, AssetButton.Y, AssetButton.X - 8 - (Panel.X + 20), AssetButton.Height);
 
         //locked when summoned from the main menu — the data folder loads once at startup and can't change in-session
