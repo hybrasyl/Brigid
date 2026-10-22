@@ -27,4 +27,12 @@ public class AssetPackManifestValidationTests
     [InlineData("""{ }""", "has no schema_version")]
     public void GetManifestRejection_RefusesAMissingOrInvalidRequiredField(string json, string reason)
         => Assert.Contains(reason, Reject(json));
+
+    [Theory]
+    [InlineData("""{ "schema_version": 1, "pack_id": "icy-steel", "content_type": "ui_theme", "name": "Icy Steel" }""", "Icy Steel")]
+    [InlineData("""{ "schema_version": 1, "pack_id": "icy-steel", "content_type": "ui_theme", "name": "  Icy Steel  " }""", "Icy Steel")]
+    [InlineData("""{ "schema_version": 1, "pack_id": "icy-steel", "content_type": "ui_theme", "name": "   " }""", "icy-steel")]
+    [InlineData("""{ "schema_version": 1, "pack_id": "icy-steel", "content_type": "ui_theme" }""", "icy-steel")]
+    public void TheDisplayNameIsTheName_ElseThePackId(string json, string expected)
+        => Assert.Equal(expected, JsonSerializer.Deserialize<AssetPackManifest>(json)!.DisplayName);
 }

@@ -21,11 +21,23 @@ public sealed class AssetPackManifest
     public int? SchemaVersion { get; init; }
 
     /// <summary>
-    ///     Identifier for this pack. Required, and used in log messages. The registry does not detect duplicates by this
-    ///     id; it orders the packs of one <see cref="ContentType" /> by <see cref="Priority" />, then by file name.
+    ///     Identifier for this pack. Required, and used in log messages and to select a <c>ui_theme</c> pack. It must be
+    ///     unique among the installed packs of every content type (case ignored): the registry refuses a second pack with
+    ///     an id that it already has.
     /// </summary>
     [JsonPropertyName("pack_id")]
     public string PackId { get; init; } = string.Empty;
+
+    /// <summary>
+    ///     Optional display name, for example <c>Icy Steel</c>. The client shows it where a player picks a pack (the theme
+    ///     drop-down in Options); see <see cref="DisplayName" />.
+    /// </summary>
+    [JsonPropertyName("name")]
+    public string? Name { get; init; }
+
+    /// <summary>The name to show for this pack: <see cref="Name" /> when it is not blank, else <see cref="PackId" />.</summary>
+    [JsonIgnore]
+    public string DisplayName => string.IsNullOrWhiteSpace(Name) ? PackId : Name.Trim();
 
     /// <summary>
     ///     Semver-style pack version. Informational — shown in debug overlay for support.

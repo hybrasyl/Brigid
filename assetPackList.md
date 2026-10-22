@@ -67,6 +67,7 @@ Per file, in order; any failure skips **that pack only** and logs to `notice-deb
 | `schema_version >= 1`                     | `pack {name} declares schema_version=N which is not a valid version; skipping` |
 | `schema_version <= 1`                     | `pack {name} declares schema_version=N which is newer than supported (1); skipping` |
 | `pack_id` present and not blank           | `pack {name} has no pack_id; skipping`                                   |
+| `pack_id` not already registered (any type, case ignored) | `pack {name} has pack_id '...', which the registered {type} pack '...' already has; skipping` |
 | `content_type` matches a factory key      | `pack {name} has unknown content_type='...'; skipping`                   |
 
 `AssetPackRegistry.GetManifestRejection` makes the manifest checks. It accepts `schema_version` from 1 through `SUPPORTED_SCHEMA_VERSION` (currently `1`). It refuses an absent, zero or negative `schema_version`, and an absent or blank `pack_id`. Creidhne and Taliesin also refuse an absent or zero `schema_version` and an absent `pack_id`, but they accept a blank `pack_id`.
@@ -135,7 +136,8 @@ Three edits: one line in `AssetPackRegistry.Factories`; the accessors, which are
 | Field            | Type                                     | Default | Read by code                                                       |
 | ---------------- | ---------------------------------------- | ------- | ------------------------------------------------------------------ |
 | `schema_version` | int (required)                           | none    | Yes — must be 1 through the supported version                      |
-| `pack_id`        | string (required)                        | none    | Must not be blank; read only by log and conflict messages          |
+| `pack_id`        | string (required)                        | none    | Must not be blank, and unique among the installed packs of every type (case ignored); the pack registered first keeps it. Log messages, and the `ui_theme` selection (`UiTheme:` in `brigid.cfg`) |
+| `name`           | string                                   | none    | Display name (`DisplayName`; the `pack_id` when absent). Shown in the Options theme drop-down |
 | `pack_version`   | string                                   | `""`    | **Nothing reads this.** Informational                              |
 | `content_type`   | string                                   | `""`    | Yes — factory discriminator                                        |
 | `priority`       | int                                      | `100`   | Yes — order of the packs of a type: highest first, then file name  |

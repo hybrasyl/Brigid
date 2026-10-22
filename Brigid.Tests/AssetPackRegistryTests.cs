@@ -360,6 +360,39 @@ public sealed class AssetPackRegistryTests : IDisposable
     }
 
     [Fact]
+    public void ASecondPackWithAPackIdThatIsRegistered_IsRefused_AcrossTypesAndCase()
+    {
+        var warnings = new List<string>();
+        void Collect(string line) => warnings.Add(line);
+
+        Register("ability_icons", "shared", new() { ["skill0001.png"] = Png(First) });
+        AssetPackRegistry.WarningLogged += Collect;
+
+        try
+        {
+            var stream = new MemoryStream();
+
+            using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, true))
+            using (var entry = zip.CreateEntry("nation0001.png").Open())
+                entry.Write(Png(Second));
+
+            stream.Position = 0;
+
+            Assert.False(AssetPackRegistry.RegisterForTest(
+                new ZipArchive(stream, ZipArchiveMode.Read),
+                new AssetPackManifest { SchemaVersion = 1, PackId = "SHARED", ContentType = "nation_badges" }));
+        }
+        finally
+        {
+            AssetPackRegistry.WarningLogged -= Collect;
+        }
+
+        Assert.Empty(AssetPackRegistry.NationBadgePacks);
+        Assert.Equal(["shared"], AssetPackRegistry.IconPacks.Select(pack => pack.Manifest.PackId));
+        Assert.Contains("has pack_id 'SHARED', which the registered ability_icons pack 'shared' already has", Assert.Single(warnings));
+    }
+
+    [Fact]
     public void UiTheme_IsTheFirstPack_WhenNoThemeIsSelected()
     {
         RegisterTheme("wood", 100, false);

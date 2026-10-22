@@ -407,6 +407,14 @@ public static class AssetPackRegistry
                 return;
             }
 
+            if (GetDuplicateRejection(manifest) is { } duplicate)
+            {
+                LogWarning($"pack {Path.GetFileName(path)} {duplicate}; skipping");
+                archive.Dispose();
+
+                return;
+            }
+
             if (!TryRegisterByContentType(archive, manifest))
             {
                 LogWarning($"pack {Path.GetFileName(path)} has unknown content_type='{manifest.ContentType}'; skipping");
@@ -517,7 +525,35 @@ public static class AssetPackRegistry
         => paths.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ThenBy(Path.GetFileName, StringComparer.Ordinal);
 
     /// <summary>Registers an archive as if it came from a file. For tests only.</summary>
-    internal static bool RegisterForTest(ZipArchive archive, AssetPackManifest manifest) => TryRegisterByContentType(archive, manifest);
+    internal static bool RegisterForTest(ZipArchive archive, AssetPackManifest manifest)
+    {
+        if (GetDuplicateRejection(manifest) is { } duplicate)
+        {
+            LogWarning($"pack '{manifest.PackId}' {duplicate}; skipping");
+            archive.Dispose();
+
+            return false;
+        }
+
+        return TryRegisterByContentType(archive, manifest);
+    }
+
+    /// <summary>
+    ///     Returns why the registry refuses a pack whose <c>pack_id</c> a registered pack already has (case ignored, across
+    ///     every content type), or null. The pack registered first, in file-name order, stays, also when the second pack
+    ///     has a higher priority: two packs with one id are usually two copies of one pack, and the warning tells the
+    ///     player to remove one. A <c>ui_theme</c> pack is selected by its id, so two packs with one id would make the
+    ///     selection depend on the file names.
+    /// </summary>
+    private static string? GetDuplicateRejection(AssetPackManifest manifest)
+    {
+        foreach (var list in Packs.Values)
+            foreach (var pack in list)
+                if (string.Equals(pack.Manifest.PackId, manifest.PackId, StringComparison.OrdinalIgnoreCase))
+                    return $"has pack_id '{manifest.PackId}', which the registered {pack.Manifest.ContentType} pack '{pack.Manifest.PackId}' already has";
+
+        return null;
+    }
 
     /// <summary>
     ///     Disposes every pack and empties the registry, so that a test starts clean. For tests only. It marks the
