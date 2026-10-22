@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- dev tool for BRIG-41; not part of Brigid.slnx. Run it with `dotnet run`, see README.md -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\Brigid.Data\Brigid.Data.csproj" />
+        <ProjectReference Include="..\..\Brigid.Rendering\Brigid.Rendering.csproj" />
+    </ItemGroup>
+</Project>

@@ -36,7 +36,7 @@ public sealed class NpcPortraitPack : AssetPack
         if (dims is null || dims.Length != 2 || dims[0] != dims[1] || dims[0] <= 0)
         {
             //phase 1 requires uniform square portraits — fail closed if the manifest doesn't promise that
-            Console.Error.WriteLine($"[asset-pack] npc_portraits pack '{manifest.PackId}' has missing or non-square dimensions; pack will serve no illustrations");
+            DataDiagnostics.Log?.Invoke($"[asset-pack] warning: npc_portraits pack '{manifest.PackId}' has missing or non-square dimensions; pack will serve no illustrations");
             Dimensions = (0, 0);
 
             return;
@@ -62,6 +62,10 @@ public sealed class NpcPortraitPack : AssetPack
             Lookup[key] = fileName;
         }
     }
+
+    /// <inheritdoc />
+    /// <remarks>A portrait pack covers the portrait keys of its manifest, not its file names.</remarks>
+    public override IEnumerable<string> CoverageKeys => Lookup.Keys;
 
     /// <summary>
     ///     Attempts to decode the portrait PNG for the given <paramref name="portraitKey" />. The key is the literal
@@ -92,7 +96,7 @@ public sealed class NpcPortraitPack : AssetPack
 
         if ((image.Width != Dimensions.Width) || (image.Height != Dimensions.Height))
         {
-            Console.Error.WriteLine($"[asset-pack] npc_portraits: '{entryName}' is {image.Width}x{image.Height}; expected {Dimensions.Width}x{Dimensions.Height}; ignoring");
+            DataDiagnostics.Log?.Invoke($"[asset-pack] warning: npc_portraits: '{entryName}' is {image.Width}x{image.Height}; expected {Dimensions.Width}x{Dimensions.Height}; ignoring");
             image.Dispose();
             image = null;
 

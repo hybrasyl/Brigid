@@ -1,5 +1,6 @@
 #region
 using Brigid.Data.Abstractions;
+using Brigid.Data.AssetPacks;
 using DALib.Drawing;
 using DALib.Drawing.Virtualized;
 using DALib.Utility;
@@ -37,7 +38,7 @@ public sealed class PanelSpriteRepository : RepositoryBase
     public Palettized<EpfFrame>? GetItemSprite(int itemId)
     {
         //server-sent item sprites carry the 0x8000 "item display" flag; strip it to get the EPF index.
-        itemId &= 0x7FFF;
+        itemId = ItemSpriteIds.ToSpriteId(itemId);
 
         if (itemId == 0)
             return null;

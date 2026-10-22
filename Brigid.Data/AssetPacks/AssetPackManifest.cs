@@ -21,7 +21,7 @@ public sealed class AssetPackManifest
 
     /// <summary>
     ///     Identifier for this pack. Required, and used in log messages. The registry does not detect duplicates by this
-    ///     id; it resolves two packs of one <see cref="ContentType" /> by <see cref="Priority" />.
+    ///     id; it orders the packs of one <see cref="ContentType" /> by <see cref="Priority" />, then by file name.
     /// </summary>
     [JsonPropertyName("pack_id")]
     public string PackId { get; init; } = string.Empty;
@@ -33,18 +33,22 @@ public sealed class AssetPackManifest
     public string PackVersion { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Enum discriminator selecting which typed pack accessor this pack registers with. The registry's
+    ///     Enum discriminator selecting which pack list of the registry this pack goes in. The registry's
     ///     <c>Factories</c> dictionary lists every recognized value; manifests declaring an unknown content type are
     ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>nation_badges</c>,
     ///     <c>item_icons</c>, <c>npc_portraits</c>, <c>static_tiles</c>, <c>legend_mark_icons</c>,
-    ///     <c>ui_sprite_overrides</c>, <c>creature_sprites</c>, <c>music</c>, <c>sound_effects</c>, <c>world_maps</c>.
+    ///     <c>ui_sprite_overrides</c>, <c>creature_sprites</c>, <c>music</c>, <c>sound_effects</c>, <c>world_maps</c>,
+    ///     <c>town_maps</c>.
     ///     Future content types land as additions to that dictionary.
     /// </summary>
     [JsonPropertyName("content_type")]
     public string ContentType { get; init; } = string.Empty;
 
     /// <summary>
-    ///     Higher wins when multiple packs cover the same asset ID. Default 100 when absent.
+    ///     The order of the packs of one content type: when two packs cover the same key, the pack with the higher
+    ///     priority wins, and at the same priority the pack that registered first (in file-name order) wins; see
+    ///     <see cref="AssetPackRegistry" />. A temporary pack, for example a holiday pack, uses a higher priority.
+    ///     Default 100 when absent.
     /// </summary>
     [JsonPropertyName("priority")]
     public int Priority { get; init; } = 100;
@@ -73,12 +77,20 @@ public sealed class AssetPackCoverageEntry
     public int[]? Dimensions { get; init; }
 
     /// <summary>
-    ///     Optional list of 1-based item IDs that participate in the runtime find-and-replace dye pass. Only meaningful
-    ///     for <c>item_icons</c> content. Items outside this list ignore the server's color byte and render as-is —
-    ///     the renderer also collapses the cache key to <c>color = 0</c> for them.
+    ///     Optional list of 1-based item IDs that take the runtime find-and-replace dye pass. Only meaningful for
+    ///     <c>item_icons</c> content. When a pack has this list, it is the exact set of dyeable items, and the client does
+    ///     not detect dyeability from the art. Older scaffold packs write it; Taliesin does not.
     /// </summary>
     [JsonPropertyName("dyeable")]
     public int[]? Dyeable { get; init; }
+
+    /// <summary>
+    ///     Optional list of 1-based item IDs that do not take the dye, although their art contains the canonical dye ramp.
+    ///     Only meaningful for <c>item_icons</c> content, and only when the pack has no <see cref="Dyeable" /> list.
+    ///     Taliesin writes this list.
+    /// </summary>
+    [JsonPropertyName("no_dye")]
+    public int[]? NoDye { get; init; }
 
     /// <summary>
     ///     For <c>npc_portraits</c>, a flat <c>(portrait key → PNG filename)</c> lookup. The key is the literal

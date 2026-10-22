@@ -196,6 +196,7 @@ public sealed class OtherProfileEquipmentTab : PrefabPanel
 
             visual.ItemName = string.Empty;
             visual.Image.Texture = visual.PlaceholderTexture;
+            visual.Image.TextureOffset = Vector2.Zero;
         }
     }
 
@@ -248,9 +249,10 @@ public sealed class OtherProfileEquipmentTab : PrefabPanel
             if (!SlotVisuals.TryGetValue((EquipmentSlot)(byte)slot.Slot, out var visual))
                 continue;
 
-            var texture = UiRenderer.Instance!.GetItemIcon(slot.Sprite, (DisplayColor)slot.Color);
-            visual.ItemTexture = texture;
-            visual.Image.Texture = texture;
+            var icon = UiRenderer.Instance!.GetItemIcon(slot.Sprite, (DisplayColor)slot.Color);
+            visual.ItemTexture = icon.Texture;
+            visual.Image.Texture = icon.Texture;
+            visual.Image.TextureOffset = icon.Offset;
         }
     }
 

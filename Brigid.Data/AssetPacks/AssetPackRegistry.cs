@@ -1,6 +1,7 @@
 #region
 using System.IO.Compression;
 using System.Text.Json;
+using SkiaSharp;
 #endregion
 
 namespace Brigid.Data.AssetPacks;
@@ -8,13 +9,30 @@ namespace Brigid.Data.AssetPacks;
 /// <summary>
 ///     Discovers and registers <c>.datf</c> asset packs from the per-user Erisco assets directory
 ///     (<see cref="AppPaths.AssetsDir" />) at startup. Packs are identified by the <c>content_type</c> field in their
-///     embedded <c>_manifest.json</c> and exposed via typed accessors (e.g. <see cref="GetIconPack" />). Missing
-///     manifests, malformed JSON, or unsupported schema versions cause the pack to be skipped with a warning rather
-///     than failing startup.
+///     embedded <c>_manifest.json</c>. Missing manifests, malformed JSON, or unsupported schema versions cause the pack
+///     to be skipped with a warning rather than failing startup.
 ///     <para>
-///     The registry stores packs through the <see cref="IAssetPack" /> interface in a content-type-keyed dictionary;
-///     adding a new pack type is one factory entry in <see cref="Factories" /> plus one typed accessor. Per-type
-///     register methods (the older shape) have been collapsed into a single <see cref="TryRegisterByContentType" />.
+///     A content type can have several packs. The registry keeps them in order of the manifest <c>priority</c>, the
+///     highest first; packs with the same priority stay in registration order, and the registry registers the files in
+///     file-name order (ordinal, case ignored), so the order is the same on every OS. A lookup asks for a key (an id, a
+///     name) and tries each pack of the type in that order: a pack that has no entry for the key, or whose entry does
+///     not decode, passes the lookup to the next pack, and after the last pack the caller uses legacy art. So when two
+///     packs cover the same key, the pack with the higher priority wins, and at the same priority the pack that
+///     registered first wins. A temporary pack, for example a holiday pack, uses a higher priority to replace the art
+///     of the packs below it while it is installed. Registration logs a warning that names both packs, the shared keys
+///     and the pack that a lookup asks first.
+///     </para>
+///     <para>
+///     There are three kinds of lookup. For a key that is one image, the registry gives a <c>TryGet…</c> lookup that
+///     decodes the image and asks the next pack when the decode fails. For a key with several values that must come
+///     from one pack (a creature: its frames, its pair count and its bounding box), the first pack that covers the
+///     key owns it (<see cref="GetCreaturePackFor" />), and an entry of that pack that does not decode shows the
+///     placeholder. When only the caller can tell whether an entry works, or must keep a second decision with the pack
+///     that answered, the caller goes through the ordered <c>…Packs</c> sequence itself: audio, which SDL decodes, and
+///     items, whose dye the pack that gives the image decides (<c>ItemIconSource</c>).
+///     </para>
+///     <para>
+///     Adding a new pack type is one factory entry in <see cref="Factories" /> plus its typed accessors.
 ///     </para>
 /// </summary>
 public static class AssetPackRegistry
@@ -50,9 +68,12 @@ public static class AssetPackRegistry
         ["town_maps"]           = static (a, m) => new TownMapPack(a, m)
     };
 
-    //registered packs keyed by manifest.content_type. Single pack per type — when multiple packs cover the same
-    //content type, the highest priority wins (ties broken by first-registered).
-    private static readonly Dictionary<string, IAssetPack> Packs = new();
+    //the number of shared keys that an overlap warning names
+    private const int OVERLAP_KEYS_SHOWN = 5;
+
+    //registered packs keyed by manifest.content_type: the highest priority first, then in registration order. a
+    //lookup tries them in this order, so the first pack that covers a key wins
+    private static readonly Dictionary<string, List<IAssetPack>> Packs = new();
     private static bool Initialized;
 
     /// <summary>
@@ -88,9 +109,9 @@ public static class AssetPackRegistry
         }
 
         var discovered = 0;
-        var registeredBefore = Packs.Count;
+        var registeredBefore = RegisteredCount;
 
-        foreach (var path in Directory.EnumerateFiles(packDir, "*.datf", SearchOption.TopDirectoryOnly))
+        foreach (var path in InRegistrationOrder(Directory.EnumerateFiles(packDir, "*.datf", SearchOption.TopDirectoryOnly)))
         {
             discovered++;
             TryRegisterPack(path);
@@ -103,7 +124,7 @@ public static class AssetPackRegistry
             return;
         }
 
-        LogInfo($"registered {Packs.Count - registeredBefore} asset pack(s) from '{packDir}'");
+        LogInfo($"registered {RegisteredCount - registeredBefore} asset pack(s) from '{packDir}'");
     }
 
     /// <summary>
@@ -179,76 +200,99 @@ public static class AssetPackRegistry
         }
     }
 
-    /// <summary>
-    ///     Returns the currently-registered ability-icon pack, or null if no pack of <c>content_type: ability_icons</c>
-    ///     is present.
-    /// </summary>
-    public static IconPack? GetIconPack() => Packs.GetValueOrDefault("ability_icons") as IconPack;
+    /// <summary>The <c>ability_icons</c> packs, in lookup order.</summary>
+    public static IEnumerable<IconPack> IconPacks => PacksOf<IconPack>("ability_icons");
+
+    /// <summary>The <c>nation_badges</c> packs, in lookup order.</summary>
+    public static IEnumerable<NationBadgePack> NationBadgePacks => PacksOf<NationBadgePack>("nation_badges");
+
+    /// <summary>The <c>item_icons</c> packs, in lookup order.</summary>
+    public static IEnumerable<ItemPack> ItemPacks => PacksOf<ItemPack>("item_icons");
+
+    /// <summary>The <c>npc_portraits</c> packs, in lookup order.</summary>
+    public static IEnumerable<NpcPortraitPack> NpcPortraitPacks => PacksOf<NpcPortraitPack>("npc_portraits");
+
+    /// <summary>The <c>static_tiles</c> packs, in lookup order.</summary>
+    public static IEnumerable<StaticTilePack> StaticTilePacks => PacksOf<StaticTilePack>("static_tiles");
+
+    /// <summary>The <c>legend_mark_icons</c> packs, in lookup order.</summary>
+    public static IEnumerable<LegendMarkIconPack> LegendMarkIconPacks => PacksOf<LegendMarkIconPack>("legend_mark_icons");
+
+    /// <summary>The <c>ui_sprite_overrides</c> packs, in lookup order.</summary>
+    public static IEnumerable<UiSpriteOverridePack> UiSpriteOverridePacks => PacksOf<UiSpriteOverridePack>("ui_sprite_overrides");
+
+    /// <summary>The <c>creature_sprites</c> packs, in lookup order.</summary>
+    public static IEnumerable<CreaturePack> CreaturePacks => PacksOf<CreaturePack>("creature_sprites");
+
+    /// <summary>The <c>music</c> packs, in lookup order.</summary>
+    public static IEnumerable<MusicPack> MusicPacks => PacksOf<MusicPack>("music");
+
+    /// <summary>The <c>sound_effects</c> packs, in lookup order.</summary>
+    public static IEnumerable<SfxPack> SfxPacks => PacksOf<SfxPack>("sound_effects");
+
+    /// <summary>The <c>world_maps</c> packs, in lookup order.</summary>
+    public static IEnumerable<WorldMapPack> WorldMapPacks => PacksOf<WorldMapPack>("world_maps");
+
+    /// <summary>The <c>town_maps</c> packs, in lookup order.</summary>
+    public static IEnumerable<TownMapPack> TownMapPacks => PacksOf<TownMapPack>("town_maps");
+
+    /// <summary>True when at least one <c>static_tiles</c> pack is registered. Lets the map preload skip its pack pass.</summary>
+    public static bool HasStaticTilePacks => Packs.TryGetValue("static_tiles", out var list) && (list.Count > 0);
+
+    /// <summary>The first <c>ability_icons</c> pack that decodes <c>{prefix}{id:D4}.png</c>. The caller owns the image.</summary>
+    public static bool TryGetIconImage(string prefix, int spriteId, out SKImage? image)
+        => TryFirstImage("ability_icons", (prefix, spriteId), static (IconPack pack, (string Prefix, int Id) key, out SKImage? img) => pack.TryGetIconImage(key.Prefix, key.Id, out img), out image);
+
+    /// <summary>The first <c>nation_badges</c> pack that decodes the badge. The caller owns the image.</summary>
+    public static bool TryGetBadgeImage(byte nationId, out SKImage? image)
+        => TryFirstImage("nation_badges", nationId, static (NationBadgePack pack, byte key, out SKImage? img) => pack.TryGetBadgeImage(key, out img), out image);
+
+    /// <summary>The first <c>npc_portraits</c> pack that gives a valid illustration for the key. The caller owns the image.</summary>
+    public static bool TryGetNpcIllustration(string portraitKey, out SKImage? image)
+        => TryFirstImage("npc_portraits", portraitKey, static (NpcPortraitPack pack, string key, out SKImage? img) => pack.TryGetIllustration(key, out img), out image);
+
+    /// <summary>The first <c>static_tiles</c> pack that decodes the floor tile. The caller owns the image.</summary>
+    public static bool TryGetFloorImage(int tileId, out SKImage? image)
+        => TryFirstImage("static_tiles", tileId, static (StaticTilePack pack, int key, out SKImage? img) => pack.TryGetFloorImage(key, out img), out image);
+
+    /// <summary>The first <c>static_tiles</c> pack that decodes the wall tile. The caller owns the image.</summary>
+    public static bool TryGetWallImage(int tileId, out SKImage? image)
+        => TryFirstImage("static_tiles", tileId, static (StaticTilePack pack, int key, out SKImage? img) => pack.TryGetWallImage(key, out img), out image);
+
+    /// <summary>The first <c>legend_mark_icons</c> pack that decodes the icon. The caller owns the image.</summary>
+    public static bool TryGetLegendMarkImage(byte iconId, out SKImage? image)
+        => TryFirstImage("legend_mark_icons", iconId, static (LegendMarkIconPack pack, byte key, out SKImage? img) => pack.TryGetLegendMarkImage(key, out img), out image);
 
     /// <summary>
-    ///     Returns the currently-registered nation-badge pack, or null if no pack of <c>content_type: nation_badges</c>
-    ///     is present.
+    ///     The first <c>ui_sprite_overrides</c> pack that decodes the frame. The key is the file name with its extension
+    ///     and the frame, so one file can take frames from two packs. The caller owns the image.
     /// </summary>
-    public static NationBadgePack? GetNationBadgePack() => Packs.GetValueOrDefault("nation_badges") as NationBadgePack;
+    public static bool TryGetUiSprite(string fileName, int frameIndex, out SKImage? image)
+        => TryFirstImage("ui_sprite_overrides", (fileName, frameIndex), static (UiSpriteOverridePack pack, (string File, int Frame) key, out SKImage? img) => pack.TryGetSprite(key.File, key.Frame, out img), out image);
+
+    /// <summary>The first <c>world_maps</c> pack that decodes the field background. The caller owns the image.</summary>
+    public static bool TryGetFieldImage(string fieldName, out SKImage? image)
+        => TryFirstImage("world_maps", fieldName, static (WorldMapPack pack, string key, out SKImage? img) => pack.TryGetFieldImage(key, out img), out image);
+
+    /// <summary>The first <c>town_maps</c> pack that decodes the town map. The caller owns the image.</summary>
+    public static bool TryGetTownMapImage(short mapId, out SKImage? image)
+        => TryFirstImage("town_maps", mapId, static (TownMapPack pack, short key, out SKImage? img) => pack.TryGetTownMapImage(key, out img), out image);
 
     /// <summary>
-    ///     Returns the currently-registered item-icon pack, or null if no pack of <c>content_type: item_icons</c> is
-    ///     present.
+    ///     The first <c>creature_sprites</c> pack that covers <paramref name="spriteId" />, or null. That pack owns the
+    ///     creature: it gives the frames, the pair count and the bounding box, so two packs never mix in one creature.
     /// </summary>
-    public static ItemPack? GetItemPack() => Packs.GetValueOrDefault("item_icons") as ItemPack;
+    public static CreaturePack? GetCreaturePackFor(int spriteId)
+    {
+        if (!Packs.TryGetValue("creature_sprites", out var list))
+            return null;
 
-    /// <summary>
-    ///     Returns the currently-registered NPC-portrait pack, or null if no pack of
-    ///     <c>content_type: npc_portraits</c> is present.
-    /// </summary>
-    public static NpcPortraitPack? GetNpcPortraitPack() => Packs.GetValueOrDefault("npc_portraits") as NpcPortraitPack;
+        foreach (var pack in list)
+            if (pack is CreaturePack creatures && creatures.Covers(spriteId))
+                return creatures;
 
-    /// <summary>
-    ///     Returns the currently-registered static-tile pack, or null if no pack of <c>content_type: static_tiles</c>
-    ///     is present.
-    /// </summary>
-    public static StaticTilePack? GetStaticTilePack() => Packs.GetValueOrDefault("static_tiles") as StaticTilePack;
-
-    /// <summary>
-    ///     Returns the currently-registered legend-mark-icon pack, or null if no pack of
-    ///     <c>content_type: legend_mark_icons</c> is present.
-    /// </summary>
-    public static LegendMarkIconPack? GetLegendMarkIconPack() => Packs.GetValueOrDefault("legend_mark_icons") as LegendMarkIconPack;
-
-    /// <summary>
-    ///     Returns the currently-registered UI-sprite-override pack, or null if no pack of
-    ///     <c>content_type: ui_sprite_overrides</c> is present.
-    /// </summary>
-    public static UiSpriteOverridePack? GetUiSpriteOverridePack() => Packs.GetValueOrDefault("ui_sprite_overrides") as UiSpriteOverridePack;
-
-    /// <summary>
-    ///     Returns the currently-registered creature-sprite pack, or null if no pack of
-    ///     <c>content_type: creature_sprites</c> is present.
-    /// </summary>
-    public static CreaturePack? GetCreaturePack() => Packs.GetValueOrDefault("creature_sprites") as CreaturePack;
-
-    /// <summary>
-    ///     Returns the currently-registered music pack, or null if no pack of <c>content_type: music</c> is present.
-    /// </summary>
-    public static MusicPack? GetMusicPack() => Packs.GetValueOrDefault("music") as MusicPack;
-
-    /// <summary>
-    ///     Returns the currently-registered sound-effects pack, or null if no pack of <c>content_type: sound_effects</c>
-    ///     is present.
-    /// </summary>
-    public static SfxPack? GetSfxPack() => Packs.GetValueOrDefault("sound_effects") as SfxPack;
-
-    /// <summary>
-    ///     Returns the currently-registered world-map pack, or null if no pack of <c>content_type: world_maps</c> is
-    ///     present.
-    /// </summary>
-    public static WorldMapPack? GetWorldMapPack() => Packs.GetValueOrDefault("world_maps") as WorldMapPack;
-
-    /// <summary>
-    ///     Returns the currently-registered town-map pack, or null if no pack of <c>content_type: town_maps</c> is
-    ///     present.
-    /// </summary>
-    public static TownMapPack? GetTownMapPack() => Packs.GetValueOrDefault("town_maps") as TownMapPack;
+        return null;
+    }
 
     private static void TryRegisterPack(string path)
     {
@@ -327,30 +371,121 @@ public static class AssetPackRegistry
     }
 
     /// <summary>
-    ///     Single consolidated registration path. Looks up a factory for the declared content type, applies the
-    ///     priority-wins conflict resolution rule (ties broken by first-registered), and either stores the new pack
-    ///     or logs the rejected pack and disposes its archive.
+    ///     Single consolidated registration path. Looks up a factory for the declared content type, warns about the keys
+    ///     that the new pack shares with the packs already registered for that type, and puts the new pack in the order:
+    ///     after every pack with the same or a higher priority, so a higher priority wins a shared key, and equal
+    ///     priorities keep the registration order.
     /// </summary>
     private static bool TryRegisterByContentType(ZipArchive archive, AssetPackManifest manifest)
     {
         if (!Factories.TryGetValue(manifest.ContentType, out var factory))
             return false;
 
-        if (Packs.TryGetValue(manifest.ContentType, out var existing) && (manifest.Priority <= existing.Manifest.Priority))
-        {
-            LogWarning($"{manifest.ContentType} pack '{manifest.PackId}' ignored — lower priority ({manifest.Priority}) than current pack '{existing.Manifest.PackId}' ({existing.Manifest.Priority})");
-            archive.Dispose();
+        var pack = factory(archive, manifest);
 
-            return true;
+        if (!Packs.TryGetValue(manifest.ContentType, out var list))
+        {
+            list = [];
+            Packs[manifest.ContentType] = list;
         }
 
-        existing?.Dispose();
-        Packs[manifest.ContentType] = factory(archive, manifest);
+        var index = list.FindIndex(other => other.Manifest.Priority < manifest.Priority);
+
+        if (index < 0)
+            index = list.Count;
+
+        for (var i = 0; i < list.Count; i++)
+        {
+            var other = list[i];
+            var shared = SharedKeys(other, pack);
+
+            if (shared.Count == 0)
+                continue;
+
+            //registration cannot tell which entries decode, so the warning gives the order, not a winner for each key
+            var (first, second) = i < index ? (other.Manifest, manifest) : (manifest, other.Manifest);
+            var reason = first.Priority == second.Priority
+                ? "it registered first, at the same priority"
+                : $"its priority {first.Priority} is higher than {second.Priority}";
+
+            LogWarning($"{manifest.ContentType} packs '{other.Manifest.PackId}' and '{manifest.PackId}' share {shared.Count} key(s) "
+                       + $"({string.Join(", ", shared.Take(OVERLAP_KEYS_SHOWN))}{(shared.Count > OVERLAP_KEYS_SHOWN ? ", ..." : string.Empty)}); "
+                       + $"'{first.PackId}' is asked first, before '{second.PackId}': {reason}. "
+                       + $"An entry of '{first.PackId}' that does not decode passes the lookup to '{second.PackId}'");
+        }
+
+        list.Insert(index, pack);
 
         return true;
     }
 
-    private static void LogWarning(string message) => Console.Error.WriteLine($"[asset-pack] {message}");
+    /// <summary>
+    ///     The keys that both packs cover, sorted. A key is what a lookup asks for: an entry name for most types, the
+    ///     id for an audio pack (so <c>sfx_1.wav</c> and <c>sfx_0001.mp3</c> are the same key). Case is ignored.
+    /// </summary>
+    internal static List<string> SharedKeys(IAssetPack first, IAssetPack second)
+    {
+        var keys = new HashSet<string>(first.CoverageKeys, StringComparer.OrdinalIgnoreCase);
+        var shared = second.CoverageKeys.Where(keys.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        shared.Sort(StringComparer.OrdinalIgnoreCase);
 
-    private static void LogInfo(string message) => Console.Out.WriteLine($"[asset-pack] {message}");
+        return shared;
+    }
+
+    /// <summary>The pack files in registration order: by file name, ordinal, case ignored.</summary>
+    internal static IEnumerable<string> InRegistrationOrder(IEnumerable<string> paths)
+        => paths.OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase).ThenBy(Path.GetFileName, StringComparer.Ordinal);
+
+    /// <summary>Registers an archive as if it came from a file. For tests only.</summary>
+    internal static bool RegisterForTest(ZipArchive archive, AssetPackManifest manifest) => TryRegisterByContentType(archive, manifest);
+
+    /// <summary>
+    ///     Disposes every pack and empties the registry, so that a test starts clean. For tests only. It marks the
+    ///     registry as initialized, so that nothing scans the real assets folder during a test.
+    /// </summary>
+    internal static void ResetForTest()
+    {
+        foreach (var list in Packs.Values)
+            foreach (var pack in list)
+                pack.Dispose();
+
+        Packs.Clear();
+        Initialized = true;
+    }
+
+    /// <summary>Each warning line that the registry logs. For tests, which must not share the global log seam.</summary>
+    internal static event Action<string>? WarningLogged;
+
+    private static int RegisteredCount => Packs.Values.Sum(list => list.Count);
+
+    private static IEnumerable<T> PacksOf<T>(string contentType) where T : class, IAssetPack
+        => Packs.TryGetValue(contentType, out var list) ? list.OfType<T>() : [];
+
+    private delegate bool ImageLookup<in TPack, in TKey>(TPack pack, TKey key, out SKImage? image);
+
+    //asks each pack of the type in order. a pack that has no entry, or whose entry does not decode, gives false, and
+    //the loop asks the next pack. the lookups are static lambdas with the key as an argument, so a call allocates
+    //nothing: some callers run every frame
+    private static bool TryFirstImage<TPack, TKey>(string contentType, TKey key, ImageLookup<TPack, TKey> lookup, out SKImage? image)
+        where TPack : class, IAssetPack
+    {
+        if (Packs.TryGetValue(contentType, out var list))
+            foreach (var pack in list)
+                if (pack is TPack typed && lookup(typed, key, out image) && (image is not null))
+                    return true;
+
+        image = null;
+
+        return false;
+    }
+
+    //through the data-layer log seam, so that the lines reach notice-debug.log and not only stderr
+    private static void LogWarning(string message)
+    {
+        var line = $"[asset-pack] warning: {message}";
+        DataDiagnostics.Log?.Invoke(line);
+        WarningLogged?.Invoke(line);
+    }
+
+    private static void LogInfo(string message) => DataDiagnostics.Log?.Invoke($"[asset-pack] {message}");
 }
