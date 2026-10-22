@@ -66,6 +66,9 @@ public sealed class SoundSystem : IDisposable
     //a one-shot bed for DesiredAmbientId played to its end. it does not play again until a different id or a stop
     private bool AmbientOneShotDone;
     private int AmbienceVolume = SdlMixer.MIX_MAX_VOLUME;
+    //the ambience volume changed while the bed faded in. at the end of a fade-in the mixer sets the volume that it had
+    //at the start of the fade, so Update() sets the new volume again when the fade ends
+    private bool AmbienceVolumeChangedInFade;
 
     private int CurrentMusicId = -1;
     //pins the pack-supplied byte[] backing a streamed Mix_LoadMUS_RW handle; SDL streams from this memory for the
@@ -251,8 +254,13 @@ public sealed class SoundSystem : IDisposable
     {
         AmbienceVolume = Math.Clamp(volume, 0, VOLUME_STEPS) * VOLUME_SCALE;
 
-        if (Initialized && (AmbientChannel >= 0))
-            SdlMixer.Mix_Volume(AmbientChannel, AmbienceVolume);
+        if (!Initialized || (AmbientChannel < 0))
+            return;
+
+        SdlMixer.Mix_Volume(AmbientChannel, AmbienceVolume);
+
+        if (SdlMixer.Mix_FadingChannel(AmbientChannel) != SdlMixer.MIX_NO_FADING)
+            AmbienceVolumeChangedInFade = true;
     }
 
     /// <summary>
@@ -372,6 +380,13 @@ public sealed class SoundSystem : IDisposable
         //try again to start a bed that did not start because every channel was busy
         if ((DesiredAmbientId >= 0) && (AmbientChannel < 0) && !AmbientOneShotDone)
             TryStartAmbient();
+
+        //the mixer clears the fade and sets the volume of the fade start in one step, so after it the new volume stays
+        if (AmbienceVolumeChangedInFade && (AmbientChannel >= 0) && (SdlMixer.Mix_FadingChannel(AmbientChannel) == SdlMixer.MIX_NO_FADING))
+        {
+            SdlMixer.Mix_Volume(AmbientChannel, AmbienceVolume);
+            AmbienceVolumeChangedInFade = false;
+        }
 
         //detect fade-out completion and start the queued track (if any)
         if (MusicFadingOut && (SdlMixer.Mix_PlayingMusic() == 0))
@@ -561,8 +576,15 @@ public sealed class SoundSystem : IDisposable
     {
         var pack = AmbientPackFor(ambientId);
 
-        if ((pack is null) || !pack.TryGetAmbientBytes(ambientId, out var bytes) || (bytes is not { Length: > 0 }))
+        if ((pack is null) || !pack.TryGetAmbientBytes(ambientId, out var bytes) || (bytes is null))
             return nint.Zero;
+
+        if (bytes.Length == 0)
+        {
+            NoticeDebugLog.Write($"[audio] ambient pack '{pack.Manifest.PackId}' has amb_{ambientId}, but the entry is empty");
+
+            return nint.Zero;
+        }
 
         var chunk = LoadChunkFromBytes(bytes);
 
@@ -635,6 +657,7 @@ public sealed class SoundSystem : IDisposable
 
         AmbientChannel = channel;
         PlayingAmbientId = DesiredAmbientId;
+        AmbienceVolumeChangedInFade = false;
     }
 
     //a looping bed plays until a stop, so an idle AmbientChannel means a one-shot bed came to its end. release the

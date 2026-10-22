@@ -485,7 +485,8 @@ amb_{id}.{ext}
 - Regex: `^amb_\d+\.(wav|ogg|mp3|flac)$`. Same root-only + plain-digit ID parsing as `music`. Taliesin writes `amb_{id:D4}`, for example `amb_0001.wav`.
 - `{id}` is an **ambient id**, a separate number space from the SFX id. `0` means no ambient, so ids are 1–255 (a byte, to agree with the planned per-map server field).
 - API `TryGetAmbientBytes(int ambientId, out byte[]?)` and `Loops(int ambientId)`.
-- Consumed by `SoundSystem.StartAmbient`. **No legacy fallback:** an id with no entry is a silent no-op, and an entry that does not decode is silent too (the client writes one line to `notice-debug.log`). An entry outside 1–255 is ignored.
+- Consumed by `SoundSystem.StartAmbient`. **No legacy fallback:** an id with no entry is a silent no-op, and an entry that is empty or does not decode is silent too (the client writes one line to `notice-debug.log`). An entry outside 1–255 is ignored.
+- **Size:** the client decodes a whole entry to PCM in memory, with no size limit, as for `sound_effects`. At the mixer format (22050 Hz, 16-bit, stereo) one second is about 86 KB, so a 10 s bed is under 1 MB and a 5 min bed is about 26 MB. Make a bed a short loop, not a long recording.
 - Manifest field read: `covers.ambient_sounds`, keyed by ambient id. Only `{ "loop": false }` changes the default.
 
 | `covers.ambient_sounds["<id>"]`          | Client behaviour                  |
