@@ -10,9 +10,9 @@ namespace Brigid.Data.AssetPacks;
 ///     <c>{id}</c> is the integer sound id (the value the server sends in <c>SoundArgs.Sound</c> when
 ///     <c>IsMusic</c> is false; matches the legacy <c>legend.dat</c> <c>{id}.mp3</c> numbering) and <c>{ext}</c> is
 ///     one of <c>wav</c>/<c>ogg</c>/<c>mp3</c>/<c>flac</c>. A present id replaces the legacy <c>legend.dat</c> sound;
-///     a new id is an addition. <c>wav</c> or <c>mp3</c> is recommended: only those are guaranteed by the client's
-///     bundled SDL2_mixer build (WAV natively, MP3 via the statically-linked minimp3). <c>ogg</c>/<c>flac</c> need
-///     codec libraries not currently shipped and fall back to the legacy sound if they fail to decode. The client
+///     a new id is an addition. Each bundled SDL2_mixer build decodes all four formats: on Windows and macOS the
+///     decoders are built in (minimp3, stb_vorbis, dr_flac); on Linux, <c>ogg</c> and <c>flac</c> come from the system
+///     libraries that the package declares. An entry that does not decode falls back to the legacy sound. The client
 ///     fully decodes these bytes via <c>Mix_LoadWAV_RW</c> and caches the resulting chunk.
 /// </summary>
 public sealed class SfxPack : AudioPack
