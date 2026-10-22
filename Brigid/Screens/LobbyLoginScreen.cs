@@ -6,6 +6,7 @@ using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.LobbyLogin;
 using Brigid.Data;
+using Brigid.Data.AssetPacks;
 using Brigid.Extensions;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
@@ -36,6 +37,7 @@ public sealed class LobbyLoginScreen : IScreen
     //the screen and its menu are made again on every return from the world and after Config; the alert shows once per
     //process
     private static bool NoSoundAlertAdded;
+    private static bool AssetsAlertAdded;
 
     private readonly bool ReturningFromWorld;
     private bool AwaitingCharFinalize;
@@ -220,6 +222,7 @@ public sealed class LobbyLoginScreen : IScreen
 
         MaybeAddLegacyImportAlert();
         MaybeAddNoSoundAlert();
+        MaybeAddAssetsAlert();
 
         //a logout redirect leaves the client connected to the login server. A server that closes the connection at
         //logout leaves no connection, and a login or a create would then wait for a reply that never comes, so start
@@ -568,6 +571,16 @@ public sealed class LobbyLoginScreen : IScreen
 
         NoSoundAlertAdded = true;
         Menu.Alerts.Add(MenuAlerts.NoSound(OperatingSystem.IsLinux()));
+    }
+
+    //── once-per-process alert that the assets folder could not be listed ──
+    private void MaybeAddAssetsAlert()
+    {
+        if (AssetsAlertAdded || AssetPackRegistry.UnlistableFolder is not { } folder)
+            return;
+
+        AssetsAlertAdded = true;
+        Menu.Alerts.Add(MenuAlerts.AssetsUnreadable(folder));
     }
 
     //── legacy character-data import offer, until the player decides ──

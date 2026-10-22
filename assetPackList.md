@@ -51,7 +51,7 @@ standard targets `~/.config`, which is `SpecialFolder.ApplicationData` there. If
 returns `""` (stripped env, `HOME` unset), the base falls back to `AppContext.BaseDirectory` so
 packs never scatter into the CWD.
 
-Scan is `AssetPackRegistry.EnumeratePackFiles(packDir)` — extension `.datf` only, in any case (`Wood.DATF` registers on Linux too), top level only, no recursion — sorted by file name (`InRegistrationOrder`, ordinal, case ignored), which is the registration order. The legacy migration below uses the same scan.
+Scan is `AssetPackRegistry.EnumeratePackFiles(packDir)` — extension `.datf` only, in any case (`Wood.DATF` registers on Linux too), top level only, no recursion — sorted by file name (`InRegistrationOrder`, ordinal, case ignored), which is the registration order. The legacy migration below uses the same scan. A folder that exists but cannot be listed (no permission, a network drive that is gone) logs `cannot list the asset-pack folder '...', so the client starts with no packs: ...`, and the client starts with no packs; the main menu shows a "No Packs" alert that names the folder, once for each run of the client (BRIG-129).
 
 ### Validation ladder
 
@@ -99,13 +99,7 @@ To make one pack win, give it a higher `priority` (the default is 100). A tempor
 
 ### Legacy migration
 
-One-time, best-effort copy of `{DataContext.DataPath}/hybrasyl-data/*.datf` into `AssetsDir`,
-smoothing pre-`AppPaths` manual installs. Gated by a `.legacy-migrated` marker file written into
-`AssetsDir` whether or not anything was found — the gate is "has it ever run", not "is the dir
-empty", so clearing the assets dir to force a launcher re-fetch never resurrects stale packs. Copies
-to `{dst}.tmp` then `File.Move` so an interrupted copy can't leave a truncated archive. Per-file
-`File.Exists(dst)` skip means launcher-placed content is never clobbered. Every failure path is
-swallowed.
+One-time, best-effort copy of `{DataContext.DataPath}/hybrasyl-data/*.datf` into `AssetsDir`, smoothing pre-`AppPaths` manual installs. Gated by a `.legacy-migrated` marker file written into `AssetsDir` whether or not anything was found — the gate is "has it ever run", not "is the dir empty", so clearing the assets dir to force a launcher re-fetch never resurrects stale packs. Copies to `{dst}.tmp` then `File.Move` so an interrupted copy can't leave a truncated archive. Per-file `File.Exists(dst)` skip means launcher-placed content is never clobbered. A failure never stops the start: a failed copy skips that pack, and a failure of the scan or the copy loop logs `cannot migrate the legacy asset packs from '...': ...`. A marker that cannot be written is not logged.
 
 ### No hot reload
 
