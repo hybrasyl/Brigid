@@ -13,7 +13,7 @@ namespace Brigid.Tests;
 
 /// <summary>
 ///     The BRIG-122 primitive gallery: Toggle opens it on a root and closes it again, Escape closes an open list first and
-///     then the gallery, every child has a lowercase name, every sample lies inside the frame (flat and with a wide themed
+///     then the gallery, the debug overlay layers are off while it is open and come back as they were when it closes, every child has a lowercase name, every sample lies inside the frame (flat and with a wide themed
 ///     frame), and every theme role is named on the gallery (the status icon roles by their common prefix).
 /// </summary>
 [Collection("FontEngine")]
@@ -21,7 +21,11 @@ public sealed class PrimitiveGalleryTests : IDisposable
 {
     public PrimitiveGalleryTests() => FontEngine.Initialize(0);
 
-    public void Dispose() => AssetPackRegistry.SetUiThemeForTests(null);
+    public void Dispose()
+    {
+        AssetPackRegistry.SetUiThemeForTests(null);
+        DebugOverlay.Layers = (true, true, true, true);
+    }
 
     private static UIPanel Root() => new() { Width = 640, Height = 480 };
 
@@ -50,6 +54,35 @@ public sealed class PrimitiveGalleryTests : IDisposable
         root.FindChild<PrimitiveGallery>("primitivegallery")!.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
 
         Assert.Null(root.FindChild<PrimitiveGallery>("primitivegallery"));
+    }
+
+    [Fact]
+    public void OpenTurnsTheOverlayLayersOffAndCloseRestoresThem()
+    {
+        var root = Root();
+        DebugOverlay.Layers = (true, false, true, true);
+
+        PrimitiveGallery.Toggle(root);
+
+        Assert.Equal((false, false, false, false), DebugOverlay.Layers);
+
+        //a layer turned on while the gallery is open does not stay on after it closes
+        DebugOverlay.ShowUiNames = true;
+        PrimitiveGallery.Toggle(root);
+
+        Assert.Equal((true, false, true, true), DebugOverlay.Layers);
+    }
+
+    [Fact]
+    public void EscapeRestoresTheOverlayLayers()
+    {
+        var root = Root();
+        DebugOverlay.Layers = (true, true, false, true);
+        PrimitiveGallery.Toggle(root);
+
+        root.FindChild<PrimitiveGallery>("primitivegallery")!.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
+
+        Assert.Equal((true, true, false, true), DebugOverlay.Layers);
     }
 
     [Fact]

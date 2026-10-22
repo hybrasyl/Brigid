@@ -316,7 +316,8 @@ public sealed class PrimitiveGallery : CenteredModalPanel
     /// <summary>
     ///     Opens the gallery on <paramref name="root" />, or closes it when it is open there. Does nothing with no root (the
     ///     launcher screen). Opening it takes the focus from a text box (the chat), so that the gallery gets the keys and
-    ///     the clicks.
+    ///     the clicks, and turns off the debug overlay layers (the element boxes and names, the stats and the readouts), so
+    ///     that a screenshot shows only the gallery. Closing it puts the layers back as they were when it opened.
     /// </summary>
     public static void Toggle(UIPanel? root)
     {
@@ -333,7 +334,11 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         UITextBox.CurrentlyFocused?.IsFocused = false;
         InputDispatcher.Instance?.ClearExplicitFocus();
 
+        var layers = DebugOverlay.Layers;
+        DebugOverlay.Layers = (false, false, false, false);
+
         var gallery = new PrimitiveGallery { ZIndex = 50 };
+        gallery.OnClose += () => DebugOverlay.Layers = layers;
         root.AddChild(gallery);
         gallery.Show();
     }

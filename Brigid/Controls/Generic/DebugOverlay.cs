@@ -58,7 +58,7 @@ public static class DebugOverlay
 
     private static readonly string[] HelpText =
     [
-        "F11 overlay   num1 boxes   num2 names   num3 world   num4 perf   num0 all on",
+        "F11 overlay   num1 boxes   num2 names   num3 world   num4 stats + text   num0 all on",
         "num5 grab what a click hits, or drop   ctrl+num5 grab any element (labels, titles)",
         "num+ / num-   next / previous element under the grab point",
         "arrows move   shift+arrows resize   the change prints to the console",
@@ -94,8 +94,21 @@ public static class DebugOverlay
     /// <summary>Sub-toggle: world-space overlays (tile outlines, hitboxes, crosshair, hover tile). Gated under <see cref="IsActive" />.</summary>
     public static bool ShowWorld { get; set; } = true;
 
-    /// <summary>Sub-toggle: performance stats (frame graph, GC, heap, net). Gated under <see cref="IsActive" />.</summary>
+    /// <summary>
+    ///     Sub-toggle: performance stats (frame graph, GC, heap, net) and the focus and shortcut readouts under them. Gated
+    ///     under <see cref="IsActive" />.
+    /// </summary>
     public static bool ShowPerf { get; set; } = true;
+
+    /// <summary>
+    ///     The four layer sub-toggles at once, so that a debug panel (the primitive gallery) can turn them off while it is
+    ///     open and put them back when it closes.
+    /// </summary>
+    public static (bool UiBoxes, bool UiNames, bool World, bool Perf) Layers
+    {
+        get => (ShowUiBoxes, ShowUiNames, ShowWorld, ShowPerf);
+        set => (ShowUiBoxes, ShowUiNames, ShowWorld, ShowPerf) = value;
+    }
 
     /// <summary>True while an element is grabbed by the live nudge tool. Consumers (e.g. world movement) suppress arrow keys.</summary>
     public static bool HasNudgeSelection => NudgeTarget is not null;
@@ -633,10 +646,13 @@ public static class DebugOverlay
         //nudge readout draws whenever something is grabbed, independent of the perf sub-toggle
         readoutY = DrawNudgeReadout(spriteBatch, readoutY);
 
-        //dispatcher focus state — names the culprit when keyboard focus wedges
-        readoutY = DrawFocusReadout(spriteBatch, readoutY);
+        if (ShowPerf)
+        {
+            //dispatcher focus state — names the culprit when keyboard focus wedges
+            readoutY = DrawFocusReadout(spriteBatch, readoutY);
 
-        DrawHelp(spriteBatch, readoutY);
+            DrawHelp(spriteBatch, readoutY);
+        }
 
         spriteBatch.End();
 
