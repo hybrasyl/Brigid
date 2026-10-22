@@ -54,6 +54,27 @@ public class TextPopupControlTests
         Assert.Equal(framedWidth, popup.Width);
     }
 
+    //BRIG-138: with no frame.sign part, the sign is the flat frame with the sign's text margins, and its text takes the
+    //text role as every other style does
+    [Fact]
+    public void WithNoThemeTheSignKeepsItsTextMarginsAndTheTextRole()
+    {
+        var popup = new TextPopupControl();
+        var scroll = popup.FindChild<ScrollView>("text")!;
+        var message = popup.FindChild<UILabel>("message")!;
+
+        popup.Show("A sign.", PopupStyle.Wooden);
+        message.ApplyForegroundRole();
+
+        Assert.Equal(16, scroll.X);
+        Assert.Equal(12, scroll.Y);
+        Assert.Equal(360 - 2 * 16, scroll.Width);
+        Assert.Equal(180 - 12 - 32, scroll.Height);
+        Assert.Equal(DialogPalette.ForRole(ThemeRoles.Text), message.DrawnForegroundColor);
+
+        popup.Hide();
+    }
+
     [Theory]
     [InlineData(Keys.Escape, false)]
     [InlineData(Keys.Space, false)]

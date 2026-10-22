@@ -87,17 +87,26 @@ public class UIPanel : UIElement
     }
 
     /// <summary>
-    ///     Draws the panel itself, under its children: the background fill, the 1px border and the
-    ///     <see cref="Background" /> texture. A control that draws theme art overrides this and calls the base only when
-    ///     the theme has no part for it.
+    ///     Draws the flat look of the panel: the background fill and the 1px border. A themed control that has no part for
+    ///     its role, and must not fall back to its base's part, calls it.
     /// </summary>
-    protected virtual void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+    protected void DrawFlatChrome(SpriteBatch spriteBatch, Rectangle bounds)
     {
         if (DrawnBackgroundColor is { } fill)
             DrawRectClipped(spriteBatch, bounds, fill);
 
         if (DrawnBorderColor is { } border)
             DrawBorderClipped(spriteBatch, bounds, border);
+    }
+
+    /// <summary>
+    ///     Draws the panel itself, under its children: the background fill, the 1px border and the
+    ///     <see cref="Background" /> texture. A control that draws theme art overrides this and calls the base only when
+    ///     the theme has no part for it.
+    /// </summary>
+    protected virtual void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+    {
+        DrawFlatChrome(spriteBatch, bounds);
 
         if (Background is not null)
             DrawTexture(spriteBatch, Background, new Vector2(ScreenX, ScreenY), Color.White);
