@@ -68,6 +68,7 @@ Per file, in order; any failure skips **that pack only** and logs to `notice-deb
 | `schema_version <= 1`                     | `pack {name} declares schema_version=N which is newer than supported (1); skipping` |
 | `pack_id` present and not blank           | `pack {name} has no pack_id; skipping`                                   |
 | `pack_id` is not `none` (reserved for `UiTheme: none`) | `pack {name} has pack_id 'none', which is reserved (...); skipping` |
+| a `ui_theme` `pack_id` has only ASCII letters, digits, `-` and `_` (so `brigid.cfg` keeps it the same) | `pack {name} has pack_id '...', which a ui_theme cannot have (...); skipping` |
 | `pack_id` not already registered (any type, case ignored) | `pack {name} has pack_id '...', which the registered {type} pack '...' already has; skipping` |
 | `content_type` matches a factory key      | `pack {name} has unknown content_type='...'; skipping`                   |
 
@@ -137,7 +138,7 @@ Three edits: one line in `AssetPackRegistry.Factories`; the accessors, which are
 | Field            | Type                                     | Default | Read by code                                                       |
 | ---------------- | ---------------------------------------- | ------- | ------------------------------------------------------------------ |
 | `schema_version` | int (required)                           | none    | Yes — must be 1 through the supported version                      |
-| `pack_id`        | string (required)                        | none    | Must not be blank, and unique among the installed packs of every type (case ignored); the pack registered first keeps it. Log messages, and the `ui_theme` selection (`UiTheme:` in `brigid.cfg`) |
+| `pack_id`        | string (required)                        | none    | Must not be blank, and unique among the installed packs of every type (case ignored); the pack registered first keeps it. A `ui_theme` id has only ASCII letters, digits, `-` and `_`. Log messages, and the `ui_theme` selection (`UiTheme:` in `brigid.cfg`) |
 | `name`           | string                                   | none    | Display name (`DisplayName`; the `pack_id` when absent). Shown in the theme drop-downs of Options and the launcher |
 | `pack_version`   | string                                   | `""`    | **Nothing reads this.** Informational                              |
 | `content_type`   | string                                   | `""`    | Yes — factory discriminator                                        |

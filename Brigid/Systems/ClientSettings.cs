@@ -218,12 +218,15 @@ public static class ClientSettings
     ///     Saves the current settings to <c>brigid.cfg</c> (per-user app root) in the original format. Best-effort —
     ///     never throws on a write failure.
     /// </summary>
-    public static void Save() => DataDiagnostics.Try(
+    public static void Save() => Save(FilePath);
+
+    /// <summary>Saves the current settings to the file at <paramref name="path" />. Internal for the tests.</summary>
+    internal static void Save(string path) => DataDiagnostics.Try(
         () =>
         {
-            Directory.CreateDirectory(AppPaths.AppRoot);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
 
-            using var writer = new StreamWriter(FilePath, false);
+            using var writer = new StreamWriter(path, false);
             writer.WriteLine("Version: 9728");
             writer.WriteLine("Port: 5");
             writer.WriteLine($"Speed: {Speed}");

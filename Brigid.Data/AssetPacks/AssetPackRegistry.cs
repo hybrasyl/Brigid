@@ -528,7 +528,8 @@ public static class AssetPackRegistry
     ///     Returns why the registry refuses a manifest, or null when it accepts it. The registry accepts schema versions 1
     ///     through <see cref="SUPPORTED_SCHEMA_VERSION" />. It refuses an absent, zero or negative <c>schema_version</c>
     ///     and an absent <c>pack_id</c>, as Creidhne and Taliesin also do. It also refuses a blank <c>pack_id</c>, which
-    ///     the two editors accept.
+    ///     the two editors accept, the reserved id <see cref="NO_UI_THEME" />, and a <c>ui_theme</c> id that is not
+    ///     <see cref="IsUiThemeId" />.
     /// </summary>
     internal static string? GetManifestRejection(AssetPackManifest manifest)
     {
@@ -547,8 +548,18 @@ public static class AssetPackRegistry
         if (string.Equals(manifest.PackId.Trim(), NO_UI_THEME, StringComparison.OrdinalIgnoreCase))
             return $"has pack_id '{manifest.PackId}', which is reserved (UiTheme: {NO_UI_THEME} selects the flat look)";
 
+        if ((manifest.ContentType == "ui_theme") && !IsUiThemeId(manifest.PackId))
+            return $"has pack_id '{manifest.PackId}', which a ui_theme cannot have (use only letters, digits, '-' and '_')";
+
         return null;
     }
+
+    /// <summary>
+    ///     True when <paramref name="packId" /> is a valid <c>ui_theme</c> id: only ASCII letters, digits, <c>-</c> and
+    ///     <c>_</c>. The settings file keeps the selected id on one trimmed line, so an id with a space or a control character
+    ///     does not come back the same. Taliesin makes ids of this form.
+    /// </summary>
+    private static bool IsUiThemeId(string packId) => packId.All(c => char.IsAsciiLetterOrDigit(c) || (c is '-' or '_'));
 
     /// <summary>
     ///     Single consolidated registration path. Looks up a factory for the declared content type, warns about the keys
