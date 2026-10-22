@@ -6,7 +6,7 @@ using System.IO.Compression;
 namespace Brigid.Data.AssetPacks;
 
 /// <summary>
-///     Common base for audio <c>.datf</c> packs (music, sound effects). Entries live at the archive root named
+///     Common base for audio <c>.datf</c> packs (music, sound effects, ambient sounds). Entries live at the archive root named
 ///     <c>{prefix}_{id}.{ext}</c>, where <c>{id}</c> is the integer audio id the server references (the value carried
 ///     in <c>SoundArgs.Sound</c>) and <c>{ext}</c> is any of the pack type's allowed audio extensions. Because the
 ///     extension varies per entry, the lookup cannot be a direct name probe; at construction the pack scans entry
@@ -61,6 +61,9 @@ public abstract class AudioPack : AssetPack
 
     /// <inheritdoc />
     /// <remarks>An audio pack covers ids: <c>sfx_1.wav</c> and <c>sfx_0001.mp3</c> are the same key.</remarks>
+    /// <summary>True when the pack has an entry for <paramref name="id" />, whatever its extension.</summary>
+    protected bool HasAudio(int id) => IdToEntry.ContainsKey(id);
+
     public override IEnumerable<string> CoverageKeys => IdToEntry.Keys.Select(id => id.ToString(CultureInfo.InvariantCulture));
 
     /// <summary>

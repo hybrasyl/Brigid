@@ -301,6 +301,27 @@ public sealed class AssetPackRegistryTests : IDisposable
     }
 
     [Fact]
+    public void GetAmbientPackFor_GivesTheHigherPriorityPack_ThatHasTheId()
+    {
+        Register("ambient_sounds", "base", new() { ["amb_0001.wav"] = [1], ["amb_0002.wav"] = [1] });
+        Register("ambient_sounds", "holiday", new() { ["amb_0001.ogg"] = [2] }, Manifest("ambient_sounds", "holiday", 200));
+
+        Assert.Equal(["holiday", "base"], AssetPackRegistry.AmbientPacks.Select(pack => pack.Manifest.PackId));
+        Assert.Equal("holiday", AssetPackRegistry.GetAmbientPackFor(1)?.Manifest.PackId);
+        Assert.Equal("base", AssetPackRegistry.GetAmbientPackFor(2)?.Manifest.PackId);
+        Assert.Null(AssetPackRegistry.GetAmbientPackFor(3));
+    }
+
+    [Fact]
+    public void GetAmbientPackFor_GivesNoPack_ForAnIdOutsideOneTo255()
+    {
+        Register("ambient_sounds", "base", new() { ["amb_0000.wav"] = [1], ["amb_256.wav"] = [1] });
+
+        Assert.Null(AssetPackRegistry.GetAmbientPackFor(0));
+        Assert.Null(AssetPackRegistry.GetAmbientPackFor(256));
+    }
+
+    [Fact]
     public void Registration_WarnsAboutSharedKeys_AndNamesThePackAskedFirst()
     {
         var warnings = new List<string>();

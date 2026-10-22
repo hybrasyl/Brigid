@@ -64,6 +64,10 @@ public sealed partial class WorldScreen : IScreen
     private const string SPOUSE_PREFIX = "Spouse: ";
     private const string GROUP_MEMBERS_PREFIX = "Group members";
 
+    //ambient id of the rain bed on rain-flagged maps (amb_1 in an ambient_sounds pack). ambient beds have no
+    //legacy data, so without a pack entry the bed is a silent no-op
+    private const int RAIN_AMBIENT_ID = 1;
+
     private readonly CastingSystem CastingSystem = new();
 
     private readonly WorldDebugRenderer DebugRenderer = new();
@@ -783,6 +787,10 @@ public sealed partial class WorldScreen : IScreen
         WorldHud.SpellBookAlt.OnSlotClicked -= HandleSpellSlotClicked;
         WorldHud.Tools.WorldSkills.OnSlotClicked -= HandleSkillSlotClicked;
         WorldHud.Tools.WorldSpells.OnSlotClicked -= HandleSpellSlotClicked;
+
+        //stop the bed before the disposals below. a stop that does not occur is audible (the bed plays on over
+        //the lobby), and StopAmbient cannot throw
+        Game.SoundSystem.StopAmbient();
 
         WorldState.ResetAll();
 

@@ -74,6 +74,12 @@ public sealed class WeatherRenderer : IDisposable
     public bool IsActive => WeatherNibble is 0x01 or 0x02;
 
     /// <summary>
+    ///     Returns true when the low nibble of the map flags is 2 (rain). The method is static and does not use the
+    ///     renderer's asset state, so the rain bed follows the flag also when the rain texture did not load.
+    /// </summary>
+    public static bool IsRain(MapFlags flags) => ((byte)flags & 0x0F) == 0x02;
+
+    /// <summary>
     ///     Call on map change. Compares nibbles; if the weather mode changed, releases old textures
     ///     and loads new ones.
     /// </summary>

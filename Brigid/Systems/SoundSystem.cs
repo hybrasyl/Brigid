@@ -3,19 +3,22 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using Brigid.Data;
 using Brigid.Data.AssetPacks;
+using Brigid.Networking;
 #endregion
 
 namespace Brigid.Systems;
 
 /// <summary>
 ///     Manages sound-effect and background-music playback via SDL2_mixer (with minimp3 compiled directly into the
-///     mixer DLL). SFX are loaded from legend.dat as MP3 bytes, decoded to PCM once via <c>Mix_LoadWAV_RW</c> and
-///     cached as <c>Mix_Chunk</c> pointers; playback uses the mixer's channel pool with per-channel volume. Music
-///     is streamed from disk via <c>Mix_LoadMUS</c>, with cross-map transitions driven by SDL_mixer's built-in
+///     mixer DLL). SFX come from the sound-effect pack, else from legend.dat, are decoded to PCM once via
+///     <c>Mix_LoadWAV_RW</c> and cached as <c>Mix_Chunk</c> pointers; playback uses the mixer's channel pool with
+///     per-channel volume. Music comes from the music pack, else from the loose music files, and streams through
+///     <c>Mix_LoadMUS_RW</c> or <c>Mix_LoadMUS</c>, with cross-map transitions driven by SDL_mixer's built-in
 ///     <c>Mix_FadeOutMusic</c>/<c>Mix_FadeInMusic</c>. When the same sound id is triggered while an earlier
 ///     instance is still audible, the prior live instances are faded out via <c>Mix_FadeOutChannel</c> (per-id
 ///     voice-stealing), matching the retail Dark Ages client's behavior of restarting the single cached Miles
-///     sample handle on each trigger.
+///     sample handle on each trigger. An ambient bed (for example rain) comes from the ambient pack, plays on one
+///     channel at the ambience volume, and loops unless its pack marks it as a one-shot.
 /// </summary>
 public sealed class SoundSystem : IDisposable
 {
@@ -43,14 +46,29 @@ public sealed class SoundSystem : IDisposable
     private readonly SdlMixer.ChannelFinishedCallback ChannelFinishedDelegate;
     //populated on SDL's audio thread when a channel naturally finishes; drained in Update() on the game thread
     private readonly ConcurrentQueue<int> FinishedChannels = new();
-    //channel → sound id mapping for voice-steal lookup + finish cleanup; only touched on the game thread
-    private readonly Dictionary<int, int> ChannelToSoundId = [];
-    //inverse lookup: sound id → currently-playing channels, iterated on each PlaySound to fade out prior instances
-    private readonly Dictionary<int, List<int>> SoundIdToChannels = [];
-    //decoded Mix_Chunk pointers indexed by sound id, with a monotonic timestamp for LRU eviction
-    private readonly Dictionary<int, (nint Chunk, long Timestamp)> SoundCache = [];
+    //channel → sound key mapping for voice-steal lookup + finish cleanup; only touched on the game thread
+    private readonly Dictionary<int, SoundKey> ChannelToSoundKey = [];
+    //inverse lookup: sound key → currently-playing channels, iterated on each PlaySound to fade out prior instances
+    private readonly Dictionary<SoundKey, List<int>> SoundKeyToChannels = [];
+    //decoded Mix_Chunk pointers indexed by sound key, with a monotonic timestamp for LRU eviction
+    private readonly Dictionary<SoundKey, (nint Chunk, long Timestamp)> SoundCache = [];
     //same-frame dedup (e.g. AOE hitting multiple targets in one tick trying to play the same sound N times)
     private readonly HashSet<int> PlayedThisFrame = [];
+
+    //the ambient bed (e.g. rain). while the bed plays, its channel is not in the sound-effect channel tracking
+    //above, so per-id voice stealing does not touch it. at a stop, the fading channel goes into that tracking,
+    //so the eviction exemption and the finish drain cover the fade. DesiredAmbientId stays after a start that
+    //failed because every channel was busy, so Update() can try again. -1 means none. these fields hold
+    //ambient ids, not sound-effect ids
+    private int AmbientChannel = -1;
+    private int PlayingAmbientId = -1;
+    private int DesiredAmbientId = -1;
+    //a one-shot bed for DesiredAmbientId played to its end. it does not play again until a different id or a stop
+    private bool AmbientOneShotDone;
+    private int AmbienceVolume = SdlMixer.MIX_MAX_VOLUME;
+    //the ambience volume changed while the bed faded in. at the end of a fade-in the mixer sets the volume that it had
+    //at the start of the fade, so Update() sets the new volume again when the fade ends
+    private bool AmbienceVolumeChangedInFade;
 
     private int CurrentMusicId = -1;
     //pins the pack-supplied byte[] backing a streamed Mix_LoadMUS_RW handle; SDL streams from this memory for the
@@ -94,6 +112,11 @@ public sealed class SoundSystem : IDisposable
         SdlMixer.Mix_ChannelFinished(nint.Zero);
         SdlMixer.Mix_HaltChannel(SdlMixer.MIX_DEFAULT_CHANNEL);
         SdlMixer.Mix_HaltMusic();
+
+        AmbientChannel = -1;
+        PlayingAmbientId = -1;
+        DesiredAmbientId = -1;
+        AmbientOneShotDone = false;
 
         FreeCurrentMusic();
 
@@ -163,24 +186,11 @@ public sealed class SoundSystem : IDisposable
         if (!PlayedThisFrame.Add(soundId))
             return;
 
-        nint chunk;
+        var key = SoundKey.Effect(soundId);
+        var chunk = GetOrLoadChunk(key);
 
-        if (SoundCache.TryGetValue(soundId, out var cached))
-        {
-            chunk = cached.Chunk;
-            SoundCache[soundId] = (chunk, SoundCacheTimestamp++);
-        } else
-        {
-            chunk = LoadChunk(soundId);
-
-            if (chunk == nint.Zero)
-                return;
-
-            SoundCache[soundId] = (chunk, SoundCacheTimestamp++);
-
-            if (SoundCache.Count > MAX_CACHED_SOUNDS)
-                EvictOldest();
-        }
+        if (chunk == nint.Zero)
+            return;
 
         //voice-steal any currently-playing instances of the same sound id so overlaps don't stack loudness.
         //Mix_FadeOutChannel does a sample-accurate fade-to-zero-then-halt inside SDL_mixer's mix callback,
@@ -191,56 +201,27 @@ public sealed class SoundSystem : IDisposable
         //this matches the retail Dark Ages client's per-id voice stealing: it kept exactly one live Miles sample
         //handle per sound id and restarted it on each trigger (AIL_start_sample), so only one instance of any
         //given sound id was audible at a time
-        if (SoundIdToChannels.TryGetValue(soundId, out var existing))
+        if (SoundKeyToChannels.TryGetValue(key, out var existing))
             foreach (var ch in existing)
                 if (SdlMixer.Mix_Playing(ch) != 0)
                     SdlMixer.Mix_FadeOutChannel(ch, FADE_OUT_MS);
 
-        //manually find a free channel instead of letting Mix_PlayChannel(-1) pick. this lets us set the channel
-        //volume BEFORE starting the play, which closes a race where a channel that finished on the audio thread
-        //mid-frame (before Update() could reset its volume) would be reassigned here at its old volume; the audio
-        //callback could then read the first samples at the wrong level before a post-Mix_PlayChannel reset caught up
-        var channel = -1;
-
-        for (var i = 0; i < CHANNEL_COUNT; i++)
-            if (SdlMixer.Mix_Playing(i) == 0)
-            {
-                channel = i;
-
-                break;
-            }
+        var channel = ClaimFreeChannel();
 
         if (channel < 0)
             return;
 
-        //set volume before play begins so the first audio callback after Mix_PlayChannel sees the correct level
-        SdlMixer.Mix_Volume(channel, SfxVolume);
-
-        //if the channel we just claimed has stale tracking from its previous play (audio-thread finish was
-        //enqueued but not drained yet), scrub it now. the drain will later see ChannelToSoundId[channel] pointing
-        //at the NEW sound id (overwritten below) and would otherwise remove the new play's tracking while leaving
-        //the previous play's SoundIdToChannels entry permanently stale — stale entries cause spurious voice-steals
-        //on unrelated sounds that land on the same channel number later
-        if (ChannelToSoundId.Remove(channel, out var prevSoundId))
-            if (SoundIdToChannels.TryGetValue(prevSoundId, out var prevList))
-            {
-                prevList.Remove(channel);
-
-                if (prevList.Count == 0)
-                    SoundIdToChannels.Remove(prevSoundId);
-            }
-
-        //Mix_PlayChannel with an explicit channel index still stops any sound currently on that channel, but we
-        //just verified Mix_Playing(ch) == 0 so the channel is idle
+        //Mix_PlayChannel with an explicit channel index still stops any sound currently on that channel, but
+        //ClaimFreeChannel just verified Mix_Playing(ch) == 0 so the channel is idle
         if (SdlMixer.Mix_PlayChannel(channel, chunk, 0) < 0)
             return;
 
-        ChannelToSoundId[channel] = soundId;
+        ChannelToSoundKey[channel] = key;
 
-        if (!SoundIdToChannels.TryGetValue(soundId, out var list))
+        if (!SoundKeyToChannels.TryGetValue(key, out var list))
         {
             list = [];
-            SoundIdToChannels[soundId] = list;
+            SoundKeyToChannels[key] = list;
         }
 
         if (!list.Contains(channel))
@@ -260,9 +241,104 @@ public sealed class SoundSystem : IDisposable
 
     /// <summary>
     ///     Sets the sound effect volume. Range: 0 (mute) to 10 (max). Future plays use the new volume; sounds
-    ///     already in flight keep their current channel volume (matching the prior NAudio-based behavior).
+    ///     already in flight keep their current channel volume (matching the prior NAudio-based behavior). The
+    ///     ambient bed does not use this volume; see <see cref="SetAmbienceVolume" />.
     /// </summary>
     public void SetSoundVolume(int volume) => SfxVolume = Math.Clamp(volume, 0, VOLUME_STEPS) * VOLUME_SCALE;
+
+    /// <summary>
+    ///     Sets the ambience volume. Range: 0 (mute) to 10 (max). The ambient bed is continuous, so the new volume
+    ///     applies immediately to the bed that plays.
+    /// </summary>
+    public void SetAmbienceVolume(int volume)
+    {
+        AmbienceVolume = Math.Clamp(volume, 0, VOLUME_STEPS) * VOLUME_SCALE;
+
+        if (!Initialized || (AmbientChannel < 0))
+            return;
+
+        SdlMixer.Mix_Volume(AmbientChannel, AmbienceVolume);
+
+        if (SdlMixer.Mix_FadingChannel(AmbientChannel) != SdlMixer.MIX_NO_FADING)
+            AmbienceVolumeChangedInFade = true;
+    }
+
+    /// <summary>
+    ///     Starts the ambient bed with the given ambient id (e.g. rain), or keeps it running if that id is already
+    ///     the bed. A different id replaces the current bed. The audio comes only from the ambient pack: an id with
+    ///     no pack entry is a silent no-op. A start that fails only because every mixer channel is busy is retried
+    ///     from <see cref="Update" />. Unlike <see cref="PlaySound" />, the bed starts even at ambience volume 0, so
+    ///     a later slider-up brings the bed in mid-map. A bed that the pack marks as a one-shot plays one time, and
+    ///     does not play again until a different id or a stop. An id of 0 or less stops the bed, because ambient id 0
+    ///     means no ambient.
+    /// </summary>
+    public void StartAmbient(int ambientId)
+    {
+        if (IsDisposed || !Initialized)
+            return;
+
+        if (ambientId <= 0)
+        {
+            StopAmbient();
+
+            return;
+        }
+
+        //this id is already the bed or pending a retry (same-map refresh, rain-to-rain map transition)
+        if (ambientId == DesiredAmbientId)
+            return;
+
+        StopAmbient();
+
+        DesiredAmbientId = ambientId;
+        TryStartAmbient();
+    }
+
+    /// <summary>
+    ///     Stops the ambient bed, if one plays, with a short fade-out. It is safe to call when no bed plays.
+    /// </summary>
+    public void StopAmbient()
+    {
+        DesiredAmbientId = -1;
+        AmbientOneShotDone = false;
+
+        if (AmbientChannel < 0)
+            return;
+
+        //Dispose resets AmbientChannel before closing the mixer, so reaching here means the mixer is live
+        if (SdlMixer.Mix_Playing(AmbientChannel) != 0)
+        {
+            //the mixer does not fade a channel at volume 0 (Ambience slider at 0), and returns 0. a looping bed then
+            //plays on for ever and keeps its channel, so stop it now. the halt is complete under the audio lock, so
+            //the chunk is free at once and the channel needs no tracking
+            if (SdlMixer.Mix_FadeOutChannel(AmbientChannel, FADE_OUT_MS) == 0)
+            {
+                SdlMixer.Mix_HaltChannel(AmbientChannel);
+                AmbientChannel = -1;
+                PlayingAmbientId = -1;
+
+                return;
+            }
+
+            //put the fading channel into the sound-effect channel tracking for the fade. EvictOldest then does not
+            //free the chunk until the finish drain removes the channel. Mix_FreeChunk on a chunk that the audio
+            //thread still mixes corrupts the mixer
+            var key = SoundKey.Ambient(PlayingAmbientId);
+            ChannelToSoundKey[AmbientChannel] = key;
+
+            if (!SoundKeyToChannels.TryGetValue(key, out var list))
+            {
+                list = [];
+                SoundKeyToChannels[key] = list;
+            }
+
+            if (!list.Contains(AmbientChannel))
+                list.Add(AmbientChannel);
+        }
+
+        AmbientChannel = -1;
+        PlayingAmbientId = -1;
+    }
 
     /// <summary>
     ///     Pumps deferred audio-thread work back into the game state. Call once per frame from the game loop.
@@ -287,17 +363,29 @@ public sealed class SoundSystem : IDisposable
                 continue;
 
             SdlMixer.Mix_Volume(channel, SfxVolume);
+            ReleaseEndedOneShot(channel);
 
-            if (!ChannelToSoundId.Remove(channel, out var soundId))
+            if (!ChannelToSoundKey.Remove(channel, out var key))
                 continue;
 
-            if (!SoundIdToChannels.TryGetValue(soundId, out var list))
+            if (!SoundKeyToChannels.TryGetValue(key, out var list))
                 continue;
 
             list.Remove(channel);
 
             if (list.Count == 0)
-                SoundIdToChannels.Remove(soundId);
+                SoundKeyToChannels.Remove(key);
+        }
+
+        //try again to start a bed that did not start because every channel was busy
+        if ((DesiredAmbientId >= 0) && (AmbientChannel < 0) && !AmbientOneShotDone)
+            TryStartAmbient();
+
+        //the mixer clears the fade and sets the volume of the fade start in one step, so after it the new volume stays
+        if (AmbienceVolumeChangedInFade && (AmbientChannel >= 0) && (SdlMixer.Mix_FadingChannel(AmbientChannel) == SdlMixer.MIX_NO_FADING))
+        {
+            SdlMixer.Mix_Volume(AmbientChannel, AmbienceVolume);
+            AmbienceVolumeChangedInFade = false;
         }
 
         //detect fade-out completion and start the queued track (if any)
@@ -316,17 +404,56 @@ public sealed class SoundSystem : IDisposable
         }
     }
 
+    //claims an idle channel from the pool, setting its volume before any play begins (a channel that finished
+    //on the audio thread mid-frame — before Update() could reset its volume — would otherwise be reassigned at
+    //its old level, and the audio callback could read the first samples at the wrong volume) and scrubbing any
+    //stale sound-effect tracking left by an undrained finish event (stale entries cause spurious voice-steals on
+    //unrelated sounds that land on the same channel number later). returns -1 when every channel is busy
+    private int ClaimFreeChannel()
+    {
+        var channel = -1;
+
+        for (var i = 0; i < CHANNEL_COUNT; i++)
+            if (SdlMixer.Mix_Playing(i) == 0)
+            {
+                channel = i;
+
+                break;
+            }
+
+        if (channel < 0)
+            return -1;
+
+        //the finish event of a one-shot bed can be still in the queue. release the bed here, or AmbientChannel
+        //would point at the sound that takes this channel
+        ReleaseEndedOneShot(channel);
+
+        SdlMixer.Mix_Volume(channel, SfxVolume);
+
+        if (ChannelToSoundKey.Remove(channel, out var prevKey))
+            if (SoundKeyToChannels.TryGetValue(prevKey, out var prevList))
+            {
+                prevList.Remove(channel);
+
+                if (prevList.Count == 0)
+                    SoundKeyToChannels.Remove(prevKey);
+            }
+
+        return channel;
+    }
+
     private void EvictOldest()
     {
         while (SoundCache.Count > MAX_CACHED_SOUNDS)
         {
-            var oldestKey = -1;
+            SoundKey? oldestKey = null;
             var oldestTime = long.MaxValue;
 
             foreach ((var key, var entry) in SoundCache)
             {
-                //skip anything that's still audibly playing — Mix_FreeChunk on a live chunk corrupts the mixer
-                if (SoundIdToChannels.ContainsKey(key))
+                //skip anything that's still audibly playing — Mix_FreeChunk on a live chunk corrupts the mixer.
+                //the chunk of the playing bed is live but not in SoundKeyToChannels, so it needs its own exemption
+                if (SoundKeyToChannels.ContainsKey(key) || (key == SoundKey.Ambient(PlayingAmbientId)))
                     continue;
 
                 if (entry.Timestamp < oldestTime)
@@ -337,15 +464,39 @@ public sealed class SoundSystem : IDisposable
             }
 
             //every cached sound is currently playing; defer eviction rather than risk crashing the mixer
-            if (oldestKey < 0)
+            if (oldestKey is not { } evict)
                 break;
 
-            var chunk = SoundCache[oldestKey].Chunk;
-            SoundCache.Remove(oldestKey);
+            var chunk = SoundCache[evict].Chunk;
+            SoundCache.Remove(evict);
 
             if (chunk != nint.Zero)
                 SdlMixer.Mix_FreeChunk(chunk);
         }
+    }
+
+    //resolves a decoded chunk for the key via the LRU cache, loading and evicting on miss. returns nint.Zero
+    //when the key has no audio anywhere
+    private nint GetOrLoadChunk(SoundKey key)
+    {
+        if (SoundCache.TryGetValue(key, out var cached))
+        {
+            SoundCache[key] = (cached.Chunk, SoundCacheTimestamp++);
+
+            return cached.Chunk;
+        }
+
+        var chunk = key.IsAmbient ? LoadAmbientChunk(key.Id) : LoadChunk(key.Id);
+
+        if (chunk == nint.Zero)
+            return nint.Zero;
+
+        SoundCache[key] = (chunk, SoundCacheTimestamp++);
+
+        if (SoundCache.Count > MAX_CACHED_SOUNDS)
+            EvictOldest();
+
+        return chunk;
     }
 
     private void InitializeMixer()
@@ -423,6 +574,34 @@ public sealed class SoundSystem : IDisposable
         return LoadChunkFromBytes(bytes);
     }
 
+    //an ambient bed has no legacy fallback: the ambient pack is the only source. there is no fallback to hide a
+    //bad entry, so log an entry that is in the pack but does not decode
+    private static nint LoadAmbientChunk(int ambientId)
+    {
+        var pack = AmbientPackFor(ambientId);
+
+        if ((pack is null) || !pack.TryGetAmbientBytes(ambientId, out var bytes) || (bytes is null))
+            return nint.Zero;
+
+        if (bytes.Length == 0)
+        {
+            NoticeDebugLog.Write($"[audio] ambient pack '{pack.Manifest.PackId}' has amb_{ambientId}, but the entry is empty");
+
+            return nint.Zero;
+        }
+
+        var chunk = LoadChunkFromBytes(bytes);
+
+        if (chunk == nint.Zero)
+            NoticeDebugLog.Write($"[audio] ambient pack '{pack.Manifest.PackId}' has amb_{ambientId}, but it does not decode: {Sdl.GetError()}");
+
+        return chunk;
+    }
+
+    //the pack for both the bytes and the loop flag of a bed: the first pack that has the id owns it. use this one seam
+    //for both, so that the two cannot come from different packs
+    private static AmbientPack? AmbientPackFor(int ambientId) => AssetPackRegistry.GetAmbientPackFor(ambientId);
+
     private static nint LoadChunkFromBytes(byte[] bytes)
     {
         //pin the managed byte[] so SDL can read it during Mix_LoadWAV_RW; Mix_LoadWAV_RW decodes the whole file
@@ -442,6 +621,59 @@ public sealed class SoundSystem : IDisposable
         {
             handle.Free();
         }
+    }
+
+    //tries to start the desired bed. a missing asset and a play error do not change, so clear the desire: then the
+    //Update() retry does not try each frame. only a full channel pool can change, so then keep the desire, and
+    //Update() tries again on the next frame
+    private void TryStartAmbient()
+    {
+        var chunk = GetOrLoadChunk(SoundKey.Ambient(DesiredAmbientId));
+
+        if (chunk == nint.Zero)
+        {
+            DesiredAmbientId = -1;
+
+            return;
+        }
+
+        var channel = ClaimFreeChannel();
+
+        if (channel < 0)
+            return;
+
+        //ClaimFreeChannel set the sound-effect volume. set the ambience volume before the play starts, so the
+        //first samples do not mix at the wrong level
+        SdlMixer.Mix_Volume(channel, AmbienceVolume);
+
+        //loops = -1 repeats until a stop; 0 plays one time (a one-shot bed). the bed is not in the sound-effect
+        //channel tracking while it plays, so voice stealing does not touch it. EvictOldest exempts it by
+        //PlayingAmbientId
+        var loops = AmbientPackFor(DesiredAmbientId)?.Loops(DesiredAmbientId) == false ? 0 : -1;
+
+        //the bed fades in over the same time as it fades out, so that a loud loop does not click at the start
+        if (SdlMixer.Mix_FadeInChannelTimed(channel, chunk, loops, FADE_OUT_MS, -1) < 0)
+        {
+            DesiredAmbientId = -1;
+
+            return;
+        }
+
+        AmbientChannel = channel;
+        PlayingAmbientId = DesiredAmbientId;
+        AmbienceVolumeChangedInFade = false;
+    }
+
+    //a looping bed plays until a stop, so an idle AmbientChannel means a one-shot bed came to its end. release the
+    //channel, but keep the desire, so that the Update() retry does not play the bed again
+    private void ReleaseEndedOneShot(int channel)
+    {
+        if (channel != AmbientChannel)
+            return;
+
+        AmbientChannel = -1;
+        PlayingAmbientId = -1;
+        AmbientOneShotDone = true;
     }
 
     private void OnChannelFinished(int channel)
@@ -519,5 +751,13 @@ public sealed class SoundSystem : IDisposable
             CurrentMusicPin.Free();
 
         CurrentMusicPin = default;
+    }
+
+    //sound effects and ambient beds have separate id spaces, so the cache and the channel tracking key on both
+    private readonly record struct SoundKey(bool IsAmbient, int Id)
+    {
+        public static SoundKey Effect(int soundId) => new(false, soundId);
+
+        public static SoundKey Ambient(int ambientId) => new(true, ambientId);
     }
 }

@@ -26,9 +26,6 @@ public static class ClientSettings
     public static int LegacyCharacterImport { get; set; } = MigrationUndecided;
     public static bool GroupOpen { get; set; }
     public static int MusicVolume { get; set; } = 5;
-
-    //placeholder for a future ambient-audio layer: persisted and surfaced on the pause menu, but nothing
-    //consumes it yet (no ambience audio path exists).
     public static int AmbienceVolume { get; set; } = 5;
     public static bool RecordNpcChat { get; set; } = true;
     public static int ScrollLevel { get; set; }

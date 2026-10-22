@@ -25,9 +25,10 @@ namespace Brigid.Data.AssetPacks;
 ///     <para>
 ///     There are three kinds of lookup. For a key that is one image, the registry gives a <c>TryGet…</c> lookup that
 ///     decodes the image and asks the next pack when the decode fails. For a key with several values that must come
-///     from one pack (a creature: its frames, its pair count and its bounding box), the first pack that covers the
-///     key owns it (<see cref="GetCreaturePackFor" />), and an entry of that pack that does not decode shows the
-///     placeholder. When only the caller can tell whether an entry works, or must keep a second decision with the pack
+///     from one pack (a creature: its frames, its pair count and its bounding box; an ambient bed: its sound and its loop
+///     flag), the first pack that covers the key owns it (<see cref="GetCreaturePackFor" />,
+///     <see cref="GetAmbientPackFor" />), and an entry of that pack that does not decode shows the placeholder or gives
+///     no bed. When only the caller can tell whether an entry works, or must keep a second decision with the pack
 ///     that answered, the caller goes through the ordered <c>…Packs</c> sequence itself: audio, which SDL decodes, and
 ///     items, whose dye the pack that gives the image decides (<c>ItemIconSource</c>).
 ///     </para>
@@ -64,6 +65,7 @@ public static class AssetPackRegistry
         ["creature_sprites"]    = static (a, m) => new CreaturePack(a, m),
         ["music"]               = static (a, m) => new MusicPack(a, m),
         ["sound_effects"]       = static (a, m) => new SfxPack(a, m),
+        ["ambient_sounds"]      = static (a, m) => new AmbientPack(a, m),
         ["world_maps"]          = static (a, m) => new WorldMapPack(a, m),
         ["town_maps"]           = static (a, m) => new TownMapPack(a, m)
     };
@@ -230,6 +232,9 @@ public static class AssetPackRegistry
     /// <summary>The <c>sound_effects</c> packs, in lookup order.</summary>
     public static IEnumerable<SfxPack> SfxPacks => PacksOf<SfxPack>("sound_effects");
 
+    /// <summary>The <c>ambient_sounds</c> packs, in lookup order. A bed comes from <see cref="GetAmbientPackFor" />.</summary>
+    public static IEnumerable<AmbientPack> AmbientPacks => PacksOf<AmbientPack>("ambient_sounds");
+
     /// <summary>The <c>world_maps</c> packs, in lookup order.</summary>
     public static IEnumerable<WorldMapPack> WorldMapPacks => PacksOf<WorldMapPack>("world_maps");
 
@@ -277,6 +282,23 @@ public static class AssetPackRegistry
     /// <summary>The first <c>town_maps</c> pack that decodes the town map. The caller owns the image.</summary>
     public static bool TryGetTownMapImage(short mapId, out SKImage? image)
         => TryFirstImage("town_maps", mapId, static (TownMapPack pack, short key, out SKImage? img) => pack.TryGetTownMapImage(key, out img), out image);
+
+    /// <summary>
+    ///     The first <c>ambient_sounds</c> pack that has a bed for <paramref name="ambientId" />, or null. That pack owns
+    ///     the bed: it gives the sound and the loop flag, so the two never come from different packs. An entry of that
+    ///     pack that does not decode gives no bed, as an ambient bed has no legacy fallback.
+    /// </summary>
+    public static AmbientPack? GetAmbientPackFor(int ambientId)
+    {
+        if (!Packs.TryGetValue("ambient_sounds", out var list))
+            return null;
+
+        foreach (var pack in list)
+            if (pack is AmbientPack ambient && ambient.Covers(ambientId))
+                return ambient;
+
+        return null;
+    }
 
     /// <summary>
     ///     The first <c>creature_sprites</c> pack that covers <paramref name="spriteId" />, or null. That pack owns the

@@ -30,6 +30,9 @@ internal static partial class SdlMixer
     //Mix_Volume scale: API takes 0..128 linear; MIX_MAX_VOLUME is defined in SDL_mixer.h as 128
     public const int MIX_MAX_VOLUME = 128;
 
+    //Mix_FadingChannel result (the Mix_Fading enum in SDL_mixer.h)
+    public const int MIX_NO_FADING = 0;
+
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void ChannelFinishedCallback(int channel);
 
@@ -89,6 +92,11 @@ internal static partial class SdlMixer
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial int Mix_PlayChannel(int channel, nint chunk, int loops);
 
+    //Mix_FadeInChannel is a C macro for this call with ticks = -1 (no time limit)
+    [LibraryImport(LIBRARY_NAME)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial int Mix_FadeInChannelTimed(int channel, nint chunk, int loops, int ms, int ticks);
+
     [LibraryImport(LIBRARY_NAME)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial int Mix_HaltChannel(int channel);
@@ -100,6 +108,11 @@ internal static partial class SdlMixer
     [LibraryImport(LIBRARY_NAME)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial int Mix_Playing(int channel);
+
+    //MIX_NO_FADING, or 1 (fading out) or 2 (fading in)
+    [LibraryImport(LIBRARY_NAME)]
+    [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
+    public static partial int Mix_FadingChannel(int which);
 
     //Mix_Volume: channel=-1 sets volume for all channels; returns the prior value for the channel
     [LibraryImport(LIBRARY_NAME)]
@@ -136,7 +149,7 @@ internal static partial class SdlMixer
     public static partial int Mix_HaltMusic();
 
     //Mix_ChannelFinished registers a function-pointer callback that fires on SDL's audio thread each time a
-    //channel's chunk finishes playing naturally (not via Mix_HaltChannel). Pass 0 to clear.
+    //channel stops: at the natural end of its chunk, at the end of a fade-out, and at Mix_HaltChannel. Pass 0 to clear.
     [LibraryImport(LIBRARY_NAME)]
     [UnmanagedCallConv(CallConvs = [typeof(CallConvCdecl)])]
     public static partial void Mix_ChannelFinished(nint cb);
