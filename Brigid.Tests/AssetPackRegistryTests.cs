@@ -236,7 +236,7 @@ public sealed class AssetPackRegistryTests : IDisposable
     }
 
     [Fact]
-    public void Registration_NamesThePriorityWinner()
+    public void Registration_NamesThePackAskedFirst_ByPriority()
     {
         var warnings = new List<string>();
         void Collect(string line) => warnings.Add(line);
@@ -254,11 +254,12 @@ public sealed class AssetPackRegistryTests : IDisposable
         }
 
         var warning = Assert.Single(warnings);
-        Assert.Contains("'holiday' wins over 'base': its priority 200 is higher than 100", warning);
+        Assert.Contains("'holiday' is asked first, before 'base': its priority 200 is higher than 100", warning);
+        Assert.Contains("An entry of 'holiday' that does not decode passes the lookup to 'base'", warning);
     }
 
     [Fact]
-    public void Registration_NamesTheEarlierPack_WhenTheNewPackLosesOnPriority()
+    public void Registration_NamesTheEarlierPack_WhenTheNewPackHasALowerPriority()
     {
         var warnings = new List<string>();
         void Collect(string line) => warnings.Add(line);
@@ -275,7 +276,7 @@ public sealed class AssetPackRegistryTests : IDisposable
             AssetPackRegistry.WarningLogged -= Collect;
         }
 
-        Assert.Contains("'holiday' wins over 'base': its priority 200 is higher than 100", Assert.Single(warnings));
+        Assert.Contains("'holiday' is asked first, before 'base': its priority 200 is higher than 100", Assert.Single(warnings));
     }
 
     [Fact]
@@ -300,7 +301,7 @@ public sealed class AssetPackRegistryTests : IDisposable
     }
 
     [Fact]
-    public void Registration_WarnsAboutSharedKeys_AndNamesTheWinner()
+    public void Registration_WarnsAboutSharedKeys_AndNamesThePackAskedFirst()
     {
         var warnings = new List<string>();
         void Collect(string line) => warnings.Add(line);
@@ -321,7 +322,7 @@ public sealed class AssetPackRegistryTests : IDisposable
         var warning = Assert.Single(warnings);
         Assert.Contains("'first' and 'second' share 1 key(s)", warning);
         Assert.Contains("skill0002.png", warning);
-        Assert.Contains("'first' wins over 'second': it registered first, at the same priority", warning);
+        Assert.Contains("'first' is asked first, before 'second': it registered first, at the same priority", warning);
     }
 
     private static byte[] EmptyZip()

@@ -20,7 +20,7 @@ namespace Brigid.Data.AssetPacks;
 ///     packs cover the same key, the pack with the higher priority wins, and at the same priority the pack that
 ///     registered first wins. A temporary pack, for example a holiday pack, uses a higher priority to replace the art
 ///     of the packs below it while it is installed. Registration logs a warning that names both packs, the shared keys
-///     and the winner.
+///     and the pack that a lookup asks first.
 ///     </para>
 ///     <para>
 ///     There are three kinds of lookup. For a key that is one image, the registry gives a <c>TryGet…</c> lookup that
@@ -402,14 +402,16 @@ public static class AssetPackRegistry
             if (shared.Count == 0)
                 continue;
 
-            var (winner, loser) = i < index ? (other.Manifest, manifest) : (manifest, other.Manifest);
-            var reason = winner.Priority == loser.Priority
+            //registration cannot tell which entries decode, so the warning gives the order, not a winner for each key
+            var (first, second) = i < index ? (other.Manifest, manifest) : (manifest, other.Manifest);
+            var reason = first.Priority == second.Priority
                 ? "it registered first, at the same priority"
-                : $"its priority {winner.Priority} is higher than {loser.Priority}";
+                : $"its priority {first.Priority} is higher than {second.Priority}";
 
             LogWarning($"{manifest.ContentType} packs '{other.Manifest.PackId}' and '{manifest.PackId}' share {shared.Count} key(s) "
                        + $"({string.Join(", ", shared.Take(OVERLAP_KEYS_SHOWN))}{(shared.Count > OVERLAP_KEYS_SHOWN ? ", ..." : string.Empty)}); "
-                       + $"'{winner.PackId}' wins over '{loser.PackId}': {reason}");
+                       + $"'{first.PackId}' is asked first, before '{second.PackId}': {reason}. "
+                       + $"An entry of '{first.PackId}' that does not decode passes the lookup to '{second.PackId}'");
         }
 
         list.Insert(index, pack);
