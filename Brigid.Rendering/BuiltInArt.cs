@@ -84,8 +84,20 @@ public static class BuiltInArt
     /// </summary>
     public static void EndFrame() => Textures.EndFrame();
 
+    //false while a test hides the built-in art, so that it can test the legacy fallback
+    private static bool Enabled = true;
+
+    /// <summary>
+    ///     Hides Brigid's own images (false) or shows them again (true). For the tests of the legacy fallback, now that
+    ///     every status has an image. A test that hides them shows them again when it ends.
+    /// </summary>
+    internal static void SetEnabledForTests(bool enabled) => Enabled = enabled;
+
     private static SKImage? GetSource(string role)
     {
+        if (!Enabled)
+            return null;
+
         if (Sources.TryGetValue(role, out var source))
             return source;
 

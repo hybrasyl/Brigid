@@ -24,6 +24,7 @@ public sealed class StatusIconTests : IDisposable
     public void Dispose()
     {
         AssetPackRegistry.SetUiThemeForTests(null);
+        BuiltInArt.SetEnabledForTests(true);
         Theme?.Dispose();
     }
 
@@ -51,6 +52,7 @@ public sealed class StatusIconTests : IDisposable
     public void AThemePartIsArtForItsStatusOnly()
     {
         InstallTheme();
+        BuiltInArt.SetEnabledForTests(false);
 
         Assert.True(StatusIcon.HasArt(SocialStatus.Awake));
         Assert.False(StatusIcon.HasArt(SocialStatus.NeedHelp));
@@ -59,11 +61,27 @@ public sealed class StatusIconTests : IDisposable
     [Fact]
     public void BrigidHasNoImageForARoleThatItDoesNotShip() => Assert.False(BuiltInArt.Has("icon.status.not_a_status"));
 
+    [Theory]
+    [InlineData(SocialStatus.Awake)]
+    [InlineData(SocialStatus.DoNotDisturb)]
+    [InlineData(SocialStatus.DayDreaming)]
+    [InlineData(SocialStatus.NeedGroup)]
+    [InlineData(SocialStatus.Grouped)]
+    [InlineData(SocialStatus.LoneHunter)]
+    [InlineData(SocialStatus.GroupHunting)]
+    [InlineData(SocialStatus.NeedHelp)]
+    public void WithNoThemeEveryStatusHasBrigidsOwnImage(SocialStatus status)
+    {
+        Assert.True(BuiltInArt.Has(StatusIcon.RoleFor(status)));
+        Assert.True(StatusIcon.HasArt(status));
+    }
+
     [Fact]
     public void AListedPartWithNoImageIsNotArt()
     {
         Theme = UiThemeTests.BuildPack("""{ "parts": { "icon.status.awake": { "file": "missing.png" } } }""");
         AssetPackRegistry.SetUiThemeForTests(Theme);
+        BuiltInArt.SetEnabledForTests(false);
 
         Assert.False(StatusIcon.HasArt(SocialStatus.Awake));
     }
@@ -102,6 +120,7 @@ public sealed class StatusIconTests : IDisposable
     public void WithNoArtTheLegacyFrameIsRead()
     {
         InstallTheme();
+        BuiltInArt.SetEnabledForTests(false);
         var icon = new StatusIcon();
         SocialStatus? read = null;
 
@@ -133,6 +152,7 @@ public sealed class StatusIconTests : IDisposable
     public void OnTheEmoteButtonWithNoArtTheIconHidesAndTheLegacyFrameIsRead()
     {
         InstallTheme();
+        BuiltInArt.SetEnabledForTests(false);
         var button = new UIButton();
         var icon = new StatusIcon();
         var reads = 0;
