@@ -255,7 +255,7 @@ public sealed partial class WorldScreen
 
         //── tooltip dismissal — clear hovered slot when blocking panels are visible ──
         if (HoveredInventorySlot is not null
-            && (OtherProfile.Visible || NpcSession.Visible || FindVisibleModal() is not null))
+            && (OtherProfile.Visible || NpcSession.Visible || InputDispatcher.Instance?.TopModal is not null))
         {
             HoveredInventorySlot = null;
             ItemTooltip.Hide();
@@ -466,22 +466,5 @@ public sealed partial class WorldScreen
             proj.CurrentFrameCycle = (proj.CurrentFrameCycle + 1) % proj.FramesPerDirection;
     }
     #endregion
-
-    /// <summary>
-    ///     Returns the first visible modal panel among Root's children (highest ZIndex first), or null.
-    /// </summary>
-    private UIPanel? FindVisibleModal()
-    {
-        if (Root is null)
-            return null;
-
-        UIPanel? best = null;
-
-        foreach (var child in Root.Children)
-            if (child is UIPanel { Visible: true, IsModal: true } panel && (best is null || (panel.ZIndex > best.ZIndex)))
-                best = panel;
-
-        return best;
-    }
 
 }

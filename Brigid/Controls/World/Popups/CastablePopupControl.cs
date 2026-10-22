@@ -3,6 +3,7 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
+using Brigid.Rendering;
 using Brigid.Systems;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -81,7 +82,7 @@ public sealed class CastablePopupControl : CenteredModalPanel
     public event ChantSetHandler? OnChantSet;
 
     public CastablePopupControl()
-        : base("Castable", PANEL_W, PANEL_H)
+        : base("Castable", PANEL_W, PANEL_H, useTheme: true)
     {
         Name = "CastablePopup";
 
@@ -143,7 +144,6 @@ public sealed class CastablePopupControl : CenteredModalPanel
                 Height = LINE_H,
                 MaxLength = CHANT_MAX_LENGTH,
                 Visible = false,
-                ForegroundColor = LegendColors.White,
                 FocusedBackgroundColor = DialogPalette.RowHoverFill,
                 VerticalAlignment = VerticalAlignment.Center,
                 //lets Tab/Shift+Tab traverse the lines through the panel's own tab-stop walk; without it the
@@ -151,6 +151,7 @@ public sealed class CastablePopupControl : CenteredModalPanel
                 IsTabStop = true
             };
 
+            TextInputs[i].SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
             content.AddChild(TextInputs[i]);
         }
 

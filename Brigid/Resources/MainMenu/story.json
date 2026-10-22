@@ -1,0 +1,29 @@
+{
+  "pages": [
+    {
+      "kind": "slide",
+      "image": "story.01",
+      "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua."
+    },
+    {
+      "kind": "slide",
+      "image": "story.02",
+      "text": "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."
+    },
+    {
+      "kind": "text",
+      "title": "Lorem Ipsum",
+      "text": "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.\n\nExcepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\n\n- Lorem ipsum dolor sit amet\n- Consectetur adipiscing elit\n- *Sed do eiusmod tempor*"
+    },
+    {
+      "kind": "cutscene",
+      "video": "intro",
+      "text": "Lorem ipsum, shown in place of the cutscene. Curabitur pretium tincidunt lacus, nulla gravida orci a odio."
+    },
+    {
+      "kind": "slide",
+      "image": "story.03",
+      "text": "Nullam varius, turpis et commodo pharetra, est eros bibendum elit, nec luctus magna felis sollicitudin mauris."
+    }
+  ]
+}

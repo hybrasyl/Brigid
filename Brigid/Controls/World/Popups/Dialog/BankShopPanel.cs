@@ -25,8 +25,14 @@ namespace Brigid.Controls.World.Popups.Dialog;
 ///     rows (icon + name + right-aligned count) on the right (paginated by a separate item &lt;/&gt; pager), and a
 ///     bottom bar with the gold readout and an OK button. Owned by <see cref="NpcSessionControl" />, which reuses the
 ///     retail pacing latch and response dispatch. Hover details are drawn by <see cref="BankItemTooltip" /> (Phase 3).
+///     <para>
+///         The panel takes the theme (BRIG-120): the frame art, the tab parts on the categories, and the role colours. The
+///         gold readout stays gold. The tooltips stay flat, as the item tooltip does: a tooltip draws outside the panel,
+///         where the theme art is clipped, and flat text keeps it readable on its flat fill. A themed frame that is wider
+///         than the flat one grows the panel, and the content moves in by <see cref="ContentOffset" />.
+///     </para>
 /// </summary>
-public sealed class BankShopPanel : UIPanel
+public sealed class BankShopPanel : FramePanel
 {
     //── layout ──
     private const int PADDING = 6;
@@ -55,23 +61,20 @@ public sealed class BankShopPanel : UIPanel
     private const int TOOLTIP_WIDTH = 190;
     private const int TOOLTIP_PAD = 6;
 
-    private static readonly Color FrameFill = DialogPalette.FrameFill;
-    private static readonly Color FrameBorder = DialogPalette.FrameBorder;
     private static readonly Color TitleColor = DialogPalette.Title;
     private static readonly Color RowHoverFill = DialogPalette.RowHoverFill;
     private static readonly Color RowSelectedFill = DialogPalette.RowSelectedFill;
     private static readonly Color SelectedTextColor = DialogPalette.SelectedText;
-    private static readonly Color TabIdleFill = DialogPalette.TabIdleFill;
-    private static readonly Color TabSelectedFill = DialogPalette.TabSelectedFill;
-    private static readonly Color TabIdleBorder = DialogPalette.TabIdleBorder;
-    private static readonly Color TabSelectedBorder = DialogPalette.TabSelectedBorder;
 
     private readonly List<string> Categories = [];
     private readonly List<MerchantEntry> Entries = [];
     private readonly List<int> FilteredIndices = [];
 
     private readonly ItemRow[] Rows;
-    private readonly CategoryTab[] Tabs;
+    private readonly SelectableTab[] Tabs;
+
+    //how far a themed frame moved the content in from where the constants place it
+    private readonly int ContentOffset;
     private readonly UILabel TitleLabel;
     private readonly UILabel GoldLabel;
     private readonly UILabel PageLabel;
@@ -113,10 +116,7 @@ public sealed class BankShopPanel : UIPanel
         Visible = false;
         Width = PANEL_WIDTH;
         Height = PANEL_HEIGHT;
-        X = (ChaosGame.VIRTUAL_WIDTH - PANEL_WIDTH) / 2;
-        Y = (ChaosGame.VIRTUAL_HEIGHT - PANEL_HEIGHT) / 2;
-        BackgroundColor = FrameFill;
-        BorderColor = FrameBorder;
+        UseTheme = true;
 
         //centered (unlike the bottom-anchored/right-aligned legacy dialog sub-panels) because the suppressed chrome
         //frees the whole screen — don't "fix" this to the sibling convention.
@@ -128,21 +128,20 @@ public sealed class BankShopPanel : UIPanel
             Width = PANEL_WIDTH,
             Height = TextRenderer.CHAR_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Center,
-            ForegroundColor = TitleColor,
             IsHitTestVisible = false
         };
+        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle, TitleColor);
         AddChild(TitleLabel);
 
         //category tab strip (vertical, aligned 1:1 with the item rows)
-        Tabs = new CategoryTab[MAX_VISIBLE_TABS];
+        Tabs = new SelectableTab[MAX_VISIBLE_TABS];
 
         for (var i = 0; i < MAX_VISIBLE_TABS; i++)
         {
             var slot = i;
 
-            var tab = new CategoryTab(TAB_W, TAB_H)
+            var tab = new SelectableTab(string.Empty, TAB_W, TAB_H)
             {
-                TabIndex = i,
                 X = PADDING,
                 Y = ROWS_Y + i * ROW_H + (ROW_H - TAB_H) / 2,
                 Width = TAB_W,
@@ -151,6 +150,8 @@ public sealed class BankShopPanel : UIPanel
             };
 
             tab.Clicked += () => HandleTabClick(slot);
+            tab.Hovered += () => NotifyTabHover(slot);
+            tab.Unhovered += () => NotifyTabLeave(slot);
             Tabs[i] = tab;
             AddChild(tab);
         }
@@ -219,10 +220,10 @@ public sealed class BankShopPanel : UIPanel
             Width = 72,
             Height = TextRenderer.CHAR_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Right,
-            ForegroundColor = LegendColors.White,
             ShrinkToFit = false,
             IsHitTestVisible = false
         };
+        PageLabel.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
         AddChild(PageLabel);
 
         ItemPrevButton = new TextButton("<", 16, 18)
@@ -249,6 +250,10 @@ public sealed class BankShopPanel : UIPanel
         };
         OkButton.Clicked += HandleOk;
         AddChild(OkButton);
+
+        ContentOffset = GrowAroundContent(PADDING);
+        X = (ChaosGame.VIRTUAL_WIDTH - Width) / 2;
+        Y = (ChaosGame.VIRTUAL_HEIGHT - Height) / 2;
     }
 
     /// <summary>
@@ -505,7 +510,7 @@ public sealed class BankShopPanel : UIPanel
             if (categoryIndex < Categories.Count)
             {
                 var category = Categories[categoryIndex];
-                tab.SetCategory(TextRenderer.Truncate(category, TAB_MAX_CHARS));
+                tab.SetText(TextRenderer.Truncate(category, TAB_MAX_CHARS));
                 tab.IsSelected = categoryIndex == SelectedCategoryIndex;
                 tab.Visible = true;
             } else
@@ -669,7 +674,7 @@ public sealed class BankShopPanel : UIPanel
 
     public override void OnMouseScroll(MouseScrollEvent e)
     {
-        var localX = e.ScreenX - ScreenX;
+        var localX = e.ScreenX - ScreenX - ContentOffset;
 
         //cursor over the left tab column scrolls categories; anywhere else scrolls the item rows. WheelBy matches the
         //client-wide "wheel-up moves toward the top" convention (see MenuListPanel).
@@ -722,9 +727,8 @@ public sealed class BankShopPanel : UIPanel
                     return;
 
                 field = value;
-                var color = value ? SelectedTextColor : LegendColors.White;
-                NameLabel.ForegroundColor = color;
-                CountLabel.ForegroundColor = color;
+                SetTextRole(NameLabel);
+                SetTextRole(CountLabel);
                 RefreshFill();
             }
         }
@@ -752,7 +756,6 @@ public sealed class BankShopPanel : UIPanel
                 Y = (ROW_H - TextRenderer.CHAR_HEIGHT) / 2,
                 Width = width - (4 + ICON_SIZE + 6) - COUNT_W - 4,
                 Height = TextRenderer.CHAR_HEIGHT,
-                ForegroundColor = LegendColors.White,
                 IsHitTestVisible = false
             };
 
@@ -763,10 +766,11 @@ public sealed class BankShopPanel : UIPanel
                 Width = COUNT_W,
                 Height = TextRenderer.CHAR_HEIGHT,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                ForegroundColor = LegendColors.White,
                 IsHitTestVisible = false
             };
 
+            SetTextRole(NameLabel);
+            SetTextRole(CountLabel);
             AddChild(IconImage);
             AddChild(NameLabel);
             AddChild(CountLabel);
@@ -800,6 +804,20 @@ public sealed class BankShopPanel : UIPanel
 
         private void RefreshFill() => BackgroundColor = IsSelected ? RowSelectedFill : Hovered ? RowHoverFill : null;
 
+        //the selected and hover fills are part of the look
+        protected internal override Color? DrawnBackgroundColor
+            => BackgroundColor is not { } fill ? null
+                : IsSelected ? ThemeColor(ThemeRoles.RowSelected, fill)
+                : ThemeColor(ThemeRoles.RowHover, fill);
+
+        private void SetTextRole(UILabel label)
+        {
+            if (IsSelected)
+                label.SetForegroundRole(ThemeRoles.TextSelected, SelectedTextColor);
+            else
+                label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+        }
+
         public override void OnMouseEnter()
         {
             Hovered = true;
@@ -829,64 +847,6 @@ public sealed class BankShopPanel : UIPanel
                 return;
 
             Confirmed?.Invoke();
-            e.Handled = true;
-        }
-    }
-
-    /// <summary>A category tab showing the category name as text with an idle/selected frame.</summary>
-    private sealed class CategoryTab : UIPanel
-    {
-        private readonly UILabel NameLabel;
-
-        public int TabIndex { get; init; }
-
-        public event ClickedHandler? Clicked;
-
-        public bool IsSelected
-        {
-            get;
-            set
-            {
-                field = value;
-                BackgroundColor = value ? TabSelectedFill : TabIdleFill;
-                BorderColor = value ? TabSelectedBorder : TabIdleBorder;
-                NameLabel.ForegroundColor = value ? SelectedTextColor : LegendColors.White;
-            }
-        }
-
-        public CategoryTab(int width, int height)
-        {
-            BackgroundColor = TabIdleFill;
-            BorderColor = TabIdleBorder;
-
-            NameLabel = new UILabel
-            {
-                X = 2,
-                Y = 0,
-                Width = width - 4,
-                Height = height,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                ShrinkToFit = false,
-                ForegroundColor = LegendColors.White,
-                IsHitTestVisible = false
-            };
-
-            AddChild(NameLabel);
-        }
-
-        public void SetCategory(string label) => NameLabel.Text = label;
-
-        public override void OnMouseEnter() => (Parent as BankShopPanel)?.NotifyTabHover(TabIndex);
-
-        public override void OnMouseLeave() => (Parent as BankShopPanel)?.NotifyTabLeave(TabIndex);
-
-        public override void OnClick(ClickEvent e)
-        {
-            if (e.Button != MouseButton.Left)
-                return;
-
-            Clicked?.Invoke();
             e.Handled = true;
         }
     }

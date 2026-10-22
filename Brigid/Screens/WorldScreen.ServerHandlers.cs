@@ -758,7 +758,7 @@ public sealed partial class WorldScreen
 
         //high ZIndex so the popup floats above all panels (StatusBook, GroupTabControl, dialogs, ...).
         //10 matches DisconnectPopup, the only other interruption-class modal.
-        var popup = new OkPopupMessageControl(true)
+        var popup = new OkPopupMessageControl("Group Invite", showCancel: true)
         {
             Name = "GroupInvitePopup",
             ZIndex = 10
@@ -769,16 +769,24 @@ public sealed partial class WorldScreen
         {
             Game.Connection.SendGroupInvite(ClientGroupSwitch.AcceptInvite, sourceName);
             popup.Hide();
-            Root.RemoveChild(popup.Name);
+            RemoveInvitePopup(popup);
         };
 
         popup.OnCancel += () =>
         {
             popup.Hide();
-            Root.RemoveChild(popup.Name);
+            RemoveInvitePopup(popup);
         };
 
         popup.Show(message);
+    }
+
+    //removes this popup only: a second invite has the same name, and RemoveChild(name) disposes every match, which left
+    //the other popup off the tree but still on the control stack
+    private void RemoveInvitePopup(OkPopupMessageControl popup)
+    {
+        Root?.Children.Remove(popup);
+        popup.Dispose();
     }
 
     //--- profiles ---

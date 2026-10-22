@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -16,7 +17,13 @@ namespace Brigid.Controls.Generic;
 ///         Setting <see cref="Checked" /> directly is silent — <see cref="CheckedChanged" /> fires only on a
 ///         user click. That lets a consumer mirror external state (e.g. a <c>UserOptions</c> toggle) into the
 ///         box without the change echoing back as a user toggle. Fill is palette-driven (idle/hover);
-///         <c>BorderColor</c> and <see cref="CheckColor" /> may be overridden.
+///         <c>BorderColor</c> and <see cref="CheckColor" /> may be overridden, and are the fallbacks of the theme colours.
+///     </para>
+///     <para>
+///         A themed box draws the <see cref="ThemeRoles.CheckBoxNormal" /> or <see cref="ThemeRoles.CheckBoxHover" /> part
+///         in place of the flat fill and border, and the <see cref="ThemeRoles.CheckBoxMark" /> part over the whole box when
+///         it is checked. With no part, it draws the flat look: the border in the theme's <see cref="ThemeRoles.Border" />
+///         colour and the check in its <see cref="ThemeRoles.TextSelected" /> colour.
 ///     </para>
 /// </summary>
 public sealed class CheckBox : UIElement
@@ -43,17 +50,33 @@ public sealed class CheckBox : UIElement
         BackgroundColor = DialogPalette.ButtonIdleFill;
     }
 
+    //the flat border is part of the look
+    protected internal override Color? DrawnBorderColor => BorderColor is { } border ? ThemeColor(ThemeRoles.Border, border) : null;
+
     private void RefreshFill() => BackgroundColor = Hovered ? DialogPalette.ButtonHoverFill : DialogPalette.ButtonIdleFill;
 
     public override void Draw(SpriteBatch spriteBatch)
     {
-        base.Draw(spriteBatch); //clip + box fill + border
+        if (!Visible)
+            return;
 
-        if (!Visible || !Checked)
+        var box = new Rectangle(ScreenX, ScreenY, Width, Height);
+
+        //a themed box draws its part in place of the flat fill and border, and the flat box when the part does not draw
+        UpdateClipRect();
+
+        if (!TryDrawThemePart(spriteBatch, Hovered ? ThemeRoles.CheckBoxHover : ThemeRoles.CheckBoxNormal, box, ThemeRoles.CheckBoxNormal))
+            base.Draw(spriteBatch); //clip + box fill + border
+
+        if (!Checked)
+            return;
+
+        //the mark part covers the whole box, so its art holds its own margin
+        if (TryDrawThemePart(spriteBatch, ThemeRoles.CheckBoxMark, box))
             return;
 
         var inner = new Rectangle(ScreenX + CHECK_INSET, ScreenY + CHECK_INSET, Width - 2 * CHECK_INSET, Height - 2 * CHECK_INSET);
-        DrawRectClipped(spriteBatch, inner, CheckColor);
+        DrawRectClipped(spriteBatch, inner, ThemeColor(ThemeRoles.TextSelected, CheckColor));
     }
 
     public override void ResetInteractionState()

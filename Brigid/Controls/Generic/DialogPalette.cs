@@ -13,6 +13,9 @@ namespace Brigid.Controls.Generic;
 /// </summary>
 internal static class DialogPalette
 {
+    //full-window backdrop behind the main menu when no theme supplies a background
+    public static readonly Color Backdrop = new(12, 14, 22);
+
     //window frame + bands
     public static readonly Color FrameFill = new(6, 8, 14, 240);
     public static readonly Color FrameBorder = new(150, 126, 78);
@@ -33,9 +36,22 @@ internal static class DialogPalette
     //ability requirements the player does not meet
     public static readonly Color RequirementUnmet = LegendColors.Scarlet;
 
+    //the dark box behind a text field or a preview
+    public static readonly Color SlotFill = new(0, 0, 0, 205);
+
+    //a form's error line; light enough to read on a dark fill and on theme art
+    public static readonly Color ErrorText = new(255, 128, 104);
+
     //TextButton states
     public static readonly Color ButtonIdleFill = new(30, 32, 42);
     public static readonly Color ButtonHoverFill = new(52, 54, 66);
     public static readonly Color ButtonPressFill = new(74, 58, 22);
     public static readonly Color DisabledText = new(96, 96, 96);
+
+    //the main menu title and status line
+    public static readonly Color MenuTitle = new(242, 240, 232);
+    public static readonly Color TitleShadow = new(0, 0, 0, 153);
+    public static readonly Color StatusText = new(176, 180, 192);
+    public static readonly Color UpdateLink = Color.Red;
+    public static readonly Color UpdateLinkHover = Color.OrangeRed;
 }

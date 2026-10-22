@@ -24,6 +24,8 @@ namespace Brigid.Tests;
 ///     certificate with an accept-this-one validator, which is also the shape the trust-on-first-use
 ///     flow will supply.
 /// </summary>
+//its upgrade must not see the short static timeouts that CapabilityDetectionTests sets
+[Collection("GameClientTimeouts")]
 public class TlsUpgradeTests
 {
     private static readonly PacketCodec Codec = new();

@@ -170,8 +170,7 @@ public sealed class InputDispatcher : IDisposable
         //exception: the chat input textbox is sticky — popups must not interrupt typing.
         if (ExplicitFocusElement is not null
             && (ExplicitFocusElement != ChatInputTextBox)
-            && (ExplicitFocusElement != panel)
-            && !IsDescendantOf(panel, ExplicitFocusElement))
+            && !IsSelfOrDescendantOf(panel, ExplicitFocusElement))
         {
             stashed = ExplicitFocusElement;
             ClearExplicitFocus();
@@ -235,11 +234,35 @@ public sealed class InputDispatcher : IDisposable
     public int ControlStackCount => ControlStack.Count;
 
     /// <summary>
+    ///     The modal panel that has the input. It is the topmost visible panel on the control stack that sets
+    ///     <see cref="UIPanel.IsModal" />, or null. The control stack decides, not the tree. Thus a modal that is the child of
+    ///     another panel counts, for example the Story view in the main menu.
+    /// </summary>
+    public UIPanel? TopModal => TopModalIndex() is var index and >= 0 ? ControlStack[index] : null;
+
+    private int TopModalIndex()
+    {
+        for (var i = ControlStack.Count - 1; i >= 0; i--)
+            if (ControlStack[i].IsModal && IsEffectivelyVisible(ControlStack[i]))
+                return i;
+
+        return -1;
+    }
+
+    /// <summary>
+    ///     When true, a mouse event outside the <see cref="TopModal" /> is consumed. A visible stack panel above the modal
+    ///     also takes the mouse, because the modal opened it (for example a list or a sub-popup). The lobby screen sets this
+    ///     flag. <see cref="Clear" /> resets it, so a world popup does not block the mouse.
+    /// </summary>
+    public bool EnforceModals { get; set; }
+
+    /// <summary>
     ///     Resets all dispatcher state. Called by ScreenManager.Switch to prevent stale
     ///     elements from persisting across screen transitions.
     /// </summary>
     public void Clear()
     {
+        EnforceModals = false;
         ControlStack.Clear();
         StashedFocus.Clear();
         ClearExplicitFocus();
@@ -294,29 +317,8 @@ public sealed class InputDispatcher : IDisposable
                     MouseMove.Target = CapturedElement;
                     CapturedElement.OnMouseMove(MouseMove);
 
-                    //check drag threshold
                     if (!DragActive)
-                    {
-                        var dx = mouseX - MouseDownPosition.X;
-                        var dy = mouseY - MouseDownPosition.Y;
-
-                        if (((dx * dx) + (dy * dy)) >= DRAG_THRESHOLD_SQ)
-                        {
-                            DragStart.Reset();
-                            DragStart.ScreenX = mouseX;
-                            DragStart.ScreenY = mouseY;
-                            DragStart.Button = MouseDownButton;
-                            DragStart.Source = CapturedElement;
-                            DragStart.Target = CapturedElement;
-                            CapturedElement.OnDragStart(DragStart);
-
-                            if (DragStart.Payload is not null)
-                            {
-                                DragActive = true;
-                                DragPayload = DragStart.Payload;
-                            }
-                        }
-                    }
+                        TryStartDrag(mouseX, mouseY);
 
                     //dragmove fires on element under cursor (hit-tested, not captured)
                     if (DragActive)
@@ -356,6 +358,13 @@ public sealed class InputDispatcher : IDisposable
             //mouse is blocked — still track position for delta calculation next frame
             PreviousMouseX = mouseX;
             PreviousMouseY = mouseY;
+
+            //a blocked cursor hovers nothing, so a button behind a modal or in it does not stay lit
+            if (HoveredElement is not null)
+            {
+                HoveredElement.OnMouseLeave();
+                HoveredElement = null;
+            }
         }
 
         //── unified event stream (keyboard + mouse button + wheel in true OS order) ──
@@ -378,16 +387,7 @@ public sealed class InputDispatcher : IDisposable
             {
                 case BufferedInputKind.MouseButton:
                 {
-                    if (!mouseBlocked)
-                        ProcessMouseButton(
-                            root,
-                            evt.X,
-                            evt.Y,
-                            totalMs,
-                            evt.Modifiers,
-                            evt.Button,
-                            evt.IsPress,
-                            !evt.IsPress);
+                    DispatchMouseButton(root, evt.X, evt.Y, totalMs, evt.Modifiers, evt.Button, evt.IsPress);
 
                     break;
                 }
@@ -397,7 +397,7 @@ public sealed class InputDispatcher : IDisposable
                     //per-event wheel dispatch — hit-test at the captured cursor position
                     //so a scroll that lands in a different panel than the frame-end cursor
                     //is still routed correctly.
-                    if (!mouseBlocked)
+                    if (!IsMouseBlocked(evt.X, evt.Y))
                     {
                         var scrollTarget = HitTest(root, evt.X, evt.Y);
 
@@ -462,6 +462,81 @@ public sealed class InputDispatcher : IDisposable
                 }
             }
     }
+
+    /// <summary>
+    ///     Dispatches one mouse button event at its own position. A blocked press does nothing. A blocked release still
+    ///     ends a capture: the captured element gets its mouse-up, a drag ends with no drop (the source gets
+    ///     <see cref="UIElement.OnDragCancel" />), and no click occurs. Thus a modal or a focused textbox that starts during
+    ///     a press or a drag does not leave the capture or the drag stuck. Internal for the tests.
+    /// </summary>
+    internal void DispatchMouseButton(
+        UIPanel root,
+        int mouseX,
+        int mouseY,
+        float totalMs,
+        KeyModifiers modifiers,
+        MouseButton button,
+        bool isPress)
+    {
+        if (!IsMouseBlocked(mouseX, mouseY))
+        {
+            ProcessMouseButton(root, mouseX, mouseY, totalMs, modifiers, button, isPress, !isPress);
+
+            return;
+        }
+
+        if (isPress || CapturedElement is null)
+            return;
+
+        MouseUp.Reset();
+        MouseUp.ScreenX = mouseX;
+        MouseUp.ScreenY = mouseY;
+        MouseUp.Button = button;
+        MouseUp.Modifiers = modifiers;
+        DispatchBubble(CapturedElement, MouseUp);
+
+        if (DragActive)
+            CapturedElement.OnDragCancel();
+
+        DragActive = false;
+        DragPayload = null;
+        CapturedElement = null;
+    }
+
+    /// <summary>
+    ///     Starts a drag when the cursor is far enough from the mouse-down and the captured element gives a payload.
+    ///     Returns true when a drag is active. Internal for the tests.
+    /// </summary>
+    internal bool TryStartDrag(int mouseX, int mouseY)
+    {
+        if (CapturedElement is null)
+            return false;
+
+        var dx = mouseX - MouseDownPosition.X;
+        var dy = mouseY - MouseDownPosition.Y;
+
+        if (((dx * dx) + (dy * dy)) < DRAG_THRESHOLD_SQ)
+            return DragActive;
+
+        DragStart.Reset();
+        DragStart.ScreenX = mouseX;
+        DragStart.ScreenY = mouseY;
+        DragStart.Button = MouseDownButton;
+        DragStart.Source = CapturedElement;
+        DragStart.Target = CapturedElement;
+        CapturedElement.OnDragStart(DragStart);
+
+        if (DragStart.Payload is not null)
+        {
+            DragActive = true;
+            DragPayload = DragStart.Payload;
+        }
+
+        return DragActive;
+    }
+
+    /// <summary>True while an element holds the mouse capture. Internal for the tests.</summary>
+    internal bool HasCapture => CapturedElement is not null;
 
     private void ProcessMouseButton(
         UIPanel root,
@@ -691,11 +766,14 @@ public sealed class InputDispatcher : IDisposable
     }
 
     /// <summary>
-    ///     Mouse blocking: when a visible textbox has explicit focus, restrict mouse events to the panel containing the
-    ///     focused textbox; clicks outside are consumed.
+    ///     Mouse blocking. With <see cref="EnforceModals" />, a mouse event outside the <see cref="TopModal" /> is consumed.
+    ///     When a visible textbox has explicit focus, a mouse event outside the panel that contains it is also consumed.
     /// </summary>
     internal bool IsMouseBlocked(int mouseX, int mouseY)
     {
+        if (IsOutsideTopModal(mouseX, mouseY))
+            return true;
+
         if (ExplicitFocusElement is null || !IsEffectivelyVisible(ExplicitFocusElement))
             return false;
 
@@ -715,6 +793,36 @@ public sealed class InputDispatcher : IDisposable
                           && chatBar.ContainsPoint(mouseX, mouseY);
 
         return !overChatBar;
+    }
+
+    //true when modals are enforced, there is a top modal, and the cursor is outside it and outside each visible stack
+    //panel above it. A capture that started in one of them is not blocked. A drag that leaves the modal keeps its mouse
+    //moves and its mouse-up
+    private bool IsOutsideTopModal(int mouseX, int mouseY)
+    {
+        if (!EnforceModals)
+            return false;
+
+        var index = TopModalIndex();
+
+        if (index < 0)
+            return false;
+
+        for (var i = index; i < ControlStack.Count; i++)
+        {
+            var panel = ControlStack[i];
+
+            if (!IsEffectivelyVisible(panel))
+                continue;
+
+            if (panel.ContainsPoint(mouseX, mouseY))
+                return false;
+
+            if (CapturedElement is not null && IsSelfOrDescendantOf(panel, CapturedElement))
+                return false;
+        }
+
+        return true;
     }
 
     private static bool IsEffectivelyVisible(UIElement element)
@@ -788,6 +896,9 @@ public sealed class InputDispatcher : IDisposable
     }
 
     //── helpers ──
+
+    private static bool IsSelfOrDescendantOf(UIPanel ancestor, UIElement element)
+        => (element == ancestor) || IsDescendantOf(ancestor, element);
 
     /// <summary>
     ///     True if <paramref name="descendant" /> is a child, grandchild, etc. of <paramref name="ancestor" />.

@@ -2,6 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -90,9 +91,9 @@ internal sealed class PostComposePane : UIPanel
             IsMultiLine = true,
             IsSelectable = true,
             MaxLength = BODY_MAX_LENGTH,
-            ForegroundColor = TextColors.Default,
             IsTabStop = true
         };
+        BodyBox.SetForegroundRole(ThemeRoles.InputText, TextColors.Default);
 
         Fields.AddChild(BodyBox);
 
@@ -120,10 +121,10 @@ internal sealed class PostComposePane : UIPanel
             PaddingTop = 0,
             Text = text,
             VerticalAlignment = VerticalAlignment.Center,
-            ForegroundColor = DialogPalette.Title,
             IsHitTestVisible = false
         };
 
+        label.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
         Fields.AddChild(label);
 
         return label;
@@ -144,12 +145,12 @@ internal sealed class PostComposePane : UIPanel
             Width = width,
             Height = FIELD_H,
             MaxLength = maxLength,
-            ForegroundColor = LegendColors.White,
             FocusedBackgroundColor = DialogPalette.RowHoverFill,
             VerticalAlignment = VerticalAlignment.Center,
             IsTabStop = true
         };
 
+        box.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
         Fields.AddChild(box);
 
         return box;
@@ -181,7 +182,11 @@ internal sealed class PostComposePane : UIPanel
         PartyLabel.Text = isMail ? "To" : "By";
         PartyBox.Text = party ?? string.Empty;
         PartyBox.IsReadOnly = !editable;
-        PartyBox.ForegroundColor = editable ? LegendColors.White : TextColors.Default;
+        //a fixed recipient or author reads as plain text, not as a field
+        if (editable)
+            PartyBox.SetForegroundRole(ThemeRoles.InputText, LegendColors.White);
+        else
+            PartyBox.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
         PartyBox.IsTabStop = editable;
 
         SubjectBox.Text = string.Empty;

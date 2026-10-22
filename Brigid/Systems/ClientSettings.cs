@@ -6,7 +6,7 @@ namespace Brigid.Systems;
 ///     Reads and writes the global client settings file (brigid.cfg) in the original DarkAges line-delimited
 ///     "Key : Value" format. Stored in the per-user app root (<see cref="AppPaths.SettingsFile" />); on first run,
 ///     settings are imported from the legacy <c>Darkages.cfg</c> in the game-data folder when the new file is absent.
-///     Client-wide preferences only (volume, font, option toggles) — not per-server/character.
+///     Client-wide preferences only (volume, font, UI theme, option toggles) — not per-server/character.
 /// </summary>
 public static class ClientSettings
 {
@@ -24,6 +24,9 @@ public static class ClientSettings
     public const int MigrationSkip = 0;
     public const int MigrationImport = 1;
     public static int LegacyCharacterImport { get; set; } = MigrationUndecided;
+
+    //the pack_id of the selected ui_theme pack; null selects the first installed theme. Not a legacy key.
+    public static string? UiTheme { get; set; }
     public static bool GroupOpen { get; set; }
     public static int MusicVolume { get; set; } = 5;
     public static int AmbienceVolume { get; set; } = 5;
@@ -149,6 +152,11 @@ public static class ClientSettings
                             LegacyCharacterImport = ci;
 
                         break;
+
+                    case "UiTheme":
+                        UiTheme = value.Length > 0 ? value : null;
+
+                        break;
                 }
             }
         } catch
@@ -179,6 +187,7 @@ public static class ClientSettings
             writer.WriteLine("HanFont: 0");
             writer.WriteLine($"EngFont: {FontIndex}");
             writer.WriteLine($"ImportCharacterData: {LegacyCharacterImport}");
+            writer.WriteLine($"UiTheme: {UiTheme}");
             writer.WriteLine("Tel1: \"Nexus\",\"1\"");
             writer.WriteLine("Tel2: \"Nexus\",\"2\"");
             writer.WriteLine("Tel3: \"Nexus\",\"3\"");

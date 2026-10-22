@@ -39,7 +39,7 @@ public sealed class AssetPackManifest
     ///     skipped at load with a warning. Known values: <c>ability_icons</c>, <c>ambient_sounds</c>, <c>nation_badges</c>,
     ///     <c>item_icons</c>, <c>npc_portraits</c>, <c>static_tiles</c>, <c>legend_mark_icons</c>,
     ///     <c>ui_sprite_overrides</c>, <c>creature_sprites</c>, <c>music</c>, <c>sound_effects</c>, <c>world_maps</c>,
-    ///     <c>town_maps</c>.
+    ///     <c>town_maps</c>, <c>ui_theme</c>.
     ///     Future content types land as additions to that dictionary.
     /// </summary>
     [JsonPropertyName("content_type")]

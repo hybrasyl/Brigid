@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Rendering;
 using Brigid.Systems.Keybinds;
 using Microsoft.Xna.Framework.Input;
 #endregion
@@ -33,7 +34,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
     /// <summary>Raised when the user commits a captured chord (command, slot, chord). Never raised on cancel.</summary>
     public event Action<CommandId, ChordSlot, KeyChord>? Committed;
 
-    public KeybindCaptureControl() : base("Rebind Key", PANEL_W, PANEL_H)
+    public KeybindCaptureControl() : base("Rebind Key", PANEL_W, PANEL_H, useTheme: true)
     {
         var content = ContentBounds;
 
@@ -45,9 +46,9 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
             Height = TextRenderer.CHAR_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            ForegroundColor = TextColors.Default,
             IsHitTestVisible = false
         };
+        PromptLabel.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
         AddChild(PromptLabel);
 
         CapturedLabel = new UILabel
@@ -58,9 +59,9 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
             Height = TextRenderer.CHAR_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            ForegroundColor = DialogPalette.SelectedText,
             IsHitTestVisible = false
         };
+        CapturedLabel.SetForegroundRole(ThemeRoles.TextSelected, DialogPalette.SelectedText);
         AddChild(CapturedLabel);
 
         StatusLabel = new UILabel
@@ -99,7 +100,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
         SetTitle($"Rebind — {name}");
         PromptLabel.Text = $"{name} · {slotLabel}";
         CapturedLabel.Text = "Press a key…";
-        CapturedLabel.ForegroundColor = DialogPalette.DisabledText;
+        CapturedLabel.SetForegroundRole(ThemeRoles.TextDisabled, DialogPalette.DisabledText);
         StatusLabel.Text = string.Empty;
         SetButton.SetEnabled(false);
 
@@ -131,7 +132,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
     private void UpdateCapturedDisplay(KeyChord chord)
     {
         CapturedLabel.Text = KeybindCatalog.Format(chord);
-        CapturedLabel.ForegroundColor = DialogPalette.SelectedText;
+        CapturedLabel.SetForegroundRole(ThemeRoles.TextSelected, DialogPalette.SelectedText);
 
         var context = Keybinds.Defaults[Command].Context;
 

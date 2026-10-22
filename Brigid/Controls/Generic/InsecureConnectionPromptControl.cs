@@ -51,8 +51,11 @@ public sealed class InsecureConnectionPromptControl : CenteredModalPanel
     public event Action<string>? OnRefused;
 
     public InsecureConnectionPromptControl()
-        : base("Connection Is Not Encrypted", PANEL_W, PANEL_H)
+        : base("Connection Is Not Encrypted", PANEL_W, PANEL_H, useTheme: true)
     {
+        //the prompt gates a connection in progress, so nothing behind it takes input while it is open
+        IsModal = true;
+
         var y = ContentTop + 4;
 
         Headline = AddRow(ref y, DialogPalette.RequirementUnmet);
@@ -92,18 +95,25 @@ public sealed class InsecureConnectionPromptControl : CenteredModalPanel
         OnClose += Refuse;
     }
 
+    //a row with no colour is plain text, in the theme's text colour; a colour passed here carries meaning
     private UILabel AddRow(ref int y, Color? color = null)
     {
+        var content = ContentBounds;
+
         var label = new UILabel
         {
-            X = PADDING,
+            X = content.X,
             Y = y,
-            Width = Width - 2 * PADDING,
+            Width = content.Width,
             Height = ROW_H,
-            ForegroundColor = color ?? DialogPalette.Title,
             IsHitTestVisible = false,
             ShrinkToFit = false
         };
+
+        if (color is { } literal)
+            label.ForegroundColor = literal;
+        else
+            label.SetForegroundRole(ThemeRoles.Text, DialogPalette.Title);
 
         AddChild(label);
         y += ROW_H;

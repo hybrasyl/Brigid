@@ -20,12 +20,13 @@ namespace Brigid.Controls.Components;
 ///     <para>
 ///         Subclasses lay their content out inside <see cref="ContentBounds" /> (add it with <c>AddChild</c>),
 ///         add bottom-bar actions with <see cref="AddBottomBarButton" />, and hang any pre-close teardown off
-///         <see cref="OnClose" /> (which also covers the Escape path). Override <see cref="Show" /> to accept
+///         <see cref="OnClose" /> (which also covers the Escape path). A modal that fits its height to its content calls
+///         <see cref="SetContentHeight" />. Override <see cref="Show" /> to accept
 ///         data (call <c>base.Show()</c> to push and reveal), <see cref="Hide" /> for teardown, and
 ///         <see cref="OnMouseScroll" /> to route the wheel to a scroll model.
 ///     </para>
 /// </summary>
-public abstract class CenteredModalPanel : UIPanel
+public abstract class CenteredModalPanel : FramePanel
 {
     protected const int PADDING = 6;
 
@@ -47,54 +48,95 @@ public abstract class CenteredModalPanel : UIPanel
     //the viewport the panel centers within; defaults to the full virtual screen until SetViewportBounds runs.
     private Rectangle Viewport = new(0, 0, ChaosGame.VIRTUAL_WIDTH, ChaosGame.VIRTUAL_HEIGHT);
 
+    //the inset the title, the dividers and the bottom bar were last placed for
+    private int LaidOutInset;
+
+    /// <summary>
+    ///     The distance from the panel edge to the content: <see cref="PADDING" />, or more inside a themed frame whose border
+    ///     art is wider. The title band and the bottom bar move in by the same extra amount.
+    /// </summary>
+    protected int Inset => InsetFor(PADDING);
+
+    //how far the title band and the bottom bar sit from the top and bottom edges: 0 for the flat frame
+    private int ChromeOffset => Inset - PADDING;
+
     /// <summary>Top of the content area (below the title band and its divider).</summary>
-    protected int ContentTop => TITLE_H + 1;
+    protected int ContentTop => ChromeOffset + TITLE_H + 1;
 
-    /// <summary>Top of the bottom action bar.</summary>
-    protected int BottomBarTop => Height - BOTTOM_H;
+    /// <summary>Top of the bottom action bar. Internal for the layout tests.</summary>
+    protected internal int BottomBarTop => Height - ChromeOffset - BOTTOM_H;
 
-    /// <summary>The content region between the title band and the bottom bar, in panel-local coordinates.</summary>
-    protected Rectangle ContentBounds => new(PADDING, ContentTop, Width - 2 * PADDING, BottomBarTop - ContentTop);
+    /// <summary>
+    ///     The content region between the title band and the bottom bar, in panel-local coordinates. Internal for the layout
+    ///     tests.
+    /// </summary>
+    protected internal Rectangle ContentBounds => new(Inset, ContentTop, Width - 2 * Inset, BottomBarTop - ContentTop);
 
     /// <summary>The Close button. Hang teardown off <see cref="OnClose" /> (not this) so Escape is covered too.</summary>
     protected TextButton CloseButton { get; }
 
     public event CloseHandler? OnClose;
 
-    protected CenteredModalPanel(string title, int width, int height)
+    /// <param name="title">The text of the title band.</param>
+    /// <param name="width">The panel width.</param>
+    /// <param name="height">The panel height.</param>
+    /// <param name="useTheme">
+    ///     True for a modal that takes the theme itself. The title band, the bottom bar and <see cref="ContentBounds" /> are
+    ///     then inside the themed frame from the start, so a subclass can lay out its content in its constructor. A themed
+    ///     frame can be wider than the flat one; the panel then grows by the difference, so that
+    ///     <see cref="ContentBounds" /> has the same size with and without the theme. Construct such a modal after the asset
+    ///     packs load, or it lays out flat. False for a modal that is flat or that takes the theme from a parent; it lays out
+    ///     again in <see cref="LayoutContent" />, and its content area becomes smaller.
+    /// </param>
+    protected CenteredModalPanel(string title, int width, int height, bool useTheme = false)
     {
         Name = GetType().Name;
         Visible = false;
         UsesControlStack = true;
         Width = width;
         Height = height;
-        BackgroundColor = DialogPalette.FrameFill;
-        BorderColor = DialogPalette.FrameBorder;
+
+        if (useTheme)
+        {
+            UseTheme = true;
+
+            var extra = Inset - PADDING;
+            Width += 2 * extra;
+            Height += 2 * extra;
+        }
+
+        LaidOutInset = Inset;
         CenterInViewport();
 
         TitleLabel = new UILabel
         {
+            Name = "title",
             X = 0,
-            Y = (TITLE_H - TextRenderer.CHAR_HEIGHT) / 2,
-            Width = width,
+            Y = ChromeOffset + (TITLE_H - TextRenderer.CHAR_HEIGHT) / 2,
+            Width = Width,
             Height = TextRenderer.CHAR_HEIGHT,
             HorizontalAlignment = HorizontalAlignment.Center,
-            ForegroundColor = DialogPalette.Title,
             Text = title,
             IsHitTestVisible = false
         };
+        TitleLabel.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
         AddChild(TitleLabel);
 
-        CloseButton = AddBottomBarButton("Close", CLOSE_W, Hide);
+        CloseButton = AddBottomBarButton("Close", CLOSE_W, Hide, "close");
     }
 
     /// <summary>
     ///     Adds a button to the bottom action bar, stacked right-to-left after Close. Returns it so subclasses
-    ///     can keep a reference (e.g. to enable/disable per tab).
+    ///     can keep a reference (e.g. to enable/disable per tab). Give a <paramref name="name" /> of <c>[a-z0-9_]</c> so
+    ///     that a later <c>ui_panels</c> pack can address the button.
     /// </summary>
-    protected TextButton AddBottomBarButton(string text, int width, ClickedHandler onClick)
+    protected TextButton AddBottomBarButton(string text, int width, ClickedHandler onClick, string? name = null)
     {
-        var button = new TextButton(text, width, BUTTON_H) { Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2 };
+        var button = new TextButton(text, width, BUTTON_H)
+        {
+            Name = name ?? string.Empty,
+            Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2
+        };
         button.Clicked += onClick;
         BottomBarButtons.Add(button);
         AddChild(button);
@@ -125,7 +167,9 @@ public abstract class CenteredModalPanel : UIPanel
     /// </summary>
     protected void RelayoutBottomBar()
     {
-        var right = Width - PADDING;
+        //the bar shares the bottom row with the frame's corner art, which is wider than its edge, so it moves in by the
+        //same extra amount as the title band moves down (nothing for the flat frame)
+        var right = Width - Inset - ChromeOffset;
 
         foreach (var button in BottomBarButtons)
         {
@@ -152,12 +196,64 @@ public abstract class CenteredModalPanel : UIPanel
         Y = Viewport.Y + (Viewport.Height - Height) / 2;
     }
 
+    /// <summary>
+    ///     Places the title, the bottom bar and the content again when <see cref="Inset" /> changed: a panel becomes themed
+    ///     when it is added under a themed parent, after its constructor laid it out flat.
+    /// </summary>
+    private void EnsureFrameLayout()
+    {
+        if (Inset == LaidOutInset)
+            return;
+
+        LaidOutInset = Inset;
+        TitleLabel.Y = ChromeOffset + (TITLE_H - TextRenderer.CHAR_HEIGHT) / 2;
+
+        PlaceBottomBarRow();
+        RelayoutBottomBar();
+        LayoutContent();
+    }
+
+    //puts the bottom-bar buttons on the bar's row
+    private void PlaceBottomBarRow()
+    {
+        foreach (var button in BottomBarButtons)
+            button.Y = BottomBarTop + (BOTTOM_H - BUTTON_H) / 2;
+    }
+
+    /// <summary>
+    ///     Sets the panel height so that <see cref="ContentBounds" /> is <paramref name="contentHeight" /> px tall, for a
+    ///     modal that fits its height to its content; such a modal can give 0 as the constructor height. The bottom bar moves
+    ///     with the bottom edge, and the panel is centered again. The top of <see cref="ContentBounds" /> does not move, but
+    ///     its bottom does, so place the content again after this call.
+    /// </summary>
+    protected void SetContentHeight(int contentHeight)
+    {
+        Height = ContentTop + contentHeight + ChromeOffset + BOTTOM_H;
+        PlaceBottomBarRow();
+        CenterInViewport();
+    }
+
+    /// <summary>
+    ///     Called when <see cref="ContentBounds" /> changed after the constructor, because the frame border changed. A
+    ///     subclass whose content is placed from <see cref="ContentBounds" /> places it again here.
+    /// </summary>
+    protected virtual void LayoutContent() { }
+
+    public override void Update(GameTime gameTime)
+    {
+        if (Visible)
+            EnsureFrameLayout();
+
+        base.Update(gameTime);
+    }
+
     /// <summary>Pushes the panel onto the control stack and reveals it. Idempotent.</summary>
     public virtual void Show()
     {
         if (Visible)
             return;
 
+        EnsureFrameLayout();
         CenterInViewport();
         InputDispatcher.Instance?.PushControl(this);
         Visible = true;
@@ -183,12 +279,15 @@ public abstract class CenteredModalPanel : UIPanel
 
         //dividers framing the title band and the bottom action bar (drawn over the fill, inset by PADDING like
         //the sibling modals).
-        DrawDivider(spriteBatch, TITLE_H);
+        DrawDivider(spriteBatch, ChromeOffset + TITLE_H);
         DrawDivider(spriteBatch, BottomBarTop);
     }
 
     private void DrawDivider(SpriteBatch spriteBatch, int localY)
-        => DrawRectClipped(spriteBatch, new Rectangle(ScreenX + PADDING, ScreenY + localY, Width - 2 * PADDING, 1), DialogPalette.Divider);
+        => DrawRectClipped(
+            spriteBatch,
+            new Rectangle(ScreenX + Inset, ScreenY + localY, Width - 2 * Inset, 1),
+            ThemeColor(ThemeRoles.Divider, DialogPalette.Divider));
 
     public override void OnKeyDown(KeyDownEvent e)
     {

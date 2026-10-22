@@ -19,6 +19,7 @@
          the same tile full-bleed. The .ico above is the
          Windows exe/apphost icon. See Build/icon/README.md for the sources. -->
     <ItemGroup>
+        <EmbeddedResource Include="Resources\MainMenu\*.md;Resources\MainMenu\*.json" LogicalName="Brigid.MainMenu.%(Filename)%(Extension)" />
         <EmbeddedResource Include="BrigidIcon.png">
             <LogicalName>BrigidIcon.png</LogicalName>
         </EmbeddedResource>

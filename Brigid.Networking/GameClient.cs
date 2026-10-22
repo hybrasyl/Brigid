@@ -59,6 +59,16 @@ public sealed class GameClient : IDisposable
     private readonly ConcurrentQueue<IExtensionServerPacket> ExtensionQueue = new();
 
     private readonly Lock SendLock = new();
+
+    //the connect in progress. A new connect and Disconnect cancel it, and a new connect waits for it to end, so that two
+    //connects never use the socket and transport fields at the same time. Under the lock, a connect makes its cancel
+    //check and tears down the old connection, and makes its last cancel check and starts the pumps; Disconnect cancels
+    //and tears down. Thus a Disconnect and a connect do not tear down at the same time, and a Disconnect cannot come
+    //between the last check and the pump start. A teardown in a connect runs on a thread-pool thread and raises
+    //OnDisconnected there
+    private readonly Lock ConnectLock = new();
+    private CancellationTokenSource? ConnectCts;
+    private Task PendingConnect = Task.CompletedTask;
     private int ConnectionGeneration;
     private bool Disposed;
     private volatile bool IsAlive;
@@ -316,7 +326,9 @@ public sealed class GameClient : IDisposable
     /// <summary>
     ///     Connects asynchronously and, for a server-first hop, reads the server's opening greeting
     ///     before starting the receive pump — publishing any capability marker it carries on
-    ///     <see cref="ServerCapability" />.
+    ///     <see cref="ServerCapability" />. One connect runs at a time: a new call cancels the connect in progress and
+    ///     waits for it to end, and that connect's task ends with an <see cref="OperationCanceledException" />.
+    ///     <see cref="Disconnect" /> cancels a connect in progress too.
     /// </summary>
     /// <remarks>
     ///     The greeting is read inline rather than through the pump so that a STARTTLS upgrade has a
@@ -344,7 +356,7 @@ public sealed class GameClient : IDisposable
     ///     which is the one that matters and the one no test covers end to end.
     /// </remarks>
     /// <param name="ct">Cancellation token.</param>
-    public async Task ConnectAsync(
+    public Task ConnectAsync(
         string host,
         int port,
         bool expectGreeting,
@@ -354,7 +366,59 @@ public sealed class GameClient : IDisposable
         if (Disposed)
             throw new ObjectDisposedException(nameof(GameClient));
 
-        Disconnect();
+        using (ConnectLock.EnterScope())
+        {
+            ConnectCts?.Cancel();
+
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            ConnectCts = cts;
+            PendingConnect = ConnectAfterPreviousAsync(PendingConnect, cts, host, port, expectGreeting, tlsHost);
+
+            return PendingConnect;
+        }
+    }
+
+    //runs a connect after the previous connect ends, and then disposes its token source
+    private async Task ConnectAfterPreviousAsync(
+        Task previous,
+        CancellationTokenSource cts,
+        string host,
+        int port,
+        bool expectGreeting,
+        string tlsHost)
+    {
+        //the previous connect reports its own result to its caller. ForceYielding keeps this method out of the lock in
+        //ConnectAsync
+        await previous.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing | ConfigureAwaitOptions.ForceYielding);
+
+        try
+        {
+            await RunConnectAsync(cts.Token, host, port, expectGreeting, tlsHost);
+        } finally
+        {
+            //cleared before the dispose: Cancel on a disposed source throws
+            using (ConnectLock.EnterScope())
+                if (ConnectCts == cts)
+                    ConnectCts = null;
+
+            cts.Dispose();
+        }
+    }
+
+    //one connect. A cancel (a newer connect, or Disconnect) ends it with an OperationCanceledException and releases its
+    //socket
+    private async Task RunConnectAsync(
+        CancellationToken ct,
+        string host,
+        int port,
+        bool expectGreeting,
+        string tlsHost)
+    {
+        using (ConnectLock.EnterScope())
+        {
+            ct.ThrowIfCancellationRequested();
+            DisconnectTransport();
+        }
 
         ServerCapability = null;
         Negotiated = null;
@@ -367,11 +431,11 @@ public sealed class GameClient : IDisposable
             NoDelay = true
         };
 
-        await Socket.ConnectAsync(host, port, ct);
-        Transport = new NetworkStream(Socket, false);
-
         try
         {
+            await Socket.ConnectAsync(host, port, ct);
+            Transport = new NetworkStream(Socket, false);
+
             var carryOver = expectGreeting ? await ReadGreetingAsync(ct) : ReadOnlyMemory<byte>.Empty;
 
             //the lobby's marker is what licenses every later hop to upgrade, so record it before using it.
@@ -381,7 +445,11 @@ public sealed class GameClient : IDisposable
             if (UpgradeToTls && carryOver.IsEmpty)
                 await UpgradeToTlsAsync(tlsHost, ct);
 
-            StartPumps(carryOver.Span);
+            using (ConnectLock.EnterScope())
+            {
+                ct.ThrowIfCancellationRequested();
+                StartPumps(carryOver.Span);
+            }
         } catch
         {
             //nothing is alive yet, so Disconnect declines to clean up and the socket would leak. That is
@@ -419,12 +487,27 @@ public sealed class GameClient : IDisposable
     }
 
     /// <summary>
-    ///     Disconnects from the current server and cleans up resources.
+    ///     Disconnects from the current server and cleans up resources. A connect that is in progress stops: its task ends
+    ///     with an <see cref="OperationCanceledException" />.
     /// </summary>
     public void Disconnect()
     {
+        using var scope = ConnectLock.EnterScope();
+        ConnectCts?.Cancel();
+        DisconnectTransport();
+    }
+
+    //tears down the connection, and drops the packets of the connection that the game loop did not handle yet: a new
+    //session must not handle an answer to the old one. The receive loop can add a packet until it stops, so the queue
+    //clears after the loops end. Call it under ConnectLock
+    private void DisconnectTransport()
+    {
         if (!IsAlive)
+        {
+            InboundQueue.Clear();
+
             return;
+        }
 
         IsAlive = false;
 
@@ -506,6 +589,7 @@ public sealed class GameClient : IDisposable
         ReceiveCount = 0;
         ReceiveCts?.Dispose();
         ReceiveCts = null;
+        InboundQueue.Clear();
 
         OnDisconnected?.Invoke();
     }

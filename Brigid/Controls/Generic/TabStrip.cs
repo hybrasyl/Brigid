@@ -56,6 +56,7 @@ public sealed class TabStrip : UIPanel
 
             var tab = new SelectableTab(titles[i], tabWidth, tabHeight)
             {
+                Name = $"tab_{i}",
                 X = orientation == TabOrientation.Horizontal ? i * stride : 0,
                 Y = orientation == TabOrientation.Horizontal ? 0 : i * stride
             };

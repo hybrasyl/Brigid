@@ -1,4 +1,5 @@
 #region
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -18,6 +19,18 @@ public abstract class UIElement : IDisposable
     ///     1px border drawn around this element's bounds. Null = no border.
     /// </summary>
     public Color? BorderColor { get; set; }
+
+    /// <summary>
+    ///     The fill that <see cref="Draw" /> draws: <see cref="BackgroundColor" />. A control whose fill is part of the look
+    ///     overrides it to take the theme colour, so that it does not change <see cref="BackgroundColor" /> at draw time.
+    /// </summary>
+    protected internal virtual Color? DrawnBackgroundColor => BackgroundColor;
+
+    /// <summary>
+    ///     The border that <see cref="Draw" /> draws: <see cref="BorderColor" />. A control whose border is part of the look
+    ///     overrides it to take the theme colour.
+    /// </summary>
+    protected internal virtual Color? DrawnBorderColor => BorderColor;
 
     public bool Enabled { get; set; } = true;
     public int Height { get; set; }
@@ -41,6 +54,16 @@ public abstract class UIElement : IDisposable
     public int PaddingRight { get; set; }
     public int PaddingTop { get; set; }
     public UIPanel? Parent { get; internal set; }
+
+    /// <summary>
+    ///     Whether this element draws the art and colours of the installed <c>ui_theme</c> pack. Null (the default) takes
+    ///     the value from the parent, so one switch on a panel themes everything in it; true or false here overrides the
+    ///     parent. With no theme pack, or for a role the pack does not supply, a themed element keeps its flat look.
+    /// </summary>
+    public bool? UseTheme { get; set; }
+
+    /// <summary>True when <see cref="UseTheme" />, here or on the nearest parent that sets it, is true.</summary>
+    public bool IsThemed => UseTheme ?? Parent?.IsThemed ?? false;
 
     public bool Visible
     {
@@ -126,15 +149,18 @@ public abstract class UIElement : IDisposable
         if ((ClipRect.Width <= 0) || (ClipRect.Height <= 0))
             return;
 
-        if (BackgroundColor.HasValue || BorderColor.HasValue)
+        var fill = DrawnBackgroundColor;
+        var border = DrawnBorderColor;
+
+        if (fill.HasValue || border.HasValue)
         {
             var bounds = new Rectangle(ScreenX, ScreenY, Width, Height);
 
-            if (BackgroundColor.HasValue)
-                DrawRectClipped(spriteBatch, bounds, BackgroundColor.Value);
+            if (fill.HasValue)
+                DrawRectClipped(spriteBatch, bounds, fill.Value);
 
-            if (BorderColor.HasValue)
-                DrawBorderClipped(spriteBatch, bounds, BorderColor.Value);
+            if (border.HasValue)
+                DrawBorderClipped(spriteBatch, bounds, border.Value);
         }
     }
 
@@ -341,6 +367,54 @@ public abstract class UIElement : IDisposable
     }
 
     /// <summary>
+    ///     Draws the theme part for <paramref name="role" /> (or <paramref name="fallbackRole" /> when the theme has no usable
+    ///     part for it) into <paramref name="bounds" />, clipped to this element's ClipRect. Returns false, and draws nothing,
+    ///     when the element is not themed or the theme has neither part; the caller then draws its flat look. Every themed
+    ///     control draws its art through here, so a later per-control layer (BRIG-54 <c>ui_panels</c>) has one place to go.
+    /// </summary>
+    protected bool TryDrawThemePart(SpriteBatch spriteBatch, string role, Rectangle bounds, string? fallbackRole = null)
+        => IsThemed && ThemeArt.TryDraw(spriteBatch, role, bounds, ClipRect, fallbackRole);
+
+    /// <summary>
+    ///     True when the element is themed and the theme has a usable part for <paramref name="role" /> (see
+    ///     <see cref="ThemeArt.HasPart" />). A control uses it to decide its layout before the draw, for example to show a
+    ///     placeholder where art is absent. A part that the theme lists but whose image entry is absent or does not decode
+    ///     gives false, as it draws the flat look.
+    /// </summary>
+    protected bool HasThemePart(string role) => IsThemed && ThemeArt.HasPart(role);
+
+    /// <summary>
+    ///     Gets the logical width of the border art of a sliced theme part, when the element is themed and the theme slices
+    ///     that part. A framed control lays its content inside it.
+    /// </summary>
+    protected bool TryGetThemeBorder(string role, out int border)
+    {
+        border = 0;
+
+        return IsThemed && ThemeArt.TryGetSliceBorder(role, out border);
+    }
+
+    /// <summary>
+    ///     The theme colour for <paramref name="role" /> when the element is themed and the theme has it; otherwise
+    ///     <paramref name="fallback" />.
+    /// </summary>
+    protected Color ThemeColor(string role, Color fallback) => IsThemed && ThemeArt.TryGetColor(role, out var color) ? color : fallback;
+
+    /// <summary>Gets the theme colour for <paramref name="role" />. False when the element is not themed or the theme has none.</summary>
+    protected bool TryGetThemeColor(string role, out Color color)
+    {
+        color = default;
+
+        return IsThemed && ThemeArt.TryGetColor(role, out color);
+    }
+
+    /// <summary>
+    ///     The colour of <paramref name="role" />, or <paramref name="fallback" />: the colour of a control that can take a
+    ///     colour role. A null role gives the fallback.
+    /// </summary>
+    protected Color RoleColor(string? role, Color fallback) => role is null ? fallback : ThemeColor(role, fallback);
+
+    /// <summary>
     ///     Draws a filled rectangle clipped to this element's ClipRect.
     /// </summary>
     protected void DrawRectClipped(SpriteBatch spriteBatch, Rectangle bounds, Color color)
@@ -426,6 +500,12 @@ public abstract class UIElement : IDisposable
     public virtual void OnDragStart(DragStartEvent e) { }
     public virtual void OnDragMove(DragMoveEvent e) { }
     public virtual void OnDragDrop(DragDropEvent e) { }
+
+    /// <summary>
+    ///     The dispatcher ended a drag that this element started, with no drop: the mouse-up was blocked. Clear the drag
+    ///     state that a drop clears.
+    /// </summary>
+    public virtual void OnDragCancel() { }
 
     public event VisibilityChangedHandler? VisibilityChanged;
 }

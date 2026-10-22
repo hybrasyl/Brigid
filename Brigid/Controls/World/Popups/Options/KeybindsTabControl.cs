@@ -186,10 +186,10 @@ internal sealed class KeybindsTabControl : UIPanel
                 Height = ROW_H,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,
-                ForegroundColor = DialogPalette.Title,
                 IsHitTestVisible = false,
                 Visible = false
             };
+            HeaderLabel.SetForegroundRole(ThemeRoles.TextTitle, DialogPalette.Title);
             AddChild(HeaderLabel);
 
             NameLabel = new UILabel
@@ -200,9 +200,9 @@ internal sealed class KeybindsTabControl : UIPanel
                 Height = ROW_H,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,
-                ForegroundColor = TextColors.Default,
                 IsHitTestVisible = false
             };
+            NameLabel.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
             AddChild(NameLabel);
 
             PrimaryButton = new TextButton(string.Empty, CHORD_W, BUTTON_H) { X = primaryX, Y = buttonY };

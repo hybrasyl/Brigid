@@ -2,6 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 #endregion
 
@@ -47,9 +48,9 @@ internal sealed class PostReadPane : UIPanel
         var dateX = AUTHOR_W + COLUMN_GAP;
         var subjectX = dateX + DATE_W + COLUMN_GAP;
 
-        AuthorLabel = AddHeader(0, AUTHOR_W, DialogPalette.Title);
-        DateLabel = AddHeader(dateX, DATE_W, DialogPalette.Title);
-        SubjectLabel = AddHeader(subjectX, Math.Max(0, pane.Width - subjectX), LegendColors.White);
+        AuthorLabel = AddHeader(0, AUTHOR_W, ThemeRoles.TextTitle, DialogPalette.Title);
+        DateLabel = AddHeader(dateX, DATE_W, ThemeRoles.TextTitle, DialogPalette.Title);
+        SubjectLabel = AddHeader(subjectX, Math.Max(0, pane.Width - subjectX), ThemeRoles.Text, LegendColors.White);
         SubjectLabel.IsSelectable = true;
         SubjectLabel.IsHitTestVisible = true;
         SubjectLabel.SelectionPressed += OnSubjectPressed;
@@ -73,7 +74,7 @@ internal sealed class PostReadPane : UIPanel
         SubjectLabel.ClearSelection();
     }
 
-    private UILabel AddHeader(int x, int width, Color color)
+    private UILabel AddHeader(int x, int width, string role, Color fallback)
     {
         var label = new UILabel
         {
@@ -86,10 +87,10 @@ internal sealed class PostReadPane : UIPanel
             PaddingTop = 0,
             VerticalAlignment = VerticalAlignment.Center,
             ShrinkToFit = false,
-            ForegroundColor = color,
             IsHitTestVisible = false
         };
 
+        label.SetForegroundRole(role, fallback);
         AddChild(label);
 
         return label;

@@ -67,6 +67,9 @@ public sealed class TextButton : UIPanel
 
     public override void Draw(SpriteBatch spriteBatch)
     {
+        //the theme can come from a parent, which can change after construction, so the colours are resolved per draw
+        RefreshVisual();
+
         base.Draw(spriteBatch);
 
         if (LabelStyle == FontStyle.Regular)
@@ -79,14 +82,33 @@ public sealed class TextButton : UIPanel
 
         //centre the styled glyph in the button using the styled width; band-centred vertically like a normal label.
         //clip to this element's ClipRect (refreshed by base.Draw) so a partially-scrolled row trims the glyph.
-        //RefreshVisual keeps Label.ForegroundColor current (even while the label is hidden), so reuse it.
-        var color = Label.ForegroundColor;
+        //the label is hidden, so it does not apply its colour role itself
+        Label.ApplyForegroundRole();
+        var color = Label.DrawnForegroundColor;
         var textWidth = TextRenderer.MeasureWidth(text, LabelStyle);
         var x = ScreenX + (Width - textWidth) / 2;
         var y = ScreenY + (Height - TextRenderer.CHAR_HEIGHT) / 2;
 
         FontEngine.Instance.DrawLine(spriteBatch, text, new Vector2(x, y), color, ClipRect, style: LabelStyle);
     }
+
+    //the flat border is part of the look: the outline, or the divider colour while disabled
+    protected internal override Color? DrawnBorderColor
+        => BorderColor is null ? null : Enabled ? ThemeColor(ThemeRoles.Border, EdgeColor) : ThemeColor(ThemeRoles.Divider, DisabledEdge);
+
+    //a state that the theme leaves out uses button.normal; with no theme the button keeps its flat look
+    protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+    {
+        if (TryDrawThemePart(spriteBatch, StateRole, bounds, ThemeRoles.ButtonNormal))
+            return;
+
+        base.DrawChrome(spriteBatch, bounds);
+    }
+
+    private string StateRole
+        => !Enabled ? ThemeRoles.ButtonDisabled
+            : Pressed ? ThemeRoles.ButtonPressed
+            : Hovered ? ThemeRoles.ButtonHover : ThemeRoles.ButtonNormal;
 
     //Enabled has no change hook on UIElement, so callers flip state through here to refresh the visual
     public void SetEnabled(bool value)
@@ -107,7 +129,13 @@ public sealed class TextButton : UIPanel
     private void RefreshVisual()
     {
         BackgroundColor = Enabled ? Pressed ? PressFill : Hovered ? HoverFill : IdleFill : IdleFill;
-        Label.ForegroundColor = Enabled ? TextColorOverride ?? LegendColors.White : DisabledText;
+        if (!Enabled)
+            Label.SetForegroundRole(ThemeRoles.TextDisabled, DisabledText);
+        else if (TextColorOverride is { } overrideColor)
+            Label.ForegroundColor = overrideColor;
+        else
+            Label.SetForegroundRole(ThemeRoles.Text, LegendColors.White);
+
         BorderColor = Enabled ? EdgeColor : DisabledEdge;
     }
 
@@ -148,9 +176,14 @@ public sealed class TextButton : UIPanel
         if (e.Button != MouseButton.Left)
             return;
 
+        PerformClick();
+        e.Handled = true;
+    }
+
+    /// <summary>Raises <see cref="Clicked" /> as a left click does. A disabled button does nothing.</summary>
+    public void PerformClick()
+    {
         if (Enabled)
             Clicked?.Invoke();
-
-        e.Handled = true;
     }
 }

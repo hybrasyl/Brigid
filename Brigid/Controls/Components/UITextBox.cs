@@ -1,4 +1,5 @@
 #region
+using Brigid.Rendering;
 using Brigid.Systems.Keybinds;
 using Brigid.Utilities;
 using Microsoft.Xna.Framework;
@@ -74,11 +75,54 @@ public class UITextBox : UIElement
     public int CursorPosition { get; internal set; }
 
     /// <summary>
-    ///     Background color drawn behind the textbox when focused. Null = no overlay.
+    ///     Background color drawn behind the textbox when focused. Null = no overlay. A themed box draws the theme's
+    ///     <see cref="ThemeRoles.InputFocus" /> colour in its place, or no fill on the slot art of an <see cref="InputSlotPane" />.
     /// </summary>
     public Color? FocusedBackgroundColor { get; set; }
 
-    public Color ForegroundColor { get; set; } = LegendColors.Silver;
+    /// <summary>The text colour. Setting it clears a role from <see cref="SetForegroundRole" />.</summary>
+    public Color ForegroundColor
+    {
+        get;
+        set
+        {
+            field = value;
+            ForegroundRole = null;
+        }
+    } = LegendColors.Silver;
+
+    //the theme colour role of the text; ForegroundColor is its fallback
+    private string? ForegroundRole;
+
+    /// <summary>
+    ///     Draws the text in the theme colour of <paramref name="role" />, or in <paramref name="fallback" /> when the box is not
+    ///     themed or the theme has no such colour. Use it for a colour that is part of the look, not for one that carries
+    ///     meaning.
+    /// </summary>
+    public void SetForegroundRole(string role, Color fallback)
+    {
+        ForegroundColor = fallback;
+        ForegroundRole = role;
+    }
+
+    //the theme is known only at draw time, because a box takes it from its parent
+    internal Color DrawnForegroundColor => RoleColor(ForegroundRole, ForegroundColor);
+
+    //the focused fill is part of the look: the theme's focus colour; else none on slot art, which shows its own focus;
+    //else the flat focus colour
+    protected internal override Color? DrawnBackgroundColor
+    {
+        get
+        {
+            if (!IsFocused || FocusedBackgroundColor is not { } focusedFill || !IsThemed)
+                return BackgroundColor;
+
+            if (TryGetThemeColor(ThemeRoles.InputFocus, out var themed))
+                return themed;
+
+            return Parent is InputSlotPane && HasThemePart(ThemeRoles.InputSlot) ? null : focusedFill;
+        }
+    }
 
     public bool IsFocused
     {
@@ -463,7 +507,7 @@ public class UITextBox : UIElement
 
                 //pre-selection segment
                 if (hlStart > 0)
-                    DrawRun(spriteBatch, new Vector2(textX, lineY), lineText[..hlStart], ForegroundColor);
+                    DrawRun(spriteBatch, new Vector2(textX, lineY), lineText[..hlStart], DrawnForegroundColor);
 
                 //selection segment: white rect + black text
                 var hlX = textX + (hlStart > 0 ? TextElement.Measure(lineText[..hlStart]) : 0);
@@ -477,10 +521,10 @@ public class UITextBox : UIElement
                 if (hlEnd < lineText.Length)
                 {
                     var postX = hlX + hlWidth;
-                    DrawRun(spriteBatch, new Vector2(postX, lineY), lineText[hlEnd..], ForegroundColor);
+                    DrawRun(spriteBatch, new Vector2(postX, lineY), lineText[hlEnd..], DrawnForegroundColor);
                 }
             } else if (lineText.Length > 0)
-                DrawRun(spriteBatch, new Vector2(textX, lineY), lineText, ForegroundColor);
+                DrawRun(spriteBatch, new Vector2(textX, lineY), lineText, DrawnForegroundColor);
         }
 
         if (!IsFocused || !CursorVisible || IsReadOnly)
@@ -502,7 +546,7 @@ public class UITextBox : UIElement
                     cursorY,
                     CURSOR_WIDTH,
                     TextRenderer.CHAR_HEIGHT),
-                ForegroundColor);
+                DrawnForegroundColor);
         }
     }
 
@@ -524,7 +568,7 @@ public class UITextBox : UIElement
         if ((Prefix.Length > 0) && IsFocused)
         {
             prefixWidth = TextElement.Measure(Prefix);
-            DrawRun(spriteBatch, new Vector2(sx + PaddingLeft, textY), Prefix, ForegroundColor);
+            DrawRun(spriteBatch, new Vector2(sx + PaddingLeft, textY), Prefix, DrawnForegroundColor);
         }
 
         //when focused, scroll horizontally so the caret stays visible; unfocused boxes render from the start (or via
@@ -545,7 +589,7 @@ public class UITextBox : UIElement
 
             //pre-selection segment
             if (selStart > 0)
-                DrawRun(spriteBatch, new Vector2(textStartX, textY), displayText[..selStart], ForegroundColor);
+                DrawRun(spriteBatch, new Vector2(textStartX, textY), displayText[..selStart], DrawnForegroundColor);
 
             //selection segment: white rect + black text
             var selStartX = textStartX + (selStart > 0 ? TextElement.Measure(displayText[..selStart]) : 0);
@@ -559,11 +603,11 @@ public class UITextBox : UIElement
             if (selEnd < displayText.Length)
             {
                 var postX = selStartX + selWidth;
-                DrawRun(spriteBatch, new Vector2(postX, textY), displayText[selEnd..], ForegroundColor);
+                DrawRun(spriteBatch, new Vector2(postX, textY), displayText[selEnd..], DrawnForegroundColor);
             }
         } else
         {
-            TextElement.Update(displayText, ForegroundColor);
+            TextElement.Update(displayText, DrawnForegroundColor);
 
             if ((HorizontalAlignment != HorizontalAlignment.Left) && !IsFocused)
             {
@@ -581,9 +625,9 @@ public class UITextBox : UIElement
                 };
 
                 //textY, not a second centring formula: the text must not move up or down when the box gets focus
-                DrawRun(spriteBatch, new Vector2(alignX, textY), displayText, ForegroundColor);
+                DrawRun(spriteBatch, new Vector2(alignX, textY), displayText, DrawnForegroundColor);
             } else
-                DrawRun(spriteBatch, new Vector2(textStartX, textY), displayText, ForegroundColor);
+                DrawRun(spriteBatch, new Vector2(textStartX, textY), displayText, DrawnForegroundColor);
         }
 
         if (!IsFocused || !CursorVisible || IsReadOnly)
@@ -602,7 +646,7 @@ public class UITextBox : UIElement
                 textY,
                 CURSOR_WIDTH,
                 TextRenderer.CHAR_HEIGHT),
-            ForegroundColor);
+            DrawnForegroundColor);
     }
 
     /// <summary>

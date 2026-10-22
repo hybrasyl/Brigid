@@ -2,6 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
+using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 #endregion
 
@@ -72,7 +73,12 @@ internal sealed class BoardIndexPane : UIPanel
         }
 
         label.Text = row.Item.Name;
-        label.ForegroundColor = row.Selected ? BoardPalette.SelectedText : TextColors.Default;
+
+        //the blue selection is literal: it keeps the selected row apart from the yellow unread row
+        if (row.Selected)
+            label.ForegroundColor = BoardPalette.SelectedText;
+        else
+            label.SetForegroundRole(ThemeRoles.Text, TextColors.Default);
     }
 
     /// <summary>Populates the pane and selects the first board (matching the legacy panel).</summary>

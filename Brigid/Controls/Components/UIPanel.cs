@@ -15,8 +15,12 @@ public class UIPanel : UIElement
     public Texture2D? Background { get; set; }
 
     /// <summary>
-    ///     When true, this panel captures all input while visible — other controls receive suppressed input (no keys, no mouse
-    ///     events) so their animations/timers still tick.
+    ///     Marks a panel that must have the input while it is visible: nothing behind it takes a click or a key. The flag
+    ///     has an effect only while the panel is on the control stack. The topmost visible modal there is
+    ///     <see cref="InputDispatcher.TopModal" />. Keys go to the top of the stack after the explicit focus, for example the
+    ///     chat input. A mouse event outside the modal is consumed only where a screen sets
+    ///     <see cref="InputDispatcher.EnforceModals" />; the lobby does, the world does not. <c>WorldScreen</c> reads the top
+    ///     modal to hide the item tooltip.
     /// </summary>
     public bool IsModal { get; set; }
 
@@ -67,25 +71,7 @@ public class UIPanel : UIElement
 
         EnsureChildOrder();
 
-        //background fill and border (inlined from base, since we insert Background texture between)
-        if (BackgroundColor.HasValue || BorderColor.HasValue)
-        {
-            var bounds = new Rectangle(ScreenX, ScreenY, Width, Height);
-
-            if (BackgroundColor.HasValue)
-                DrawRectClipped(spriteBatch, bounds, BackgroundColor.Value);
-
-            if (BorderColor.HasValue)
-            {
-                DrawRectClipped(spriteBatch, new Rectangle(bounds.X, bounds.Y, bounds.Width, 1), BorderColor.Value);
-                DrawRectClipped(spriteBatch, new Rectangle(bounds.X, bounds.Y + bounds.Height - 1, bounds.Width, 1), BorderColor.Value);
-                DrawRectClipped(spriteBatch, new Rectangle(bounds.X, bounds.Y, 1, bounds.Height), BorderColor.Value);
-                DrawRectClipped(spriteBatch, new Rectangle(bounds.X + bounds.Width - 1, bounds.Y, 1, bounds.Height), BorderColor.Value);
-            }
-        }
-
-        if (Background is not null)
-            DrawTexture(spriteBatch, Background, new Vector2(ScreenX, ScreenY), Color.White);
+        DrawChrome(spriteBatch, new Rectangle(ScreenX, ScreenY, Width, Height));
 
         foreach (var child in Children)
             if (child.Visible)
@@ -93,6 +79,23 @@ public class UIPanel : UIElement
                 child.Draw(spriteBatch);
                 DebugOverlay.DrawElement(spriteBatch, child);
             }
+    }
+
+    /// <summary>
+    ///     Draws the panel itself, under its children: the background fill, the 1px border and the
+    ///     <see cref="Background" /> texture. A control that draws theme art overrides this and calls the base only when
+    ///     the theme has no part for it.
+    /// </summary>
+    protected virtual void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
+    {
+        if (DrawnBackgroundColor is { } fill)
+            DrawRectClipped(spriteBatch, bounds, fill);
+
+        if (DrawnBorderColor is { } border)
+            DrawBorderClipped(spriteBatch, bounds, border);
+
+        if (Background is not null)
+            DrawTexture(spriteBatch, Background, new Vector2(ScreenX, ScreenY), Color.White);
     }
 
     internal void EnsureChildOrder()
