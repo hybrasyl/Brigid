@@ -536,19 +536,23 @@ public sealed class SoundSystem : IDisposable
 
     private static nint LoadChunk(int soundId)
     {
-        //prefer a .datf sound-effects pack override; a present id replaces the legend.dat sound, a new id adds one
-        var pack = AssetPackRegistry.GetSfxPack();
-
-        if ((pack is not null) && pack.TryGetSfxBytes(soundId, out var packBytes) && (packBytes is { Length: > 0 }))
+        //prefer a .datf sound-effects pack override; a present id replaces the legend.dat sound, a new id adds one.
+        //the loop asks each pack in the registry's order (priority, then registration order), and the first entry that
+        //decodes wins
+        foreach (var pack in AssetPackRegistry.SfxPacks)
         {
+            if (!pack.TryGetSfxBytes(soundId, out var packBytes) || (packBytes is not { Length: > 0 }))
+                continue;
+
             var packChunk = LoadChunkFromBytes(packBytes);
 
             if (packChunk != nint.Zero)
                 return packChunk;
 
             //pack entry present but undecodable (corrupt, or a codec the bundled SDL2_mixer wasn't built with —
-            //only mp3/wav are guaranteed) — fall through to the legacy sound rather than going silent, matching
-            //StartMusic's pack-decode-failure fallback and the image packs' "decode failure = not present" contract
+            //only mp3/wav are guaranteed) — ask the next pack, then fall through to the legacy sound rather than
+            //going silent, matching StartMusic's pack-decode-failure fallback and the image packs' "decode failure =
+            //not present" contract
         }
 
         if (!DatArchives.Legend.TryGetValue($"{soundId}.mp3", out var entry))
@@ -594,9 +598,9 @@ public sealed class SoundSystem : IDisposable
         return chunk;
     }
 
-    //the pack for both the bytes and the loop flag of a bed. use this one seam for both, so that the two cannot
-    //come from different packs when the registry holds more than one pack of a content type
-    private static AmbientPack? AmbientPackFor(int ambientId) => AssetPackRegistry.GetAmbientPack();
+    //the pack for both the bytes and the loop flag of a bed: the first pack that has the id owns it. use this one seam
+    //for both, so that the two cannot come from different packs
+    private static AmbientPack? AmbientPackFor(int ambientId) => AssetPackRegistry.GetAmbientPackFor(ambientId);
 
     private static nint LoadChunkFromBytes(byte[] bytes)
     {
@@ -685,11 +689,14 @@ public sealed class SoundSystem : IDisposable
         var handle = nint.Zero;
         var pin = default(GCHandle);
 
-        //prefer a .datf music pack override; a present id replaces the legacy loose .mus, a new id adds a track
-        var pack = AssetPackRegistry.GetMusicPack();
-
-        if ((pack is not null) && pack.TryGetMusicBytes(musicId, out var bytes) && (bytes is { Length: > 0 }))
+        //prefer a .datf music pack override; a present id replaces the legacy loose .mus, a new id adds a track. the
+        //loop asks each pack in the registry's order (priority, then registration order), and the first entry that loads
+        //wins
+        foreach (var pack in AssetPackRegistry.MusicPacks)
         {
+            if (!pack.TryGetMusicBytes(musicId, out var bytes) || (bytes is not { Length: > 0 }))
+                continue;
+
             //SDL streams from this memory for the life of playback, so keep it pinned until Mix_FreeMusic
             pin = GCHandle.Alloc(bytes, GCHandleType.Pinned);
             var rw = Sdl.SDL_RWFromConstMem(pin.AddrOfPinnedObject(), bytes.Length);
@@ -698,12 +705,12 @@ public sealed class SoundSystem : IDisposable
                 //freesrc=1 frees the RWops at Mix_FreeMusic time; the backing byte[] stays pinned via `pin`
                 handle = SdlMixer.Mix_LoadMUS_RW(rw, 1);
 
-            if (handle == nint.Zero)
-            {
-                //pack load failed — release the pin and fall through to the legacy loose-file path
-                pin.Free();
-                pin = default;
-            }
+            if (handle != nint.Zero)
+                break;
+
+            //pack load failed — release the pin, then ask the next pack and finally the legacy loose-file path
+            pin.Free();
+            pin = default;
         }
 
         if (handle == nint.Zero)

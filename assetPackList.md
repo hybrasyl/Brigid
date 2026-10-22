@@ -23,9 +23,9 @@ doesn't surface "a zip full of PNGs"; it is not a security boundary.
 A pack ships modern assets the client prefers over the legacy `.dat`/`.epf`/`.spf` sheets.
 Resolution is **per asset**, not per pack:
 
-1. Renderer probes the registered pack for this content type.
+1. The lookup asks each registered pack of this content type, the highest `priority` first, and at the same priority in registration order (file-name order).
 2. Hit → modern asset used.
-3. Miss, or decode failure → falls through to the legacy asset for that ID alone.
+3. Miss, or decode failure → the next pack is asked; after the last pack, the legacy asset for that ID alone. A creature is the exception: the first pack that covers it owns it, and a bad entry shows the placeholder (see "Several packs of one type, and conflicts").
 
 Decode failure is deliberately indistinguishable from absence (`AssetPack.TryGetImage` swallows read
 and decode errors), so a corrupt entry degrades to legacy instead of breaking a surface.
@@ -52,12 +52,13 @@ returns `""` (stripped env, `HOME` unset), the base falls back to `AppContext.Ba
 packs never scatter into the CWD.
 
 Scan is `Directory.EnumerateFiles(packDir, "*.datf", SearchOption.TopDirectoryOnly)` — extension
-`.datf` only, top level only, no recursion.
+`.datf` only, top level only, no recursion — sorted by file name (`InRegistrationOrder`, ordinal, case
+ignored), which is the registration order.
 
 ### Validation ladder
 
-Per file, in order; any failure skips **that pack only** and logs to stderr with the `[asset-pack]`
-prefix. Startup is never aborted by a bad pack.
+Per file, in order; any failure skips **that pack only** and logs to `notice-debug.log` (through
+`DataDiagnostics.Log`) with the `[asset-pack]` prefix. Startup is never aborted by a bad pack.
 
 | Check                                     | Message on failure                                                       |
 | ----------------------------------------- | ------------------------------------------------------------------------ |
@@ -75,20 +76,24 @@ prefix. Startup is never aborted by a bad pack.
 No checksum, no signature, no entry-name validation, no image-format validation at load. All decode
 is lazy, at first lookup.
 
-### Conflict resolution
+### Several packs of one type, and conflicts
 
-One registered pack per `content_type`. **Strictly greater `priority` wins; ties go to
-first-registered** (`AssetPackRegistry.cs:316`):
+A content type can have several packs (BRIG-15). The registry keeps them in order of the manifest **`priority`**, the highest first. Packs with the same priority stay in **registration order**, and the registry registers the `*.datf` files in **file-name order** (ordinal, case ignored), so the order is the same on every OS. A lookup asks for a key and tries each pack of the type in that order. So when two packs cover a key, **the pack with the higher priority wins**, and at the same priority **the pack that registered first wins**.
 
-```csharp
-if (Packs.TryGetValue(manifest.ContentType, out var existing) && (manifest.Priority <= existing.Manifest.Priority))
-{ /* log, dispose the loser's archive, keep existing */ }
-existing?.Dispose();
-Packs[manifest.ContentType] = factory(archive, manifest);
-```
+What a pack does with a bad entry depends on the type:
 
-A superseded pack is disposed by the registry. Multi-pack-per-type (per-ID dispatch across several
-archives) is not implemented.
+| Types | Key | Bad entry (does not decode) |
+| --- | --- | --- |
+| `ability_icons`, `nation_badges`, `npc_portraits`, `static_tiles`, `legend_mark_icons`, `world_maps`, `town_maps` | one image (for `npc_portraits`, the portrait key) | the next pack is asked, then legacy art |
+| `ui_sprite_overrides` | one frame of one file (`{file.ext}/{frame}`), so one file can take frames from two packs | the next pack is asked, then legacy art |
+| `music`, `sound_effects` | the id | the next pack is asked, then the legacy sound |
+| `item_icons` | the sprite id; the pack that gives the image also decides the dye | the next pack is asked, then the legacy EPF |
+| `creature_sprites` | the sprite id; the first pack that covers it owns the whole creature (frames, pair count, bounding box) | the placeholder |
+| `ambient_sounds` | the ambient id; the first pack that has it owns the bed (the sound and the loop flag) | no bed, and one line in `notice-debug.log` (there is no legacy fallback) |
+
+At registration the registry compares the new pack's keys with the packs already registered for its type, and logs one warning for each pair that shares keys: both `pack_id`s, the count, the first five keys, which pack a lookup asks first and why, and that an entry of that pack that does not decode passes the lookup to the other pack. A key is a `.png` entry name for the image types (other files, such as the manifest or a README, are not keys), the id for `music` and `sound_effects` (`sfx_1.wav` and `sfx_0001.mp3` are the same key), the sprite id for `creature_sprites`, and the portrait key for `npc_portraits`. The registry writes its messages through `DataDiagnostics.Log`, so they are in `notice-debug.log`.
+
+To make one pack win, give it a higher `priority` (the default is 100). A temporary pack, for example a holiday pack, uses this: at priority 200 it replaces the art of the packs below it while it is installed, and it stops when it is removed. At the same priority the file name decides. The sort compares characters, not numbers: `items_9001.datf` sorts after `items_20001.datf`. Zero-pad the numbers in file names (`items_09001`) when the order matters. A convention for chunked content, for example `items_20001-21000.datf` and `items_21001-22000.datf`, is to cover separate keys so that no pack overlaps another.
 
 ### Legacy migration
 
@@ -108,8 +113,7 @@ renderer's cache is cleared. Restart the client.
 
 ### Adding a content type
 
-Three edits: one line in `AssetPackRegistry.Factories`, one typed accessor, and the pack class
-deriving from `AssetPack` (or `AudioPack` for byte-serving types).
+Three edits: one line in `AssetPackRegistry.Factories`; the accessors, which are an ordered `…Packs` sequence and a key lookup (and a `CoverageKeys` override when the key is not the `.png` entry name, so that the overlap warning names the right keys); and the pack class deriving from `AssetPack` (or `AudioPack` for byte-serving types).
 
 ---
 
@@ -135,7 +139,7 @@ deriving from `AssetPack` (or `AudioPack` for byte-serving types).
 | `pack_id`        | string (required)                        | none    | Must not be blank; read only by log and conflict messages          |
 | `pack_version`   | string                                   | `""`    | **Nothing reads this.** Informational                              |
 | `content_type`   | string                                   | `""`    | Yes — factory discriminator                                        |
-| `priority`       | int                                      | `100`   | Yes — conflict resolution                                          |
+| `priority`       | int                                      | `100`   | Yes — order of the packs of a type: highest first, then file name  |
 | `covers`         | `Dictionary<string, CoverageEntry>`      | `{}`    | Only the sub-fields below                                          |
 
 `covers` is a **capability** declaration, not a coverage range — actual coverage is emergent from
@@ -146,7 +150,8 @@ which entries the archive ships. You never enumerate sprite IDs in the manifest.
 | Field        | Type                         | Consumed by                                          |
 | ------------ | ---------------------------- | ---------------------------------------------------- |
 | `dimensions` | `int[]` `[w, h]`             | **`NpcPortraitPack` only.** See note below           |
-| `dyeable`    | `int[]` (1-based item IDs)   | `ItemPack` only — `covers.item_icons.dyeable`        |
+| `dyeable`    | `int[]` (1-based item IDs)   | `ItemPack` only — `covers.item_icons.dyeable`; when present, the exact dyeable set |
+| `no_dye`     | `int[]` (1-based item IDs)   | `ItemPack` only — `covers.item_icons.no_dye`; the exceptions to ramp detection (Taliesin writes it) |
 | `portraits`  | `Dictionary<string, string>` | `NpcPortraitPack` only — **required**, it *is* the naming convention |
 | `"<id>"`     | object, one for each id      | `AmbientPack` only — `covers.ambient_sounds["<id>"].loop`. See `ambient_sounds` |
 
@@ -161,21 +166,21 @@ behavioral difference.
 
 ## Content types at a glance
 
-| `content_type`        | Entry pattern                                        | ID base            | Accessor                    | Legacy fallback                                   |
+| `content_type`        | Entry pattern                                        | ID base            | Lookup                      | Legacy fallback                                   |
 | --------------------- | ---------------------------------------------------- | ------------------ | --------------------------- | ------------------------------------------------- |
-| `ability_icons`       | `{skill\|spell}{id:D4}.png`                          | 1                  | `GetIconPack()`             | `skill001.epf` / `spell001.epf`                   |
-| `item_icons`          | `item{id:D5}.png`                                    | 1                  | `GetItemPack()`             | item EPF sheets in `legend.dat`                   |
-| `nation_badges`       | `nation{id:D4}.png`                                  | 1                  | `GetNationBadgePack()`      | `_nui_nat.spf` frame `id - 1`                     |
-| `npc_portraits`       | manifest-declared filenames                          | n/a (keyed)        | `GetNpcPortraitPack()`      | `npcbase.dat` SPF frame 0                         |
-| `static_tiles`        | `floor{id:D5}.png` / `wall{id:D5}.png`               | raw map tile id    | `GetStaticTilePack()`       | tileset / `stc{id:D5}.hpf`                        |
-| `legend_mark_icons`   | `legend{id:D4}.png`                                  | **0**              | `GetLegendMarkIconPack()`   | `legends.epf` frame `id`                          |
-| `ui_sprite_overrides` | `{file.ext}/{frame:D4}.png`                          | frame 0            | `GetUiSpriteOverridePack()` | any `setoa.dat` / `cious.dat` EPF/SPF frame       |
-| `creature_sprites`    | `creature_sprites/creature_{id:D5}/stand/{n\|e}_001.png` | 1              | `GetCreaturePack()`         | creature MPF                                      |
-| `music`               | `music_{id}.{ext}`                                   | raw server id      | `GetMusicPack()`            | `{DataPath}/music/{id}.mus`                       |
-| `sound_effects`       | `sfx_{id}.{ext}`                                     | raw server id      | `GetSfxPack()`              | `legend.dat` `{id}.mp3`                           |
-| `ambient_sounds`      | `amb_{id}.{ext}`                                     | ambient id, 1–255  | `GetAmbientPack()`          | none — no pack entry means no bed                 |
-| `world_maps`          | `{fieldName}.png`                                    | named, not numeric | `GetWorldMapPack()`         | `{field}.epf` + `{field}.pal` in `setoa.dat`      |
-| `town_maps`           | `town_{mapId:D5}.png`                                | raw map id         | `GetTownMapPack()`          | `national.dat` `_t*` five-layer composite         |
+| `ability_icons`       | `{skill\|spell}{id:D4}.png`                          | 1                  | `TryGetIconImage`           | `skill001.epf` / `spell001.epf`                   |
+| `item_icons`          | `item{id:D5}.png`                                    | 1, to 32767        | `ItemIconSource.Load`       | item EPF sheets in `legend.dat`                   |
+| `nation_badges`       | `nation{id:D4}.png`                                  | 1                  | `TryGetBadgeImage`          | `_nui_nat.spf` frame `id - 1`                     |
+| `npc_portraits`       | manifest-declared filenames                          | n/a (keyed)        | `TryGetNpcIllustration`     | `npcbase.dat` SPF frame 0                         |
+| `static_tiles`        | `floor{id:D5}.png` / `wall{id:D5}.png`               | raw map tile id    | `TryGetFloor/WallImage`     | tileset / `stc{id:D5}.hpf`                        |
+| `legend_mark_icons`   | `legend{id:D4}.png`                                  | **0**              | `TryGetLegendMarkImage`     | `legends.epf` frame `id`                          |
+| `ui_sprite_overrides` | `{file.ext}/{frame:D4}.png`                          | frame 0            | `TryGetUiSprite`            | any `setoa.dat` / `cious.dat` EPF/SPF frame       |
+| `creature_sprites`    | `creature_sprites/creature_{id:D5}/stand/{n\|e}_001.png` | 1              | `GetCreaturePackFor`        | creature MPF                                      |
+| `music`               | `music_{id}.{ext}`                                   | raw server id      | `MusicPacks`                | `{DataPath}/music/{id}.mus`                       |
+| `sound_effects`       | `sfx_{id}.{ext}`                                     | raw server id      | `SfxPacks`                  | `legend.dat` `{id}.mp3`                           |
+| `ambient_sounds`      | `amb_{id}.{ext}`                                     | ambient id, 1–255  | `GetAmbientPackFor`         | none — no pack entry means no bed                 |
+| `world_maps`          | `{fieldName}.png`                                    | named, not numeric | `TryGetFieldImage`          | `{field}.epf` + `{field}.pal` in `setoa.dat`      |
+| `town_maps`           | `town_{mapId:D5}.png`                                | raw map id         | `TryGetTownMapImage`        | `national.dat` `_t*` five-layer composite         |
 
 All lookups are case-insensitive. Unless a section says otherwise, entries live at the ZIP root and
 subfolders are ignored.
@@ -211,30 +216,29 @@ per ID; the client tints at render time (`CornflowerBlue` learnable, `DimGray` l
 
 ## `item_icons`
 
-`Brigid.Data/AssetPacks/ItemPack.cs` — inventory, ground, vendor, and bank item sprites.
+`Brigid.Data/AssetPacks/ItemPack.cs` — every item surface: ground items, the dialog item portrait, the inventory, bank, shop, item menu, exchange, and both equipment tabs.
 
 ```csharp
-return HasEntry($"item{spriteId:D5}.png");                     // ItemPack.cs:37
-return TryGetImage($"item{spriteId:D5}.png", out image);       // ItemPack.cs:59
+return HasEntry($"item{spriteId:D5}.png");
+return TryGetImage($"item{spriteId:D5}.png", out image);
 ```
 
-- Regex: `^item\d{5}\.png$`. **5 digits** — legacy IDs reach 15,965+.
+- Regex: `^item\d{5}\.png$`. **5 digits** — legacy IDs reach 15,965+, and modern icons use 20001–32767 (BRIG-77).
 - **1-based**. Guard: `spriteId <= 0` → miss.
-- Overrides `ItemRenderer.LoadSpriteFromLegacy` (legacy EPF + palette pipeline).
+- **The ceiling is 32767.** The server sends an item sprite as `sprite + 0x8000` in a `u16`, so the client removes the flag with `& 0x7FFF`. A sprite above 32767 wraps on the wire.
+- **One resolver for every surface:** `Brigid.Rendering/ItemIconSource.cs`. It removes the flag, asks the `item_icons` packs in their order (priority, then file name; a bad entry passes to the next pack), then reads the legacy EPF + palette. `ItemRenderer` (ground items, dialog portrait) and `UiRenderer.GetItemIcon` (the other surfaces) both call it.
+- **Icon offset.** A pack icon draws at `floor((31 − size) / 2)` on each axis in the 31×31 slot (`IconTexture.FromPack`): a 32×32 icon at `-1,-1`, as a modern ability icon does, and a smaller icon centred. The client does not clamp a larger icon: a 48×48 icon draws at `-9,-9` and covers the next slots. Taliesin accepts 16 to 32 px, so only a pack made by hand can have one. A legacy icon draws at `0,0`. On the ground, a pack PNG is centred as a tightly cropped image.
+- **Legacy dye** goes through `AislingDrawDataRepository.ApplyDye`, which leaves a palette without the canonical dye ramp unchanged.
 
-**Manifest field read: `covers.item_icons.dyeable`** — a flat array of item IDs opting into the
-runtime dye pass, loaded fail-closed into `DyeableSet` and exposed as `IsDyeable(spriteId)`.
+**Which items take the dye (BRIG-41).** `ItemPack.IsDyeable(spriteId, image)` decides, for the pack that gives the image:
 
-For a dyeable item with a non-zero server color byte, the renderer replaces pixels matching the
-canonical purple ramp (legacy palette indices 98–103:
-`#B393C7 #9B7BB7 #8F5BA3 #7F3B93 #47235F #37005B`) with the six colors from the active
-`color0.tbl` entry, preserving alpha. Items **not**
-listed ignore the color byte entirely, and `ItemRenderer.GetSprite` collapses their cache key to
-`color = 0` so one decoded texture serves every incoming color.
+1. An id of 20001 or more (`ItemSpriteIds.MODERN_FIRST`) is **never** dyed by this pass. Modern icons are painted art, and a painted color can match the ramp by chance; mask dye for them is BRIG-112.
+2. When the manifest has `covers.item_icons.dyeable`, that list is the exact set. Only the old scaffold writes it.
+3. Otherwise an id in `covers.item_icons.no_dye` is not dyeable, and any other id is dyeable when its PNG contains at least one visible pixel of the canonical purple ramp (legacy palette indices 98–103: `#B393C7 #9B7BB7 #8F5BA3 #7F3B93 #47235F #37005B`, `ItemDyeRamp`). This is the legacy rule: the sprite uses the dye slots. The client detects it on the first load of the id and keeps the answer. **Ramp pixels must be fully opaque**, as palette art is: the PNG decode rounds the color of a semi-transparent pixel, so it is not found and not dyed (a soft purple edge stays purple). Taliesin writes `no_dye` for the exceptions and never writes `dyeable`.
 
-Opt-in rather than auto-detected because scanning every pixel of every icon would waste CPU on the
-~95% of items with no dye-relevant pixels. `Scripts/dump-item-palette/` produces `items-dyeable.csv`
-as a starting list; a hand-editable scaffold lives at `Scripts/sample-packs/items-test-001-002/`.
+For a dyeable item with a non-zero server color byte, the client replaces the ramp pixels with the six colors from the active `color0.tbl` entry, preserving alpha. Other items ignore the color byte. Both item caches key on the color byte that the server sent, so a cache hit asks no pack. At startup, when an item pack is installed, the client compares the ramp with `color0.tbl` entry 0 and logs any difference.
+
+`Scripts/item-dye-compare/` checks the rule and the dye pass against legacy on real art, in both directions. The result for the Unity rip is on BRIG-41: the pack dye matches the legacy dye for every comparable dyeable icon except 15 whose palette has no dye ramp (so the legacy client does not dye them, and a pack lists them in `no_dye`: 5595, 12769–12772 and 12774–12783), and 2 icons that the legacy client dyes but whose rip art has no ramp pixel (14099 and 14104; the art must be repainted with the ramp).
 
 ---
 
@@ -586,7 +590,7 @@ are **not** supported in v1 and would clip.
   and corrupt/non-image data are both reported as "not present". Nothing verifies PNG magic — any
   Skia-decodable format would in fact work despite the `.png` naming convention. Don't rely on that.
 - **Disposal.** The caller owns the returned `SKImage`. `AssetPack.Dispose()` disposes the
-  `ZipArchive`; the registry disposes a superseded pack when a higher-priority one replaces it.
+  `ZipArchive`. The registry keeps every registered pack for the life of the process.
 - **Zip root.** Some Windows ZIP tools wrap contents in a folder named after the archive. If
   `_manifest.json` isn't at the top level immediately, the pack is skipped. Rebuild with contents at
   root.
@@ -597,10 +601,10 @@ are **not** supported in v1 and would clip.
 
 | Symptom                                            | Cause                                                                                              |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Pack not loading at all                            | Check stderr for `[asset-pack]` at startup. Missing/malformed `_manifest.json`, `schema_version` absent or not a supported version, `pack_id` absent or blank, unknown `content_type`, or the pack is in the game-data folder instead of `AppPaths.AssetsDir` |
+| Pack not loading at all                            | Check `notice-debug.log` for `[asset-pack]` at startup. Missing/malformed `_manifest.json`, `schema_version` absent or not a supported version, `pack_id` absent or blank, unknown `content_type`, or the pack is in the game-data folder instead of `AppPaths.AssetsDir` |
 | Some assets legacy despite being in the pack       | Filename doesn't match the exact pattern (case-insensitive but padding matters), corrupt entry, or the file isn't at the ZIP root |
-| Two packs claim the same type                      | Higher `priority` wins; ties go to first-registered. The loser logs a warning and is disposed      |
-| Icon appears 1px off                               | Expected — 32×32 modern icons draw at `-1,-1` relative to legacy 31×31. Verify the PNG really is 32×32 |
+| Two packs cover the same key                       | The pack with the higher `priority` wins that key; at the same priority, the pack whose file name sorts first. Startup logs a warning that names both packs, the shared keys and the pack that a lookup asks first |
+| Icon appears 1px off                               | Expected — a pack icon is centred in the legacy 31×31 slot by its size, so a 32×32 icon draws at `-1,-1` (an ability icon always does). Check the PNG size |
 | `ui_sprite_overrides` frame ignored                | Folder name must include the legacy extension (`butt001.epf/`, not `butt001/`); PNG name must be 4-digit padded (`0000.png`, not `0.png`); frames ≥ the legacy frame count are silently dropped |
 | `npc_portraits` serves nothing                     | `dimensions` missing or non-square → the pack registers but is inert. Check stderr                 |
 | A water/lava tile stays legacy                     | Palette-cycled tiles are deliberately excluded from `static_tiles` lookup                          |
@@ -644,9 +648,9 @@ In this repo:
 
 - `controlFileList.txt` — legacy control/EPF/SPF catalog (what `ui_sprite_overrides` overrides)
 - `docs/static-tiles-authoring-guide.md` — static tile art rules
-- `Scripts/sample-packs/items-test-001-002/` — hand-editable manifest scaffold
+- `Scripts/sample-packs/items-test-001-002/` — old hand-editable manifest scaffold (an explicit `dyeable` list)
 - `Scripts/dump-prefab-images.{sh,ps1}` — resolve prefab control names to EPF/SPF stems
-- `Scripts/dump-item-palette/` — item dyeability scan (`items-dyeable.csv`)
+- `Scripts/item-dye-compare/` — compares the pack dye with the legacy dye on real item art (BRIG-41)
 
 Packs are authored with **Taliesin** (`../taliesin/`), the Hybrasyl asset-management tool — the
 supported path for producing `.datf` archives.

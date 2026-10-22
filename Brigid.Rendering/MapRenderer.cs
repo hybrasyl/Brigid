@@ -448,7 +448,7 @@ public sealed class MapRenderer : IDisposable
 
         //consult the static_tiles pack before legacy art so that pack-only floor ids (no legacy tileset entry) and
         //pack-replaced ids resolve on the runtime fallback path too, not just during preload.
-        if (AssetPackRegistry.GetStaticTilePack() is { } pack && pack.TryGetFloorImage(tileId, out var packImage) && (packImage is not null))
+        if (AssetPackRegistry.TryGetFloorImage(tileId, out var packImage) && (packImage is not null))
         {
             using (packImage)
             {
@@ -480,7 +480,7 @@ public sealed class MapRenderer : IDisposable
 
         //consult the static_tiles pack before legacy art so that pack-only wall ids (no legacy stc*.hpf) and
         //pack-replaced ids resolve on the runtime fallback path too — notably runtime-introduced door variants.
-        if (AssetPackRegistry.GetStaticTilePack() is { } pack && pack.TryGetWallImage(tileId, out var packImage) && (packImage is not null))
+        if (AssetPackRegistry.TryGetWallImage(tileId, out var packImage) && (packImage is not null))
         {
             using (packImage)
             {
@@ -640,9 +640,7 @@ public sealed class MapRenderer : IDisposable
         //drives phase 3 ("replace"); cycled ids are skipped because palette cycling overlays would visually overwrite
         //the pack PNG anyway. for a pack-only id (no legacy data) the cycling-table check is skipped entirely — its
         //GetPaletteNumber(id+1) has no legacy entry — and the pack image, if present, simply seeds the cache.
-        var staticTilePack = AssetPackRegistry.GetStaticTilePack();
-
-        if (staticTilePack is not null)
+        if (AssetPackRegistry.HasStaticTilePacks)
         {
             var bgLookup = DataContext.Tiles.BackgroundPaletteLookup;
 
@@ -651,7 +649,7 @@ public sealed class MapRenderer : IDisposable
                 if (bgTileData.ContainsKey(tileId) && bgLookup.Table.GetCyclingEntries(bgLookup.Table.GetPaletteNumber(tileId + 1)) is not null)
                     continue;
 
-                if (staticTilePack.TryGetFloorImage(tileId, out var packImage) && (packImage is not null))
+                if (AssetPackRegistry.TryGetFloorImage(tileId, out var packImage) && (packImage is not null))
                 {
                     BgImageCache[tileId] = packImage;
                     bgTileData.Remove(tileId);
@@ -665,7 +663,7 @@ public sealed class MapRenderer : IDisposable
                 if (compressedFgData.ContainsKey(tileId) && fgLookup.Table.GetCyclingEntries(fgLookup.Table.GetPaletteNumber(tileId + 1)) is not null)
                     continue;
 
-                if (staticTilePack.TryGetWallImage(tileId, out var packImage) && (packImage is not null))
+                if (AssetPackRegistry.TryGetWallImage(tileId, out var packImage) && (packImage is not null))
                 {
                     FgImageCache[tileId] = packImage;
                     compressedFgData.Remove(tileId);

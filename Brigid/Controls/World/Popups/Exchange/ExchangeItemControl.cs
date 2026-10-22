@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Chaos.DarkAges.Definitions;
+using Microsoft.Xna.Framework;
 #endregion
 
 namespace Brigid.Controls.World.Popups.Exchange;
@@ -83,7 +84,9 @@ public sealed class ExchangeItemControl : UIPanel
 
     public void SetItem(ushort sprite, DisplayColor color, string name)
     {
-        Icon.Texture = UiRenderer.Instance!.GetItemIcon(sprite, color);
+        var icon = UiRenderer.Instance!.GetItemIcon(sprite, color);
+        Icon.Texture = icon.Texture;
+        Icon.TextureOffset = icon.Offset;
         var textWidth = TextRenderer.MeasureWidth(name);
         NameLabel.Width = textWidth;
         NameLabel.Text = name;

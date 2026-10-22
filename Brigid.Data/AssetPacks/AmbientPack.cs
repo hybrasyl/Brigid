@@ -52,6 +52,9 @@ public sealed class AmbientPack : AudioPack
         }
     }
 
+    /// <summary>True when the pack has an entry for <paramref name="ambientId" /> in 1 to <see cref="MAX_AMBIENT_ID" />.</summary>
+    public bool Covers(int ambientId) => ambientId is >= 1 and <= MAX_AMBIENT_ID && HasAudio(ambientId);
+
     /// <summary>
     ///     Attempts to read the ambient-sound bytes for the given <paramref name="ambientId" />. The returned bytes are
     ///     the raw undecoded file; the caller decodes them once via SDL_mixer. An id outside 1 to

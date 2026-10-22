@@ -59,6 +59,13 @@ public abstract class AudioPack : AssetPack
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>An audio pack covers ids: <c>sfx_1.wav</c> and <c>sfx_0001.mp3</c> are the same key.</remarks>
+    /// <summary>True when the pack has an entry for <paramref name="id" />, whatever its extension.</summary>
+    protected bool HasAudio(int id) => IdToEntry.ContainsKey(id);
+
+    public override IEnumerable<string> CoverageKeys => IdToEntry.Keys.Select(id => id.ToString(CultureInfo.InvariantCulture));
+
     /// <summary>
     ///     Returns the raw bytes of the audio entry for <paramref name="id" />, or false if this pack has no entry for
     ///     it (or the entry failed to read). Caller hands the bytes to SDL_mixer.

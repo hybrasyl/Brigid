@@ -137,6 +137,18 @@ public class AmbientPackTests
     }
 
     [Fact]
+    public void Covers_IsTrue_OnlyForAnIdThatHasAnEntry_InOneTo255()
+    {
+        var pack = BuildPack("{}", "amb_0001.wav", "AMB_7.OGG", "amb_0.wav", "amb_256.wav");
+
+        Assert.True(pack.Covers(1));
+        Assert.True(pack.Covers(7));
+        Assert.False(pack.Covers(2));
+        Assert.False(pack.Covers(0));
+        Assert.False(pack.Covers(256));
+    }
+
+    [Fact]
     public void Constructor_LoadsThePack_WhenTheCoversValuesAreNull()
     {
         using var nullEntry = BuildPack("""{ "ambient_sounds": null }""", "amb_1.wav");
