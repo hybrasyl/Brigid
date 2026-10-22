@@ -216,6 +216,24 @@ public class AlertsPanelTests
         Assert.Empty(panel.Alerts);
     }
 
+    //BRIG-132: a greeting that does not decompress shows one alert for each connection, and OK dismisses it
+    [Fact]
+    public void TheUnreadableGreetingAlertShowsOnce_AndOkDismissesIt()
+    {
+        var panel = new AlertsPanel();
+
+        panel.Add(MenuAlerts.GreetingUnreadable());
+        panel.Add(MenuAlerts.GreetingUnreadable());
+
+        var alert = Assert.Single(panel.Alerts);
+        Assert.Contains("The server notice could not be read.", alert.Body);
+        Assert.Equal("OK", Assert.Single(alert.Actions).Text);
+
+        panel.RunAction(0);
+
+        Assert.Empty(panel.Alerts);
+    }
+
     [Fact]
     public void ASecondOfflineAlertReplacesTheFirst()
     {

@@ -350,6 +350,7 @@ public sealed class LobbyLoginScreen : IScreen
         if (Game.Connection.RetryLastRedirect())
         {
             Menu.Alerts.Remove(MenuAlerts.OFFLINE_ID);
+            Menu.Alerts.Remove(MenuAlerts.GREETING_UNREADABLE_ID);
 
             return;
         }
@@ -631,6 +632,7 @@ public sealed class LobbyLoginScreen : IScreen
     {
         Connecting = true;
         Menu.Alerts.Remove(MenuAlerts.OFFLINE_ID);
+        Menu.Alerts.Remove(MenuAlerts.GREETING_UNREADABLE_ID);
         Menu.CoverUntilGreeting();
 
         //a new connection needs the greeting, or the cached greeting, again before the connection buttons are enabled
@@ -897,6 +899,7 @@ public sealed class LobbyLoginScreen : IScreen
         catch (InvalidDataException ex)
         {
             NoticeDebugLog.Write($"  !!! the greeting does not decompress, so no greeting to show: {ex.Message}");
+            Menu.Alerts.Add(MenuAlerts.GreetingUnreadable());
             LobbyReady = true;
 
             return;
