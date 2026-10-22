@@ -72,7 +72,10 @@ public sealed class StatusIconTests : IDisposable
     [InlineData(SocialStatus.NeedHelp)]
     public void WithNoThemeEveryStatusHasBrigidsOwnImage(SocialStatus status)
     {
-        Assert.True(BuiltInArt.Has(StatusIcon.RoleFor(status)));
+        var role = StatusIcon.RoleFor(status);
+
+        Assert.NotNull(role);
+        Assert.True(BuiltInArt.Has(role));
         Assert.True(StatusIcon.HasArt(status));
     }
 
