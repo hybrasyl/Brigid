@@ -73,6 +73,50 @@ public class ProfileTextEditorTests
         editor.Hide();
     }
 
+    //BRIG-100: a text saved before the wrap width changed can be one line past the 12 that the box shows. It can still be
+    //edited: an edit that adds no line and a delete work; only an edit that adds a line is refused
+    [Fact]
+    public void AStoredTextPastTheVisibleAreaCanStillBeEdited()
+    {
+        var editor = new SelfProfileTextEditorControl();
+        var stored = string.Join('\n', Enumerable.Repeat("a", 13));
+        editor.Show(stored);
+        var box = editor.FindChild<UITextBox>("text")!;
+        box.CursorPosition = box.Text.Length;
+        box.ClearSelection();
+
+        box.OnTextInput(new TextInputEvent { Character = 'b' });
+
+        //the stored text is past the 12 lines that the box shows, and the edit still went in
+        Assert.True(box.LineCount > box.VisibleLineCount);
+        Assert.Equal(stored + "b", box.Text);
+
+        //a paste that adds no line works too; Ctrl is the primary modifier, as InputBuffer reports it on Windows
+        var clipboard = TestClipboard.Instance.Text;
+        TestClipboard.Instance.Text = "c";
+
+        try
+        {
+            box.OnKeyDown(new KeyDownEvent { Key = Keys.V, Modifiers = KeyModifiers.Ctrl | KeyModifiers.Meta });
+        } finally
+        {
+            TestClipboard.Instance.Text = clipboard;
+        }
+
+        Assert.Equal(stored + "bc", box.Text);
+
+        box.OnKeyDown(new KeyDownEvent { Key = Keys.Back });
+
+        box.OnTextInput(new TextInputEvent { Character = '\r' });
+
+        Assert.Equal(stored + "b", box.Text);
+
+        box.OnKeyDown(new KeyDownEvent { Key = Keys.Back });
+
+        Assert.Equal(stored, box.Text);
+        editor.Hide();
+    }
+
     [Fact]
     public void SaveRaisesTheTextAndHidesTheEditor()
     {
