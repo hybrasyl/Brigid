@@ -1,5 +1,5 @@
 #region
-using Brigid.Controls.Generic;
+using Brigid.Controls.Components;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using Microsoft.Xna.Framework;
@@ -7,7 +7,7 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
 
-namespace Brigid.Controls.Components;
+namespace Brigid.Controls.Generic;
 
 /// <summary>
 ///     Base for from-scratch (asset-free) centered modals in the modernized-dialog family: a

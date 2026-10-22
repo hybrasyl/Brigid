@@ -3,7 +3,7 @@ using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 #endregion
 
-namespace Brigid.Controls.Generic;
+namespace Brigid.Controls.Components;
 
 /// <summary>
 ///     Shared colour palette for the from-scratch (asset-free) modernized dialog panels — the merchant/bank browser

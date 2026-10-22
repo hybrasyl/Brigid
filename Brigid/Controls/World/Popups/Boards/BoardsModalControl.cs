@@ -1,6 +1,5 @@
 #region
 using Brigid.Collections;
-using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Models;
 using Brigid.Systems.Keybinds;

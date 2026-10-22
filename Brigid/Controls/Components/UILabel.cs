@@ -1,5 +1,4 @@
 #region
-using Brigid.Controls.Generic;
 using Brigid.Systems.Keybinds;
 using Brigid.Utilities;
 using Microsoft.Xna.Framework;

@@ -1,6 +1,5 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
 using Brigid.Rendering;
 using Microsoft.Xna.Framework;

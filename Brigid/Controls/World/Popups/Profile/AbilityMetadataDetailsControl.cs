@@ -1,7 +1,6 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
-using Brigid.Controls.Generic;
 using Brigid.Data.Models;
 using Brigid.Rendering;
 using Brigid.Systems;

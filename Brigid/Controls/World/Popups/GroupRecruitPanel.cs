@@ -1,6 +1,5 @@
 #region
 using Brigid.Controls.Components;
-using Brigid.Controls.Generic;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using DALib.Networking.Packets.Server;

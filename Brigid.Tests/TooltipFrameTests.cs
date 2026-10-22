@@ -1,4 +1,5 @@
 #region
+using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.World.Popups;
 using Brigid.Data.AssetPacks;
