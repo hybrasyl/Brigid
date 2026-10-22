@@ -127,9 +127,8 @@ public sealed partial class WorldScreen
         //the gold button opens the gold prompt over the exchange; its OnConfirm sends SetGold while the exchange is open
         Exchange.OnGoldClicked += () =>
         {
-            GoldForExchange = true;
-            GoldDrop.SetViewportBounds(new Rectangle(Exchange.X, Exchange.Y, Exchange.Width, Exchange.Height));
-            GoldDrop.ShowForTarget(Exchange.OtherUserId, 0, 0);
+            GoldDrop.SetViewportBounds(Exchange.Bounds);
+            GoldDrop.ShowForExchange();
             WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");
         };
     }
@@ -757,6 +756,9 @@ public sealed partial class WorldScreen
         TextPopup.SetViewportBounds(viewport);
         SelfProfileTextEditor.SetViewportBounds(viewport);
         Exchange.SetViewportBounds(viewport);
+        //a prompt over the exchange moves with it; a prompt for a drop stays in the viewport
+        GoldDrop.SetViewportBounds(GoldDrop.ForExchange ? Exchange.Bounds : viewport);
+        ItemAmount.SetViewportBounds(Exchange.Bounds);
         GroupPanel.SetViewportBounds(viewport);
         GroupBoxViewer.SetViewportBounds(viewport);
 

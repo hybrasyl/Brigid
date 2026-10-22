@@ -1,4 +1,5 @@
 #region
+using Brigid.Controls.Components;
 using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -54,7 +55,7 @@ public class TooltipFrame : FramePanel
     private readonly int MaxTextWidth;
     private readonly List<(string Text, TooltipLine Line)> Wrapped = [];
 
-    private int FittedGeneration = -1;
+    private readonly FontGenerationStamp Fitted = new();
     private IReadOnlyList<TooltipLine> Lines = [];
 
     /// <param name="maxTextWidth">The largest width of a line of text; a longer line wraps.</param>
@@ -92,7 +93,7 @@ public class TooltipFrame : FramePanel
     //a new face or window size wraps the lines again; a tooltip with no parent gets no update, so the callers check
     private void EnsureFitted()
     {
-        if (FontEngine.Instance.Generation != FittedGeneration)
+        if (Fitted.Changed)
             Fit();
     }
 
@@ -109,7 +110,7 @@ public class TooltipFrame : FramePanel
                 widest = Math.Max(widest, TextRenderer.MeasureWidth(text));
             }
 
-        FittedGeneration = FontEngine.Instance.Generation;
+        Fitted.Mark();
 
         var inset = InsetFor(PADDING);
 

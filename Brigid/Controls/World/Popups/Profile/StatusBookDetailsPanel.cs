@@ -39,7 +39,7 @@ public abstract class StatusBookDetailsPanel : CenteredModalPanel
 
     //the description lines that the panel was last fitted to, and the FontEngine generation it was fitted at
     private int DescriptionLines = MIN_DESCRIPTION_LINES;
-    private int FittedGeneration = -1;
+    private readonly FontGenerationStamp Fitted = new();
 
     protected UIImage Icon { get; }
 
@@ -165,7 +165,7 @@ public abstract class StatusBookDetailsPanel : CenteredModalPanel
 
         //a new width or a new FontEngine generation wraps the text again
         DescriptionLabel.Text = DescriptionLabel.Text;
-        FittedGeneration = FontEngine.Instance.Generation;
+        Fitted.Mark();
 
         DescriptionLines = Math.Clamp(DescriptionLabel.ContentHeight / TextRenderer.CHAR_HEIGHT, MIN_DESCRIPTION_LINES, MAX_DESCRIPTION_LINES);
         SetContentHeight(ContentHeightFor(DescriptionLines));
@@ -175,7 +175,7 @@ public abstract class StatusBookDetailsPanel : CenteredModalPanel
     public override void Update(GameTime gameTime)
     {
         //a new face or window size wraps the description again, and changes the caption widths
-        if (Visible && (FontEngine.Instance.Generation != FittedGeneration))
+        if (Visible && Fitted.Changed)
             FitDescription();
 
         base.Update(gameTime);

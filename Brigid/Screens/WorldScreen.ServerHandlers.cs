@@ -581,7 +581,7 @@ public sealed partial class WorldScreen
 
     private void HandleExchangeAmountRequested(byte fromSlot)
     {
-        ItemAmount.SetViewportBounds(new Rectangle(Exchange.X, Exchange.Y, Exchange.Width, Exchange.Height));
+        ItemAmount.SetViewportBounds(Exchange.Bounds);
         ItemAmount.ShowForSlot(fromSlot);
 
         //surface the slot's hover description (e.g. "Apple[ 10 ]") in the HUD bar while the popup
@@ -594,7 +594,7 @@ public sealed partial class WorldScreen
         //a prompt that the exchange opened has nothing to act on after the close
         ItemAmount.Hide();
 
-        if (GoldForExchange)
+        if (GoldDrop.ForExchange)
             GoldDrop.Hide();
 
         if (!string.IsNullOrEmpty(message))

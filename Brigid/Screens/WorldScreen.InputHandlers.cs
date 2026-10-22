@@ -119,7 +119,6 @@ public sealed partial class WorldScreen
         //gold bag (slot 0) — show the gold amount popup
         if (slot == 0)
         {
-            GoldForExchange = false;
             GoldDrop.SetViewportBounds(viewport);
             GoldDrop.ShowForTarget(droppedOnEntity ? entity!.Id : null, tileX, tileY);
             WorldHud.SetDescription($"Gold( {WorldState.Inventory.Gold} )");

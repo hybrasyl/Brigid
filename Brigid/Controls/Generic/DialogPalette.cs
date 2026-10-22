@@ -32,8 +32,9 @@ internal static class DialogPalette
     public static readonly Color TabIdleFill = new(24, 26, 34);
     public static readonly Color TabSelectedFill = new(74, 58, 22);
 
-    //ability requirements the player does not meet
-    public static readonly Color RequirementUnmet = LegendColors.Scarlet;
+    //ability requirements the player does not meet: the scarlet of the legacy legend palette (LegendColor.Scarlet), as a
+    //literal, so that it needs no dat file and has its value before the palette loads
+    public static readonly Color RequirementUnmet = new(203, 0, 23);
 
     //the dark box behind a text field or a preview
     public static readonly Color SlotFill = new(0, 0, 0, 205);

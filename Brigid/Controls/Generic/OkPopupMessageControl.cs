@@ -36,7 +36,7 @@ public sealed class OkPopupMessageControl : CenteredModalPanel
     private UIElement? PreviousFocus;
 
     //the FontEngine generation that the panel was last fitted at; a new face or window size wraps the message again
-    private int FittedGeneration = -1;
+    private readonly FontGenerationStamp Fitted = new();
 
     public TextButton? CancelButton { get; }
     public TextButton OkButton { get; }
@@ -113,7 +113,7 @@ public sealed class OkPopupMessageControl : CenteredModalPanel
     public override void Update(GameTime gameTime)
     {
         //the label wraps again when the face or the window size changes; the panel then fits the new line count
-        if (Visible && (FontEngine.Instance.Generation != FittedGeneration))
+        if (Visible && Fitted.Changed)
             FitToText();
 
         base.Update(gameTime);
@@ -129,7 +129,7 @@ public sealed class OkPopupMessageControl : CenteredModalPanel
 
         //a new width or a new FontEngine generation wraps the text again
         MessageLabel.Text = MessageLabel.Text;
-        FittedGeneration = FontEngine.Instance.Generation;
+        Fitted.Mark();
 
         var wrappedHeight = MessageLabel.ContentHeight;
         var lines = Math.Clamp(wrappedHeight / TextRenderer.CHAR_HEIGHT, MIN_LINES, MAX_LINES);

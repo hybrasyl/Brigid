@@ -47,7 +47,7 @@ public sealed class TextPopupControl : CenteredModalPanel
     private bool Wooden;
 
     //the FontEngine generation the scroll range was read at; a new face or window size wraps the text again
-    private int ScrollGeneration = -1;
+    private readonly FontGenerationStamp Wrapped = new();
 
     public TextPopupControl()
         : base("Message", PANEL_W, PANEL_H, useTheme: true)
@@ -96,7 +96,7 @@ public sealed class TextPopupControl : CenteredModalPanel
         TextLabel.Text = text;
         TextScroll.Sync();
         TextScroll.ScrollToStart();
-        ScrollGeneration = FontEngine.Instance.Generation;
+        Wrapped.Mark();
 
         if (Visible)
         {
@@ -140,11 +140,11 @@ public sealed class TextPopupControl : CenteredModalPanel
     public override void Update(GameTime gameTime)
     {
         //a new wrap changes the number of lines, so the scroll range is read again
-        if (Visible && (ScrollGeneration != FontEngine.Instance.Generation))
+        if (Visible && Wrapped.Changed)
         {
             TextLabel.Text = TextLabel.Text;
             TextScroll.Sync();
-            ScrollGeneration = FontEngine.Instance.Generation;
+            Wrapped.Mark();
         }
 
         base.Update(gameTime);

@@ -97,6 +97,27 @@ public class AmountPromptTests
     }
 
     [Fact]
+    public void TheExchangeTargetReplacesADropTargetAndBack()
+    {
+        var prompt = new GoldAmountControl();
+
+        prompt.ShowForTarget(42, 3, 4);
+        Assert.False(prompt.ForExchange);
+
+        prompt.Hide();
+        prompt.ShowForExchange();
+
+        Assert.True(prompt.ForExchange);
+        Assert.Null(prompt.TargetEntityId);
+
+        prompt.Hide();
+        prompt.ShowForTarget(null, 5, 6);
+
+        Assert.False(prompt.ForExchange);
+        Assert.Equal(5, prompt.TargetTileX);
+    }
+
+    [Fact]
     public void EnterDoesNothingWhileTheFieldIsEmpty()
     {
         var prompt = new GoldAmountControl();

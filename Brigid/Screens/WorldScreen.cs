@@ -141,7 +141,6 @@ public sealed partial class WorldScreen : IScreen
 
     //true while the gold prompt is open for the exchange's gold, false while it is open for a drop. The exchange can close
     //while the prompt is open, so the confirm must not then fall through to a drop on the other player
-    private bool GoldForExchange;
     private GroupBoxViewerControl GroupBoxViewer = null!;
 
     //true when j was pressed — the next selfprofile response triggers group highlighting instead of opening the panel
@@ -421,7 +420,7 @@ public sealed partial class WorldScreen : IScreen
             //the packets carry the gold as an int
             var amount = (int)Math.Min(confirmed, int.MaxValue);
 
-            if (GoldForExchange)
+            if (GoldDrop.ForExchange)
             {
                 if (WorldState.Exchange.IsActive)
                     Game.Connection.SendExchangeInteraction(ExchangeRequestType.SetGold, Exchange.OtherUserId, goldAmount: amount);

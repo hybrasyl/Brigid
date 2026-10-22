@@ -47,7 +47,7 @@ public class PopupMenu : FramePanel
     private readonly UILabel TitleLabel;
 
     private int EntryCount;
-    private int FittedGeneration = -1;
+    private readonly FontGenerationStamp Fitted = new();
     private int RowWidth = MIN_ROW_W;
 
     /// <param name="maxEntries">The largest number of entries that the menu shows.</param>
@@ -172,7 +172,7 @@ public class PopupMenu : FramePanel
 
         //1 px more than the text, so that a rounding difference does not clip the last glyph
         RowWidth = Math.Max(MIN_ROW_W, widest + 2 * TEXT_PAD + 1);
-        FittedGeneration = FontEngine.Instance.Generation;
+        Fitted.Mark();
 
         var inset = Inset;
 
@@ -219,7 +219,7 @@ public class PopupMenu : FramePanel
     public override void Update(GameTime gameTime)
     {
         //a new face or window size changes the text widths
-        if (Visible && (FontEngine.Instance.Generation != FittedGeneration))
+        if (Visible && Fitted.Changed)
         {
             Layout();
             PlaceAt(X, Y);

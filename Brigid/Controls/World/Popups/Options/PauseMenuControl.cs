@@ -124,24 +124,21 @@ public sealed class PauseMenuControl : CenteredModalPanel
     public event SettingsHandler? OnSettings;
     public event SoundVolumeChangedHandler? OnSoundVolumeChanged;
 
-    //Escape closes the menu and X closes it and exits. Every other key goes on to the world screen, as before the
-    //rebuild: Q closes the menu again, and a panel hotkey closes it and opens its panel. The base modal marks every key as
-    //handled, so this override does not call it
+    //every key that the menu does not use goes on to the world screen, as before the rebuild: Q closes the menu again, and
+    //a panel hotkey closes it and opens its panel
+    protected override bool LetsKeysThrough => true;
+
+    //X closes the menu and exits; the base closes it on Escape
     public override void OnKeyDown(KeyDownEvent e)
     {
-        switch (e.Key)
+        if (e.Key == Keys.X)
         {
-            case Keys.Escape:
-                Hide();
-                e.Handled = true;
+            Exit();
+            e.Handled = true;
 
-                break;
-
-            case Keys.X:
-                Exit();
-                e.Handled = true;
-
-                break;
+            return;
         }
+
+        base.OnKeyDown(e);
     }
 }
