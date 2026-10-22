@@ -1,8 +1,6 @@
 #region
-using Brigid.Data;
 using Brigid.Data.AssetPacks;
 using Brigid.Rendering.Utility;
-using DALib.Drawing;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -10,9 +8,9 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Brigid.Rendering;
 
 /// <summary>
-///     Renders and caches item sprites for ground display. Separate from UiRenderer's permanent icon cache — these
-///     textures are evicted on map change. Stores frame offset metadata (Left/Top) for proper visual centering.
-///     Cache key includes both sprite ID and dye color.
+///     Renders and caches item sprites for ground display and the dialog item portrait. Separate from UiRenderer's
+///     permanent icon cache — these textures are evicted on map change. Stores frame offset metadata (Left/Top) for
+///     proper visual centering. Cache key includes both sprite ID and dye color.
 /// </summary>
 public sealed class ItemRenderer : IDisposable
 {
@@ -119,84 +117,44 @@ public sealed class ItemRenderer : IDisposable
     }
 
     /// <summary>
-    ///     Returns the ground item sprite for the given sprite ID and dye color. If an <c>item_icons</c> asset pack covers
-    ///     the ID, renders from the pack PNG (running the find-and-replace dye pass for dyeable IDs); otherwise renders
-    ///     from the legacy EPF + palette pipeline. Non-dyeable pack items collapse to <c>color = 0</c> in the cache so a
-    ///     single decode is shared across every server-sent color byte for that ID.
+    ///     Returns the ground item sprite for the given sprite and dye color. <paramref name="sprite" /> can carry the
+    ///     0x8000 wire flag (the dialog item portrait gives the raw value). <see cref="ItemIconSource" /> gives the
+    ///     image: the <c>item_icons</c> packs first, then the legacy EPF + palette pipeline. The cache key is the color
+    ///     that the server sent, so a lookup that hits the cache asks no pack.
     /// </summary>
-    public ItemSprite? GetSprite(int spriteId, byte color = 0)
+    public ItemSprite? GetSprite(int sprite, byte color = 0)
     {
-        var pack = AssetPackRegistry.GetItemPack();
-        var packCovers = (pack is not null) && pack.HasItem(spriteId);
-
-        if (packCovers && !pack!.IsDyeable(spriteId))
-            color = 0;
-
+        var spriteId = ItemSpriteIds.ToSpriteId(sprite);
         var key = (spriteId, color);
 
-        if (!SpriteCache.TryGetValue(key, out var sprite))
+        if (!SpriteCache.TryGetValue(key, out var cachedSprite))
         {
-            sprite = packCovers
-                ? LoadSpriteFromPack(pack!, spriteId, color)
-                : LoadSpriteFromLegacy(spriteId, color);
+            cachedSprite = Load(spriteId, color);
 
             //memoize the load, misses included — a cached null means "absent from both sources", so the expensive
             //legacy lookup runs at most once per (id, color) rather than every frame the missing item is on screen.
-            SpriteCache[key] = sprite;
+            SpriteCache[key] = cachedSprite;
         }
 
         //terminal miss: serve the shared placeholder (never itself cached, so it can't be double-freed) so a
         //referenced-but-absent item id is a visible marker rather than an invisible ground pickup. spriteId 0 stays
         //null — it is the "no sprite" sentinel, not a missing asset.
-        if (sprite is null && spriteId > 0)
+        if (cachedSprite is null && spriteId > 0)
             return GetMissingItemSprite();
 
-        return sprite;
+        return cachedSprite;
     }
 
-    private static ItemSprite? LoadSpriteFromPack(ItemPack pack, int spriteId, byte color)
+    private static ItemSprite? Load(int spriteId, byte color)
     {
-        if (!pack.TryGetItemImage(spriteId, out var sourceImage) || (sourceImage is null))
+        if (ItemIconSource.Load(spriteId, color) is not { } loaded)
             return null;
 
-        using var owned = sourceImage;
-
-        if ((color > 0) && DataContext.AislingDrawData.DyeColorTable.Contains(color))
-        {
-            using var dyed = ItemDyePass.ApplyDyeFindReplace(owned, DataContext.AislingDrawData.DyeColorTable[color]);
-            var dyedTexture = TextureConverter.ToTexture2D(dyed);
-
-            //modern PNGs are tightly cropped — no legacy frame Left/Top padding to compensate for
-            return new ItemSprite(dyedTexture, 0, 0);
-        }
-
-        var texture = TextureConverter.ToTexture2D(owned);
-
-        return new ItemSprite(texture, 0, 0);
-    }
-
-    private static ItemSprite? LoadSpriteFromLegacy(int spriteId, byte color)
-    {
-        var palettized = DataContext.PanelSprites.GetItemSprite(spriteId);
-
-        if (palettized is null)
-            return null;
-
-        var palette = palettized.Palette;
-
-        //apply dye color if specified
-        if ((color > 0) && DataContext.AislingDrawData.DyeColorTable.Contains(color))
-            palette = palette.Dye(DataContext.AislingDrawData.DyeColorTable[color]);
-
-        using var image = Graphics.RenderImage(palettized.Entity, palette);
-
-        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
-        if (image is null)
-            return null;
-
+        using var image = loaded.Image;
         var texture = TextureConverter.ToTexture2D(image);
 
-        return new ItemSprite(texture, palettized.Entity.Left, palettized.Entity.Top);
+        //a pack PNG is tightly cropped (offsets 0); a legacy frame keeps its Left/Top padding
+        return new ItemSprite(texture, loaded.FrameLeft, loaded.FrameTop);
     }
 
     /// <summary>

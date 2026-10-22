@@ -71,6 +71,19 @@ public static class DataContext
         PanelSprites = new PanelSpriteRepository();
         Tiles = new TileRepository();
         UserControls = new UiComponentRepository();
+
+        CheckItemDyeRamp();
+    }
+
+    //the item dye pass finds the hardcoded ramp. if the game's color0.tbl entry 0 has other colors, a pack icon would
+    //not be found dyeable and would not be dyed, so say so in the log. only an item pack needs the check
+    private static void CheckItemDyeRamp()
+    {
+        if (!AssetPackRegistry.ItemPacks.Any() || !AislingDrawData.DyeColorTable.Contains(0))
+            return;
+
+        foreach (var difference in ItemDyeRamp.DifferencesFrom(AislingDrawData.DyeColorTable[0].Colors))
+            DataDiagnostics.Log?.Invoke($"[asset-pack] warning: {difference}");
     }
 
     /// <summary>

@@ -33,7 +33,7 @@ public sealed class UiRenderer : IDisposable
     ///     Cache keys for which the stored texture was sourced from a modern .datf asset pack (not legacy EPF). Used to
     ///     tag icons with the <see cref="IconTexture.Modern" /> offset on retrieval.
     /// </summary>
-    private readonly HashSet<string> ModernIconKeys = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> PackIconKeys = new(StringComparer.OrdinalIgnoreCase);
     private readonly GraphicsDevice Device;
     private readonly Dictionary<string, int> EpfFrameCounts = new(StringComparer.OrdinalIgnoreCase);
     private CachedTexture2D? MissingTextureField;
@@ -208,9 +208,7 @@ public sealed class UiRenderer : IDisposable
         //modern path: world_maps .datf pack PNG decoded via SkiaSharp. Reuse the same Convert + Cache flow as the
         //legacy path so the cached texture's ownership/disposal contract is identical (WorldMap.ClearBackground
         //disposes whatever is cached here).
-        var pack = AssetPackRegistry.GetWorldMapPack();
-
-        if ((pack is not null) && pack.TryGetFieldImage(fieldName, out var modern) && (modern is not null))
+        if (AssetPackRegistry.TryGetFieldImage(fieldName, out var modern) && (modern is not null))
             using (modern)
             {
                 var modernTexture = Convert(modern);
@@ -244,9 +242,7 @@ public sealed class UiRenderer : IDisposable
         if (Cache.TryGetValue(key, out var cached))
             return cached;
 
-        var pack = AssetPackRegistry.GetTownMapPack();
-
-        if ((pack is not null) && pack.TryGetTownMapImage(mapId, out var modern) && (modern is not null))
+        if (AssetPackRegistry.TryGetTownMapImage(mapId, out var modern) && (modern is not null))
             using (modern)
             {
                 var texture = Convert(modern);
@@ -276,9 +272,7 @@ public sealed class UiRenderer : IDisposable
         var ownedSource = false;
 
         //modern path: pack PNG decoded via SkiaSharp
-        var pack = AssetPackRegistry.GetIconPack();
-
-        if ((pack is not null) && pack.TryGetIconImage("spell", iconId, out var modern) && (modern is not null))
+        if (AssetPackRegistry.TryGetIconImage("spell", iconId, out var modern) && (modern is not null))
         {
             sourceImage = modern;
             ownedSource = true;
@@ -331,38 +325,37 @@ public sealed class UiRenderer : IDisposable
     }
 
     /// <summary>
-    ///     Renders and caches an inventory/equipment item icon.
+    ///     Renders and caches an item icon for the inventory, bank, shop, item menu, exchange and equipment surfaces.
+    ///     <paramref name="sprite" /> can carry the 0x8000 wire flag. <see cref="ItemIconSource" /> gives the image: the
+    ///     <c>item_icons</c> packs first, then the legacy EPF. A pack icon gets the offset that centres it in the legacy
+    ///     31×31 slot (see <see cref="IconTexture.FromPack" />); a legacy icon gets none.
     /// </summary>
-    public Texture2D GetItemIcon(ushort spriteId, DisplayColor color = DisplayColor.Default)
+    public IconTexture GetItemIcon(ushort sprite, DisplayColor color = DisplayColor.Default)
     {
+        var spriteId = ItemSpriteIds.ToSpriteId(sprite);
         var key = color == DisplayColor.Default ? $"item:{spriteId}" : $"item:{spriteId}:{(int)color}";
 
         if (Cache.TryGetValue(key, out var cached))
-            return cached;
+            return ItemIcon(cached, PackIconKeys.Contains(key));
 
-        var palettized = DataContext.PanelSprites.GetItemSprite(spriteId);
+        if (ItemIconSource.Load(spriteId, (byte)color) is not { } loaded)
+            return IconTexture.Legacy(MissingTexture);
 
-        if (palettized is not null && (color != DisplayColor.Default))
-        {
-            var dyedPalette = DataContext.AislingDrawData.ApplyDye(palettized.Palette, color);
+        CachedTexture2D texture;
 
-            if (dyedPalette != palettized.Palette)
-                palettized = new Palettized<EpfFrame>
-                {
-                    Entity = palettized.Entity,
-                    Palette = dyedPalette
-                };
-        }
-
-        var texture = RenderSprite(palettized);
-
-        if (texture is null)
-            return MissingTexture;
+        using (loaded.Image)
+            texture = Convert(loaded.Image);
 
         Cache[key] = texture;
 
-        return texture;
+        if (loaded.IsFromPack)
+            PackIconKeys.Add(key);
+
+        return ItemIcon(texture, loaded.IsFromPack);
     }
+
+    private static IconTexture ItemIcon(Texture2D texture, bool fromPack)
+        => fromPack ? IconTexture.FromPack(texture) : IconTexture.Legacy(texture);
 
     /// <summary>
     ///     Loads a single EPF frame from national.dat (legend.pal) and caches the resulting texture.
@@ -446,9 +439,7 @@ public sealed class UiRenderer : IDisposable
             return cached;
 
         //modern path: pack PNG decoded via SkiaSharp
-        var pack = AssetPackRegistry.GetNationBadgePack();
-
-        if ((pack is not null) && pack.TryGetBadgeImage(nationId, out var modernImage) && (modernImage is not null))
+        if (AssetPackRegistry.TryGetBadgeImage(nationId, out var modernImage) && (modernImage is not null))
             try
             {
                 var modernTex = Convert(modernImage);
@@ -488,9 +479,7 @@ public sealed class UiRenderer : IDisposable
             return cached;
 
         //modern path: pack PNG decoded via SkiaSharp
-        var pack = AssetPackRegistry.GetLegendMarkIconPack();
-
-        if ((pack is not null) && pack.TryGetLegendMarkImage(iconId, out var modernImage) && (modernImage is not null))
+        if (AssetPackRegistry.TryGetLegendMarkImage(iconId, out var modernImage) && (modernImage is not null))
             try
             {
                 var modernTex = Convert(modernImage);
@@ -567,23 +556,21 @@ public sealed class UiRenderer : IDisposable
 
     /// <summary>
     ///     Shared modern-first dispatch for skill and spell icons. Legacy EPF lookup goes through the provided
-    ///     delegate; modern PNG lookup goes through <see cref="AssetPackRegistry.GetIconPack" />.
+    ///     delegate; modern PNG lookup goes through <see cref="AssetPackRegistry.TryGetIconImage" />.
     /// </summary>
     private IconTexture GetAbilityIcon(string prefix, ushort spriteId, Func<int, Palettized<EpfFrame>?> legacyLookup)
     {
         var key = $"{prefix}:{spriteId}";
 
         if (Cache.TryGetValue(key, out var cached))
-            return ModernIconKeys.Contains(key) ? IconTexture.Modern(cached) : IconTexture.Legacy(cached);
+            return PackIconKeys.Contains(key) ? IconTexture.Modern(cached) : IconTexture.Legacy(cached);
 
-        var pack = AssetPackRegistry.GetIconPack();
-
-        if ((pack is not null) && pack.TryGetIconImage(prefix, spriteId, out var skImage) && (skImage is not null))
+        if (AssetPackRegistry.TryGetIconImage(prefix, spriteId, out var skImage) && (skImage is not null))
             try
             {
                 var modernTex = Convert(skImage);
                 Cache[key] = modernTex;
-                ModernIconKeys.Add(key);
+                PackIconKeys.Add(key);
 
                 return IconTexture.Modern(modernTex);
             }

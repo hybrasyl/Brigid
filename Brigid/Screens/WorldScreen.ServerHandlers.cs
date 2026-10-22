@@ -540,9 +540,7 @@ public sealed partial class WorldScreen
 
         var portraitKey = filenames[variant];
 
-        var portraitPack = AssetPackRegistry.GetNpcPortraitPack();
-
-        if (portraitPack is not null && portraitPack.TryGetIllustration(portraitKey, out var packImage) && packImage is not null)
+        if (AssetPackRegistry.TryGetNpcIllustration(portraitKey, out var packImage) && packImage is not null)
             using (packImage)
                 return TextureConverter.ToTexture2D(packImage);
 

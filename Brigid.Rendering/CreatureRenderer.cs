@@ -192,9 +192,7 @@ public sealed class CreatureRenderer : IDisposable
         if (AverageTopOffsetCache.TryGetValue(spriteId, out var cached))
             return cached;
 
-        var pack = AssetPackRegistry.GetCreaturePack();
-
-        if (pack is not null && pack.Covers(spriteId))
+        if (AssetPackRegistry.GetCreaturePackFor(spriteId) is not null)
         {
             var packFrame = GetFrame(spriteId, 0);
 
@@ -247,9 +245,7 @@ public sealed class CreatureRenderer : IDisposable
     /// </summary>
     public CreatureAnimInfo? GetAnimInfo(int spriteId)
     {
-        var pack = AssetPackRegistry.GetCreaturePack();
-
-        if (pack is not null && pack.Covers(spriteId))
+        if (AssetPackRegistry.GetCreaturePackFor(spriteId) is { } pack)
             return SynthesizeStaticAnimInfo(pack.GetPairCount(spriteId));
 
         var palettized = DataContext.CreatureSprites.GetCreatureSprite(spriteId);
@@ -314,9 +310,9 @@ public sealed class CreatureRenderer : IDisposable
         if (FrameCache.TryGetValue(key, out var cached))
             return cached;
 
-        var pack = AssetPackRegistry.GetCreaturePack();
-
-        if (pack is not null && pack.Covers(spriteId))
+        //the first pack that covers the sprite owns the whole creature (frames, pair count, bounding box), so frames
+        //from two packs never mix in one creature
+        if (AssetPackRegistry.GetCreaturePackFor(spriteId) is { } pack)
         {
             var packed = LoadPackFrame(pack, spriteId, frameIndex);
 
