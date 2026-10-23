@@ -1,5 +1,5 @@
 #region
-using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Definitions;
 using DALib.Networking.Packets.Server;
 #endregion

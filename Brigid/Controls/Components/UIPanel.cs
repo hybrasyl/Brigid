@@ -1,5 +1,4 @@
 #region
-using Brigid.Controls.Generic;
 using Chaos.Extensions.Common;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -13,6 +12,12 @@ public class UIPanel : UIElement
     internal bool ChildOrderDirty;
 
     public Texture2D? Background { get; set; }
+
+    /// <summary>
+    ///     Draws over each visible child just after the child draws, or null. The debug overlay sets it while it is on, so
+    ///     that its boxes and names keep the z-order of the controls, and this namespace does not depend on the overlay.
+    /// </summary>
+    internal static Action<SpriteBatch, UIElement>? DrawOverChild { get; set; }
 
     /// <summary>
     ///     Marks a panel that must have the input while it is visible: nothing behind it takes a click or a key. The flag
@@ -77,7 +82,7 @@ public class UIPanel : UIElement
             if (child.Visible)
             {
                 child.Draw(spriteBatch);
-                DebugOverlay.DrawElement(spriteBatch, child);
+                DrawOverChild?.Invoke(spriteBatch, child);
             }
     }
 

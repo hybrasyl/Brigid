@@ -1,5 +1,4 @@
 #region
-using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;

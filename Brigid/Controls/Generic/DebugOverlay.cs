@@ -82,8 +82,19 @@ public static class DebugOverlay
     private static long SnappedDrawCount;
     private static long DebugDrawCount;
 
-    /// <summary>Master toggle (F11). When false the whole debug layer is inert and the numpad sub-toggles do nothing.</summary>
-    public static bool IsActive { get; set; }
+    /// <summary>
+    ///     Master toggle (F11). When false the whole debug layer is inert and the numpad sub-toggles do nothing. While true,
+    ///     <see cref="UIPanel.DrawOverChild" /> is <see cref="DrawElement" />.
+    /// </summary>
+    public static bool IsActive
+    {
+        get;
+        set
+        {
+            field = value;
+            UIPanel.DrawOverChild = value ? DrawElement : null;
+        }
+    }
 
     /// <summary>Sub-toggle: colored element border rectangles. Gated under <see cref="IsActive" />.</summary>
     public static bool ShowUiBoxes { get; set; } = true;
@@ -297,8 +308,8 @@ public static class DebugOverlay
     }
 
     /// <summary>
-    ///     Draws the debug border and label for a single element. Called inline from UIPanel.Draw after each child draws, so
-    ///     debug overlays respect the natural z-order of controls.
+    ///     Draws the debug border and label for a single element. Called after each child draws, through
+    ///     <see cref="UIPanel.DrawOverChild" /> from UIPanel.Draw, so debug overlays respect the natural z-order of controls.
     /// </summary>
     public static void DrawElement(SpriteBatch spriteBatch, UIElement element)
     {

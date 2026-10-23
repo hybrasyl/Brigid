@@ -11,7 +11,7 @@ namespace Brigid.Controls.Generic;
 ///     A primitive framed box: the <see cref="DialogPalette" /> frame fill and border, or the theme's
 ///     <see cref="ThemeRoles.FramePanel" /> art when the panel is themed. A subclass draws another part through
 ///     <see cref="FrameRole" />, for example <see cref="ThemeRoles.FramePopup" />. Content goes in with <c>AddChild</c>.
-///     <see cref="Components.CenteredModalPanel" />, the menu alerts and the Story view are framed with it.
+///     <see cref="CenteredModalPanel" />, the menu alerts and the Story view are framed with it.
 /// </summary>
 public class FramePanel : UIPanel
 {
@@ -56,7 +56,7 @@ public class FramePanel : UIPanel
     ///     so the content keeps its size and clears the frame art. Call it once, at the end of the constructor, after
     ///     <see cref="UIElement.UseTheme" /> is set and the children are added. Returns the distance the content moved; the
     ///     panel adds it to the positions that it draws itself. With no theme, or a frame that fits, it returns 0. It is the
-    ///     after-layout form of the growth that <see cref="Components.CenteredModalPanel" /> does before its layout.
+    ///     after-layout form of the growth that <see cref="CenteredModalPanel" /> does before its layout.
     /// </summary>
     protected int GrowAroundContent(int padding)
     {
