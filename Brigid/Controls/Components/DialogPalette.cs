@@ -8,7 +8,7 @@ namespace Brigid.Controls.Components;
 /// <summary>
 ///     Shared colour palette for the from-scratch (asset-free) modernized dialog panels — the merchant/bank browser
 ///     (<see cref="World.Popups.Dialog.BankShopPanel" />), the Aisling list
-///     (<see cref="World.Popups.WorldList.WorldListControl" />), and the <see cref="TextButton" /> primitive they share.
+///     (<see cref="World.Popups.WorldList.WorldListControl" />), and the <c>TextButton</c> primitive they share.
 ///     One home so the modernized-dialog look can't drift between panels. Panels keep locally-named constants that alias
 ///     these values, so a retune happens here once.
 /// </summary>

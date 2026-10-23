@@ -24,4 +24,27 @@ public class DebugOverlayHookTests
             DebugOverlay.IsActive = false;
         }
     }
+
+    [Fact]
+    public void APanelCallsTheHookForEachVisibleChildAfterItDraws()
+    {
+        var parent = new UIPanel { Width = 100, Height = 100 };
+        var shown = new UIPanel { Width = 10, Height = 10 };
+        var hidden = new UIPanel { Width = 10, Height = 10, Visible = false };
+        parent.AddChild(shown);
+        parent.AddChild(hidden);
+
+        var drawnOver = new List<UIElement>();
+
+        try
+        {
+            UIPanel.DrawOverChild = (_, child) => drawnOver.Add(child);
+            parent.Draw(null!);
+        } finally
+        {
+            UIPanel.DrawOverChild = null;
+        }
+
+        Assert.Equal([shown], drawnOver);
+    }
 }
