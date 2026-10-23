@@ -20,6 +20,9 @@ public sealed class InputDispatcher : IDisposable
     //the new top panel — which would route keys to a panel that doesn't accept text.
     private readonly Dictionary<UIPanel, UIElement?> StashedFocus = [];
 
+    //the stack entries that were pushed over a focused text box and left it its focus; their removal changes no focus
+    private readonly HashSet<UIPanel> TextFocusKeepers = [];
+
     //explicit focus — the single element (typically a uitextbox) that receives
     //keyboard events before the control stack. set via textboxfocusgained.
     private UIElement? ExplicitFocusElement;
@@ -154,12 +157,25 @@ public sealed class InputDispatcher : IDisposable
     ///     Pushes a panel onto the control stack. Idempotent — if already present, removes
     ///     and re-adds to the top. The topmost panel receives keyboard events via Phase 2
     ///     when explicit focus doesn't handle them.
+    ///     <para>
+    ///         With <paramref name="keepTextFocus" />, a focused text box keeps its focus, so the player can still type in it,
+    ///         and the removal of the panel changes no focus. Use it for a small entry that only needs the keys the text box
+    ///         lets through, such as Escape (an open <c>DropDown</c> list). With any other focus, the push is as
+    ///         usual.
+    ///     </para>
     /// </summary>
-    public void PushControl(UIPanel panel)
+    public void PushControl(UIPanel panel, bool keepTextFocus = false)
     {
         var alreadyOnStack = ControlStack.Contains(panel);
         ControlStack.Remove(panel);
         ControlStack.Add(panel);
+
+        if (keepTextFocus && !alreadyOnStack && ExplicitFocusElement is UITextBox)
+        {
+            TextFocusKeepers.Add(panel);
+
+            return;
+        }
 
         UIElement? stashed = null;
 
@@ -190,6 +206,10 @@ public sealed class InputDispatcher : IDisposable
     public void RemoveControl(UIPanel panel)
     {
         ControlStack.Remove(panel);
+
+        if (TextFocusKeepers.Remove(panel))
+            return;
+
         StashedFocus.Remove(panel, out var stashed);
 
         if (ExplicitFocusElement is not null && IsDescendantOf(panel, ExplicitFocusElement))
@@ -265,6 +285,7 @@ public sealed class InputDispatcher : IDisposable
         EnforceModals = false;
         ControlStack.Clear();
         StashedFocus.Clear();
+        TextFocusKeepers.Clear();
         ClearExplicitFocus();
         CapturedElement = null;
 
@@ -711,8 +732,9 @@ public sealed class InputDispatcher : IDisposable
     ///     Two-phase keyboard dispatch.
     ///     Phase 1: If ExplicitFocus is set and visible, deliver to it (no bubbling). Falls through to Phase 2 if unhandled.
     ///     Phase 2: Target = TopControl or root. Dispatches with normal parent bubbling.
+    ///     Internal for the tests, which send a key as a frame does.
     /// </summary>
-    private void DispatchKeyboardEvent(UIPanel root, InputEvent e)
+    internal void DispatchKeyboardEvent(UIPanel root, InputEvent e)
     {
         //phase 0: global hotkeys — always delivered to root, bypass focus and stack
         if (e is KeyDownEvent { Key: Keys.Enter, Alt: true })

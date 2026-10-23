@@ -1,7 +1,6 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Scrolling;
-using Brigid.Data;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using Microsoft.Xna.Framework;
@@ -18,9 +17,9 @@ namespace Brigid.Controls.Generic;
 ///     <para>
 ///         ScrollWindow and NonScrollWindow are the same, as in the retail client: the "Message" title band, the text in a
 ///         scroll view, and Close on the bottom bar. WoodenBoard is a wooden sign: no title band, no scroll bar and no
-///         Close. A themed sign draws the <see cref="ThemeRoles.FrameSign" /> part; with no part it draws the legacy
-///         <c>woodbk.epf</c> art, and the text is white, because the theme's text colour is chosen for its frame. The mouse
-///         wheel scrolls the text in every style. Escape, Space and Enter close the popup.
+///         Close. A themed sign draws the <see cref="ThemeRoles.FrameSign" /> part; with no part, which includes no theme,
+///         it draws the flat frame (the fill and the 1 px border) and keeps the sign's text margins (BRIG-138). The sign
+///         reads no legacy art. The mouse wheel scrolls the text in every style. Escape, Space and Enter close the popup.
 ///     </para>
 /// </summary>
 public sealed class TextPopupControl : CenteredModalPanel
@@ -41,9 +40,6 @@ public sealed class TextPopupControl : CenteredModalPanel
     private readonly int FramedWidth;
     private readonly int FramedHeight;
 
-    //the legacy sign art, loaded the first time a sign draws with no frame.sign part
-    private Texture2D? WoodBackground;
-    private bool WoodLoaded;
     private bool Wooden;
 
     //the FontEngine generation the scroll range was read at; a new face or window size wraps the text again
@@ -86,12 +82,6 @@ public sealed class TextPopupControl : CenteredModalPanel
         Width = Wooden ? PANEL_W : FramedWidth;
         Height = Wooden ? PANEL_H : FramedHeight;
         LayoutContent();
-
-        //the theme's text colour is chosen for its frame, so it is used on a sign only when the theme has sign art
-        if (Wooden && !HasThemePart(ThemeRoles.FrameSign))
-            TextLabel.ForegroundColor = LegendColors.White;
-        else
-            TextLabel.SetForegroundRole(ThemeRoles.Text);
 
         TextLabel.Text = text;
         TextScroll.Sync();
@@ -162,23 +152,8 @@ public sealed class TextPopupControl : CenteredModalPanel
         if (TryDrawThemePart(spriteBatch, ThemeRoles.FrameSign, bounds))
             return;
 
-        //loaded here, not in Show, so that the popup needs no game data until a sign draws with no part
-        if (!WoodLoaded)
-        {
-            WoodLoaded = true;
-
-            //the legacy sign is 360 by 180, the retail popup size
-            using var woodImage = DataContext.UserControls.GetLegendEpfImage("woodbk.epf");
-
-            if (woodImage is not null)
-                WoodBackground = TextureConverter.ToTexture2D(woodImage);
-        }
-
-        //with no sign art at all, the flat frame keeps the text readable
-        if (WoodBackground is not null)
-            DrawTexture(spriteBatch, WoodBackground, new Vector2(ScreenX, ScreenY), Color.White);
-        else
-            base.DrawChrome(spriteBatch, bounds);
+        //with no sign part, the flat frame: not the theme's frame.panel, which has its own insets and title band
+        DrawFlatChrome(spriteBatch, bounds);
     }
 
     public override void OnKeyDown(KeyDownEvent e)
@@ -201,13 +176,5 @@ public sealed class TextPopupControl : CenteredModalPanel
     {
         TextScroll.OnMouseScroll(e);
         e.Handled = true;
-    }
-
-    public override void Dispose()
-    {
-        WoodBackground?.Dispose();
-        WoodBackground = null;
-
-        base.Dispose();
     }
 }

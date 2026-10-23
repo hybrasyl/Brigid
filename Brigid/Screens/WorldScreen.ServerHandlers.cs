@@ -47,8 +47,7 @@ public sealed partial class WorldScreen
             LoadPlayerFriendList();
             LoadPlayerMacros();
             WorldState.ReloadChants();
-            PlayerPortrait = LoadPortraitFile(args.Name);
-            StatusBook.SetProfileText(LoadProfileText());
+            LoadOwnProfile(args.Name);
 
             //the class — and so the SClass ability metadata behind the castable popup's Details tab — is only
             //revealed by a self-profile reply. Ask for one unsolicited (SelfProfileRequested stays false, so the
@@ -797,6 +796,21 @@ public sealed partial class WorldScreen
     //--- profiles ---
 
     private void HandleEditableProfileRequest() => Game.Connection.SendEditableProfile(PlayerPortrait, StatusBook.GetProfileText());
+
+    //the player's own portrait and profile text from the character folder, into the status book. This runs on each map
+    //change, so a changed portrait file shows after the next one; an unchanged portrait is not decoded again
+    private void LoadOwnProfile(string name)
+    {
+        var portrait = LoadPortraitFile(name);
+
+        if (!portrait.AsSpan().SequenceEqual(PlayerPortrait))
+        {
+            PlayerPortrait = portrait;
+            StatusBook.SetPortrait(portrait);
+        }
+
+        StatusBook.SetProfileText(LoadProfileText());
+    }
 
     //the name comes from the server, and the portrait goes back to it in the editable profile, so TryGetFilePath must
     //refuse a name that leaves the character folder

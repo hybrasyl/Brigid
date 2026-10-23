@@ -39,9 +39,6 @@ public sealed class ThemePicker : UIPanel
     /// <summary>True while the hint shows. Internal for the tests.</summary>
     internal bool ShowsHint => Hint.Visible;
 
-    /// <summary>True while the list is open.</summary>
-    public bool IsOpen => Choice.IsOpen;
-
     /// <param name="width">Width of the row.</param>
     /// <param name="rowHeight">Height of the row, and of the drop-down box and its list rows.</param>
     /// <param name="entries">The entries, in order (<see cref="UiThemeChoices.EntriesFor" />). The first entry is the default.</param>
@@ -96,9 +93,6 @@ public sealed class ThemePicker : UIPanel
         AddChild(Choice);
         UpdateHint();
     }
-
-    /// <summary>Closes the open list, for example on Escape.</summary>
-    public void Close() => Choice.Close();
 
     /// <summary>Chooses an entry, as a click on it does. Internal for the tests.</summary>
     internal void Choose(int index)

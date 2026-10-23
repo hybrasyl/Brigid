@@ -283,19 +283,40 @@ public sealed partial class WorldScreen
 
         var skipDispatch = false;
 
+        //the menus as they were at the start of the frame: a right press that closes one must not let a later left press
+        //in the same frame through to the world
+        var aislingMenuOpen = AislingContext.Visible;
+        var doorMenuOpen = DoorContext.Visible;
+
         foreach (var evt in InputBuffer.Events)
         {
-            if (evt is not { Kind: BufferedInputKind.MouseButton, Button: MouseButton.Left, IsPress: true })
+            if (evt is not { Kind: BufferedInputKind.MouseButton, IsPress: true })
                 continue;
 
             var mx = evt.X;
             var my = evt.Y;
 
-            if (AislingContext.Visible && !AislingContext.ContainsPoint(mx, my))
+            //a right press outside a context menu closes it and still goes on, so it walks to the tile, as on retail
+            //(BRIG-141). The door menu is Brigid's own, and takes the same rule
+            if (evt.Button == MouseButton.Right)
+            {
+                if (aislingMenuOpen && !AislingContext.ContainsPoint(mx, my))
+                    AislingContext.Hide();
+
+                if (doorMenuOpen && !DoorContext.ContainsPoint(mx, my))
+                    DoorContext.Hide();
+
+                continue;
+            }
+
+            if (evt.Button != MouseButton.Left)
+                continue;
+
+            if (aislingMenuOpen && !AislingContext.ContainsPoint(mx, my))
             {
                 AislingContext.Hide();
                 skipDispatch = true;
-            } else if (DoorContext.Visible && !DoorContext.ContainsPoint(mx, my))
+            } else if (doorMenuOpen && !DoorContext.ContainsPoint(mx, my))
             {
                 DoorContext.Hide();
                 skipDispatch = true;

@@ -554,4 +554,46 @@ public sealed class AssetPackRegistryTests : IDisposable
 
         Assert.Equal(["ITEMS_A.datf", "items_b.datf", "Items_C.datf"], ordered);
     }
+
+    //BRIG-129: an assets folder that exists but cannot be listed stopped the client from starting. The listing gives one
+    //valid pack before it fails, so the test also shows that nothing registers from a listing that did not finish
+    [Theory]
+    [InlineData(typeof(UnauthorizedAccessException))]
+    [InlineData(typeof(IOException))]
+    public void AFolderThatCannotBeListed_LogsOneWarningAndRegistersNothing(Type error)
+    {
+        var dir = Directory.CreateTempSubdirectory("brigid-packs-").FullName;
+        var pack = Path.Combine(dir, "icons.datf");
+        var warnings = new List<string>();
+
+        using (var zip = ZipFile.Open(pack, ZipArchiveMode.Create))
+        using (var manifest = zip.CreateEntry("_manifest.json").Open())
+            manifest.Write(Encoding.UTF8.GetBytes("""{"schema_version": 1, "pack_id": "icons", "content_type": "ability_icons"}"""));
+
+        IEnumerable<string> ListThenFail(string _)
+        {
+            yield return pack;
+
+            throw (Exception)Activator.CreateInstance(error, "listing refused")!;
+        }
+
+        void Collect(string line) => warnings.Add(line);
+
+        AssetPackRegistry.WarningLogged += Collect;
+
+        try
+        {
+            AssetPackRegistry.InitializeFrom(dir, ListThenFail);
+        }
+        finally
+        {
+            AssetPackRegistry.WarningLogged -= Collect;
+            Directory.Delete(dir, true);
+        }
+
+        var warning = Assert.Single(warnings);
+        Assert.Contains($"cannot list the asset-pack folder '{dir}', so the client starts with no packs: listing refused", warning);
+        Assert.Equal(0, AssetPackRegistry.RegisteredCount);
+        Assert.Equal(dir, AssetPackRegistry.UnlistableFolder);
+    }
 }

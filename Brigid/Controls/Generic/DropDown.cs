@@ -4,6 +4,7 @@ using Brigid.Definitions;
 using Brigid.Rendering;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input;
 #endregion
 
 namespace Brigid.Controls.Generic;
@@ -11,8 +12,11 @@ namespace Brigid.Controls.Generic;
 /// <summary>
 ///     A primitive, asset-free drop-down list: a box that shows the selected entry, and a list of the entries that opens
 ///     below it. A click on the box opens or closes the list. A click on an entry selects it and closes the list. The list
-///     also closes when the mouse leaves the control, when the control is disabled or hidden, and when the host calls
-///     <see cref="Close" /> (for example on Escape).
+///     also closes when the mouse leaves the control, when the control is disabled or hidden, when the host calls
+///     <see cref="Close" />, and on Escape: while the list is open, the control is on the control stack, as
+///     <see cref="PopupMenu" /> is, so it gets Escape before its host (BRIG-135). The other keys go on to the host. A
+///     focused text box in the host keeps its focus while the list is open, so the player can still type in it; a text
+///     box lets Escape through, so the list still closes on Escape.
 ///     <para>
 ///         While the list is open, the control is taller, so the list can cover the rows below it. Give the control a
 ///         <see cref="UIElement.ZIndex" /> above the siblings that the open list covers, so the list draws above them and
@@ -101,6 +105,7 @@ public sealed class DropDown : UIPanel
         IsOpen = true;
         HoveredRow = -1;
         Height = RowHeight * (Items.Length + 1);
+        InputDispatcher.Instance?.PushControl(this, keepTextFocus: true);
     }
 
     /// <summary>Closes the list. Does nothing when it is closed.</summary>
@@ -112,6 +117,21 @@ public sealed class DropDown : UIPanel
         IsOpen = false;
         HoveredRow = -1;
         Height = RowHeight;
+        InputDispatcher.Instance?.RemoveControl(this);
+    }
+
+    //Escape closes the open list and goes no further; the other keys go on to the host
+    public override void OnKeyDown(KeyDownEvent e)
+    {
+        if (IsOpen && (e.Key == Keys.Escape))
+        {
+            Close();
+            e.Handled = true;
+
+            return;
+        }
+
+        base.OnKeyDown(e);
     }
 
     public override void ResetInteractionState()

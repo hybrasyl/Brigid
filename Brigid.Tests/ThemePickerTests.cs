@@ -117,7 +117,7 @@ public sealed class ThemePickerTests : IDisposable
         var lastRowY = picker.Choice.ScreenY + ROW_H * Entries.Length + ROW_H / 2;
         Assert.Same(picker.Choice, InputDispatcher.HitTest(pane, picker.Choice.ScreenX + 4, lastRowY));
 
-        picker.Close();
+        picker.Choice.Close();
         pane.Update(new GameTime());
 
         Assert.Equal(ROW_H, picker.Height);

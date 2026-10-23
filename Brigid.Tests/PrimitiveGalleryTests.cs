@@ -168,19 +168,35 @@ public sealed class PrimitiveGalleryTests : IDisposable
         Assert.All(ThemeRoles.StatusIcons, role => Assert.Contains(role["icon.status.".Length..], statusRoles));
     }
 
+    //BRIG-135: the open list is on the control stack, so it gets Escape before the gallery
     [Fact]
     public void EscapeClosesAnOpenListFirst()
     {
+        var dispatcher = new InputDispatcher();
         var root = Root();
-        PrimitiveGallery.Toggle(root);
-        var gallery = root.FindChild<PrimitiveGallery>("primitivegallery")!;
-        var dropDown = gallery.FindChild<DropDown>("dropdown")!;
-        dropDown.Open();
 
-        gallery.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
+        try
+        {
+            PrimitiveGallery.Toggle(root);
+            var gallery = root.FindChild<PrimitiveGallery>("primitivegallery")!;
+            var dropDown = gallery.FindChild<DropDown>("dropdown")!;
+            dropDown.Open();
 
-        Assert.False(dropDown.IsOpen);
-        Assert.True(gallery.Visible);
+            dispatcher.DispatchKeyboardEvent(root, new KeyDownEvent { Key = Keys.Escape });
+
+            Assert.False(dropDown.IsOpen);
+            Assert.True(gallery.Visible);
+
+            dispatcher.DispatchKeyboardEvent(root, new KeyDownEvent { Key = Keys.Escape });
+
+            Assert.False(gallery.Visible);
+        } finally
+        {
+            if (root.FindChild<PrimitiveGallery>("primitivegallery") is { Visible: true })
+                PrimitiveGallery.Toggle(root);
+
+            dispatcher.Dispose();
+        }
     }
 
     [Fact]
