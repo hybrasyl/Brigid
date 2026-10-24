@@ -186,7 +186,8 @@ public static class AppPaths
         => ServerScope = ServerProfileKey.Resolve(host, serverName);
 
     /// <summary>
-    ///     <c>{AppRoot}/metafile/{serverKey}</c> — cache of server-sent metafiles (checksum-validated, disposable).
+    ///     <c>{AppRoot}/metafile/{serverKey}</c> — cache of server-sent metafiles (disposable). <see cref="MetaFileSync" />
+    ///     writes a file only when the client requested it and its CRC-32 matches the server's checksum.
     /// </summary>
     public static string MetaFileDir => Path.Combine(AppRoot, "metafile", ServerScope);
 
