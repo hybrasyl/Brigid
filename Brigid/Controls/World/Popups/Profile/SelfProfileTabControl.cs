@@ -464,6 +464,9 @@ public sealed class SelfProfileTabControl : PrefabPanel
         equipPage?.SetProfileText(text);
     }
 
+    /// <summary>Shows the player's own portrait on the Equipment tab (BRIG-106).</summary>
+    public void SetPortrait(byte[]? portraitData) => GetOrCreateEquipmentPage()?.SetPortrait(portraitData);
+
     private SelfProfileEquipmentTab? GetOrCreateEquipmentPage()
     {
         if (TabPages.TryGetValue(StatusBookTab.Equipment, out var page) && page is SelfProfileEquipmentTab existing)

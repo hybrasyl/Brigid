@@ -3,7 +3,6 @@ using Brigid.Controls.Components;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using Brigid.Systems;
-using Microsoft.Xna.Framework;
 #endregion
 
 namespace Brigid.Controls.Generic;
@@ -39,9 +38,6 @@ public sealed class ThemePicker : UIPanel
     /// <summary>True while the hint shows. Internal for the tests.</summary>
     internal bool ShowsHint => Hint.Visible;
 
-    /// <summary>True while the list is open.</summary>
-    public bool IsOpen => Choice.IsOpen;
-
     /// <param name="width">Width of the row.</param>
     /// <param name="rowHeight">Height of the row, and of the drop-down box and its list rows.</param>
     /// <param name="entries">The entries, in order (<see cref="UiThemeChoices.EntriesFor" />). The first entry is the default.</param>
@@ -72,6 +68,9 @@ public sealed class ThemePicker : UIPanel
         Choice = new DropDown(Entries.Select(entry => entry.Label).ToArray(), CHOICE_W, rowHeight) { Name = "choice", X = LABEL_W, Y = 0 };
         Choice.SetSelected(UiThemeChoices.IndexOf(Entries, stored));
         Choice.SelectionChanged += OnSelectionChanged;
+        //the list is clipped to this row and a click outside the row does not reach it, so the row grows with the list at
+        //once: a row that grows in Update misses a click on the list in the frame that opened it
+        Choice.OpenChanged += () => Height = Choice.Height;
 
         Hint = new UILabel
         {
@@ -97,22 +96,11 @@ public sealed class ThemePicker : UIPanel
         UpdateHint();
     }
 
-    /// <summary>Closes the open list, for example on Escape.</summary>
-    public void Close() => Choice.Close();
-
     /// <summary>Chooses an entry, as a click on it does. Internal for the tests.</summary>
     internal void Choose(int index)
     {
         Choice.SetSelected(index);
         OnSelectionChanged(index);
-    }
-
-    public override void Update(GameTime gameTime)
-    {
-        //the list is clipped to this row and a click outside the row does not reach it, so the row grows with the list
-        Height = Choice.Height;
-
-        base.Update(gameTime);
     }
 
     private void OnSelectionChanged(int index)

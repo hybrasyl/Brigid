@@ -147,13 +147,13 @@ public sealed class CharacterCreatorControl : LobbyFormPanel
         AddLookControl(BodyFrame, 1);
 
         GenderTabs = new TabStrip(["Male", "Female"], GENDER_TAB_W, ROW_H) { Name = "gender" };
-        GenderTabs.TabClicked += index => Appearance.SetGender(index == 0 ? Gender.Male : Gender.Female);
+        GenderTabs.TabClicked += index => WhenIdle(() => Appearance.SetGender(index == 0 ? Gender.Male : Gender.Female));
         AddFieldLabel(Look, "gender_label", "Gender", 2);
         AddLookControl(GenderTabs, 2);
 
         HairStepper = new Stepper(STEPPER_W, ROW_H) { Name = "hair" };
-        HairStepper.Previous += Appearance.PreviousHairStyle;
-        HairStepper.Next += Appearance.NextHairStyle;
+        HairStepper.Previous += () => WhenIdle(Appearance.PreviousHairStyle);
+        HairStepper.Next += () => WhenIdle(Appearance.NextHairStyle);
         AddFieldLabel(Look, "hair_label", "Hair", 3);
         AddLookControl(HairStepper, 3);
 
@@ -173,7 +173,7 @@ public sealed class CharacterCreatorControl : LobbyFormPanel
                 Height = SWATCH_H
             };
 
-            swatch.Clicked += () => Appearance.SetHairColor(color);
+            swatch.Clicked += () => WhenIdle(() => Appearance.SetHairColor(color));
             Swatches[i] = swatch;
             HairColorGrid.AddChild(swatch);
         }
@@ -280,6 +280,25 @@ public sealed class CharacterCreatorControl : LobbyFormPanel
     /// <summary>Clears the name field and puts the cursor in it.</summary>
     public void ClearName() => ClearAndFocus(NameField);
 
+    //the look does not change while the server checks the character, so the character that it creates is the one shown
+    protected override void ApplyBusy(bool busy)
+    {
+        Look.Enabled = !busy;
+
+        if (busy)
+        {
+            Species.Close();
+            BodyFrame.Close();
+        }
+    }
+
+    //a click that the dispatcher captured before the wait can still arrive, so the look handlers check the wait themselves
+    private void WhenIdle(Action change)
+    {
+        if (!IsBusy)
+            change();
+    }
+
     //Show starts the form with the first species and body type and the starting appearance
     protected override void ResetForm()
     {
@@ -329,17 +348,6 @@ public sealed class CharacterCreatorControl : LobbyFormPanel
                 Appearance.Direction,
                 i);
         }
-    }
-
-    //an open drop-down list closes before Escape cancels the form
-    protected override void HandleEscape()
-    {
-        if (Species.IsOpen || BodyFrame.IsOpen)
-        {
-            Species.Close();
-            BodyFrame.Close();
-        } else
-            Cancel();
     }
 
     public override void Dispose()

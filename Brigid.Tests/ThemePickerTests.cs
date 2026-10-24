@@ -105,8 +105,8 @@ public sealed class ThemePickerTests : IDisposable
         var picker = NewPicker(null);
         pane.AddChild(picker);
 
+        //the row grows when the list opens, with no Update between: a click on the list in the same frame must reach it
         picker.Choice.Open();
-        pane.Update(new GameTime());
 
         Assert.Equal(ROW_H * (Entries.Length + 1), picker.Height);
 
@@ -117,8 +117,7 @@ public sealed class ThemePickerTests : IDisposable
         var lastRowY = picker.Choice.ScreenY + ROW_H * Entries.Length + ROW_H / 2;
         Assert.Same(picker.Choice, InputDispatcher.HitTest(pane, picker.Choice.ScreenX + 4, lastRowY));
 
-        picker.Close();
-        pane.Update(new GameTime());
+        picker.Choice.Close();
 
         Assert.Equal(ROW_H, picker.Height);
     }

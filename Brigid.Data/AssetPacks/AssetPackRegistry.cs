@@ -90,6 +90,12 @@ public static class AssetPackRegistry
     private static readonly Dictionary<string, List<IAssetPack>> Packs = new();
     private static bool Initialized;
 
+    /// <summary>
+    ///     The assets folder when <see cref="Initialize" /> could not list it, so the client runs with no packs; else null.
+    ///     The main menu shows an alert for it.
+    /// </summary>
+    public static string? UnlistableFolder { get; private set; }
+
     //the pack_id of the theme that the player selected, or null for the first theme. The active theme is a field, as
     //ThemeArt asks for it on each draw
     private static string? SelectedUiThemeId;
@@ -111,14 +117,23 @@ public static class AssetPackRegistry
 
         Initialized = true;
 
-        var packDir = AppPaths.AssetsDir;
+        InitializeFrom(AppPaths.AssetsDir, EnumeratePackFiles);
+    }
 
+    /// <summary>
+    ///     Registers the packs in <paramref name="packDir" />, as <paramref name="enumerate" /> lists them. A folder that
+    ///     cannot be listed logs one warning, and the client starts with no packs. Internal for the tests, which give a
+    ///     listing that fails.
+    /// </summary>
+    internal static void InitializeFrom(string packDir, Func<string, IEnumerable<string>> enumerate)
+    {
         try
         {
             Directory.CreateDirectory(packDir);
-        } catch
+        } catch (Exception ex)
         {
-            //best effort — if the dir can't be created, the enumerate below simply finds nothing
+            //best effort — if the dir can't be created, the check below finds no folder and the client starts with no packs
+            LogWarning($"cannot create the asset-pack folder '{packDir}': {ex.GetType().Name}: {ex.Message}");
         }
 
         TryMigrateLegacyPacks(packDir);
@@ -130,16 +145,25 @@ public static class AssetPackRegistry
             return;
         }
 
-        var discovered = 0;
-        var registeredBefore = RegisteredCount;
+        List<string> paths;
 
-        foreach (var path in InRegistrationOrder(EnumeratePackFiles(packDir)))
+        try
         {
-            discovered++;
-            TryRegisterPack(path);
+            paths = [.. InRegistrationOrder(enumerate(packDir))];
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogWarning($"cannot list the asset-pack folder '{packDir}', so the client starts with no packs: {ex.Message}");
+            UnlistableFolder = packDir;
+
+            return;
         }
 
-        if (discovered == 0)
+        var registeredBefore = RegisteredCount;
+
+        foreach (var path in paths)
+            TryRegisterPack(path);
+
+        if (paths.Count == 0)
         {
             LogInfo($"asset-pack folder '{packDir}' contains no .datf files");
 
@@ -158,18 +182,19 @@ public static class AssetPackRegistry
     /// </summary>
     private static void TryMigrateLegacyPacks(string assetsDir)
     {
+        if (string.IsNullOrEmpty(DataContext.DataPath))
+            return;
+
+        var legacyDir = Path.Combine(DataContext.DataPath, LEGACY_PACK_SUBFOLDER);
+
         try
         {
-            if (string.IsNullOrEmpty(DataContext.DataPath))
-                return;
 
             var marker = Path.Combine(assetsDir, MIGRATION_MARKER_NAME);
 
             //already attempted once — never run again, even if the assets dir was later cleared
             if (File.Exists(marker))
                 return;
-
-            var legacyDir = Path.Combine(DataContext.DataPath, LEGACY_PACK_SUBFOLDER);
 
             if (Directory.Exists(legacyDir))
             {
@@ -205,9 +230,10 @@ public static class AssetPackRegistry
 
             //drop the marker whether or not anything was found, so we don't re-scan the legacy dir every launch
             TryWriteMigrationMarker(marker);
-        } catch
+        } catch (Exception ex)
         {
             //best effort — a failed migration just means nothing migrated; the launcher can re-fetch packs
+            LogWarning($"cannot migrate the legacy asset packs from '{legacyDir}': {ex.GetType().Name}: {ex.Message}");
         }
     }
 
@@ -672,6 +698,7 @@ public static class AssetPackRegistry
                 pack.Dispose();
 
         Packs.Clear();
+        UnlistableFolder = null;
         SelectedUiThemeId = null;
         ActiveUiTheme = null;
         Initialized = true;
@@ -680,7 +707,7 @@ public static class AssetPackRegistry
     /// <summary>Each warning line that the registry logs. For tests, which must not share the global log seam.</summary>
     internal static event Action<string>? WarningLogged;
 
-    private static int RegisteredCount => Packs.Values.Sum(list => list.Count);
+    internal static int RegisteredCount => Packs.Values.Sum(list => list.Count);
 
     private static IEnumerable<T> PacksOf<T>(string contentType) where T : class, IAssetPack
         => Packs.TryGetValue(contentType, out var list) ? list.OfType<T>() : [];

@@ -20,6 +20,12 @@ public sealed class InputDispatcher : IDisposable
     //the new top panel — which would route keys to a panel that doesn't accept text.
     private readonly Dictionary<UIPanel, UIElement?> StashedFocus = [];
 
+    //the stack entries that were pushed over a focused text box and left it its focus; their removal changes no focus
+    private readonly HashSet<UIPanel> TextFocusKeepers = [];
+
+    //the indexes in InputBuffer.Events of the presses that the next dispatch skips (SwallowPress)
+    private readonly HashSet<int> SwallowedPresses = [];
+
     //explicit focus — the single element (typically a uitextbox) that receives
     //keyboard events before the control stack. set via textboxfocusgained.
     private UIElement? ExplicitFocusElement;
@@ -154,12 +160,25 @@ public sealed class InputDispatcher : IDisposable
     ///     Pushes a panel onto the control stack. Idempotent — if already present, removes
     ///     and re-adds to the top. The topmost panel receives keyboard events via Phase 2
     ///     when explicit focus doesn't handle them.
+    ///     <para>
+    ///         With <paramref name="keepTextFocus" />, a focused text box keeps its focus, so the player can still type in it,
+    ///         and the removal of the panel changes no focus. Use it for a small entry that only needs the keys the text box
+    ///         lets through, such as Escape (an open <c>DropDown</c> list). With any other focus, the push is as
+    ///         usual.
+    ///     </para>
     /// </summary>
-    public void PushControl(UIPanel panel)
+    public void PushControl(UIPanel panel, bool keepTextFocus = false)
     {
         var alreadyOnStack = ControlStack.Contains(panel);
         ControlStack.Remove(panel);
         ControlStack.Add(panel);
+
+        if (keepTextFocus && !alreadyOnStack && ExplicitFocusElement is UITextBox)
+        {
+            TextFocusKeepers.Add(panel);
+
+            return;
+        }
 
         UIElement? stashed = null;
 
@@ -190,6 +209,10 @@ public sealed class InputDispatcher : IDisposable
     public void RemoveControl(UIPanel panel)
     {
         ControlStack.Remove(panel);
+
+        if (TextFocusKeepers.Remove(panel))
+            return;
+
         StashedFocus.Remove(panel, out var stashed);
 
         if (ExplicitFocusElement is not null && IsDescendantOf(panel, ExplicitFocusElement))
@@ -265,6 +288,8 @@ public sealed class InputDispatcher : IDisposable
         EnforceModals = false;
         ControlStack.Clear();
         StashedFocus.Clear();
+        TextFocusKeepers.Clear();
+        SwallowedPresses.Clear();
         ClearExplicitFocus();
         CapturedElement = null;
 
@@ -377,16 +402,37 @@ public sealed class InputDispatcher : IDisposable
         //WM_KEYDOWN always precedes its WM_CHAR, so when a KeyDown handler gains
         //textbox focus we suppress the immediately following TextInput to prevent the
         //hotkey character from leaking into the newly-focused textbox.
-        var events = InputBuffer.Events;
+        DispatchEvents(root, InputBuffer.Events, totalMs);
+    }
 
+    /// <summary>
+    ///     Makes the next dispatch skip one mouse press: the press at <paramref name="eventIndex" /> in
+    ///     <see cref="InputBuffer.Events" />. A screen calls it before <see cref="ProcessInput" /> for a press that it
+    ///     handled itself, for example a press outside a popup that closes the popup. The other events of the frame still
+    ///     dispatch. Call it in the same frame, just before <see cref="ProcessInput" />: the index is into this frame's events.
+    /// </summary>
+    public void SwallowPress(int eventIndex) => SwallowedPresses.Add(eventIndex);
+
+    /// <summary>
+    ///     Dispatches the frame's events in their order, except the presses that <see cref="SwallowPress" /> named, and
+    ///     then forgets those. Internal for the tests.
+    /// </summary>
+    internal void DispatchEvents(UIPanel root, ReadOnlySpan<BufferedInputEvent> events, float totalMs)
+    {
         var suppressNextTextInput = false;
         DispatchedKeys.Clear();
 
-        foreach (var evt in events)
+        for (var i = 0; i < events.Length; i++)
+        {
+            var evt = events[i];
+
             switch (evt.Kind)
             {
                 case BufferedInputKind.MouseButton:
                 {
+                    if (evt.IsPress && SwallowedPresses.Contains(i))
+                        break;
+
                     DispatchMouseButton(root, evt.X, evt.Y, totalMs, evt.Modifiers, evt.Button, evt.IsPress);
 
                     break;
@@ -461,6 +507,9 @@ public sealed class InputDispatcher : IDisposable
                     break;
                 }
             }
+        }
+
+        SwallowedPresses.Clear();
     }
 
     /// <summary>
@@ -711,8 +760,9 @@ public sealed class InputDispatcher : IDisposable
     ///     Two-phase keyboard dispatch.
     ///     Phase 1: If ExplicitFocus is set and visible, deliver to it (no bubbling). Falls through to Phase 2 if unhandled.
     ///     Phase 2: Target = TopControl or root. Dispatches with normal parent bubbling.
+    ///     Internal for the tests, which send a key as a frame does.
     /// </summary>
-    private void DispatchKeyboardEvent(UIPanel root, InputEvent e)
+    internal void DispatchKeyboardEvent(UIPanel root, InputEvent e)
     {
         //phase 0: global hotkeys — always delivered to root, bypass focus and stack
         if (e is KeyDownEvent { Key: Keys.Enter, Alt: true })

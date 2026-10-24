@@ -169,28 +169,39 @@ public class CharacterCreatorControlTests
         Assert.Equal(1, oks);
     }
 
+    //BRIG-135: the open list is on the control stack, so it gets Escape before the form
     [Fact]
     public void EscapeClosesTheSpeciesListBeforeItCancels()
     {
+        var dispatcher = new InputDispatcher();
         var creator = new CharacterCreatorControl();
         var cancels = 0;
         creator.OnCancel += () => cancels++;
-        creator.Species.Open();
 
-        creator.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
+        try
+        {
+            creator.Show();
+            creator.Species.Open();
 
-        Assert.False(creator.Species.IsOpen);
-        Assert.Equal(0, cancels);
+            dispatcher.DispatchKeyboardEvent(creator, new KeyDownEvent { Key = Keys.Escape });
 
-        creator.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
+            Assert.False(creator.Species.IsOpen);
+            Assert.Equal(0, cancels);
 
-        Assert.Equal(1, cancels);
+            creator.BodyFrame.Open();
+            dispatcher.DispatchKeyboardEvent(creator, new KeyDownEvent { Key = Keys.Escape });
 
-        creator.BodyFrame.Open();
-        creator.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
+            Assert.False(creator.BodyFrame.IsOpen);
+            Assert.Equal(0, cancels);
 
-        Assert.False(creator.BodyFrame.IsOpen);
-        Assert.Equal(1, cancels);
+            dispatcher.DispatchKeyboardEvent(creator, new KeyDownEvent { Key = Keys.Escape });
+
+            Assert.Equal(1, cancels);
+        } finally
+        {
+            creator.Hide();
+            dispatcher.Dispose();
+        }
     }
 
     [Fact]
@@ -282,6 +293,25 @@ public class CharacterCreatorControlTests
         Assert.True(creator.PasswordField.IsFocused);
 
         creator.PasswordField.IsFocused = false;
+    }
+
+    //BRIG-143: the look does not change while the server checks the character
+    [Fact]
+    public void WhileBusyTheLookControlsTakeNoInput()
+    {
+        var creator = new CharacterCreatorControl();
+        var look = creator.FindChild<UIPanel>("look")!;
+        creator.Species.Open();
+
+        creator.SetBusy(true);
+
+        Assert.False(look.Enabled);
+        Assert.False(creator.Species.IsOpen);
+        Assert.True(creator.FindChild<UITextBox>("name")!.IsReadOnly);
+
+        creator.SetBusy(false);
+
+        Assert.True(look.Enabled);
     }
 
     private static ClickEvent LeftClick() => new() { Button = MouseButton.Left };

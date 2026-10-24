@@ -15,6 +15,8 @@ public static class MenuAlerts
     public const string NO_SOUND_ID = "nosound";
     public const string LEGACY_IMPORT_ID = "legacyimport";
     public const string OFFLINE_ID = "offline";
+    public const string GREETING_UNREADABLE_ID = "greetingunreadable";
+    public const string ASSETS_UNLISTABLE_ID = "assetsunlistable";
 
     /// <summary>The install command for each distribution family, in display order.</summary>
     public static IReadOnlyList<(string Distro, string Command)> InstallCommands { get; } =
@@ -50,6 +52,28 @@ public static class MenuAlerts
             "Offline",
             "**Brigid has no connection to the server.**\n\nClick Reconnect to connect to the lobby again.",
             [new MenuAlertAction("Reconnect", reconnect)]);
+
+    /// <summary>
+    ///     Tells the player that Brigid could not list its assets folder, so it runs with no asset packs: no theme and no
+    ///     pack art (BRIG-129). The fix is on the player's computer, so the alert names the folder.
+    /// </summary>
+    public static MenuAlert AssetsUnlistable(string folder)
+        => new(
+            ASSETS_UNLISTABLE_ID,
+            "No Packs",
+            $"**Brigid could not read its assets folder,** so it runs with no asset packs: no theme and no pack art.\n\nCheck that your user account can open `{folder}`, then start Brigid again.",
+            [new MenuAlertAction("Dismiss")]);
+
+    /// <summary>
+    ///     Tells the player that the server sent a greeting (the lobby notice) that does not decompress, so it does not
+    ///     show (BRIG-132). The menu stays usable. The alert goes away when a new lobby connection starts.
+    /// </summary>
+    public static MenuAlert GreetingUnreadable()
+        => new(
+            GREETING_UNREADABLE_ID,
+            "Notice",
+            "**The server notice could not be read.**\n\nThe server sent a notice, but Brigid could not read it. You can still log in.",
+            [new MenuAlertAction("OK")]);
 
     /// <summary>
     ///     Offers to import the character settings of the legacy Dark Ages client. The alert does not record a decision when

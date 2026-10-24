@@ -680,8 +680,7 @@ public sealed partial class WorldScreen : IScreen
 
         //load local portrait and profile text from character folder
         var playerName = Game.Connection.AislingName;
-        PlayerPortrait = LoadPortraitFile(playerName);
-        StatusBook.SetProfileText(LoadProfileText());
+        LoadOwnProfile(playerName);
     }
 
     //single keybind-persistence seam: mutate the registry, persist, then repaint the Options tab. Both the

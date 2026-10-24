@@ -15,7 +15,8 @@ namespace Brigid.Controls.LobbyLogin;
 ///     <para>
 ///         The screen does the work: <see cref="OnOk" /> asks it to check the fields and send the packet, and
 ///         <see cref="OnCancel" /> asks it to hide the form. While the screen waits for the server it calls
-///         <see cref="SetBusy" />, which disables the submit button and shows the busy text. Cancel stays enabled: the
+///         <see cref="SetBusy" />, which disables the submit button, makes the text fields read-only and shows the busy
+///         text, so the text that the screen sent is the text that the form shows. Cancel stays enabled: the
 ///         screen ends a wait that the player cancels, and a wait that is too long. <see cref="BusyMs" /> gives the time
 ///         that the form waits.
 ///         Validation and server messages show in the status line, not in a popup.
@@ -179,8 +180,9 @@ public abstract class LobbyFormPanel : CenteredModalPanel
     }
 
     /// <summary>
-    ///     Sets the state that waits for the server: the submit button is disabled, and the status line shows the busy text.
-    ///     Cancel stays enabled. Clearing it enables the submit button and leaves the status line as it is.
+    ///     Sets the state that waits for the server: the submit button is disabled, the text fields are read-only (they keep
+    ///     their text; the cursor can still move), and the status line shows the busy text. Cancel stays enabled. Clearing
+    ///     it enables the submit button and the fields, and leaves the status line as it is.
     /// </summary>
     public void SetBusy(bool busy)
     {
@@ -190,9 +192,21 @@ public abstract class LobbyFormPanel : CenteredModalPanel
         IsBusy = busy;
         SubmitButton.SetEnabled(!busy);
 
+        foreach (var field in TextFields)
+            field.IsReadOnly = busy;
+
+        ApplyBusy(busy);
+
         if (busy)
             ShowStatus(BusyText);
     }
+
+    /// <summary>
+    ///     Called on each <see cref="SetBusy" />, also when the state does not change (<c>Show</c> and <c>Hide</c> clear it), so
+    ///     an override gives the same result each time. A form with other inputs that must not change while it waits
+    ///     overrides it.
+    /// </summary>
+    protected virtual void ApplyBusy(bool busy) { }
 
     public override void Update(GameTime gameTime)
     {

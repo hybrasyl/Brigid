@@ -58,8 +58,9 @@ public class UITextBox : UIElement
     public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Top;
 
     /// <summary>
-    ///     When true, prevents text input that would cause the content to exceed the visible area. Only applies to multiline
-    ///     text boxes. Uses the computed line layout to determine whether content fits.
+    ///     When true, prevents text input that would add a line past the visible area. Only applies to multiline text boxes.
+    ///     Uses the computed line layout to determine whether content fits. A text that is already past the visible area can
+    ///     still be edited: a delete, or an edit that adds no line, is not refused (BRIG-100).
     /// </summary>
     public bool ClampToVisibleArea { get; set; }
 
@@ -426,7 +427,7 @@ public class UITextBox : UIElement
         if (IsMultiLine)
         {
             //invalidate the cached layout so Update recomputes line starts for the restored text
-            CachedLayoutText = string.Empty;
+            InvalidateLayout();
             EnsureCursorVisible();
         }
     }
@@ -703,16 +704,26 @@ public class UITextBox : UIElement
     }
 
     /// <summary>
-    ///     Forces a layout recompute and returns true if the content exceeds the visible line count. Only meaningful when both
-    ///     <see cref="ClampToVisibleArea" /> and <see cref="IsMultiLine" /> are true.
+    ///     Forces a layout recompute and returns true if the edit just made leaves more lines than the box shows and more
+    ///     lines than <paramref name="linesBefore" />. A stored text that is already past the visible area (one saved before
+    ///     the wrap width changed, BRIG-100) can still be edited: a delete, or an edit that adds no line, is not refused.
+    ///     Only meaningful when both <see cref="ClampToVisibleArea" /> and <see cref="IsMultiLine" /> are true.
     /// </summary>
-    private bool ExceedsVisibleArea()
+    private bool AddsLinePastVisibleArea(int linesBefore)
     {
-        //invalidate cached layout to force recomputation
-        CachedLayoutText = string.Empty;
+        var lines = RecountLines();
+
+        return (lines > VisibleLineCount) && (lines > linesBefore);
+    }
+
+    //the wrapped line count of the text. Unlike LineCount, it does not trust the cached layout, which keys only on the
+    //text and the width: it lays the text out again
+    private int RecountLines()
+    {
+        InvalidateLayout();
         ComputeLineLayout();
 
-        return LineStarts.Count > VisibleLineCount;
+        return LineStarts.Count;
     }
 
     private int FindWordBoundaryLeft(int from)
@@ -1004,6 +1015,7 @@ public class UITextBox : UIElement
 
         //capture pre-edit state once; commit it to undo only if the edit sticks (a rejected overflow never touches undo)
         var preEdit = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
+        var linesBefore = ClampToVisibleArea && IsMultiLine ? RecountLines() : 0;
 
         if (HasSelection)
             DeleteSelection();
@@ -1029,7 +1041,7 @@ public class UITextBox : UIElement
         ResetCursor();
 
         //single-line boxes scroll horizontally rather than reject overflow; only multiline clamp-to-area reverts here
-        if (ClampToVisibleArea && IsMultiLine && ExceedsVisibleArea())
+        if (ClampToVisibleArea && IsMultiLine && AddsLinePastVisibleArea(linesBefore))
         {
             //rejected — restore pre-edit state; undo was never committed, so nothing to roll back
             RestoreSnapshot(preEdit);
@@ -1052,6 +1064,7 @@ public class UITextBox : UIElement
 
         //capture pre-edit state once; commit it to undo only if the edit sticks (a rejected overflow never touches undo)
         var preEdit = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
+        var linesBefore = ClampToVisibleArea && IsMultiLine ? RecountLines() : 0;
 
         if (HasSelection)
             DeleteSelection();
@@ -1065,7 +1078,7 @@ public class UITextBox : UIElement
             ResetCursor();
         }
 
-        if (ClampToVisibleArea && ExceedsVisibleArea())
+        if (ClampToVisibleArea && AddsLinePastVisibleArea(linesBefore))
         {
             //rejected — restore pre-edit state (also re-runs EnsureCursorVisible); undo was never committed
             RestoreSnapshot(preEdit);
@@ -1563,6 +1576,7 @@ public class UITextBox : UIElement
 
         //capture pre-edit state once; commit it to undo only if the edit sticks (a rejected overflow never touches undo)
         var preEdit = new UndoSnapshot(Text, CursorPosition, SelectionAnchor);
+        var linesBefore = ClampToVisibleArea && IsMultiLine ? RecountLines() : 0;
 
         //replace selection with typed character
         if (HasSelection)
@@ -1584,7 +1598,7 @@ public class UITextBox : UIElement
         ResetCursor();
 
         //single-line boxes scroll horizontally rather than reject overflow; only multiline clamp-to-area reverts here
-        if (ClampToVisibleArea && IsMultiLine && ExceedsVisibleArea())
+        if (ClampToVisibleArea && IsMultiLine && AddsLinePastVisibleArea(linesBefore))
         {
             //rejected — restore pre-edit state; undo was never committed, so nothing to roll back
             RestoreSnapshot(preEdit);
