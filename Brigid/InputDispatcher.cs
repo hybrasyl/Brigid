@@ -23,6 +23,9 @@ public sealed class InputDispatcher : IDisposable
     //the stack entries that were pushed over a focused text box and left it its focus; their removal changes no focus
     private readonly HashSet<UIPanel> TextFocusKeepers = [];
 
+    //the indexes in InputBuffer.Events of the presses that the next dispatch skips (SwallowPress)
+    private readonly HashSet<int> SwallowedPresses = [];
+
     //explicit focus — the single element (typically a uitextbox) that receives
     //keyboard events before the control stack. set via textboxfocusgained.
     private UIElement? ExplicitFocusElement;
@@ -286,6 +289,7 @@ public sealed class InputDispatcher : IDisposable
         ControlStack.Clear();
         StashedFocus.Clear();
         TextFocusKeepers.Clear();
+        SwallowedPresses.Clear();
         ClearExplicitFocus();
         CapturedElement = null;
 
@@ -398,16 +402,37 @@ public sealed class InputDispatcher : IDisposable
         //WM_KEYDOWN always precedes its WM_CHAR, so when a KeyDown handler gains
         //textbox focus we suppress the immediately following TextInput to prevent the
         //hotkey character from leaking into the newly-focused textbox.
-        var events = InputBuffer.Events;
+        DispatchEvents(root, InputBuffer.Events, totalMs);
+    }
 
+    /// <summary>
+    ///     Makes the next dispatch skip one mouse press: the press at <paramref name="eventIndex" /> in
+    ///     <see cref="InputBuffer.Events" />. A screen calls it before <see cref="ProcessInput" /> for a press that it
+    ///     handled itself, for example a press outside a popup that closes the popup. The other events of the frame still
+    ///     dispatch. Call it in the same frame, just before <see cref="ProcessInput" />: the index is into this frame's events.
+    /// </summary>
+    public void SwallowPress(int eventIndex) => SwallowedPresses.Add(eventIndex);
+
+    /// <summary>
+    ///     Dispatches the frame's events in their order, except the presses that <see cref="SwallowPress" /> named, and
+    ///     then forgets those. Internal for the tests.
+    /// </summary>
+    internal void DispatchEvents(UIPanel root, ReadOnlySpan<BufferedInputEvent> events, float totalMs)
+    {
         var suppressNextTextInput = false;
         DispatchedKeys.Clear();
 
-        foreach (var evt in events)
+        for (var i = 0; i < events.Length; i++)
+        {
+            var evt = events[i];
+
             switch (evt.Kind)
             {
                 case BufferedInputKind.MouseButton:
                 {
+                    if (evt.IsPress && SwallowedPresses.Contains(i))
+                        break;
+
                     DispatchMouseButton(root, evt.X, evt.Y, totalMs, evt.Modifiers, evt.Button, evt.IsPress);
 
                     break;
@@ -482,6 +507,9 @@ public sealed class InputDispatcher : IDisposable
                     break;
                 }
             }
+        }
+
+        SwallowedPresses.Clear();
     }
 
     /// <summary>

@@ -427,7 +427,7 @@ public class UITextBox : UIElement
         if (IsMultiLine)
         {
             //invalidate the cached layout so Update recomputes line starts for the restored text
-            CachedLayoutText = string.Empty;
+            InvalidateLayout();
             EnsureCursorVisible();
         }
     }
@@ -720,7 +720,7 @@ public class UITextBox : UIElement
     //text and the width: it lays the text out again
     private int RecountLines()
     {
-        CachedLayoutText = string.Empty;
+        InvalidateLayout();
         ComputeLineLayout();
 
         return LineStarts.Count;

@@ -3,7 +3,6 @@ using Brigid.Controls.Components;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using Brigid.Systems;
-using Microsoft.Xna.Framework;
 #endregion
 
 namespace Brigid.Controls.Generic;
@@ -69,6 +68,9 @@ public sealed class ThemePicker : UIPanel
         Choice = new DropDown(Entries.Select(entry => entry.Label).ToArray(), CHOICE_W, rowHeight) { Name = "choice", X = LABEL_W, Y = 0 };
         Choice.SetSelected(UiThemeChoices.IndexOf(Entries, stored));
         Choice.SelectionChanged += OnSelectionChanged;
+        //the list is clipped to this row and a click outside the row does not reach it, so the row grows with the list at
+        //once: a row that grows in Update misses a click on the list in the frame that opened it
+        Choice.OpenChanged += () => Height = Choice.Height;
 
         Hint = new UILabel
         {
@@ -99,14 +101,6 @@ public sealed class ThemePicker : UIPanel
     {
         Choice.SetSelected(index);
         OnSelectionChanged(index);
-    }
-
-    public override void Update(GameTime gameTime)
-    {
-        //the list is clipped to this row and a click outside the row does not reach it, so the row grows with the list
-        Height = Choice.Height;
-
-        base.Update(gameTime);
     }
 
     private void OnSelectionChanged(int index)

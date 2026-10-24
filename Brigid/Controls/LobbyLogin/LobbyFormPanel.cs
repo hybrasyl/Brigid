@@ -181,7 +181,7 @@ public abstract class LobbyFormPanel : CenteredModalPanel
 
     /// <summary>
     ///     Sets the state that waits for the server: the submit button is disabled, the text fields are read-only (they keep
-    ///     their text and their cursor position), and the status line shows the busy text. Cancel stays enabled. Clearing
+    ///     their text; the cursor can still move), and the status line shows the busy text. Cancel stays enabled. Clearing
     ///     it enables the submit button and the fields, and leaves the status line as it is.
     /// </summary>
     public void SetBusy(bool busy)

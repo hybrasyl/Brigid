@@ -49,6 +49,9 @@ public sealed class DropDown : UIPanel
     /// <summary>Raised when the player selects an entry, with its index. Not raised by <see cref="SetSelected" />.</summary>
     public event Action<int>? SelectionChanged;
 
+    /// <summary>Raised when the list opens or closes, after <see cref="UIElement.Height" /> changes.</summary>
+    public event Action? OpenChanged;
+
     /// <summary>The selected entry index, or -1 when there are no entries.</summary>
     public int SelectedIndex { get; private set; }
 
@@ -106,6 +109,7 @@ public sealed class DropDown : UIPanel
         HoveredRow = -1;
         Height = RowHeight * (Items.Length + 1);
         InputDispatcher.Instance?.PushControl(this, keepTextFocus: true);
+        OpenChanged?.Invoke();
     }
 
     /// <summary>Closes the list. Does nothing when it is closed.</summary>
@@ -118,6 +122,7 @@ public sealed class DropDown : UIPanel
         HoveredRow = -1;
         Height = RowHeight;
         InputDispatcher.Instance?.RemoveControl(this);
+        OpenChanged?.Invoke();
     }
 
     //Escape closes the open list and goes no further; the other keys go on to the host

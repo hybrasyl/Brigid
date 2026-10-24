@@ -281,7 +281,11 @@ public class AlertsPanelTests
             {
                 engine.SetActiveFont(face);
 
-                foreach (var alert in (MenuAlert[])[MenuAlerts.NoSound(true), MenuAlerts.NoSound(false), MenuAlerts.LegacyImport(() => { }, () => { })])
+                foreach (var alert in (MenuAlert[])
+                         [
+                             MenuAlerts.NoSound(true), MenuAlerts.NoSound(false), MenuAlerts.LegacyImport(() => { }, () => { }),
+                             MenuAlerts.AssetsUnlistable(@"C:\Users\Someone\AppData\Local\Erisco\Brigid\assets"), MenuAlerts.GreetingUnreadable()
+                         ])
                 {
                     var panel = new AlertsPanel();
                     panel.Add(alert);

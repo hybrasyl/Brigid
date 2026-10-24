@@ -117,6 +117,42 @@ public class ProfileTextEditorTests
         editor.Hide();
     }
 
+    //the line count before an edit comes from the text before the edit, also when that text is empty: an empty text at an
+    //unchanged width must not take the line layout that the box kept from its last text
+    [Fact]
+    public void APasteIntoAnEmptiedBoxIsCheckedAgainstTheEmptyText()
+    {
+        var editor = new SelfProfileTextEditorControl();
+        var overflowing = string.Join('\n', Enumerable.Repeat("a", 13));
+        editor.Show(overflowing);
+        var box = editor.FindChild<UITextBox>("text")!;
+        box.CursorPosition = box.Text.Length;
+        box.ClearSelection();
+
+        //a keystroke lays out the 13 lines, which the box keeps
+        box.OnTextInput(new TextInputEvent { Character = 'b' });
+        Assert.True(box.LineCount > box.VisibleLineCount);
+
+        box.Text = string.Empty;
+        box.CursorPosition = 0;
+        box.ClearSelection();
+
+        var clipboard = TestClipboard.Instance.Text;
+        TestClipboard.Instance.Text = overflowing;
+
+        try
+        {
+            box.OnKeyDown(new KeyDownEvent { Key = Keys.V, Modifiers = KeyModifiers.Ctrl | KeyModifiers.Meta });
+        } finally
+        {
+            TestClipboard.Instance.Text = clipboard;
+        }
+
+        //the paste makes 13 lines from none, past the 12 that the box shows, so it is refused
+        Assert.Equal(string.Empty, box.Text);
+        editor.Hide();
+    }
+
     [Fact]
     public void SaveRaisesTheTextAndHidesTheEditor()
     {

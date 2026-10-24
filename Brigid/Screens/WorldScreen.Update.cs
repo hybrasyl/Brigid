@@ -1,6 +1,7 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Models;
 using Brigid.Systems;
 using Chaos.Geometry.Abstractions.Definitions;
@@ -281,65 +282,62 @@ public sealed partial class WorldScreen
         //initial press and os key-repeat keydowns through the event pipeline, so dialogs
         //that consume spacebar (via e.Handled = true) naturally block it.
 
-        var skipDispatch = false;
+        //a press outside a context menu or a details popup closes it. A right press still goes on, so it walks to the tile,
+        //as on retail (BRIG-141); the door menu is Brigid's own, and takes the same rule. A left press is swallowed, and
+        //only that press, so a key or another press in the same frame still dispatches. Each press sees the popups as the
+        //presses before it left them, as it would in a frame of its own
+        var events = InputBuffer.Events;
 
-        //the menus as they were at the start of the frame: a right press that closes one must not let a later left press
-        //in the same frame through to the world
-        var aislingMenuOpen = AislingContext.Visible;
-        var doorMenuOpen = DoorContext.Visible;
-
-        foreach (var evt in InputBuffer.Events)
+        for (var i = 0; i < events.Length; i++)
         {
+            var evt = events[i];
+
             if (evt is not { Kind: BufferedInputKind.MouseButton, IsPress: true })
                 continue;
 
-            var mx = evt.X;
-            var my = evt.Y;
-
-            //a right press outside a context menu closes it and still goes on, so it walks to the tile, as on retail
-            //(BRIG-141). The door menu is Brigid's own, and takes the same rule
             if (evt.Button == MouseButton.Right)
             {
-                if (aislingMenuOpen && !AislingContext.ContainsPoint(mx, my))
-                    AislingContext.Hide();
-
-                if (doorMenuOpen && !DoorContext.ContainsPoint(mx, my))
-                    DoorContext.Hide();
+                HideOnPressOutside(AislingContext, evt.X, evt.Y);
+                HideOnPressOutside(DoorContext, evt.X, evt.Y);
 
                 continue;
             }
 
-            if (evt.Button != MouseButton.Left)
-                continue;
-
-            if (aislingMenuOpen && !AislingContext.ContainsPoint(mx, my))
-            {
-                AislingContext.Hide();
-                skipDispatch = true;
-            } else if (doorMenuOpen && !DoorContext.ContainsPoint(mx, my))
-            {
-                DoorContext.Hide();
-                skipDispatch = true;
-            } else if (AbilityMetadataDetails.Visible && !AbilityMetadataDetails.ContainsPoint(mx, my))
-            {
-                AbilityMetadataDetails.Hide();
-                skipDispatch = true;
-            } else if (EventMetadataDetails.Visible && !EventMetadataDetails.ContainsPoint(mx, my))
-            {
-                EventMetadataDetails.Hide();
-                skipDispatch = true;
-            }
-
-            break;
+            if ((evt.Button == MouseButton.Left)
+                && (HideOnPressOutside(AislingContext, evt.X, evt.Y)
+                    || HideOnPressOutside(DoorContext, evt.X, evt.Y)
+                    || HideOnPressOutside(AbilityMetadataDetails, evt.X, evt.Y)
+                    || HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y)))
+                Game.Dispatcher.SwallowPress(i);
         }
 
-        if (!skipDispatch)
-            Game.Dispatcher.ProcessInput(Root!, gameTime);
+        Game.Dispatcher.ProcessInput(Root!, gameTime);
 
         //all movement has been processed at this point — sort once and publish the frame state.
         PopulateFrameState(newHoveredId);
 
         Root!.Update(gameTime);
+    }
+
+    //hides a visible popup when a press at (x, y) is outside it, and returns true when it did
+    private static bool HideOnPressOutside(PopupMenu popup, int x, int y)
+    {
+        if (!popup.Visible || popup.ContainsPoint(x, y))
+            return false;
+
+        popup.Hide();
+
+        return true;
+    }
+
+    private static bool HideOnPressOutside(CenteredModalPanel popup, int x, int y)
+    {
+        if (!popup.Visible || popup.ContainsPoint(x, y))
+            return false;
+
+        popup.Hide();
+
+        return true;
     }
 
     /// <summary>
