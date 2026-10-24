@@ -127,8 +127,9 @@ public sealed class MetaFileSyncTests : IDisposable
         Assert.Equal(1, Completions);
     }
 
+    //the repository and the prune match names exactly, so the file takes the name from the list, not from the answer
     [Fact]
-    public void OnData_MatchesARequestedNameWhateverItsCase()
+    public void OnData_MatchesARequestedNameWhateverItsCase_AndWritesItUnderTheListedName()
     {
         var sync = NewSync();
         sync.OnChecksums(Listing("ItemInfo0"));
@@ -137,6 +138,7 @@ public sealed class MetaFileSyncTests : IDisposable
 
         Assert.Equal(0, sync.PendingCount);
         Assert.Equal(1, Completions);
+        Assert.Equal(["ItemInfo0"], Directory.GetFiles(Root).Select(Path.GetFileName));
     }
 
     [Fact]
@@ -237,6 +239,21 @@ public sealed class MetaFileSyncTests : IDisposable
 
         Assert.Empty(Requests);
         Assert.Equal(1, Completions);
+    }
+
+    //a null list ends the open sync, so a late answer for its file does not complete a second time
+    [Fact]
+    public void OnChecksums_ANullListEndsASyncThatIsOpen()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+
+        sync.OnChecksums(null);
+        Answer(sync, "ItemInfo0");
+
+        Assert.Equal(1, Completions);
+        Assert.Equal(0, sync.PendingCount);
+        Assert.False(OnDisk("ItemInfo0"));
     }
 
     [Fact]

@@ -111,9 +111,15 @@ public static class MetaFileCache
         return CRC32.Calculate(data.ToArray());
     }
 
-    /// <summary>Writes a metafile. Returns false when the name is refused or the write fails.</summary>
+    /// <summary>Writes a metafile, and makes the directory when it is not there. Returns false when the name is refused or the write fails.</summary>
     public static bool TryWrite(string directory, string name, byte[] data)
-        => IsSafeName(name) && DataDiagnostics.Try(() => File.WriteAllBytes(Path.Combine(directory, name), data), $"write metafile {name}");
+        => IsSafeName(name)
+           && DataDiagnostics.Try(
+               () =>
+               {
+                   Directory.CreateDirectory(directory);
+                   File.WriteAllBytes(Path.Combine(directory, name), data);
+               }, $"write metafile {name}");
 
     /// <summary>
     ///     Deletes each file in <paramref name="directory" /> whose name is not in <paramref name="listedNames" />, and

@@ -37,7 +37,6 @@ public static class DataContext
 
     public static LocalPlayerSettingsRepository LocalPlayerSettings { get; private set; } = null!;
 
-    public static MapFileRepository MapsFiles { get; private set; } = null!;
     public static MessageTable Messages { get; private set; } = null!;
     public static MetaFileRepository MetaFiles { get; private set; } = null!;
     public static PanelSpriteRepository PanelSprites { get; private set; } = null!;
@@ -65,7 +64,6 @@ public static class DataContext
         Effects = new EffectsRepository();
         LightMasks = new LightMaskRepository();
         LocalPlayerSettings = new LocalPlayerSettingsRepository();
-        MapsFiles = new MapFileRepository();
         Messages = MessageTable.Load();
         MetaFiles = new MetaFileRepository();
         PanelSprites = new PanelSpriteRepository();

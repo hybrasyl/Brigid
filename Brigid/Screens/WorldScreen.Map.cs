@@ -1,7 +1,6 @@
 #region
 using Brigid.Collections;
 using Brigid.Data;
-using Brigid.Models;
 using Brigid.Networking;
 using Brigid.Systems;
 using Brigid.Systems.Keybinds;
@@ -34,9 +33,9 @@ public sealed partial class WorldScreen
         WorldMap.HideMap();
         //same map (refresh) — skip expensive teardown, just clear transient entity state. checksum must
         //also match: a server-side map edit reuses the same id but changes the bytes, so a mismatch means
-        //the cached MapFile is stale and we have to take the full reload path. A map whose data timed out also takes the
-        //full reload path, so a refresh asks for it again.
-        if ((args.MapId == CurrentMapId) && (args.Checksum == CurrentMapCheckSum) && MapFile is not null && !MapDataIncomplete)
+        //the cached MapFile is stale and we have to take the full reload path. A map that did not load completely also
+        //takes the full reload path, so a refresh asks for it again. The id is a u16 on the wire and a short here
+        if (((short)args.MapId == CurrentMapId) && (args.Checksum == CurrentMapCheckSum) && MapFile is not null && !MapDataIncomplete)
         {
             ClearTransientState();
 
@@ -134,30 +133,28 @@ public sealed partial class WorldScreen
 
         MapDataIdleMs = 0f;
 
-        var y = args.RowIndex;
-        MapRows.Apply(y, args.RowData);
-
-        if (!MapRows.IsLastRow(y))
-            return;
-
-        if (!MapRows.IsComplete)
+        switch (MapRows.Receive(args.RowIndex, args.RowData))
         {
-            EndMapDataIncomplete($"the last row arrived with {MapRows.ReceivedCount} of {MapFile.Height} rows complete");
+            case MapStreamStatus.Open:
+                return;
 
-            return;
+            case MapStreamStatus.Incomplete:
+                EndMapDataIncomplete($"the last row arrived with {MapRows.ReceivedCount} of {MapFile.Height} rows complete");
+
+                return;
         }
 
         if (MapRows.Problems is { } problems)
-            NoticeDebugLog.Write($"[map] map {CurrentMapId} is complete, with rows that were not accepted: {problems}");
+            NoticeDebugLog.Write($"[map] map {(ushort)CurrentMapId} is complete, with rows that were not accepted: {problems}");
 
         MapRows = null;
 
         //a complete map that does not match the checksum still loads, and a refresh does not request it again: a server
         //map file with bytes after its tiles never matches, so an orange-bar message would show at each entry to that map
         if (MapCache.ToCacheBytes(MapFile, CurrentMapCheckSum) is { } bytes)
-            MapCache.TrySave(AppPaths.MapsDir, CurrentMapId, bytes);
+            MapCache.TrySave(AppPaths.MapsDir, (ushort)CurrentMapId, bytes);
         else
-            NoticeDebugLog.Write($"[map] map {CurrentMapId} does not match the checksum the server sent; it is used but not saved");
+            NoticeDebugLog.Write($"[map] map {(ushort)CurrentMapId} does not match the checksum the server sent; it is used but not saved");
 
         FinalizeMapLoad();
     }
@@ -189,7 +186,7 @@ public sealed partial class WorldScreen
         MapDataIncomplete = true;
         MapRows = null;
 
-        NoticeDebugLog.Write($"[map] map {CurrentMapId} did not load completely: {reason}{problems}. The map loads with the rows that arrived.");
+        NoticeDebugLog.Write($"[map] map {(ushort)CurrentMapId} did not load completely: {reason}{problems}; the map loads with the rows that arrived");
         var refreshKey = KeybindCatalog.Format(Keybinds.Effective(CommandId.World_Refresh).Primary);
         WorldState.Chat.AddOrangeBarMessage($"The map did not load completely. Press {refreshKey} to load it again.");
         FinalizeMapLoad();
@@ -198,7 +195,7 @@ public sealed partial class WorldScreen
     private void HandleMapLoadComplete()
     {
         //when awaiting server map data, ignore this — finalizemapload will be called from handlemapdata
-        if (AwaitingMapData)
+        if (MapRows is not null)
             return;
 
         FinalizeMapLoad();

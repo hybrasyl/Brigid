@@ -3,7 +3,7 @@ using System.Collections;
 using DALib.Data;
 #endregion
 
-namespace Brigid.Models;
+namespace Brigid.Data;
 
 /// <summary>What <see cref="MapRowTracker.Apply" /> did with one row of a map that the server streams.</summary>
 public enum MapRowResult
@@ -24,6 +24,19 @@ public enum MapRowResult
     OutOfRange
 }
 
+/// <summary>Where a map stream stands after a row (<see cref="MapRowTracker.Receive" />).</summary>
+public enum MapStreamStatus
+{
+    /// <summary>The row with the last index has not arrived.</summary>
+    Open,
+
+    /// <summary>The row with the last index arrived, and every row arrived with its full width.</summary>
+    Complete,
+
+    /// <summary>The row with the last index arrived, and a row is missing or short.</summary>
+    Incomplete
+}
+
 /// <summary>
 ///     Writes the rows of a map that the server streams (0x3C, one row in each packet) into a <see cref="MapFile" />, and
 ///     records which rows arrived with their full width (BRIG-113). Retail completes a map on the row with the last index
@@ -31,7 +44,7 @@ public enum MapRowResult
 /// </summary>
 public sealed class MapRowTracker(MapFile map)
 {
-    //each tile is 6 bytes: bg(2 be), lfg(2 be), rfg(2 be)
+    //each tile is 6 bytes: the background, the left foreground and the right foreground, each a big-endian u16
     private const int TILE_BYTES = 6;
 
     private readonly BitArray Received = new(map.Height);
@@ -74,6 +87,21 @@ public sealed class MapRowTracker(MapFile map)
 
             return parts.Count > 0 ? string.Join(", ", parts) : null;
         }
+    }
+
+    /// <summary>
+    ///     Writes one row (<see cref="Apply" />) and returns where the stream stands. The row with the last index ends the
+    ///     stream, as on retail: <see cref="MapStreamStatus.Complete" /> when every row arrived with its full width, else
+    ///     <see cref="MapStreamStatus.Incomplete" />. A row after that changes the map but not the result.
+    /// </summary>
+    public MapStreamStatus Receive(int rowIndex, ReadOnlySpan<byte> rowData)
+    {
+        Apply(rowIndex, rowData);
+
+        if (!IsLastRow(rowIndex))
+            return MapStreamStatus.Open;
+
+        return IsComplete ? MapStreamStatus.Complete : MapStreamStatus.Incomplete;
     }
 
     /// <summary>

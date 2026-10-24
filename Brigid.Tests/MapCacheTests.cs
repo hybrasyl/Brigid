@@ -1,5 +1,4 @@
 using Brigid.Data;
-using Brigid.Models;
 using DALib.Data;
 using DALib.Networking.Wire;
 using Xunit;
@@ -9,6 +8,8 @@ namespace Brigid.Tests;
 // The server sends a map row with each tile value big-endian, and the cache file holds each value little-endian. The
 // server's MapInfo gives the CRC-CCITT of the file, so the client saves a map only when its bytes match that checksum
 // (BRIG-113), and loads a cached map only when its size and checksum match.
+//TrySave writes through DataDiagnostics.Try, which reads DataDiagnostics.Log
+[Collection("DataDiagnostics")]
 public sealed class MapCacheTests : IDisposable
 {
     private readonly string Root = Path.Combine(Path.GetTempPath(), "brigid-maps-" + Guid.NewGuid().ToString("N"));
@@ -62,6 +63,18 @@ public sealed class MapCacheTests : IDisposable
         Assert.Equal(0x0304, loaded.Tiles[0, 0].LeftForeground);
         Assert.Equal(0x0506, loaded.Tiles[0, 0].RightForeground);
         Assert.Equal(0x1516, loaded.Tiles[0, 1].RightForeground);
+    }
+
+    //a map id is a u16 on the wire; the file name must not take the sign of a short
+    [Fact]
+    public void AMapIdAboveTheShortRangeSavesAndLoadsUnderItsOwnName()
+    {
+        var checksum = CrcCcitt.Compute(CacheBytes);
+
+        Assert.True(MapCache.TrySave(Root, 40000, CacheBytes));
+
+        Assert.True(File.Exists(Path.Combine(Root, "lod40000.map")));
+        Assert.NotNull(MapCache.TryLoad(Root, 40000, 1, 2, checksum));
     }
 
     [Fact]

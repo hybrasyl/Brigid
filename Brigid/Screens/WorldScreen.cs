@@ -12,6 +12,7 @@ using Brigid.Controls.World.Popups.Options;
 using Brigid.Controls.World.Popups.Profile;
 using Brigid.Controls.World.Popups.WorldList;
 using Brigid.Controls.World.ViewPort;
+using Brigid.Data;
 using Brigid.Data.Repositories;
 using Brigid.Extensions;
 using Brigid.Models;
@@ -106,7 +107,6 @@ public sealed partial class WorldScreen : IScreen
 
     //the rows of the map that the server streams; null when no map-data wait is active
     private MapRowTracker? MapRows;
-    private bool AwaitingMapData => MapRows is not null;
 
     //one modal for the whole board/mail flow (index -> list -> read/compose, Boards and Mail tabs)
     private BoardsModalControl BoardsModal = null!;

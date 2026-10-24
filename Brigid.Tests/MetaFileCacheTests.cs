@@ -8,6 +8,8 @@ namespace Brigid.Tests;
 // The server names each metafile and the client stores it under that name, so a name must stay a bare file name inside
 // the metafile directory. A file that the server no longer lists must not stay on disk, because the repository reads
 // every ItemInfo* and SEvent* file that it finds.
+//TryWrite and PruneUnlisted write through DataDiagnostics.Try, which reads DataDiagnostics.Log
+[Collection("DataDiagnostics")]
 public sealed class MetaFileCacheTests : IDisposable
 {
     private readonly string Root = Path.Combine(Path.GetTempPath(), "brigid-metafile-" + Guid.NewGuid().ToString("N"));
@@ -122,6 +124,15 @@ public sealed class MetaFileCacheTests : IDisposable
     [Fact]
     public void IsValidPayload_RefusesAnEmptyPayloadForAZeroChecksum()
         => Assert.False(MetaFileCache.IsValidPayload([], 0));
+
+    [Fact]
+    public void TryWrite_MakesTheDirectoryWhenItIsNotThere()
+    {
+        var directory = Path.Combine(Root, "deleted");
+
+        Assert.True(MetaFileCache.TryWrite(directory, "Light", [7, 8]));
+        Assert.Equal([7, 8], File.ReadAllBytes(Path.Combine(directory, "Light")));
+    }
 
     [Fact]
     public void TryWrite_WritesABareName()

@@ -19,8 +19,9 @@ public sealed class MetaFileSync
     private readonly Action Complete;
     private readonly Func<string, byte[], bool> Write;
 
-    //the files that the client requested and has not completed, with the number of requests sent for each
-    private readonly Dictionary<string, int> Pending = new(StringComparer.OrdinalIgnoreCase);
+    //the files that the client requested and has not completed: the name as the list gives it, and the number of
+    //requests sent. A file is written under the listed name, because the repository and the prune match names exactly
+    private readonly Dictionary<string, (string Name, int Requests)> Pending = new(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="directory">The metafile folder. It is read each time, because it depends on the server scope.</param>
     /// <param name="request">Sends the request for one file by name.</param>
@@ -44,19 +45,19 @@ public sealed class MetaFileSync
     internal int PendingCount => Pending.Count;
 
     /// <summary>
-    ///     Starts a sync from the server's checksum list, in place of a sync that is open. A null list completes at once,
-    ///     with no change to the cache.
+    ///     Starts a sync from the server's checksum list, in place of a sync that is open. A null list ends a sync that is
+    ///     open and completes at once, with no change to the cache.
     /// </summary>
     public void OnChecksums(IEnumerable<(string Name, uint Checksum)>? entries)
     {
+        Pending.Clear();
+
         if (entries is null)
         {
             Complete();
 
             return;
         }
-
-        Pending.Clear();
 
         var directory = DirectoryOf();
         var listed = new List<(string Name, uint Checksum)>();
@@ -77,7 +78,7 @@ public sealed class MetaFileSync
 
         foreach (var (name, checksum) in listed)
             if (MetaFileCache.GetChecksum(directory, name) != checksum)
-                Pending[name] = 1;
+                Pending[name] = (name, 1);
 
         foreach (var name in Pending.Keys)
             Request(name);
@@ -104,16 +105,17 @@ public sealed class MetaFileSync
             return;
         }
 
-        if (!Pending.TryGetValue(name, out var requests))
+        if (!Pending.TryGetValue(name, out var pending))
         {
             Log($"Ignored a metafile that the client did not request: {name}.");
 
             return;
         }
 
+        var (listedName, requests) = pending;
         var valid = MetaFileCache.IsValidPayload(data, checksum);
 
-        if (!valid || !Write(name, data))
+        if (!valid || !Write(listedName, data))
         {
             var problem = valid ? "could not be written" : "does not match its checksum";
 
@@ -121,14 +123,14 @@ public sealed class MetaFileSync
             //to clear, and it uses the same limit, so a disk that cannot be written does not hold the sync open
             if (requests < MAX_REQUESTS)
             {
-                Log($"{name} {problem}. Requesting it again ({requests + 1} of {MAX_REQUESTS}).");
-                Pending[name] = requests + 1;
-                Request(name);
+                Log($"{listedName} {problem}. Requesting it again ({requests + 1} of {MAX_REQUESTS}).");
+                Pending[name] = (listedName, requests + 1);
+                Request(listedName);
 
                 return;
             }
 
-            Log($"{name} {problem} after {requests} requests. The cache keeps its old copy, if it has one.");
+            Log($"{listedName} {problem} after {requests} requests. The cache keeps its old copy, if it has one.");
         }
 
         Pending.Remove(name);

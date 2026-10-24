@@ -1,4 +1,4 @@
-using Brigid.Models;
+using Brigid.Data;
 using DALib.Data;
 using Xunit;
 
@@ -117,6 +117,28 @@ public sealed class MapRowTrackerTests
         Assert.Equal(MapRowResult.Accepted, tracker.Apply(0, Row(3, 1)));
         Assert.True(tracker.IsComplete);
         Assert.Equal(106, map.Tiles[1, 0].Background);
+    }
+
+    //the row with the last index ends the stream, as on retail; the screen saves the map only for Complete
+    [Fact]
+    public void ReceiveEndsTheStreamOnTheLastRow()
+    {
+        var tracker = new MapRowTracker(new MapFile(2, 3));
+
+        Assert.Equal(MapStreamStatus.Open, tracker.Receive(0, Row(2, 1)));
+        Assert.Equal(MapStreamStatus.Open, tracker.Receive(1, Row(2, 2)));
+        Assert.Equal(MapStreamStatus.Complete, tracker.Receive(2, Row(2, 3)));
+    }
+
+    [Fact]
+    public void ReceiveGivesIncompleteForALastRowWithARowMissingOrShort()
+    {
+        var missing = new MapRowTracker(new MapFile(2, 2));
+        Assert.Equal(MapStreamStatus.Incomplete, missing.Receive(1, Row(2, 2)));
+
+        var shortLast = new MapRowTracker(new MapFile(2, 2));
+        shortLast.Receive(0, Row(2, 1));
+        Assert.Equal(MapStreamStatus.Incomplete, shortLast.Receive(1, []));
     }
 
     [Fact]
