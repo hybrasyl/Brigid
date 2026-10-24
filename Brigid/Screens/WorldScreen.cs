@@ -101,10 +101,12 @@ public sealed partial class WorldScreen : IScreen
     private DoorContextMenu DoorContext = null!;
 
     private int AnimationTick;
-    private bool AwaitingMapData;
     private float MapDataIdleMs;
     private bool MapDataIncomplete;
-    private int MapDataRowsReceived;
+
+    //the rows of the map that the server streams; null when no map-data wait is active
+    private MapRowTracker? MapRows;
+    private bool AwaitingMapData => MapRows is not null;
 
     //one modal for the whole board/mail flow (index -> list -> read/compose, Boards and Mail tabs)
     private BoardsModalControl BoardsModal = null!;

@@ -116,6 +116,7 @@ Centralized in `Directory.Build.props`: C# 14, net10.0, nullable enabled, implic
 - **`IconPack`** (`AssetPacks/`) -- Wraps a ZipArchive of `{prefix}{id:D4}.png` entries. `TryGetIconImage(prefix, spriteId, out SKImage?)` case-insensitive lookup; decode failures treated as "not present" so renderer falls back cleanly to legacy.
 - **`DataDiagnostics`** -- Log seam for `Brigid.Data` and `Brigid.Rendering`, which cannot reference `NoticeDebugLog`. `Program.cs` sets `Log` to `NoticeDebugLog.Write`; `Try` runs best-effort file IO and logs a failure.
 - **`MetaFileCache`** -- Static helpers for the metafile cache in `AppPaths.MetaFileDir`. `IsSafeName` refuses a server-sent name that is not a bare, cross-platform file name; `GetChecksum`, `TryWrite` and `PruneUnlisted` (deletes the files the server no longer lists) apply it.
+- **`MapCache`** -- Static helpers for the map cache in `AppPaths.MapsDir` (`lod{mapId}.map`). `TryLoad` gives a cached map only when its size and CRC-CCITT match the server's MapInfo; `ToCacheBytes` and `TrySave` write one. The world screen streams an uncached map through `MapRowTracker` (`Models/`) and saves it only when every row arrived with its full width and the checksum matches (BRIG-113); an incomplete map loads with the rows that arrived and is not saved.
 - **`AppPaths`** -- Per-user `Erisco/Brigid` directories (`AppRoot`, `AssetsDir`, `MetaFileDir`, `MapsDir` and others). `MigrateLegacyVendorFolder()` runs once in `Program.cs`, before anything reads `AppRoot`, and moves a legacy lowercase `erisco` folder entry by entry.
 
 ### Rendering Layer (`Brigid.Rendering`)
@@ -229,7 +230,7 @@ Brigid/
 ### World State & Models
 - **`WorldState`** (`Collections/`) -- Static class. Entity tracking, sorted rendering, active effects, all ViewModel state. Access via `WorldState.Inventory`, `WorldState.Attributes`, etc.
 - **`WorldEntity`** (`Models/`) -- Full entity data bag: position, direction, appearance, animation state, emotes.
-- **Other models:** `Animation`, `EntityRemovalAnimation`, `WorldFrameState`, `SlotDragPayload`, `PathfindingState`, `TileClickTracker`, `Projectile`, `MailEntry`, `LegendMarkEntry`, `WorldListEntry`.
+- **Other models:** `Animation`, `EntityRemovalAnimation`, `WorldFrameState`, `SlotDragPayload`, `PathfindingState`, `TileClickTracker`, `MapRowTracker`, `Projectile`, `MailEntry`, `LegendMarkEntry`, `WorldListEntry`.
 
 ### ViewModel (`Brigid/ViewModel/`)
 Authoritative state objects exposed as static properties on WorldState, updated by server packets:
