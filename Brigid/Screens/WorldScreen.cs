@@ -168,9 +168,20 @@ public sealed partial class WorldScreen : IScreen
     //entity captured on first right-click so a follow-up double-click can still target it even if pathfinding has shifted the camera between clicks
     private uint? PendingDoubleClickEntityId;
     private int PendingDoubleClickTick;
-    //written on the network thread (HandleStateChanged) and read in Update: one field, so that the game thread cannot see
-    //the switch to the login screen before the close of Exit Game
-    private volatile LogoutOutcome PendingLogout;
+    //what the connection did, for Update to act on (a ConnectionEvent). HandleStateChanged writes it on the network
+    //thread, so that ExitFlow and the popups change only on the game thread
+    private int PendingConnectionEvent;
+
+    private enum ConnectionEvent
+    {
+        None,
+
+        //the state went to Login: a logout redirect
+        LoggedOut,
+
+        //the connection closed outside a redirect: the logout in the grace time, else a lost connection
+        Closed
+    }
 
     //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.
     private bool TransportSecure;

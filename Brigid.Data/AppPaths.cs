@@ -194,8 +194,9 @@ public static class AppPaths
     /// <summary>
     ///     <c>{AppRoot}/maps/{serverKey}</c> — cache of downloaded map files (disposable). Scoped by the server key
     ///     (<see cref="ServerProfileKey" />), because retail and Hybrasyl send different maps under one map number
-    ///     (BRIG-105). The key ignores the port, and every Hybrasyl host has one key, so those share a folder; the size
-    ///     and CRC check of <see cref="MapCache.TryLoad" /> keeps a wrong map from loading.
+    ///     (BRIG-105). The key ignores the port, and every host whose name contains "hybrasyl" has one key, so those
+    ///     share a folder; the size and CRC check of <see cref="MapCache.TryLoad" /> keeps a wrong map from loading.
+    ///     The files of the old flat <c>maps</c> folder are not read again.
     /// </summary>
     public static string MapsDir => Path.Combine(AppRoot, "maps", ServerScope);
 

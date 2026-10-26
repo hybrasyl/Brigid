@@ -593,7 +593,7 @@ public sealed class ChaosGame : Game
             return false;
 
         ScopeServerCaches();
-        DataContext.MetaFiles.ClearServerCaches();
+        DataContext.MetaFiles.ClearCaches();
         CertificateTrustStore.ClearPendingPrompts();
         NoticeDebugLog.Write($"lobby server changed to {GlobalSettings.LobbyHost}:{GlobalSettings.LobbyPort}");
 

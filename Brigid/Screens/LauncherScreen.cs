@@ -361,8 +361,11 @@ public sealed class LauncherScreen : IScreen
             //only a different pick changes the server. The lobby connection stays when the server did not change and
             //the lobby was ready; the lobby screen connects when the connection has gone since
             var selected = LauncherConfig.GetSelectedServer();
-            var serverChanged = PicksNewServer(selected, SelectedKeyAtOpen)
-                                && Game.UseLobbyServer(selected!.Host, selected.Port);
+            var serverChanged = false;
+
+            if (PicksNewServer(selected, SelectedKeyAtOpen))
+                serverChanged = Game.UseLobbyServer(selected!.Host, selected.Port);
+
             var keep = !serverChanged && LobbyWasReady;
 
             Completed = true;
@@ -644,8 +647,7 @@ public sealed class LauncherScreen : IScreen
         LauncherConfig.SelectedServer = server.Key;
         LauncherConfig.Save();
 
-        GlobalSettings.LobbyHost = server.Host;
-        GlobalSettings.LobbyPort = server.Port;
+        GlobalSettings.SetLobbyServer(server.Host, server.Port);
         GlobalSettings.DataPath = AssetPath.Trim();
 
         Completed = true;

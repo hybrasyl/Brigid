@@ -16,19 +16,24 @@ public sealed partial class WorldScreen
 {
     public void Update(GameTime gameTime)
     {
-        switch (PendingLogout)
+        switch ((ConnectionEvent)Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.None))
         {
-            case LogoutOutcome.LoginScreen:
-                PendingLogout = LogoutOutcome.None;
-                Game.Screens.Switch(new LobbyLoginScreen(LobbyStart.ReturningFromWorld));
+            case ConnectionEvent.LoggedOut:
+                EndLogout();
 
                 return;
 
-            case LogoutOutcome.CloseClient:
-                PendingLogout = LogoutOutcome.None;
-                Game.Exit();
+            //a close in the grace time is the logout (Exit to Menu goes to the login screen, and Exit Game closes the
+            //client); any other close is a lost connection
+            case ConnectionEvent.Closed when ExitFlow.IsAwaitingLogout:
+                EndLogout();
 
                 return;
+
+            case ConnectionEvent.Closed:
+                DisconnectPopup.Show("Connection lost.");
+
+                break;
         }
 
         var elapsedMs = (float)gameTime.ElapsedGameTime.TotalMilliseconds;
@@ -49,9 +54,9 @@ public sealed partial class WorldScreen
                 break;
 
             case ExitStep.CloseClient:
-                PendingLogout = LogoutOutcome.CloseClient;
+                Game.Exit();
 
-                break;
+                return;
         }
 
         //ease the transfer loading bar while it's up across the reconnect gap (cosmetic; see MapLoadingBar)

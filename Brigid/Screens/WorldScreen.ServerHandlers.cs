@@ -1307,6 +1307,9 @@ public sealed partial class WorldScreen
     {
         DarknessRenderer.ReloadMetadata();
         DarknessRenderer.ReapplyLightLevel();
+
+        //an NPC dialog before the end of the sync can read the old files
+        DataContext.MetaFiles.ClearCaches();
         DataContext.MetaFiles.BuildItemIndex();
     }
 
@@ -1336,13 +1339,6 @@ public sealed partial class WorldScreen
     }
 
     //--- exit / state ---
-
-    private enum LogoutOutcome
-    {
-        None,
-        LoginScreen,
-        CloseClient
-    }
 
     //Exit to Menu (closeClient false) and Exit Game (true) send the same packets; ExitFlow keeps the timers
     private void BeginExit(bool closeClient)
@@ -1391,6 +1387,15 @@ public sealed partial class WorldScreen
         //hook left in place so phase 2 can update the popup text on server ack if desired.
     }
 
+    //the logout completed: Exit Game closes the client, and every other logout goes to the login screen
+    private void EndLogout()
+    {
+        if (ExitFlow.CompleteLogout())
+            Game.Exit();
+        else
+            Game.Screens.Switch(new LobbyLoginScreen(LobbyStart.ReturningFromWorld));
+    }
+
     private void HandleStateChanged(ConnectionState oldState, ConnectionState newState)
     {
         //server redirected us back to login (e.g., after logout)
@@ -1398,7 +1403,7 @@ public sealed partial class WorldScreen
         if (newState == ConnectionState.Login)
         {
             RedirectInProgress = false;
-            PendingLogout = ExitFlow.CompleteLogout() ? LogoutOutcome.CloseClient : LogoutOutcome.LoginScreen;
+            Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.LoggedOut);
 
             return;
         }
@@ -1414,17 +1419,12 @@ public sealed partial class WorldScreen
 
         if ((newState == ConnectionState.Disconnected) && !RedirectInProgress)
         {
-            //a disconnect in the grace time is the logout on a server that closes the connection with no Redirect
-            //(ExitFlow). Exit to Menu goes to the login screen, and Exit Game closes the client
-            if (ExitFlow.IsAwaitingLogout)
-            {
-                PendingLogout = ExitFlow.CompleteLogout() ? LogoutOutcome.CloseClient : LogoutOutcome.LoginScreen;
-
-                return;
-            }
-
-            //unexpected disconnect — show reconnect prompt
-            DisconnectPopup.Show("Connection lost.");
+            //Update decides: in the grace time it is the logout on a server that closes the connection with no
+            //Redirect (ExitFlow), else a lost connection. A logout recorded first stays
+            Interlocked.CompareExchange(
+                ref PendingConnectionEvent,
+                (int)ConnectionEvent.Closed,
+                (int)ConnectionEvent.None);
         }
     }
 

@@ -26,6 +26,10 @@ public enum ExitStep
 ///         the grace time ends. The confirm is sent before the grace time starts, so the client never closes before the
 ///         server has the exit request.
 ///     </para>
+///     <para>
+///         Use it only on the game thread. The screen records a state change of the connection, which comes on the
+///         network thread, and acts on it in its update.
+///     </para>
 /// </summary>
 /// <remarks>
 ///     Some servers close the connection and send no Redirect. Hybrasyl sends the Redirect after 1200 ms, but it removes

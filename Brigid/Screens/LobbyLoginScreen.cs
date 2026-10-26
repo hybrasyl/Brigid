@@ -235,6 +235,9 @@ public sealed class LobbyLoginScreen : IScreen
             //was accepted before the world, so the menu is ready when the login form closes
             LobbyReady = true;
             LoginForm.Show();
+
+            //the answer to the homepage request of the logout hop came while the world screen was shown
+            Game.Connection.RequestHomepage();
         } else if ((Start == LobbyStart.ReturningFromConfig) && (Game.Connection.State == ConnectionState.Login))
         {
             //back from Config with the same server (BRIG-105): the connection stays, so the menu is ready at once. The

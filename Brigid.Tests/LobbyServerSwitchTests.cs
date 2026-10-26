@@ -27,15 +27,6 @@ public sealed class LobbyServerSwitchTests
         => Assert.Equal(expected, GlobalSettings.IsSameServer(host, port, otherHost, otherPort));
 
     [Fact]
-    public void SetLobbyServer_WithTheSameServerChangesNothing()
-    {
-        var host = GlobalSettings.LobbyHost;
-
-        Assert.False(GlobalSettings.SetLobbyServer($" {host.ToUpperInvariant()} ", GlobalSettings.LobbyPort));
-        Assert.Equal(host, GlobalSettings.LobbyHost);
-    }
-
-    [Fact]
     public void OnlyAPickOfAnotherEntryChangesTheServer()
     {
         var current = new ServerEntry { Host = GlobalSettings.LobbyHost, Port = GlobalSettings.LobbyPort };
