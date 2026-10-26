@@ -25,6 +25,20 @@ public class ChatWrapColorTests
     private static string WithoutCodes(IEnumerable<string> lines)
         => string.Join(' ', lines.Select(line => line.Replace("{=b", "").Replace("{=c", "")));
 
+    //BRIG-111: with codes off, a code is text: it does not continue, and no character is lost or added
+    [Fact]
+    public void WrapLines_WithCodesOffKeepsTheCodeAsText()
+    {
+        FontEngine.Initialize(0);
+        const string text = "{=b" + Words;
+
+        var lines = TextRenderer.WrapLines(text, WIDTH, colorCodesEnabled: false);
+
+        Assert.True(lines.Count > 2, "the text must wrap onto three or more lines");
+        Assert.All(lines.Skip(1), line => Assert.DoesNotContain("{=", line));
+        Assert.Equal(text, string.Join(' ', lines));
+    }
+
     [Fact]
     public void WrapLines_StartsEachRowWithTheColorCodeOfTheLineBefore()
     {

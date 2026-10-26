@@ -714,7 +714,7 @@ public sealed partial class WorldScreen
         //f1 — help merchant (server-side). Above the stack guard so that it also works while an NPC or vendor window is
         //the top popup; any other popup on top still blocks it
         if (Keybinds.Matches(e, CommandId.World_HelpMerchant)
-            && HelpPassesTheStack(Game.Dispatcher.ControlStackCount, Game.Dispatcher.TopControl, NpcSession))
+            && IsHelpAllowed(Game.Dispatcher.ControlStackCount, Game.Dispatcher.TopControl, NpcSession))
         {
             Game.Connection.ClickEntity(uint.MaxValue);
             e.Handled = true;
@@ -1166,7 +1166,7 @@ public sealed partial class WorldScreen
     ///     True when F1 (help) passes the popup guard: no popup is open, or the NPC window is the top popup. Any other
     ///     popup on top blocks it.
     /// </summary>
-    internal static bool HelpPassesTheStack(int stackCount, UIPanel? top, UIPanel? npcSession)
+    internal static bool IsHelpAllowed(int stackCount, UIPanel? top, UIPanel? npcSession)
         => (stackCount == 0) || (top == npcSession);
 
     /// <summary>

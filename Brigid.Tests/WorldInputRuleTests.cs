@@ -7,10 +7,10 @@ using Xunit;
 namespace Brigid.Tests;
 
 /// <summary>
-///     BRIG-111 item 7: two PR #60 fixes in the world input, as pure rules. J3: the press and the double right-click
-///     use one pursuit rule (a creature or another aisling that is not hidden); the walk that the press does not start
-///     is in the screen and has no test. J13: F1 (help) works while the NPC window is the top popup, and any other
-///     popup on top blocks it.
+///     BRIG-111 item 7: two PR #60 fixes in the world input, as pure rules. A right-button press on a creature or
+///     another aisling that is not hidden is the first half of the double right-click that pursues it, and both use one
+///     rule; the walk that the press does not start is in the screen and has no test. F1 (help) works while the NPC
+///     window is the top popup, and any other popup on top blocks it.
 /// </summary>
 public sealed class WorldInputRuleTests
 {
@@ -43,10 +43,10 @@ public sealed class WorldInputRuleTests
         var npcSession = new UIPanel { Name = "npc" };
         var other = new UIPanel { Name = "other" };
 
-        Assert.True(WorldScreen.HelpPassesTheStack(0, null, npcSession));
-        Assert.True(WorldScreen.HelpPassesTheStack(1, npcSession, npcSession));
-        Assert.True(WorldScreen.HelpPassesTheStack(2, npcSession, npcSession));
-        Assert.False(WorldScreen.HelpPassesTheStack(1, other, npcSession));
-        Assert.False(WorldScreen.HelpPassesTheStack(2, other, npcSession));
+        Assert.True(WorldScreen.IsHelpAllowed(0, null, npcSession));
+        Assert.True(WorldScreen.IsHelpAllowed(1, npcSession, npcSession));
+        Assert.True(WorldScreen.IsHelpAllowed(2, npcSession, npcSession));
+        Assert.False(WorldScreen.IsHelpAllowed(1, other, npcSession));
+        Assert.False(WorldScreen.IsHelpAllowed(2, other, npcSession));
     }
 }

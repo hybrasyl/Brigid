@@ -149,7 +149,7 @@ public sealed class TextElement
 
         if (WrapWidth > 0)
         {
-            WrappedLines = TextRenderer.WrapText(text, WrapWidth, FontSize, CharacterSpacing);
+            WrappedLines = TextRenderer.WrapText(text, WrapWidth, FontSize, CharacterSpacing, ColorCodesEnabled);
             Width = WrapWidth;
             Height = Math.Max(TextRenderer.CHAR_HEIGHT, WrappedLines.Count * TextRenderer.CHAR_HEIGHT);
 

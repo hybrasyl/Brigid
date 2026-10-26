@@ -84,7 +84,14 @@ public static class DebugOverlay
 
     //the FPS window runs on wall time, not on game time: under a fixed time step with load, MonoGame runs catch-up
     //Updates, and their game time is more than the real time (BRIG-111). A test gives its own clock
-    internal static TimeProvider Clock = TimeProvider.System;
+    private static TimeProvider Clock = TimeProvider.System;
+
+    /// <summary>Sets the clock of the FPS window for a test; null puts the system clock back.</summary>
+    internal static void SetClockForTests(TimeProvider? clock)
+    {
+        Clock = clock ?? TimeProvider.System;
+        FpsWindowStart = null;
+    }
     private static long SnappedDrawCount;
     private static long DebugDrawCount;
 
@@ -823,14 +830,13 @@ public static class DebugOverlay
         FpsWindowStart ??= now;
         var elapsed = Clock.GetElapsedTime(FpsWindowStart.Value, now);
 
+        //each window is one second or more; the frames are divided by its real length, so a window that a stall (a
+        //debugger break, a window drag) made longer gives the true rate, and the next window starts now
         if (elapsed >= TimeSpan.FromSeconds(1))
         {
-            FramesPerSecond = FpsCounter;
+            FramesPerSecond = (int)Math.Round(FpsCounter / elapsed.TotalSeconds);
             FpsCounter = 0;
-
-            //after a stall (a debugger break, a window drag) the window starts again, so the seconds that were missed
-            //do not each close a window with almost no frames
-            FpsWindowStart = elapsed >= TimeSpan.FromSeconds(2) ? now : FpsWindowStart + Clock.TimestampFrequency;
+            FpsWindowStart = now;
         }
 
         //gc collection tracking
@@ -847,6 +853,7 @@ public static class DebugOverlay
         LastGen1Count = g1;
         LastGen2Count = g2;
 
+        //the flash is a short cue, so game time is close enough for it
         if (Gen2FlashTimer > 0)
             Gen2FlashTimer -= (float)gameTime.ElapsedGameTime.TotalMilliseconds;
     }

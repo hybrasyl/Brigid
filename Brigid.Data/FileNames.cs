@@ -9,7 +9,7 @@ namespace Brigid.Data;
 ///     The one rule for a file name that Brigid makes from data it does not control: a server-sent metafile name, a
 ///     character name. A safe name is a bare file name that names the same file on every platform (BRIG-111).
 /// </summary>
-public static class FileNames
+internal static class FileNames
 {
     //the characters Windows refuses in a file name, including both separators. They are refused on every platform, so
     //a name that one platform accepts, every platform accepts.

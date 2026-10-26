@@ -26,10 +26,9 @@ public class DebugOverlayFpsTests
     //runs updates with a wall clock that moves wallMsPerUpdate at each Update, and draws on every drawEvery-th Update
     private static int MeasureFps(int updates, int wallMsPerUpdate, int drawEvery, int stallBeforeUpdate = -1)
     {
-        var previousClock = DebugOverlay.Clock;
         var clock = new ManualClock();
 
-        DebugOverlay.Clock = clock;
+        DebugOverlay.SetClockForTests(clock);
         DebugOverlay.IsActive = true;
         DebugOverlay.ResetFrameCounters();
 
@@ -54,7 +53,7 @@ public class DebugOverlayFpsTests
         {
             DebugOverlay.IsActive = false;
             DebugOverlay.ResetFrameCounters();
-            DebugOverlay.Clock = previousClock;
+            DebugOverlay.SetClockForTests(null);
         }
     }
 
@@ -63,7 +62,8 @@ public class DebugOverlayFpsTests
     [Fact]
     public void FramesPerSecond_CountsDrawnFramesWhenUpdatesSkipDraws() => Assert.Equal(25, MeasureFps(101, 20, 2));
 
-    //a 5 s stall before Update 60 closes one window and starts the next at that Update; the window after it reads 25
+    //a 5 s stall before Update 60 makes one long window with a low rate, and the next window starts at that Update; the
+    //window after it reads 25
     [Fact]
     public void FramesPerSecond_StartsTheWindowAgainAfterAStall() => Assert.Equal(25, MeasureFps(111, 20, 2, 60));
 

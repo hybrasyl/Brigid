@@ -7,8 +7,8 @@ using Xunit;
 namespace Brigid.Tests;
 
 /// <summary>
-///     BRIG-111 item 7: two PR #60 fixes in the world messages. J6: the Shift+F history panel stopped redrawing when
-///     its 1000-entry ring buffer was full, because it compared the count; it now redraws on the Chat event. The panel
+///     BRIG-111 item 7: two PR #60 fixes in the world messages. The Shift+F history panel stopped redrawing when its
+///     1000-entry ring buffer was full, because it compared the count; it now redraws on the Chat event. The panel
 ///     needs game data, so the test pins what it relies on: the full buffer still raises one event for each message.
 ///     BRIG-28: the "map did not load" message names the refresh key that the player has.
 /// </summary>
