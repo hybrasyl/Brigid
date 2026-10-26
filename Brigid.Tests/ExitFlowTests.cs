@@ -27,6 +27,29 @@ public sealed class ExitFlowTests
         Assert.True(Flow.IsAwaitingLogout);
     }
 
+    [Fact]
+    public void TheCountdownRoundsUpToWholeSeconds()
+    {
+        Assert.Equal(0, Flow.ConfirmSecondsLeft);
+
+        Flow.Begin(false);
+
+        Assert.Equal((int)ExitFlow.CONFIRM_SECONDS, Flow.ConfirmSecondsLeft);
+
+        Flow.Tick(0.25f);
+
+        Assert.Equal((int)ExitFlow.CONFIRM_SECONDS, Flow.ConfirmSecondsLeft);
+
+        //0.75 s left
+        Flow.Tick(ExitFlow.CONFIRM_SECONDS - 1f);
+
+        Assert.Equal(1, Flow.ConfirmSecondsLeft);
+
+        Flow.Cancel();
+
+        Assert.Equal(0, Flow.ConfirmSecondsLeft);
+    }
+
     //a long frame ends the confirmation only; the grace time starts with the screen's confirm, not in the same tick
     [Fact]
     public void ALongTickConfirmsAndDoesNotClose()

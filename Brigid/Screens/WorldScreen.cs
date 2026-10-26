@@ -124,6 +124,8 @@ public sealed partial class WorldScreen : IScreen
     private OkPopupMessageControl DisconnectPopup = null!;
     private OkPopupMessageControl ExitConfirmPopup = null!;
     private readonly ExitFlow ExitFlow = new();
+    //the countdown that the exit confirmation shows; its text changes only when the whole seconds change
+    private int ShownExitSeconds;
 
     //event detail popup (from events tab)
     private EventMetadataDetailsControl EventMetadataDetails = null!;

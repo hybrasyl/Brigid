@@ -59,6 +59,10 @@ public sealed partial class WorldScreen
                 return;
         }
 
+        //the confirmation shows the whole seconds left; its text changes when they change
+        if (ExitFlow.IsConfirming && (ExitFlow.ConfirmSecondsLeft != ShownExitSeconds))
+            ShowExitConfirmation();
+
         //ease the transfer loading bar while it's up across the reconnect gap (cosmetic; see MapLoadingBar)
         MapLoading.Tick(elapsedMs);
         TickMapDataWatchdog(elapsedMs);

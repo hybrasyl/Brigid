@@ -1355,12 +1355,20 @@ public sealed partial class WorldScreen
 
         //Exit Game while the Log Out confirmation is open changes the confirmation to Exit Game
         if (ExitFlow.IsConfirming)
-        {
-            if (ExitFlow.ClosesClient)
-                ExitConfirmPopup.Show("Exit Game", "Exiting the game. Press OK to exit now.");
-            else
-                ExitConfirmPopup.Show("Log Out", "Logging out. Press OK to log out now.");
-        }
+            ShowExitConfirmation();
+    }
+
+    //the confirmation with its countdown, in two fixed lines, so that the text does not move when the count changes. A
+    //show while it is open changes the title and the text only
+    private void ShowExitConfirmation()
+    {
+        var seconds = ExitFlow.ConfirmSecondsLeft;
+        ShownExitSeconds = seconds;
+
+        if (ExitFlow.ClosesClient)
+            ExitConfirmPopup.Show("Exit Game", $"Exiting the game in {seconds} s.\nPress OK to exit now.");
+        else
+            ExitConfirmPopup.Show("Log Out", $"Logging out in {seconds} s.\nPress OK to log out now.");
     }
 
     private void ConfirmExit()

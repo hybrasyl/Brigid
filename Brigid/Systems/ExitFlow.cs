@@ -52,6 +52,12 @@ public sealed class ExitFlow
     /// <summary>True while the confirmation waits for OK or Cancel.</summary>
     public bool IsConfirming => ConfirmSecondsRemaining > 0f;
 
+    /// <summary>
+    ///     The whole seconds before the confirmation confirms by itself, rounded up, for the countdown that the
+    ///     confirmation shows. 0 when no confirmation is open.
+    /// </summary>
+    public int ConfirmSecondsLeft => (int)MathF.Ceiling(MathF.Max(ConfirmSecondsRemaining, 0f));
+
     /// <summary>True after the confirm, until the logout completes or the grace time ends.</summary>
     public bool IsAwaitingLogout => GraceSecondsRemaining > 0f;
 
