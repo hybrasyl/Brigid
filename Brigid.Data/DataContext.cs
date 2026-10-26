@@ -79,10 +79,10 @@ public static class DataContext
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
             return false;
 
-        var present = Directory.EnumerateFiles(path)
-                               .Select(Path.GetFileName)
-                               .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return HasFile(path, "khanpal.dat") && HasFile(path, "legend.dat");
 
-        return present.Contains("khanpal.dat") && present.Contains("legend.dat");
+        static bool HasFile(string directory, string name)
+            => DirectoryEntries.FindName(directory, name, StringComparison.OrdinalIgnoreCase, DirectoryEntryKind.Files)
+               is not null;
     }
 }
