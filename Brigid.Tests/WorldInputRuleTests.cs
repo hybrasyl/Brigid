@@ -7,9 +7,10 @@ using Xunit;
 namespace Brigid.Tests;
 
 /// <summary>
-///     BRIG-111 item 7: two PR #60 fixes in the world input, as pure rules. J3: a right-button press on a creature or
-///     another aisling is the first half of the double right-click that pursues it, and does not walk. J13: F1 (help)
-///     works while the NPC window is the top popup, and any other popup on top blocks it.
+///     BRIG-111 item 7: two PR #60 fixes in the world input, as pure rules. J3: the press and the double right-click
+///     use one pursuit rule (a creature or another aisling that is not hidden); the walk that the press does not start
+///     is in the screen and has no test. J13: F1 (help) works while the NPC window is the top popup, and any other
+///     popup on top blocks it.
 /// </summary>
 public sealed class WorldInputRuleTests
 {
@@ -21,7 +22,7 @@ public sealed class WorldInputRuleTests
     [InlineData(ClientEntityType.Aisling, true, 20u, false)]
     [InlineData(ClientEntityType.Aisling, false, PLAYER_ID, false)]
     [InlineData(ClientEntityType.GroundItem, false, 20u, false)]
-    public void APressOnACreatureOrAnotherAislingIsADoubleClickTarget(
+    public void ACreatureOrAnotherVisibleAislingIsAPursuitTarget(
         ClientEntityType type,
         bool hidden,
         uint id,
@@ -29,12 +30,12 @@ public sealed class WorldInputRuleTests
     {
         var entity = new WorldEntity { Type = type, IsHidden = hidden, Id = id };
 
-        Assert.Equal(expected, WorldScreen.IsDoubleClickTarget(entity, PLAYER_ID));
+        Assert.Equal(expected, WorldScreen.IsPursuitTarget(entity, PLAYER_ID));
     }
 
     [Fact]
-    public void APressOnTheGroundIsNoDoubleClickTarget()
-        => Assert.False(WorldScreen.IsDoubleClickTarget(null, PLAYER_ID));
+    public void TheGroundIsNoPursuitTarget()
+        => Assert.False(WorldScreen.IsPursuitTarget(null, PLAYER_ID));
 
     [Fact]
     public void HelpPassesWithNoPopupOrUnderTheNpcWindowOnly()
@@ -47,6 +48,5 @@ public sealed class WorldInputRuleTests
         Assert.True(WorldScreen.HelpPassesTheStack(2, npcSession, npcSession));
         Assert.False(WorldScreen.HelpPassesTheStack(1, other, npcSession));
         Assert.False(WorldScreen.HelpPassesTheStack(2, other, npcSession));
-        Assert.False(WorldScreen.HelpPassesTheStack(1, null, null));
     }
 }

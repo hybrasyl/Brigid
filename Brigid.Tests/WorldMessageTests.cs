@@ -1,14 +1,16 @@
 using Brigid.Screens;
 using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
+using Microsoft.Xna.Framework.Input;
 using Xunit;
 
 namespace Brigid.Tests;
 
 /// <summary>
-///     BRIG-111 item 7: two PR #60 fixes in the world messages. J6: the Shift+F history redrew only when its count
-///     changed, and the count of its 1000-entry ring buffer stops changing when the buffer is full, so the panel now
-///     follows the event. BRIG-28: the "map did not load" message names the refresh key that the player has.
+///     BRIG-111 item 7: two PR #60 fixes in the world messages. J6: the Shift+F history panel stopped redrawing when
+///     its 1000-entry ring buffer was full, because it compared the count; it now redraws on the Chat event. The panel
+///     needs game data, so the test pins what it relies on: the full buffer still raises one event for each message.
+///     BRIG-28: the "map did not load" message names the refresh key that the player has.
 /// </summary>
 public sealed class WorldMessageTests
 {
@@ -29,13 +31,10 @@ public sealed class WorldMessageTests
         Assert.Equal("message 1004", history[^1].Text);
     }
 
+    //a rebound key shows: a message with "F5" written in it fails here
     [Fact]
-    public void TheIncompleteMapMessageNamesTheRefreshKey()
-    {
-        var refreshKey = KeybindCatalog.Format(Keybinds.Effective(CommandId.World_Refresh).Primary);
-
-        Assert.Equal(
-            $"The map did not load completely. Press {refreshKey} to load it again.",
-            WorldScreen.IncompleteMapMessage());
-    }
+    public void TheIncompleteMapMessageNamesTheRefreshKeyThatThePlayerHas()
+        => Assert.Equal(
+            "The map did not load completely. Press F6 to load it again.",
+            WorldScreen.IncompleteMapMessage(new KeyChord(Keys.F6)));
 }
