@@ -5,12 +5,6 @@ using Xunit;
 
 namespace Brigid.Tests;
 
-// UITextBox keeps a process-global static FocusedTextBox, and focusing one box unfocuses any other. Test classes that
-// construct focused text boxes must therefore run serially, not in parallel, or they steal focus from each other's
-// in-flight boxes. This collection (DisableParallelization) groups all such classes so they never overlap.
-[CollectionDefinition("UITextBoxFocus", DisableParallelization = true)]
-public sealed class UITextBoxFocusCollection;
-
 // Single-level undo/redo (one step back, one forward) in UITextBox. Contiguous same-kind edit runs (typing, deleting)
 // coalesce into one undo unit; caret movement, mouse selection, and select-all break the run so a following edit is
 // its own unit. A second consecutive undo is inert, and any fresh edit invalidates a pending redo.

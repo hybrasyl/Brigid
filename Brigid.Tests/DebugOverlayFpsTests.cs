@@ -4,10 +4,6 @@ using Xunit;
 
 namespace Brigid.Tests;
 
-// DebugOverlay is a static class, so tests that change its state run serially.
-[CollectionDefinition("DebugOverlay", DisableParallelization = true)]
-public sealed class DebugOverlayCollection;
-
 // The client runs a fixed time step. Under load, MonoGame runs catch-up Updates and skips Draws, so the F11 FPS counter
 // counted Updates and showed the target rate while the drawn rate fell. It now counts in EndFrame, once per Draw, and
 // closes each one-second window on wall time, not on the game time of the Updates (BRIG-111). The tests give the

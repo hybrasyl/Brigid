@@ -8,10 +8,6 @@ using Xunit;
 
 namespace Brigid.Tests;
 
-//DataDiagnostics.Log is static, so the tests that replace it run alone
-[CollectionDefinition("DataDiagnostics", DisableParallelization = true)]
-public sealed class DataDiagnosticsCollection;
-
 // One unreadable effect frame must not crash effect loading. Its slot stays empty, so the other frames keep their
 // indices, center points and timing, and an animation with no frame that renders is rejected. The renderer is injected,
 // and textures are identity-only stand-ins, because a real texture needs a graphics device.

@@ -3,12 +3,6 @@ using Xunit;
 
 namespace Brigid.Tests;
 
-// The font tests share the process-global static FontEngine/FontStashSharp FontSystem, which is
-// single-threaded by design (the game drives it from the draw thread only). Serialize them into
-// one non-parallel collection so concurrent test classes don't race the shared instance.
-[CollectionDefinition("FontEngine", DisableParallelization = true)]
-public sealed class FontEngineCollection;
-
 [Collection("FontEngine")]
 
 // Regression: the emoji-picker crash. The text measure/layout path must never throw on

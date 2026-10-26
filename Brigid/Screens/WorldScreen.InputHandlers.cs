@@ -713,7 +713,7 @@ public sealed partial class WorldScreen
         //f1 — help merchant (server-side). Above the stack guard so that it also works while an NPC or vendor window is
         //the top popup; any other popup on top still blocks it
         if (Keybinds.Matches(e, CommandId.World_HelpMerchant)
-            && ((Game.Dispatcher.ControlStackCount == 0) || (Game.Dispatcher.TopControl == NpcSession)))
+            && HelpPassesTheStack(Game.Dispatcher.ControlStackCount, Game.Dispatcher.TopControl, NpcSession))
         {
             Game.Connection.ClickEntity(uint.MaxValue);
             e.Handled = true;
@@ -1127,14 +1127,12 @@ public sealed partial class WorldScreen
         //target and kick off a self-follow loop in OnRootDoubleClick.
         //exclude a hidden aisling — it has a hitbox only so that spells can target it, and OnRootDoubleClick does not
         //follow one, so a cached hidden aisling would make this press do nothing
-        var isDoubleClickTarget = false;
+        var isDoubleClickTarget = IsDoubleClickTarget(hoverEntity, Game.Connection.AislingId);
 
-        if (hoverEntity is { Type: ClientEntityType.Aisling or ClientEntityType.Creature, IsHidden: false } target
-            && (target.Id != Game.Connection.AislingId))
+        if (isDoubleClickTarget)
         {
-            PendingDoubleClickEntityId = target.Id;
+            PendingDoubleClickEntityId = hoverEntity!.Id;
             PendingDoubleClickTick = currentTick;
-            isDoubleClickTarget = true;
         }
 
         //neither press starts a ground path; both prime the same-tile tracker so a right-doubleclick still resolves to
@@ -1155,6 +1153,22 @@ public sealed partial class WorldScreen
 
         e.Handled = true;
     }
+
+    /// <summary>
+    ///     True when a right-button press on <paramref name="entity" /> is the first half of the double right-click
+    ///     that pursues it (J3): a creature or another aisling that is not hidden. Such a press does not walk. A hidden
+    ///     aisling has a hitbox only for spell targets, and the player's own sprite is never a target.
+    /// </summary>
+    internal static bool IsDoubleClickTarget(WorldEntity? entity, uint playerId)
+        => entity is { Type: ClientEntityType.Aisling or ClientEntityType.Creature, IsHidden: false }
+           && (entity.Id != playerId);
+
+    /// <summary>
+    ///     True when F1 (help) passes the popup guard (J13): no popup is open, or the NPC window is the top popup. Any
+    ///     other popup on top blocks it.
+    /// </summary>
+    internal static bool HelpPassesTheStack(int stackCount, UIPanel? top, UIPanel? npcSession)
+        => (stackCount == 0) || ((top is not null) && (top == npcSession));
 
     /// <summary>
     ///     Handles mouse clicks that bubble up to the root panel (no child element consumed them).

@@ -191,9 +191,19 @@ public sealed partial class WorldScreen
         MapRows = null;
 
         NoticeDebugLog.Write($"[map] map {(ushort)CurrentMapId} did not load completely: {reason}{problems}; the map loads with the rows that arrived");
-        var refreshKey = KeybindCatalog.Format(Keybinds.Effective(CommandId.World_Refresh).Primary);
-        WorldState.Chat.AddOrangeBarMessage($"The map did not load completely. Press {refreshKey} to load it again.");
+        WorldState.Chat.AddOrangeBarMessage(IncompleteMapMessage());
         FinalizeMapLoad();
+    }
+
+    /// <summary>
+    ///     The orange-bar message for a map that did not load completely. It names the refresh key that the player has
+    ///     now, so a rebound key shows (BRIG-28).
+    /// </summary>
+    internal static string IncompleteMapMessage()
+    {
+        var refreshKey = KeybindCatalog.Format(Keybinds.Effective(CommandId.World_Refresh).Primary);
+
+        return $"The map did not load completely. Press {refreshKey} to load it again.";
     }
 
     private void HandleMapLoadComplete()
