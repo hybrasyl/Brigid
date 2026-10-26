@@ -114,9 +114,10 @@ public delegate void ExchangeItemAddedHandler(bool isOtherSide, byte index);
 public delegate void ExchangeGoldSetHandler(bool isOtherSide);
 
 /// <summary>
-///     The other player accepted the exchange.
+///     The server confirmed that one side accepted the exchange. <paramref name="isOtherSide" /> is true for the other
+///     player.
 /// </summary>
-public delegate void ExchangeOtherAcceptedHandler();
+public delegate void ExchangeAcceptedHandler(bool isOtherSide);
 
 /// <summary>
 ///     The exchange was closed (cancelled or completed). Message is the server-provided result text,

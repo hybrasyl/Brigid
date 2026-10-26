@@ -6,6 +6,7 @@ using Brigid.Controls.World.Popups.Exchange;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using Chaos.DarkAges.Definitions;
+using DALib.Networking.Packets.Server;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 using Xunit;
@@ -145,9 +146,43 @@ public sealed class ExchangeControlTests : IDisposable
     {
         WorldState.Exchange.Start(7, "Sabrael");
 
-        WorldState.Exchange.SetOtherAccepted();
+        WorldState.Exchange.SetAccepted(true, null);
 
         Assert.True(Exchange.SideText(true).Accepted);
+    }
+
+    //BRIG-140: retail confirms your own accept to you at once, and the trade stays open until the other player accepts
+    [Fact]
+    public void TheServerConfirmingYourSideAloneKeepsTheWindowOpen()
+    {
+        WorldState.Exchange.Start(7, "Sabrael");
+        Exchange.OkButton.OnClick(LeftClick());
+
+        WorldState.Exchange.SetAccepted(false, "Exchange completed.");
+
+        Assert.True(Exchange.Visible);
+        Assert.True(Exchange.SideText(false).Accepted);
+        Assert.False(Exchange.SideText(true).Accepted);
+
+        WorldState.Exchange.SetAccepted(true, "Exchange completed.");
+
+        Assert.False(Exchange.Visible);
+    }
+
+    //the packet path: WorldState sends every Accepted event to the exchange, so a side-0 event does not close it alone
+    [Fact]
+    public void ASideZeroAcceptedPacketLeavesTheWindowOpen()
+    {
+        WorldState.Exchange.Start(7, "Sabrael");
+
+        WorldState.ApplyExchange(new AcceptExchangeResponsePacket { RightSide = false, Message = "Exchange completed." });
+
+        Assert.True(Exchange.Visible);
+        Assert.True(Exchange.SideText(false).Accepted);
+
+        WorldState.ApplyExchange(new AcceptExchangeResponsePacket { RightSide = true, Message = "Exchange completed." });
+
+        Assert.False(Exchange.Visible);
     }
 
     [Fact]
@@ -155,7 +190,7 @@ public sealed class ExchangeControlTests : IDisposable
     {
         WorldState.Exchange.Start(7, "Sabrael");
         WorldState.Exchange.AddItem(false, 0, 1, DisplayColor.Default, "Apple");
-        WorldState.Exchange.SetOtherAccepted();
+        WorldState.Exchange.SetAccepted(true, null);
         Exchange.OkButton.OnClick(LeftClick());
         WorldState.Exchange.Close();
 

@@ -16,8 +16,9 @@ namespace Brigid.Controls.World.Popups.Exchange;
 ///     The exchange window (BRIG-126 step 3b), a themed <see cref="CenteredModalPanel" /> in place of the legacy
 ///     <c>_nexch</c> prefab. A thin view of the <c>WorldState.Exchange</c> state: two columns, yours (<c>my</c>) on the
 ///     left and the other player's (<c>their</c>) on the right. Each column has the name, a list of four item rows with a
-///     vertical and a horizontal scroll bar, and the gold. "Accepted" shows over a column when that side accepted. Accept
-///     and Cancel are on the bottom bar.
+///     vertical and a horizontal scroll bar, and the gold. "Accepted" shows over a column when that side accepted: over
+///     yours when you click Accept, and over either column when the server confirms that side. Accept and Cancel are on the
+///     bottom bar.
 ///     <para>
 ///         The panel is not modal: the player drags items from the inventory onto it, and the keys that it does not use go
 ///         on to the screen (D10). Escape cancels the exchange. The screen sends the packets: <see cref="OnOk" /> accepts,
@@ -99,7 +100,7 @@ public sealed class ExchangeControl : CenteredModalPanel
         WorldState.Exchange.Started += OnExchangeStarted;
         WorldState.Exchange.ItemAdded += OnExchangeItemAdded;
         WorldState.Exchange.GoldSet += OnExchangeGoldSet;
-        WorldState.Exchange.OtherAccepted += OnExchangeOtherAccepted;
+        WorldState.Exchange.Accepted += OnExchangeAccepted;
         WorldState.Exchange.Closed += OnExchangeClosed;
     }
 
@@ -135,13 +136,13 @@ public sealed class ExchangeControl : CenteredModalPanel
         WorldState.Exchange.Started -= OnExchangeStarted;
         WorldState.Exchange.ItemAdded -= OnExchangeItemAdded;
         WorldState.Exchange.GoldSet -= OnExchangeGoldSet;
-        WorldState.Exchange.OtherAccepted -= OnExchangeOtherAccepted;
+        WorldState.Exchange.Accepted -= OnExchangeAccepted;
         WorldState.Exchange.Closed -= OnExchangeClosed;
 
         base.Dispose();
     }
 
-    //your accept shows at once; the server says nothing back until the exchange completes
+    //your accept shows at once, because Hybrasyl confirms your side only when the exchange completes
     private void Accept()
     {
         OkButton.SetEnabled(false);
@@ -165,7 +166,7 @@ public sealed class ExchangeControl : CenteredModalPanel
 
     private void OnExchangeItemAdded(bool rightSide, byte index) => (rightSide ? Theirs : Mine).ItemsChanged();
 
-    private void OnExchangeOtherAccepted() => Theirs.AcceptedLabel.Visible = true;
+    private void OnExchangeAccepted(bool rightSide) => (rightSide ? Theirs : Mine).AcceptedLabel.Visible = true;
 
     private void OnExchangeStarted()
     {

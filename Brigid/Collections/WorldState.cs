@@ -630,6 +630,51 @@ public static class WorldState
     ///     Subscribes to ConnectionManager events and routes them to state mutations.
     ///     Call once at startup after ConnectionManager is constructed.
     /// </summary>
+    /// <summary>Applies one exchange event from the server to <see cref="Exchange" />. Internal for the tests.</summary>
+    internal static void ApplyExchange(ExchangeResponsePacket args)
+    {
+        switch (args)
+        {
+            case StartExchangeResponsePacket start:
+                Exchange.Start(start.OtherUserId, start.OtherUserName);
+
+                break;
+
+            case RequestExchangeAmountPacket req:
+                Exchange.RequestAmount(req.SourceSlot);
+
+                break;
+
+            case AddExchangeItemResponsePacket add:
+                Exchange.AddItem(
+                    add.RightSide,
+                    add.ExchangeIndex,
+                    add.Sprite,
+                    (DisplayColor)add.Color,
+                    add.Name);
+
+                break;
+
+            case SetExchangeGoldResponsePacket gold:
+                Exchange.SetGold(gold.RightSide, (int)gold.GoldAmount);
+
+                break;
+
+            //the side byte says whose accept the server confirms: 0 = yours, 1 = the other player's. The exchange
+            //closes when both are confirmed (BRIG-140). On Hybrasyl a 0 comes only when the exchange completes;
+            //retail sends a 0 to the player who accepts
+            case AcceptExchangeResponsePacket accept:
+                Exchange.SetAccepted(accept.RightSide, accept.Message);
+
+                break;
+
+            case CancelExchangeResponsePacket cancel:
+                Exchange.Close(cancel.Message);
+
+                break;
+        }
+    }
+
     public static void SubscribeTo(ConnectionManager connection)
     {
         connection.OnAddSkillToPane += args =>
@@ -703,51 +748,7 @@ public static class WorldState
         };
 
         //exchange
-        connection.OnDisplayExchange += args =>
-        {
-            switch (args)
-            {
-                case StartExchangeResponsePacket start:
-                    Exchange.Start(start.OtherUserId, start.OtherUserName);
-
-                    break;
-
-                case RequestExchangeAmountPacket req:
-                    Exchange.RequestAmount(req.SourceSlot);
-
-                    break;
-
-                case AddExchangeItemResponsePacket add:
-                    Exchange.AddItem(
-                        add.RightSide,
-                        add.ExchangeIndex,
-                        add.Sprite,
-                        (DisplayColor)add.Color,
-                        add.Name);
-
-                    break;
-
-                case SetExchangeGoldResponsePacket gold:
-                    Exchange.SetGold(gold.RightSide, (int)gold.GoldAmount);
-
-                    break;
-
-                //confirm byte: 1 = the other side accepted (exchange still open), 0 = completed
-                //(Hybrasyl ServerPackets/Exchange.cs writes Side ? 0 : 1; the message rides both forms)
-                case AcceptExchangeResponsePacket accept:
-                    if (accept.RightSide)
-                        Exchange.SetOtherAccepted();
-                    else
-                        Exchange.Close(accept.Message);
-
-                    break;
-
-                case CancelExchangeResponsePacket cancel:
-                    Exchange.Close(cancel.Message);
-
-                    break;
-            }
-        };
+        connection.OnDisplayExchange += ApplyExchange;
 
         //npc dialog/menu
         connection.OnDisplayDialog += args => NpcInteraction.ShowDialog(args);
