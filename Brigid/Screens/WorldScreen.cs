@@ -12,6 +12,7 @@ using Brigid.Controls.World.Popups.Options;
 using Brigid.Controls.World.Popups.Profile;
 using Brigid.Controls.World.Popups.WorldList;
 using Brigid.Controls.World.ViewPort;
+using Brigid.Data;
 using Brigid.Data.Repositories;
 using Brigid.Extensions;
 using Brigid.Models;
@@ -101,10 +102,11 @@ public sealed partial class WorldScreen : IScreen
     private DoorContextMenu DoorContext = null!;
 
     private int AnimationTick;
-    private bool AwaitingMapData;
     private float MapDataIdleMs;
     private bool MapDataIncomplete;
-    private int MapDataRowsReceived;
+
+    //the rows of the map that the server streams; null when no map-data wait is active
+    private MapRowTracker? MapRows;
 
     //one modal for the whole board/mail flow (index -> list -> read/compose, Boards and Mail tabs)
     private BoardsModalControl BoardsModal = null!;

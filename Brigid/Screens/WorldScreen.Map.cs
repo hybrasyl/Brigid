@@ -10,7 +10,6 @@ using Chaos.Geometry.Abstractions;
 using Chaos.Pathfinding;
 using DALib.Data;
 using DALib.Networking.Packets.Server;
-using DALib.Networking.Wire;
 using DALib.Extensions;
 using Pathfinder = Chaos.Pathfinding.Pathfinder;
 using TileFlags = DALib.Definitions.TileFlags;
@@ -34,9 +33,9 @@ public sealed partial class WorldScreen
         WorldMap.HideMap();
         //same map (refresh) — skip expensive teardown, just clear transient entity state. checksum must
         //also match: a server-side map edit reuses the same id but changes the bytes, so a mismatch means
-        //the cached MapFile is stale and we have to take the full reload path. A map whose data timed out also takes the
-        //full reload path, so a refresh asks for it again.
-        if ((args.MapId == CurrentMapId) && (args.Checksum == CurrentMapCheckSum) && MapFile is not null && !MapDataIncomplete)
+        //the cached MapFile is stale and we have to take the full reload path. A map that did not load completely also
+        //takes the full reload path, so a refresh asks for it again. The id is a u16 on the wire and a short here
+        if (((short)args.MapId == CurrentMapId) && (args.Checksum == CurrentMapCheckSum) && MapFile is not null && !MapDataIncomplete)
         {
             ClearTransientState();
 
@@ -61,14 +60,15 @@ public sealed partial class WorldScreen
         MapRenderer.Dispose();
         MapRenderer = new MapRenderer();
 
-        MapFile = LoadMapFile(
+        MapFile = MapCache.TryLoad(
+            AppPaths.MapsDir,
             args.MapId,
             args.Width,
             args.Height,
             args.Checksum);
         MapPreloaded = false;
-        AwaitingMapData = false;
         MapDataIncomplete = false;
+        MapRows = null;
         CurrentMapId = (short)args.MapId;
         CurrentMapCheckSum = args.Checksum;
         CurrentMapFlags = (MapFlags)args.Flags;
@@ -79,9 +79,8 @@ public sealed partial class WorldScreen
         {
             MapFile = new MapFile(args.Width, args.Height);
             InitializeEmptyTiles(MapFile);
-            AwaitingMapData = true;
             MapDataIdleMs = 0f;
-            MapDataRowsReceived = 0;
+            MapRows = new MapRowTracker(MapFile);
             Game.Connection.RequestMapData();
         }
 
@@ -127,53 +126,49 @@ public sealed partial class WorldScreen
 
     private void HandleMapData(MapDataPacket args)
     {
-        if (MapFile is null)
+        //as on retail, a row is used only during a map-data wait: a row that arrives after the last row, after a timeout,
+        //or for a map from the cache changes nothing
+        if (MapRows is null || MapFile is null)
             return;
 
-        var y = args.RowIndex;
+        var (row, stream) = MapRows.Receive(args.RowIndex, args.RowData);
 
-        //ignore rows that arrive after the wait timed out: the pathfinder and tab map are built from the rows before it
-        if ((y >= MapFile.Height) || MapDataIncomplete)
-            return;
+        //only a new full row is progress: a short, duplicate or out-of-range row does not hold off the watchdog
+        if (row == MapRowResult.Accepted)
+            MapDataIdleMs = 0f;
 
-        MapDataIdleMs = 0f;
-        MapDataRowsReceived++;
-
-        //each tile is 6 bytes: bg(2 be), lfg(2 be), rfg(2 be)
-        var data = args.RowData;
-        var tileCount = Math.Min(data.Length / 6, MapFile.Width);
-
-        for (var x = 0; x < tileCount; x++)
+        switch (stream)
         {
-            var offset = x * 6;
-            var background = (ushort)((data[offset] << 8) | data[offset + 1]);
-            var leftForeground = (ushort)((data[offset + 2] << 8) | data[offset + 3]);
-            var rightForeground = (ushort)((data[offset + 4] << 8) | data[offset + 5]);
+            case MapStreamStatus.Open:
+                return;
 
-            MapFile.Tiles[x, y] = new MapTile
-            {
-                Background = background,
-                LeftForeground = leftForeground,
-                RightForeground = rightForeground
-            };
+            case MapStreamStatus.Incomplete:
+                EndMapDataIncomplete($"the last row arrived with {MapRows.ReceivedCount} of {MapFile.Height} rows complete");
+
+                return;
         }
 
-        //last row received — save to disk and finalize
-        if (AwaitingMapData && (y >= (MapFile.Height - 1)))
-        {
-            AwaitingMapData = false;
-            SaveMapFile(CurrentMapId);
-            FinalizeMapLoad();
-        }
+        if (MapRows.Problems is { } problems)
+            NoticeDebugLog.Write($"[map] map {(ushort)CurrentMapId} is complete, with rows that were not accepted: {problems}");
+
+        MapRows = null;
+
+        //a complete map that does not match the checksum still loads, and a refresh does not request it again: a server
+        //map file with bytes after its tiles never matches, so an orange-bar message would show at each entry to that map
+        if (MapCache.ToCacheBytes(MapFile, CurrentMapCheckSum) is { } bytes)
+            MapCache.TrySave(AppPaths.MapsDir, (ushort)CurrentMapId, bytes);
+        else
+            NoticeDebugLog.Write($"[map] map {(ushort)CurrentMapId} does not match the checksum the server sent; it is used but not saved");
+
+        FinalizeMapLoad();
     }
 
     /// <summary>
-    ///     Ends a map-data wait that received no row for <see cref="MAP_DATA_TIMEOUT_MS" />. The map loads with the rows
-    ///     that arrived and is not saved. A refresh or the next entry to the map requests it again.
+    ///     Ends a map-data wait that received no row for <see cref="MAP_DATA_TIMEOUT_MS" />.
     /// </summary>
     private void TickMapDataWatchdog(float elapsedMs)
     {
-        if (!AwaitingMapData)
+        if (MapRows is null)
             return;
 
         MapDataIdleMs += elapsedMs;
@@ -181,11 +176,21 @@ public sealed partial class WorldScreen
         if (MapDataIdleMs < MAP_DATA_TIMEOUT_MS)
             return;
 
-        AwaitingMapData = false;
-        MapDataIncomplete = true;
+        EndMapDataIncomplete($"map data stopped after {MapRows.ReceivedCount} of {MapFile?.Height} rows");
+    }
 
-        NoticeDebugLog.Write(
-            $"[map] map data for map {CurrentMapId} stopped after {MapDataRowsReceived} of {MapFile?.Height} rows; the map loads without the rest");
+    /// <summary>
+    ///     Ends a map-data wait that did not give a complete map: the stream stopped, or the last row arrived with rows
+    ///     missing or short (BRIG-113). The map loads with the rows that arrived and is not saved. A refresh or the next
+    ///     entry to the map requests it again.
+    /// </summary>
+    private void EndMapDataIncomplete(string reason)
+    {
+        var problems = MapRows?.Problems is { } rows ? $"; rows not accepted: {rows}" : string.Empty;
+        MapDataIncomplete = true;
+        MapRows = null;
+
+        NoticeDebugLog.Write($"[map] map {(ushort)CurrentMapId} did not load completely: {reason}{problems}; the map loads with the rows that arrived");
         var refreshKey = KeybindCatalog.Format(Keybinds.Effective(CommandId.World_Refresh).Primary);
         WorldState.Chat.AddOrangeBarMessage($"The map did not load completely. Press {refreshKey} to load it again.");
         FinalizeMapLoad();
@@ -194,7 +199,7 @@ public sealed partial class WorldScreen
     private void HandleMapLoadComplete()
     {
         //when awaiting server map data, ignore this — finalizemapload will be called from handlemapdata
-        if (AwaitingMapData)
+        if (MapRows is not null)
             return;
 
         FinalizeMapLoad();
@@ -341,66 +346,6 @@ public sealed partial class WorldScreen
             return false;
 
         return true;
-    }
-
-    private static MapFile? LoadMapFile(
-        int mapId,
-        int width,
-        int height,
-        ushort serverCheckSum)
-    {
-        var path = Path.Combine(AppPaths.MapsDir, $"lod{mapId}.map");
-
-        if (!File.Exists(path))
-            return null;
-
-        try
-        {
-            var fileBytes = File.ReadAllBytes(path);
-
-            if (fileBytes.Length != (width * height * 6))
-                return null;
-
-            if (CrcCcitt.Compute(fileBytes) != serverCheckSum)
-                return null;
-
-            //parse in-place — file format is le int16 x3 per tile, y-major x-minor
-            var mapFile = new MapFile(width, height);
-            var index = 0;
-
-            for (var y = 0; y < height; y++)
-                for (var x = 0; x < width; x++)
-                {
-                    var background = (ushort)(fileBytes[index] | (fileBytes[index + 1] << 8));
-                    var leftForeground = (ushort)(fileBytes[index + 2] | (fileBytes[index + 3] << 8));
-                    var rightForeground = (ushort)(fileBytes[index + 4] | (fileBytes[index + 5] << 8));
-                    index += 6;
-
-                    mapFile.Tiles[x, y] = new MapTile
-                    {
-                        Background = background,
-                        LeftForeground = leftForeground,
-                        RightForeground = rightForeground
-                    };
-                }
-
-            return mapFile;
-        } catch
-        {
-            return null;
-        }
-    }
-
-    private void SaveMapFile(int mapId)
-    {
-        var path = Path.Combine(AppPaths.MapsDir, $"lod{mapId}.map");
-
-        DataDiagnostics.Try(
-            () =>
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                MapFile!.Save(path);
-            }, "SaveMapFile");
     }
 
     private void HandleLocationChanged(int x, int y)

@@ -77,19 +77,12 @@ public static class MetaFileCache
     }
 
     /// <summary>
-    ///     Returns how the client accepts a metafile payload that it requested. The payload is valid when its decompressed
-    ///     CRC-32 is <paramref name="expectedChecksum" />. An invalid payload, an empty one included, is requested again
-    ///     until the client has sent <paramref name="maxRequests" /> requests for it.
+    ///     Returns true when the CRC-32 of the decompressed payload is <paramref name="checksum" />. An empty payload, or one
+    ///     that is not valid zlib data, is not valid.
     /// </summary>
-    /// <remarks>Retail decompresses the payload, compares its CRC-32 with the sent checksum, and requests it again on a
-    /// mismatch. The limit stops a server that always sends bad data from holding the sync open.</remarks>
-    public static MetaFileReceipt CheckReceived(byte[] payload, uint expectedChecksum, int requestsSent, int maxRequests)
-    {
-        if ((payload.Length > 0) && (GetPayloadChecksum(payload) == expectedChecksum))
-            return MetaFileReceipt.Valid;
-
-        return requestsSent < maxRequests ? MetaFileReceipt.Retry : MetaFileReceipt.GiveUp;
-    }
+    /// <remarks>Retail decompresses the payload, compares its CRC-32 with the checksum in the same packet, and requests the
+    /// file again on a mismatch.</remarks>
+    public static bool IsValidPayload(byte[] payload, uint checksum) => (payload.Length > 0) && (GetPayloadChecksum(payload) == checksum);
 
     //null when the payload is not valid zlib data
     private static uint? GetPayloadChecksum(byte[] payload)
@@ -118,9 +111,15 @@ public static class MetaFileCache
         return CRC32.Calculate(data.ToArray());
     }
 
-    /// <summary>Writes a metafile. Returns false when the name is refused or the write fails.</summary>
+    /// <summary>Writes a metafile, and makes the directory when it is not there. Returns false when the name is refused or the write fails.</summary>
     public static bool TryWrite(string directory, string name, byte[] data)
-        => IsSafeName(name) && DataDiagnostics.Try(() => File.WriteAllBytes(Path.Combine(directory, name), data), $"write metafile {name}");
+        => IsSafeName(name)
+           && DataDiagnostics.Try(
+               () =>
+               {
+                   Directory.CreateDirectory(directory);
+                   File.WriteAllBytes(Path.Combine(directory, name), data);
+               }, $"write metafile {name}");
 
     /// <summary>
     ///     Deletes each file in <paramref name="directory" /> whose name is not in <paramref name="listedNames" />, and
@@ -159,17 +158,4 @@ public static class MetaFileCache
 
         return deleted;
     }
-}
-
-/// <summary>What the client does with a metafile payload that it requested.</summary>
-public enum MetaFileReceipt
-{
-    /// <summary>The payload matches its checksum. Write it.</summary>
-    Valid,
-
-    /// <summary>The payload does not match its checksum. Request it again.</summary>
-    Retry,
-
-    /// <summary>The payload does not match its checksum, and the request limit is reached. Keep the cached file.</summary>
-    GiveUp
 }
