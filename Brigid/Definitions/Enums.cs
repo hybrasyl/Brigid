@@ -35,7 +35,7 @@ public enum PopupStyle
 /// <summary>
 ///     Why a <see cref="Screens.LobbyLoginScreen" /> starts. It decides whether the screen connects to the lobby.
 /// </summary>
-public enum LobbyEntry
+public enum LobbyStart
 {
     /// <summary>The first start, or a start that needs a new connection: the screen connects to the lobby.</summary>
     Fresh,
@@ -48,7 +48,7 @@ public enum LobbyEntry
 
     /// <summary>
     ///     A return from Config with the same server, while the lobby was ready (BRIG-105). The screen keeps the
-    ///     connection and the greeting that the player accepted; with no connection it connects to the lobby.
+    ///     connection, and the menu is ready at once; with no connection it connects to the lobby.
     /// </summary>
     ReturningFromConfig
 }

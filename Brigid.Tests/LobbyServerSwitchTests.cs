@@ -1,5 +1,4 @@
 using Brigid.Data;
-using Brigid.Networking.Definitions;
 using Brigid.Screens;
 using Brigid.Systems;
 using Xunit;
@@ -8,7 +7,8 @@ namespace Brigid.Tests;
 
 /// <summary>
 ///     BRIG-105: a server picked in Config from the main menu becomes the lobby server with no restart, and the server
-///     caches follow it. A return with the same server keeps the lobby connection when the lobby was ready.
+///     caches follow it. Only a pick of another entry changes the server. The tests read the lobby server and change no
+///     static state.
 /// </summary>
 public sealed class LobbyServerSwitchTests
 {
@@ -26,61 +26,39 @@ public sealed class LobbyServerSwitchTests
         bool expected)
         => Assert.Equal(expected, GlobalSettings.IsSameServer(host, port, otherHost, otherPort));
 
-    [Theory]
-    [InlineData(false, true, ConnectionState.Login, true)]
-    [InlineData(true, true, ConnectionState.Login, false)]
-    [InlineData(false, false, ConnectionState.Login, false)]
-    [InlineData(false, true, ConnectionState.Disconnected, false)]
-    [InlineData(false, true, ConnectionState.Lobby, false)]
-    [InlineData(false, true, ConnectionState.Connecting, false)]
-    public void TheLobbyConnectionStaysOnlyForTheSameServerAndAReadyLobby(
-        bool serverChanged,
-        bool lobbyWasReady,
-        ConnectionState state,
-        bool expected)
-        => Assert.Equal(expected, LauncherScreen.KeepsLobbyConnection(serverChanged, lobbyWasReady, state));
-
     [Fact]
-    public void TheReturnButtonReadsConnectOnlyForAnotherServer()
+    public void SetLobbyServer_WithTheSameServerChangesNothing()
     {
-        var current = new ServerEntry { Host = GlobalSettings.LobbyHost.ToUpperInvariant(), Port = GlobalSettings.LobbyPort };
-        var otherPort = new ServerEntry { Host = GlobalSettings.LobbyHost, Port = GlobalSettings.LobbyPort + 1 };
+        var host = GlobalSettings.LobbyHost;
 
-        Assert.Equal("Return to Main Menu", LauncherScreen.ReturnLabel(null));
-        Assert.Equal("Return to Main Menu", LauncherScreen.ReturnLabel(current));
-        Assert.Equal("Connect", LauncherScreen.ReturnLabel(otherPort));
+        Assert.False(GlobalSettings.SetLobbyServer($" {host.ToUpperInvariant()} ", GlobalSettings.LobbyPort));
+        Assert.Equal(host, GlobalSettings.LobbyHost);
     }
 
     [Fact]
-    public void SetLobbyServer_ChangesTheServerAndTheCacheScope_AndTheSameServerChangesNothing()
+    public void OnlyAPickOfAnotherEntryChangesTheServer()
     {
-        var previousHost = GlobalSettings.LobbyHost;
-        var previousPort = GlobalSettings.LobbyPort;
-        var previousScope = Path.GetFileName(AppPaths.MetaFileDir);
+        var current = new ServerEntry { Host = GlobalSettings.LobbyHost, Port = GlobalSettings.LobbyPort };
+        var other = new ServerEntry { Host = "brigid-test.example.org", Port = GlobalSettings.LobbyPort + 1 };
 
-        //other tests read GlobalSettings.IsCursed (the retail chat cap), so the test host keeps the retail state of the
-        //host that it replaces
-        var host = ServerProfileKey.IsRetail(previousHost) ? "brigid-test.kru.com" : "brigid-test.example.org";
+        //no list, or the entry that was selected when Config opened
+        Assert.False(LauncherScreen.PicksNewServer(null, current.Key));
+        Assert.False(LauncherScreen.PicksNewServer(other, other.Key));
 
-        try
-        {
-            Assert.True(GlobalSettings.SetLobbyServer(host, 2611));
+        //DA_HOST started the client on a server that the list lacks: a return with the saved pick keeps that server
+        Assert.False(LauncherScreen.PicksNewServer(other, other.Key.ToUpperInvariant()));
 
-            Assert.Equal(host, GlobalSettings.LobbyHost);
-            Assert.Equal(2611, GlobalSettings.LobbyPort);
+        //another entry, which is not the server that the client uses now
+        Assert.True(LauncherScreen.PicksNewServer(other, current.Key));
 
-            var scope = ServerProfileKey.Resolve(host, null);
-            Assert.Equal(scope, Path.GetFileName(AppPaths.MetaFileDir));
-            Assert.Equal(scope, Path.GetFileName(AppPaths.MapsDir));
-            Assert.Equal("maps", Path.GetFileName(Path.GetDirectoryName(AppPaths.MapsDir)));
+        //another entry that names the server that the client uses now
+        Assert.False(LauncherScreen.PicksNewServer(current, other.Key));
+    }
 
-            Assert.False(GlobalSettings.SetLobbyServer(host.ToUpperInvariant(), 2611));
-            Assert.Equal(host, GlobalSettings.LobbyHost);
-        } finally
-        {
-            GlobalSettings.LobbyHost = previousHost;
-            GlobalSettings.LobbyPort = previousPort;
-            AppPaths.SetServerScope(previousScope);
-        }
+    [Fact]
+    public void TheMapAndMetafileCachesShareTheServerScope()
+    {
+        Assert.Equal(Path.GetFileName(AppPaths.MetaFileDir), Path.GetFileName(AppPaths.MapsDir));
+        Assert.Equal("maps", Path.GetFileName(Path.GetDirectoryName(AppPaths.MapsDir)));
     }
 }

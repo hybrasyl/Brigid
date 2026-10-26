@@ -179,23 +179,24 @@ public static class GlobalSettings
     /// </summary>
     public static bool IsLobbyServer(string host, int port) => IsSameServer(host, port, LobbyHost, LobbyPort);
 
-    /// <summary>True when two endpoints name the same server. A host name compares with no letter case.</summary>
-    public static bool IsSameServer(string host, int port, string otherHost, int otherPort)
+    /// <summary>
+    ///     True when two endpoints name the same server. A host name compares with no letter case and no outer spaces.
+    /// </summary>
+    internal static bool IsSameServer(string host, int port, string otherHost, int otherPort)
         => (port == otherPort) && string.Equals(host.Trim(), otherHost.Trim(), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    ///     Makes <paramref name="host" />:<paramref name="port" /> the lobby server, and scopes the server caches to it
-    ///     (<see cref="AppPaths.SetServerScope" />). Returns false, and changes nothing, when it is the server that the
-    ///     client uses now.
+    ///     Makes <paramref name="host" />:<paramref name="port" /> the lobby server. Returns false, and changes
+    ///     nothing, when it is the server that the client uses now. The caller moves the server caches
+    ///     (<c>ChaosGame</c>).
     /// </summary>
     public static bool SetLobbyServer(string host, int port)
     {
         if (IsLobbyServer(host, port))
             return false;
 
-        LobbyHost = host;
+        LobbyHost = host.Trim();
         LobbyPort = port;
-        AppPaths.SetServerScope(host);
 
         return true;
     }

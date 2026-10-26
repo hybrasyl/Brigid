@@ -192,8 +192,10 @@ public static class AppPaths
     public static string MetaFileDir => Path.Combine(AppRoot, "metafile", ServerScope);
 
     /// <summary>
-    ///     <c>{AppRoot}/maps/{serverKey}</c> — cache of downloaded map files (disposable). Scoped per server, because
-    ///     two servers can send different maps under one map number (BRIG-105).
+    ///     <c>{AppRoot}/maps/{serverKey}</c> — cache of downloaded map files (disposable). Scoped by the server key
+    ///     (<see cref="ServerProfileKey" />), because retail and Hybrasyl send different maps under one map number
+    ///     (BRIG-105). The key ignores the port, and every Hybrasyl host has one key, so those share a folder; the size
+    ///     and CRC check of <see cref="MapCache.TryLoad" /> keeps a wrong map from loading.
     /// </summary>
     public static string MapsDir => Path.Combine(AppRoot, "maps", ServerScope);
 

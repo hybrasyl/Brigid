@@ -20,7 +20,7 @@ public sealed partial class WorldScreen
         {
             case LogoutOutcome.LoginScreen:
                 PendingLogout = LogoutOutcome.None;
-                Game.Screens.Switch(new LobbyLoginScreen(LobbyEntry.ReturningFromWorld));
+                Game.Screens.Switch(new LobbyLoginScreen(LobbyStart.ReturningFromWorld));
 
                 return;
 

@@ -39,7 +39,7 @@ public sealed class LobbyLoginScreen : IScreen
     private static bool NoSoundAlertAdded;
     private static bool AssetsAlertAdded;
 
-    private readonly LobbyEntry Entry;
+    private readonly LobbyStart Start;
     private bool AwaitingCharFinalize;
 
     //the checksum of the greeting that the player accepted, and of the greeting that shows now. A reconnect skips only a
@@ -86,9 +86,9 @@ public sealed class LobbyLoginScreen : IScreen
     /// <inheritdoc />
     public UIPanel? Root { get; private set; }
 
-    public LobbyLoginScreen(LobbyEntry entry = LobbyEntry.Fresh) => Entry = entry;
+    public LobbyLoginScreen(LobbyStart start = LobbyStart.Fresh) => Start = start;
 
-    private bool ReturningFromWorld => Entry == LobbyEntry.ReturningFromWorld;
+    private bool ReturningFromWorld => Start == LobbyStart.ReturningFromWorld;
 
     /// <inheritdoc />
     public void Dispose() => Root?.Dispose();
@@ -235,11 +235,12 @@ public sealed class LobbyLoginScreen : IScreen
             //was accepted before the world, so the menu is ready when the login form closes
             LobbyReady = true;
             LoginForm.Show();
-        } else if ((Entry == LobbyEntry.ReturningFromConfig) && (Game.Connection.State == ConnectionState.Login))
+        } else if ((Start == LobbyStart.ReturningFromConfig) && (Game.Connection.State == ConnectionState.Login))
         {
-            //back from Config with the same server (BRIG-105): the connection and the greeting that the player accepted
-            //stay, so the menu is ready at once
+            //back from Config with the same server (BRIG-105): the connection stays, so the menu is ready at once. The
+            //homepage URL came to the screen before Config, so ask for it again
             LobbyReady = true;
+            Game.Connection.RequestHomepage();
         } else
 
             //fresh start, a new server from Config, or the server closed the connection — connect to lobby
