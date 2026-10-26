@@ -3,6 +3,7 @@ using Brigid.Controls.Components;
 using Brigid.Data;
 using Brigid.Data.AssetPacks;
 using Brigid.Definitions;
+using Brigid.Networking.Definitions;
 using Brigid.Rendering;
 using Brigid.Systems;
 using Brigid.Utilities;
@@ -96,6 +97,10 @@ public sealed class LauncherScreen : IScreen
     //in-session, so it must stay fixed here.
     private readonly bool OpenedFromMainMenu;
 
+    //from the main menu: true when the lobby was connected and its greeting accepted. A return with the same server
+    //then keeps that connection (BRIG-105)
+    private readonly bool LobbyWasReady;
+
     //recomputed each frame from current state
     private Rectangle DropdownButton;
     private Rectangle ThemeButton;
@@ -108,8 +113,30 @@ public sealed class LauncherScreen : IScreen
     private Rectangle SaveButton;
     private Rectangle CancelButton;
 
-    //cold startup uses the parameterless form (openedFromMainMenu defaults false); the main-menu Config button passes true.
-    public LauncherScreen(bool openedFromMainMenu = false) => OpenedFromMainMenu = openedFromMainMenu;
+    //cold startup uses the parameterless form (openedFromMainMenu defaults false); the main-menu Config button passes
+    //true, and whether its lobby is ready.
+    public LauncherScreen(bool openedFromMainMenu = false, bool lobbyReady = false)
+    {
+        OpenedFromMainMenu = openedFromMainMenu;
+        LobbyWasReady = lobbyReady;
+    }
+
+    /// <summary>
+    ///     True when the return from Config keeps the lobby connection: the server did not change, the lobby was ready
+    ///     when Config opened, and the client is still on the login server. Otherwise the lobby connects again
+    ///     (BRIG-105).
+    /// </summary>
+    internal static bool KeepsLobbyConnection(bool serverChanged, bool lobbyWasReady, ConnectionState state)
+        => !serverChanged && lobbyWasReady && (state == ConnectionState.Login);
+
+    /// <summary>
+    ///     The label of the return button: "Connect" when <paramref name="selected" /> is not the server that the
+    ///     client uses now, else "Return to Main Menu". Both do the same thing.
+    /// </summary>
+    internal static string ReturnLabel(ServerEntry? selected)
+        => (selected is not null) && !GlobalSettings.IsLobbyServer(selected.Host, selected.Port)
+            ? "Connect"
+            : "Return to Main Menu";
 
     public UIPanel? Root => null;
 
@@ -325,16 +352,22 @@ public sealed class LauncherScreen : IScreen
 
     private void HandleMainClick(Point cursor)
     {
-        //return to the main menu without connecting — reuses the already-loaded assets (no FinishAssetInitialization).
-        //set Completed so the post-click guards short-circuit the rest of the frame, since Switch disposes this screen.
+        //return to the main menu — reuses the already-loaded assets (no FinishAssetInitialization). The selected server
+        //becomes the lobby server (BRIG-105). Set Completed so the post-click guards short-circuit the rest of the
+        //frame, since Switch disposes this screen.
         if (OpenedFromMainMenu && ReturnButton.Contains(cursor))
         {
             //persist any in-session server pick (resolution and skip-launcher already save on change; Connect, which
             //normally persists the selection, is hidden in this mode). Data folder is locked, so it is unchanged.
             LauncherConfig.Save();
 
+            //a list with no server keeps the server that the client uses now
+            var selected = LauncherConfig.GetSelectedServer();
+            var serverChanged = selected is not null && Game.UseLobbyServer(selected.Host, selected.Port);
+            var keep = KeepsLobbyConnection(serverChanged, LobbyWasReady, Game.Connection.State);
+
             Completed = true;
-            Game.Screens.Switch(new LobbyLoginScreen());
+            Game.Screens.Switch(new LobbyLoginScreen(keep ? LobbyEntry.ReturningFromConfig : LobbyEntry.Fresh));
 
             return;
         }
@@ -645,9 +678,10 @@ public sealed class LauncherScreen : IScreen
         DrawSkipLauncherCheckbox();
 
         //Connect is only meaningful at startup (it runs the once-only asset init + enters the lobby). When summoned
-        //from the main menu the session is already loaded, so Connect is hidden and Return to Main Menu is the exit.
+        //from the main menu the session is already loaded, so Connect is hidden and the return button is the exit. It
+        //reads "Connect" when the selected server is not the server that the client uses now (BRIG-105)
         if (OpenedFromMainMenu)
-            DrawButton(ReturnButton, "Return to Main Menu", true, new Color(50, 54, 68), FieldBorder);
+            DrawButton(ReturnButton, ReturnLabel(selected), true, new Color(50, 54, 68), FieldBorder);
         else
             DrawButton(ConnectButton, "Connect", CanConnect(), new Color(60, 110, 70), new Color(110, 180, 120));
 

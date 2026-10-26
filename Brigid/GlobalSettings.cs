@@ -31,7 +31,10 @@ public static class GlobalSettings
     /// </summary>
     public static string DataPath { get; set; } = "";
 
-    /// <summary>Lobby server host. Empty until resolved from env/config or the launcher screen.</summary>
+    /// <summary>
+    ///     Lobby server host. Empty until resolved from env/config or the launcher screen. The one source of the lobby
+    ///     server: Config from the main menu changes it through <see cref="SetLobbyServer" /> (BRIG-105).
+    /// </summary>
     public static string LobbyHost { get; set; } = "";
 
     /// <summary>GitHub API endpoint queried by the startup release check (<see cref="UpdateChecker" />).</summary>
@@ -164,10 +167,37 @@ public static class GlobalSettings
     /// </summary>
     public static void InitializeAssetData()
     {
-        DataContext.Initialize(ClientVersion, DataPath, LobbyHost, LobbyPort);
+        DataContext.Initialize(ClientVersion, DataPath);
 
         LegendColors.Initialize();
         TextColors.Initialize();
+    }
+
+    /// <summary>
+    ///     True when <paramref name="host" /> and <paramref name="port" /> name the lobby server that the client uses
+    ///     now.
+    /// </summary>
+    public static bool IsLobbyServer(string host, int port) => IsSameServer(host, port, LobbyHost, LobbyPort);
+
+    /// <summary>True when two endpoints name the same server. A host name compares with no letter case.</summary>
+    public static bool IsSameServer(string host, int port, string otherHost, int otherPort)
+        => (port == otherPort) && string.Equals(host.Trim(), otherHost.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    ///     Makes <paramref name="host" />:<paramref name="port" /> the lobby server, and scopes the server caches to it
+    ///     (<see cref="AppPaths.SetServerScope" />). Returns false, and changes nothing, when it is the server that the
+    ///     client uses now.
+    /// </summary>
+    public static bool SetLobbyServer(string host, int port)
+    {
+        if (IsLobbyServer(host, port))
+            return false;
+
+        LobbyHost = host;
+        LobbyPort = port;
+        AppPaths.SetServerScope(host);
+
+        return true;
     }
 
     private static string? FirstNonBlank(string? primary, string? fallback)

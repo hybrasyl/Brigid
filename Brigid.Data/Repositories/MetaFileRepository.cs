@@ -67,6 +67,16 @@ public sealed class MetaFileRepository
     }
 
     /// <summary>
+    ///     Clears the item index and the NPC illustration metadata, which come from the metafiles of one server. Call
+    ///     it when the client changes server (BRIG-105); the next world entry builds the index again.
+    /// </summary>
+    public void ClearServerCaches()
+    {
+        ItemIndex = null;
+        NpcIllustrationMetadataCache = null;
+    }
+
+    /// <summary>
     ///     Loads an unparsed MetaFile from the metafile directory by filename.
     /// </summary>
     public MetaFile? Get(string name)
@@ -211,7 +221,7 @@ public sealed class MetaFileRepository
     /// <summary>
     ///     Returns merged NPC illustration metadata from both <c>npci.tbl</c> (inside <c>npcbase.dat</c>) and the
     ///     server-pushed <c>NPCIllust</c> metafile. <c>npci.tbl</c> variants occupy the low indices; metafile
-    ///     variants are appended after them. Cached after first call — the data only changes on startup.
+    ///     variants are appended after them. Cached after first call, until <see cref="ClearServerCaches" />.
     /// </summary>
     public NpcIllustrationMetadata GetNpcIllustrationMetadata()
         => NpcIllustrationMetadataCache ??= NpcIllustrationMetadata.Build(DatArchives.Npcbase, Get("NPCIllust"));

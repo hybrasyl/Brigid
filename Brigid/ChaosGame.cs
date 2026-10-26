@@ -582,6 +582,24 @@ public sealed class ChaosGame : Game
         Screens.Switch(new LobbyLoginScreen());
     }
 
+    /// <summary>
+    ///     Makes <paramref name="host" />:<paramref name="port" /> the lobby server, for Config from the main menu
+    ///     (BRIG-105). Returns false, and changes nothing, when it is the server that the client uses now. Otherwise
+    ///     the server caches follow it: the metafile and map folders, and the metafile data in memory. The data folder
+    ///     does not change.
+    /// </summary>
+    public bool UseLobbyServer(string host, int port)
+    {
+        if (!GlobalSettings.SetLobbyServer(host, port))
+            return false;
+
+        DataDiagnostics.Try(() => Directory.CreateDirectory(MetaFilePath), "create metafile dir");
+        DataContext.MetaFiles.ClearServerCaches();
+        NoticeDebugLog.Write($"lobby server changed to {host}:{port}");
+
+        return true;
+    }
+
     private void LoadCustomCursor()
     {
         CursorTexture = UiRenderer.Instance!.GetEpfTexture("mouse.epf", 0);
