@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Brigid.Controls.Generic;
 using Microsoft.Xna.Framework;
 using Xunit;
@@ -18,14 +17,23 @@ public class DebugOverlayFpsTests
 {
     private static readonly GameTime Step = new(TimeSpan.Zero, TimeSpan.FromMilliseconds(20));
 
-    //runs updates with a wall clock that moves wallMsPerUpdate at each Update, and draws on every drawEvery-th Update
-    private static int MeasureFps(int updates, int wallMsPerUpdate, int drawEvery)
+    //a clock in milliseconds that the test moves
+    private sealed class ManualClock : TimeProvider
     {
-        var previousClock = DebugOverlay.GetTimestamp;
-        long ticks = 0;
-        var ticksPerUpdate = Stopwatch.Frequency * wallMsPerUpdate / 1000;
+        public long Ms;
 
-        DebugOverlay.GetTimestamp = () => ticks;
+        public override long TimestampFrequency => 1000;
+
+        public override long GetTimestamp() => Ms;
+    }
+
+    //runs updates with a wall clock that moves wallMsPerUpdate at each Update, and draws on every drawEvery-th Update
+    private static int MeasureFps(int updates, int wallMsPerUpdate, int drawEvery, int stallBeforeUpdate = -1)
+    {
+        var previousClock = DebugOverlay.Clock;
+        var clock = new ManualClock();
+
+        DebugOverlay.Clock = clock;
         DebugOverlay.IsActive = true;
         DebugOverlay.ResetFrameCounters();
 
@@ -33,26 +41,35 @@ public class DebugOverlayFpsTests
         {
             for (var i = 0; i < updates; i++)
             {
+                if (i == stallBeforeUpdate)
+                    clock.Ms += 5000;
+
                 DebugOverlay.BeginFrame();
                 DebugOverlay.Update(Step);
 
                 if ((i % drawEvery) == (drawEvery - 1))
                     DebugOverlay.EndFrame();
 
-                ticks += ticksPerUpdate;
+                clock.Ms += wallMsPerUpdate;
             }
 
             return DebugOverlay.FramesPerSecond;
         } finally
         {
             DebugOverlay.IsActive = false;
-            DebugOverlay.GetTimestamp = previousClock;
+            DebugOverlay.ResetFrameCounters();
+            DebugOverlay.Clock = previousClock;
         }
     }
 
-    //50 Updates and 25 Draws each second, for two seconds
+    //50 Updates and 25 Draws each second, for two seconds. A window closes on the first Update at or after its second,
+    //so the 101st Update closes the second window
     [Fact]
     public void FramesPerSecond_CountsDrawnFramesWhenUpdatesSkipDraws() => Assert.Equal(25, MeasureFps(101, 20, 2));
+
+    //a 5 s stall before Update 60 closes one window and starts the next at that Update; the window after it reads 25
+    [Fact]
+    public void FramesPerSecond_StartsTheWindowAgainAfterAStall() => Assert.Equal(25, MeasureFps(111, 20, 2, 60));
 
     //each 20 ms game step takes 40 ms of real time: 25 Updates and 25 Draws each real second. On game time the window
     //closed after 50 Updates, which is two real seconds, and showed 50

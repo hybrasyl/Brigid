@@ -79,12 +79,12 @@ public static class DebugOverlay
     private static float LastFrameWorkMs;
     private static int FpsCounter;
 
-    //the start of the current one-second FPS window, in Stopwatch ticks; null until the first Update after a reset
+    //the start of the current one-second FPS window, in Clock timestamps; null until the first Update after a reset
     private static long? FpsWindowStart;
 
     //the FPS window runs on wall time, not on game time: under a fixed time step with load, MonoGame runs catch-up
     //Updates, and their game time is more than the real time (BRIG-111). A test gives its own clock
-    internal static Func<long> GetTimestamp = Stopwatch.GetTimestamp;
+    internal static TimeProvider Clock = TimeProvider.System;
     private static long SnappedDrawCount;
     private static long DebugDrawCount;
 
@@ -819,14 +819,18 @@ public static class DebugOverlay
         if (!IsActive)
             return;
 
-        var now = GetTimestamp();
+        var now = Clock.GetTimestamp();
         FpsWindowStart ??= now;
+        var elapsed = Clock.GetElapsedTime(FpsWindowStart.Value, now);
 
-        if (Stopwatch.GetElapsedTime(FpsWindowStart.Value, now) >= TimeSpan.FromSeconds(1))
+        if (elapsed >= TimeSpan.FromSeconds(1))
         {
             FramesPerSecond = FpsCounter;
             FpsCounter = 0;
-            FpsWindowStart += Stopwatch.Frequency;
+
+            //after a stall (a debugger break, a window drag) the window starts again, so the seconds that were missed
+            //do not each close a window with almost no frames
+            FpsWindowStart = elapsed >= TimeSpan.FromSeconds(2) ? now : FpsWindowStart + Clock.TimestampFrequency;
         }
 
         //gc collection tracking

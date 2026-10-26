@@ -245,11 +245,16 @@ public static class TextRenderer
 
     /// <summary>
     ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Adds the same
-    ///     <see cref="RunAdvance" /> for each color run that the draw moves the pen by, so a caret placed with this width
-    ///     sits where the text is drawn. The sum is rounded once: a rounded width per run loses up to 0.5 px off 1x.
-    ///     With <paramref name="colorCodes" /> false, a code is text and is measured as the glyphs that the draw shows.
+    ///     <see cref="RunAdvance" /> for each color run that the draw moves the pen by, so a caret placed with this
+    ///     width sits where the text is drawn. The sum is rounded once: a rounded width per run loses up to 0.5 px off
+    ///     1x. With <paramref name="colorCodesEnabled" /> false, a code is text and is measured as the glyphs that the
+    ///     draw shows.
     /// </summary>
-    public static int MeasureWidth(string text, int? size = null, float extraSpacing = 0f, bool colorCodes = true)
+    public static int MeasureWidth(
+        string text,
+        int? size = null,
+        float extraSpacing = 0f,
+        bool colorCodesEnabled = true)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
@@ -257,7 +262,7 @@ public static class TextRenderer
         var engine = FontEngine.Instance;
         var px = size ?? FontEngine.Instance.UiSize;
 
-        if (!colorCodes)
+        if (!colorCodesEnabled)
             return (int)MathF.Round(RunAdvance(engine, text, px, extraSpacing));
 
         var width = 0f;
@@ -283,7 +288,8 @@ public static class TextRenderer
 
     /// <summary>
     ///     How far the pen moves for one color run, drawn at <paramref name="extraSpacing" /> on top of the default
-    ///     tracking. The draw and <see cref="MeasureWidth(string, int?, float)" /> both use it, so they cannot disagree.
+    ///     tracking. The draw and <see cref="MeasureWidth(string, int?, float, bool)" /> both use it, so they cannot
+    ///     disagree.
     /// </summary>
     private static float RunAdvance(FontEngine engine, string run, int px, float extraSpacing)
         => engine.MeasureWidthExact(run, px, FontStyle.Regular, extraSpacing);

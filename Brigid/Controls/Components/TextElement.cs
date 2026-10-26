@@ -54,24 +54,17 @@ public sealed class TextElement
     ///     drawing at an explicit size is what puts carets, selection rects and hit-tests out of step with the glyphs,
     ///     and it is a whole class of bug that cannot occur if the size never has to be passed by hand.
     /// </summary>
-    public int Measure(string text) => TextRenderer.MeasureWidth(text, FontSize, CharacterSpacing);
-
-    /// <summary>
-    ///     <see cref="Measure(string)" /> with the color-code rule of the caller: with
-    ///     <paramref name="colorCodesEnabled" /> false, a {=x} code is text and has a width.
-    /// </summary>
-    public int Measure(string text, bool colorCodesEnabled)
-        => TextRenderer.MeasureWidth(text, FontSize, CharacterSpacing, colorCodesEnabled);
+    public int Measure(string text) => TextRenderer.MeasureWidth(text, FontSize, CharacterSpacing, ColorCodesEnabled);
 
     /// <summary>
     ///     The caret index nearest to <paramref name="x" /> pixels from the start of <paramref name="text" />, for a
     ///     mouse click. Measures each candidate prefix whole, as the caret and the selection are drawn. Do not add up
     ///     single-glyph widths: a single glyph has no tracking to the next glyph, so the sum is wider than the drawn
-    ///     text. A {=x} color code (when <paramref name="colorCodesEnabled" />) and a surrogate pair are one step. Each
+    ///     text. A {=x} color code (when <see cref="ColorCodesEnabled" />) and a surrogate pair are one step. Each
     ///     prefix is measured with the same code rule, so the prefix widths only grow, and a binary search finds the
     ///     glyph with log n measurements. A drag-select calls this on each mouse move.
     /// </summary>
-    public int IndexAtX(string text, int x, bool colorCodesEnabled)
+    public int IndexAtX(string text, int x)
     {
         if ((text.Length == 0) || (x <= 0))
             return 0;
@@ -80,7 +73,7 @@ public sealed class TextElement
 
         for (var i = 0; i < text.Length;)
         {
-            if (colorCodesEnabled && TextRenderer.IsColorCode(text, i))
+            if (ColorCodesEnabled && TextRenderer.IsColorCode(text, i))
             {
                 i += 3;
 
@@ -100,7 +93,7 @@ public sealed class TextElement
         {
             var mid = (low + high) / 2;
             var (start, end) = glyphs[mid];
-            var midpoint = (Measure(text[..start], colorCodesEnabled) + Measure(text[..end], colorCodesEnabled)) / 2;
+            var midpoint = (Measure(text[..start]) + Measure(text[..end])) / 2;
 
             if (x < midpoint)
                 high = mid;
@@ -165,7 +158,7 @@ public sealed class TextElement
 
         WrappedLines = null;
         (var marginX, var marginY) = ShadowStyle.ShadowMargin;
-        Width = TextRenderer.MeasureWidth(text, FontSize, CharacterSpacing) + marginX;
+        Width = Measure(text) + marginX;
         Height = TextRenderer.CHAR_HEIGHT + marginY;
     }
 
@@ -273,7 +266,7 @@ public sealed class TextElement
             return;
         }
 
-        var textWidth = TextRenderer.MeasureWidth(text, FontSize, CharacterSpacing);
+        var textWidth = Measure(text);
         var textBounds = new Rectangle((int)position.X, (int)position.Y, textWidth, TextRenderer.CHAR_HEIGHT);
 
         if (!clipRect.Intersects(textBounds))

@@ -44,7 +44,9 @@ public class SurrogateReproTests
     {
         FontEngine.Initialize(0);
         // a lone surrogate in the text — what the click hit test measures while an emoji is half typed
-        Assert.InRange(new Brigid.Controls.Components.TextElement().IndexAtX("a\uD83Db", 1000, colorCodesEnabled: false), 0, 3);
+        var element = new Brigid.Controls.Components.TextElement { ColorCodesEnabled = false };
+
+        Assert.InRange(element.IndexAtX("a\uD83Db", 1000), 0, 3);
     }
 
     [Fact]

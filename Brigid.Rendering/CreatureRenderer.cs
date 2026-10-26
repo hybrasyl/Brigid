@@ -117,9 +117,7 @@ public sealed class CreatureRenderer : IDisposable
         Color groundTintColor,
         float alpha = 1f)
     {
-        var spriteFrame = GetFrame(spriteId, frameIndex);
-
-        if (spriteFrame is not { Texture: { } texture } frame)
+        if (GetFrame(spriteId, frameIndex) is not { Texture: { } texture } frame)
             return 0;
 
         var texCenterX = frame.CenterX - Math.Min(0, (int)frame.Left);

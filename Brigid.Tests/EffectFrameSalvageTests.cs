@@ -28,7 +28,7 @@ public sealed class EffectFrameSalvageTests
         return texture;
     }
 
-    private static SpriteFrame Frame(Texture2D? texture, short centerX) => new(texture!, centerX, 70, 0, 0);
+    private static SpriteFrame Frame(Texture2D? texture, short centerX) => new(texture, centerX, 70, 0, 0);
 
     private static SKImage OnePixel()
     {
