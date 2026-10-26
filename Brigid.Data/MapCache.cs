@@ -15,13 +15,13 @@ public static class MapCache
 {
     private const int TILE_BYTES = 6;
 
-    private static string PathFor(string directory, int mapId) => Path.Combine(directory, $"lod{mapId}.map");
+    private static string PathFor(string directory, ushort mapId) => Path.Combine(directory, $"lod{mapId}.map");
 
     /// <summary>
     ///     Returns the cached map, or null when the file is absent or unreadable, or its size or CRC-CCITT is not the one
     ///     the server sent. A null makes the client request the map.
     /// </summary>
-    public static MapFile? TryLoad(string directory, int mapId, int width, int height, ushort checksum)
+    public static MapFile? TryLoad(string directory, ushort mapId, int width, int height, ushort checksum)
     {
         var path = PathFor(directory, mapId);
 
@@ -74,8 +74,11 @@ public static class MapCache
         return CrcCcitt.Compute(bytes) == checksum ? bytes : null;
     }
 
-    /// <summary>Writes the cache file of a map. Returns false when the write fails.</summary>
-    public static bool TrySave(string directory, int mapId, byte[] bytes)
+    /// <summary>
+    ///     Writes the cache file of a map. Returns false when the write fails. The map id is a u16, as on the wire, so a
+    ///     signed id does not convert without a cast and give a file name with a minus sign.
+    /// </summary>
+    public static bool TrySave(string directory, ushort mapId, byte[] bytes)
     {
         var path = PathFor(directory, mapId);
 

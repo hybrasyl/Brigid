@@ -90,18 +90,19 @@ public sealed class MapRowTracker(MapFile map)
     }
 
     /// <summary>
-    ///     Writes one row (<see cref="Apply" />) and returns where the stream stands. The row with the last index ends the
-    ///     stream, as on retail: <see cref="MapStreamStatus.Complete" /> when every row arrived with its full width, else
-    ///     <see cref="MapStreamStatus.Incomplete" />. A row after that changes the map but not the result.
+    ///     Writes one row (<see cref="Apply" />) and returns what it did with the row and where the stream stands. The row
+    ///     with the last index ends the stream, as on retail: <see cref="MapStreamStatus.Complete" /> when every row arrived
+    ///     with its full width, else <see cref="MapStreamStatus.Incomplete" />. A row after that changes the map but not the
+    ///     result.
     /// </summary>
-    public MapStreamStatus Receive(int rowIndex, ReadOnlySpan<byte> rowData)
+    public (MapRowResult Row, MapStreamStatus Stream) Receive(int rowIndex, ReadOnlySpan<byte> rowData)
     {
-        Apply(rowIndex, rowData);
+        var row = Apply(rowIndex, rowData);
 
         if (!IsLastRow(rowIndex))
-            return MapStreamStatus.Open;
+            return (row, MapStreamStatus.Open);
 
-        return IsComplete ? MapStreamStatus.Complete : MapStreamStatus.Incomplete;
+        return (row, IsComplete ? MapStreamStatus.Complete : MapStreamStatus.Incomplete);
     }
 
     /// <summary>

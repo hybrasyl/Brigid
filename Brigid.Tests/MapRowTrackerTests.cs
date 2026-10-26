@@ -125,20 +125,33 @@ public sealed class MapRowTrackerTests
     {
         var tracker = new MapRowTracker(new MapFile(2, 3));
 
-        Assert.Equal(MapStreamStatus.Open, tracker.Receive(0, Row(2, 1)));
-        Assert.Equal(MapStreamStatus.Open, tracker.Receive(1, Row(2, 2)));
-        Assert.Equal(MapStreamStatus.Complete, tracker.Receive(2, Row(2, 3)));
+        Assert.Equal((MapRowResult.Accepted, MapStreamStatus.Open), tracker.Receive(0, Row(2, 1)));
+        Assert.Equal((MapRowResult.Accepted, MapStreamStatus.Open), tracker.Receive(1, Row(2, 2)));
+        Assert.Equal((MapRowResult.Accepted, MapStreamStatus.Complete), tracker.Receive(2, Row(2, 3)));
     }
 
     [Fact]
     public void ReceiveGivesIncompleteForALastRowWithARowMissingOrShort()
     {
         var missing = new MapRowTracker(new MapFile(2, 2));
-        Assert.Equal(MapStreamStatus.Incomplete, missing.Receive(1, Row(2, 2)));
+        Assert.Equal((MapRowResult.Accepted, MapStreamStatus.Incomplete), missing.Receive(1, Row(2, 2)));
 
         var shortLast = new MapRowTracker(new MapFile(2, 2));
         shortLast.Receive(0, Row(2, 1));
-        Assert.Equal(MapStreamStatus.Incomplete, shortLast.Receive(1, []));
+        Assert.Equal((MapRowResult.Short, MapStreamStatus.Incomplete), shortLast.Receive(1, []));
+    }
+
+    //the screen resets the map-data watchdog only for an accepted row: a row that is not progress must not hold off the
+    //10 s limit, so a server that sends rows forever cannot keep the loading bar on the screen
+    [Fact]
+    public void ReceiveGivesTheRowResultForARowThatIsNotProgress()
+    {
+        var tracker = new MapRowTracker(new MapFile(2, 3));
+        tracker.Receive(0, Row(2, 1));
+
+        Assert.Equal((MapRowResult.OutOfRange, MapStreamStatus.Open), tracker.Receive(9, Row(2, 1)));
+        Assert.Equal((MapRowResult.Duplicate, MapStreamStatus.Open), tracker.Receive(0, Row(2, 1)));
+        Assert.Equal((MapRowResult.Short, MapStreamStatus.Open), tracker.Receive(1, []));
     }
 
     [Fact]

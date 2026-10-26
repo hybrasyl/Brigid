@@ -19,9 +19,15 @@ public sealed class MetaFileSync
     private readonly Action Complete;
     private readonly Func<string, byte[], bool> Write;
 
-    //the files that the client requested and has not completed: the name as the list gives it, and the number of
-    //requests sent. A file is written under the listed name, because the repository and the prune match names exactly
-    private readonly Dictionary<string, (string Name, int Requests)> Pending = new(StringComparer.OrdinalIgnoreCase);
+    //the files that the client requested and has not completed. A file is written under the listed name, because the
+    //repository and the prune match names exactly
+    private readonly Dictionary<string, Entry> Pending = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <param name="Name">The name as the checksum list gives it.</param>
+    /// <param name="Requests">The number of requests sent.</param>
+    /// <param name="Listed">The checksum in the list.</param>
+    /// <param name="Replaced">The checksum in a list that this list replaced while the file was pending, when it differs.</param>
+    private readonly record struct Entry(string Name, int Requests, uint Listed, uint? Replaced);
 
     /// <param name="directory">The metafile folder. It is read each time, because it depends on the server scope.</param>
     /// <param name="request">Sends the request for one file by name.</param>
@@ -50,6 +56,8 @@ public sealed class MetaFileSync
     /// </summary>
     public void OnChecksums(IEnumerable<(string Name, uint Checksum)>? entries)
     {
+        //an answer to a list that this list replaces can still arrive, and it carries no mark of its list
+        var replaced = Pending.Values.ToDictionary(entry => entry.Name, entry => entry.Listed, StringComparer.OrdinalIgnoreCase);
         Pending.Clear();
 
         if (entries is null)
@@ -78,7 +86,7 @@ public sealed class MetaFileSync
 
         foreach (var (name, checksum) in listed)
             if (MetaFileCache.GetChecksum(directory, name) != checksum)
-                Pending[name] = (name, 1);
+                Pending[name] = new Entry(name, 1, checksum, replaced.TryGetValue(name, out var old) && (old != checksum) ? old : null);
 
         foreach (var name in Pending.Keys)
             Request(name);
@@ -112,8 +120,19 @@ public sealed class MetaFileSync
             return;
         }
 
-        var (listedName, requests) = pending;
+        var (listedName, requests, listedChecksum, replacedChecksum) = pending;
         var valid = MetaFileCache.IsValidPayload(data, checksum);
+
+        //a late answer to the replaced list matches the replaced checksum: drop it once and request the file again. After
+        //that the checksum in the data packet decides, so a server whose list and data disagree for good still completes
+        if (valid && (checksum == replacedChecksum) && (checksum != listedChecksum))
+        {
+            Log($"{listedName} answers a checksum list that a later list replaced. Requesting it again.");
+            Pending[name] = pending with { Requests = requests + 1, Replaced = null };
+            Request(listedName);
+
+            return;
+        }
 
         if (!valid || !Write(listedName, data))
         {
@@ -124,7 +143,7 @@ public sealed class MetaFileSync
             if (requests < MAX_REQUESTS)
             {
                 Log($"{listedName} {problem}. Requesting it again ({requests + 1} of {MAX_REQUESTS}).");
-                Pending[name] = (listedName, requests + 1);
+                Pending[name] = pending with { Requests = requests + 1 };
                 Request(listedName);
 
                 return;

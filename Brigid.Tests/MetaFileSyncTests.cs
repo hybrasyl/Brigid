@@ -49,6 +49,16 @@ public sealed class MetaFileSyncTests : IDisposable
 
     private bool OnDisk(string name) => File.Exists(Path.Combine(Root, name));
 
+    private static byte[] Decompress(byte[] data)
+    {
+        using var input = new MemoryStream(data);
+        using var zlib = new ZLibStream(input, CompressionMode.Decompress);
+        using var output = new MemoryStream();
+        zlib.CopyTo(output);
+
+        return output.ToArray();
+    }
+
     private static void Answer(MetaFileSync sync, string name) => sync.OnData(name, ContentChecksum, Compress(Content));
 
     [Fact]
@@ -267,6 +277,47 @@ public sealed class MetaFileSyncTests : IDisposable
         Assert.Equal(["ItemInfo0"], Requests);
         Assert.False(OnDisk("Stale"));
         Assert.Contains(Logs, line => line.Contains("unsafe name"));
+    }
+
+    //an answer carries no mark of its list. A late answer to a replaced list matches the replaced checksum, so it is
+    //dropped once and the file is requested again; the answer to the current list is then written
+    [Fact]
+    public void OnData_DropsALateAnswerToAReplacedListOnce()
+    {
+        var older = Encoding.ASCII.GetBytes("ItemInfo0 before the server changed it");
+        var olderChecksum = CRC32.Calculate(older);
+        var sync = NewSync();
+        sync.OnChecksums([("ItemInfo0", olderChecksum)]);
+        sync.OnChecksums(Listing("ItemInfo0"));
+        Requests.Clear();
+
+        sync.OnData("ItemInfo0", olderChecksum, Compress(older));
+
+        Assert.False(OnDisk("ItemInfo0"));
+        Assert.Equal(0, Completions);
+        Assert.Equal(["ItemInfo0"], Requests);
+
+        Answer(sync, "ItemInfo0");
+
+        Assert.Equal(Content, Decompress(File.ReadAllBytes(Path.Combine(Root, "ItemInfo0"))));
+        Assert.Equal(1, Completions);
+    }
+
+    //the drop is once only: a server whose list and data disagree for good still completes, with the data it sends
+    [Fact]
+    public void OnData_TakesTheSecondAnswerThatMatchesAReplacedList()
+    {
+        var older = Encoding.ASCII.GetBytes("ItemInfo0 before the server changed it");
+        var olderChecksum = CRC32.Calculate(older);
+        var sync = NewSync();
+        sync.OnChecksums([("ItemInfo0", olderChecksum)]);
+        sync.OnChecksums(Listing("ItemInfo0"));
+
+        sync.OnData("ItemInfo0", olderChecksum, Compress(older));
+        sync.OnData("ItemInfo0", olderChecksum, Compress(older));
+
+        Assert.True(OnDisk("ItemInfo0"));
+        Assert.Equal(1, Completions);
     }
 
     [Fact]

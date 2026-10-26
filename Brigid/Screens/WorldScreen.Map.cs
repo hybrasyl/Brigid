@@ -131,9 +131,13 @@ public sealed partial class WorldScreen
         if (MapRows is null || MapFile is null)
             return;
 
-        MapDataIdleMs = 0f;
+        var (row, stream) = MapRows.Receive(args.RowIndex, args.RowData);
 
-        switch (MapRows.Receive(args.RowIndex, args.RowData))
+        //only a new full row is progress: a short, duplicate or out-of-range row does not hold off the watchdog
+        if (row == MapRowResult.Accepted)
+            MapDataIdleMs = 0f;
+
+        switch (stream)
         {
             case MapStreamStatus.Open:
                 return;
