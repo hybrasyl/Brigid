@@ -168,9 +168,9 @@ public sealed partial class WorldScreen : IScreen
     //entity captured on first right-click so a follow-up double-click can still target it even if pathfinding has shifted the camera between clicks
     private uint? PendingDoubleClickEntityId;
     private int PendingDoubleClickTick;
-    private bool PendingLoginSwitch;
-    //the logout of Exit Game completed: close the client in place of the switch to the login screen
-    private bool PendingClientClose;
+    //written on the network thread (HandleStateChanged) and read in Update: one field, so that the game thread cannot see
+    //the switch to the login screen before the close of Exit Game
+    private volatile LogoutOutcome PendingLogout;
 
     //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.
     private bool TransportSecure;

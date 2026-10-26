@@ -3,6 +3,7 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Models;
+using Brigid.Networking.Definitions;
 using Brigid.Systems;
 using Chaos.Geometry.Abstractions.Definitions;
 using Microsoft.Xna.Framework;
@@ -15,23 +16,31 @@ public sealed partial class WorldScreen
 {
     public void Update(GameTime gameTime)
     {
-        if (PendingLoginSwitch)
+        switch (PendingLogout)
         {
-            PendingLoginSwitch = false;
-
-            if (PendingClientClose)
-                Game.Exit();
-            else
+            case LogoutOutcome.LoginScreen:
+                PendingLogout = LogoutOutcome.None;
                 Game.Screens.Switch(new LobbyLoginScreen(true));
 
-            return;
+                return;
+
+            case LogoutOutcome.CloseClient:
+                PendingLogout = LogoutOutcome.None;
+                Game.Exit();
+
+                return;
         }
 
         var elapsedMs = (float)gameTime.ElapsedGameTime.TotalMilliseconds;
 
-        //the confirmation confirms by itself when its time ends. After the confirm, a disconnect in the grace time is the
-        //logout (HandleStateChanged); when the grace time ends, Exit to Menu leaves the player in the world, and Exit Game
-        //closes the client
+        //the connection sends the exit packets only in the world: a lost connection or a transfer while the confirmation
+        //is open cancels it, so that its timer does not confirm to no server
+        if (ExitFlow.IsConfirming && (Game.Connection.State != ConnectionState.World))
+            CancelExit();
+
+        //the confirmation confirms by itself when its time ends. After the confirm, a logout goes through
+        //HandleStateChanged; when the grace time ends with no logout, Exit to Menu leaves the player in the world, and
+        //Exit Game closes the client
         switch (ExitFlow.Tick(elapsedMs / 1000f))
         {
             case ExitStep.Confirm:
@@ -40,9 +49,9 @@ public sealed partial class WorldScreen
                 break;
 
             case ExitStep.CloseClient:
-                Game.Exit();
+                PendingLogout = LogoutOutcome.CloseClient;
 
-                return;
+                break;
         }
 
         //ease the transfer loading bar while it's up across the reconnect gap (cosmetic; see MapLoadingBar)

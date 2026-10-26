@@ -8,7 +8,7 @@ public enum ExitStep
     /// <summary>Nothing.</summary>
     None,
 
-    /// <summary>The confirmation time ended with no answer: send the exit confirm, as OK does.</summary>
+    /// <summary>The confirmation time ended with no answer: confirm, as OK does.</summary>
     Confirm,
 
     /// <summary>The grace time ended with no logout, and the player chose Exit Game: close the client.</summary>
@@ -16,25 +16,26 @@ public enum ExitStep
 }
 
 /// <summary>
-///     The client side of the safe quit (<c>0x0B</c>, BRIG-139). <see cref="Begin" /> starts the confirmation: the screen
-///     sends the exit query and shows the confirmation. OK, or the end of the confirmation time, is
-///     <see cref="Confirm" />: the screen sends the exit confirm, and the grace time starts. Cancel stops the
-///     confirmation; it needs no packet, because the client does not send the confirm. A logout that completes in the
-///     grace time is <see cref="LoggedOut" />.
+///     The timers of the safe quit (<c>0x0B</c>, BRIG-139) and whether the client closes after it. The world screen sends
+///     the packets. <see cref="Begin" /> starts the confirmation: the screen sends the exit query and shows the
+///     confirmation. OK, or the end of the confirmation time, is <see cref="Confirm" />: the screen sends the exit confirm,
+///     and the grace time starts. <see cref="Cancel" /> stops the confirmation. It needs no packet, because the client
+///     does not send the confirm. A logout in the grace time is <see cref="CompleteLogout" />.
 ///     <para>
 ///         Exit to Menu and Exit Game send the same packets. Exit Game closes the client when the logout completes or
 ///         the grace time ends. The confirm is sent before the grace time starts, so the client never closes before the
 ///         server has the exit request.
 ///     </para>
 /// </summary>
+/// <remarks>
+///     Some servers close the connection and send no Redirect. Hybrasyl sends the Redirect after 1200 ms, but it removes
+///     the player from its world state first. So a disconnect in the grace time is the logout, not a lost connection.
+/// </remarks>
 public sealed class ExitFlow
 {
     /// <summary>The time the confirmation waits for OK or Cancel before it confirms.</summary>
     public const float CONFIRM_SECONDS = 10f;
 
-    //buggy/older servers (e.g. Hybrasyl, which enqueues the Redirect with a 1200ms TransmitDelay and drops the user from
-    //WorldState before the queue flushes) close the socket without sending Redirect. A disconnect in this time after the
-    //confirm is the logout, not an unexpected drop
     /// <summary>The time after the confirm in which a disconnect counts as the logout.</summary>
     public const float GRACE_SECONDS = 10f;
 
@@ -51,21 +52,18 @@ public sealed class ExitFlow
     public bool IsAwaitingLogout => GraceSecondsRemaining > 0f;
 
     /// <summary>
-    ///     Starts the confirmation. Returns false, and the screen sends nothing, when an exit is already in progress. Exit
-    ///     Game during the grace time of Exit to Menu still closes the client after the logout.
+    ///     Starts the confirmation, and returns true: the screen sends the exit query. When an exit is already in progress,
+    ///     it returns false and the screen sends nothing. Exit Game then still closes the client after the logout.
     /// </summary>
     /// <param name="closeClient">True for Exit Game, false for Exit to Menu.</param>
     public bool Begin(bool closeClient)
     {
-        if (IsAwaitingLogout)
+        if (IsConfirming || IsAwaitingLogout)
         {
             ClosesClient |= closeClient;
 
             return false;
         }
-
-        if (IsConfirming)
-            return false;
 
         ClosesClient = closeClient;
         ConfirmSecondsRemaining = CONFIRM_SECONDS;
@@ -88,10 +86,11 @@ public sealed class ExitFlow
     }
 
     /// <summary>
-    ///     The logout completed: the server redirected to the login server, or closed the connection in the grace time.
-    ///     Returns true when the client must close. A logout that the client did not ask for returns false.
+    ///     Ends the exit, because the logout completed: the server redirected to the login server, or closed the
+    ///     connection in the grace time. Returns true when the client must close. A logout that the client did not ask
+    ///     for returns false.
     /// </summary>
-    public bool LoggedOut()
+    public bool CompleteLogout()
     {
         var close = ClosesClient && IsAwaitingLogout;
 
@@ -102,21 +101,22 @@ public sealed class ExitFlow
         return close;
     }
 
-    /// <summary>Advances the timers by <paramref name="seconds" /> and returns what the screen must do.</summary>
+    /// <summary>
+    ///     Advances the timers by <paramref name="seconds" /> and returns what the screen must do. When the confirmation
+    ///     time ends, the screen calls <see cref="Confirm" />.
+    /// </summary>
     public ExitStep Tick(float seconds)
     {
         if (ConfirmSecondsRemaining > 0f)
         {
             ConfirmSecondsRemaining -= seconds;
 
-            if (ConfirmSecondsRemaining <= 0f)
-            {
-                Confirm();
+            if (ConfirmSecondsRemaining > 0f)
+                return ExitStep.None;
 
-                return ExitStep.Confirm;
-            }
+            ConfirmSecondsRemaining = 0f;
 
-            return ExitStep.None;
+            return ExitStep.Confirm;
         }
 
         if (GraceSecondsRemaining > 0f)

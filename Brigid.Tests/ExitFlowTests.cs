@@ -19,9 +19,23 @@ public sealed class ExitFlowTests
         Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.CONFIRM_SECONDS - 1));
         Assert.True(Flow.IsConfirming);
         Assert.Equal(ExitStep.Confirm, Flow.Tick(1));
-
         Assert.False(Flow.IsConfirming);
+
+        //the screen confirms: it sends the exit confirm, and the grace time starts
+        Flow.Confirm();
+
         Assert.True(Flow.IsAwaitingLogout);
+    }
+
+    //a long frame ends the confirmation only; the grace time starts with the screen's confirm, not in the same tick
+    [Fact]
+    public void ALongTickConfirmsAndDoesNotClose()
+    {
+        Flow.Begin(true);
+
+        Assert.Equal(ExitStep.Confirm, Flow.Tick(ExitFlow.CONFIRM_SECONDS + ExitFlow.GRACE_SECONDS + 5));
+        Assert.Equal(ExitStep.None, Flow.Tick(1));
+        Assert.True(Flow.ClosesClient);
     }
 
     //the log-out Escape fault: a cancel stops the timer, so no logout comes after it
@@ -39,12 +53,27 @@ public sealed class ExitFlowTests
     }
 
     [Fact]
-    public void ASecondBeginWhileConfirmingSendsNothing()
+    public void ASecondExitToMenuWhileConfirmingSendsNothing()
     {
         Assert.True(Flow.Begin(false));
-        Assert.False(Flow.Begin(true));
+        Assert.False(Flow.Begin(false));
 
+        Assert.True(Flow.IsConfirming);
         Assert.False(Flow.ClosesClient);
+    }
+
+    //the screen then shows the Exit Game confirmation
+    [Fact]
+    public void ExitGameWhileTheLogOutConfirmationIsOpenChangesItToExitGame()
+    {
+        Flow.Begin(false);
+
+        Assert.False(Flow.Begin(true));
+        Assert.True(Flow.ClosesClient);
+
+        Flow.Confirm();
+
+        Assert.True(Flow.CompleteLogout());
     }
 
     [Fact]
@@ -65,7 +94,7 @@ public sealed class ExitFlowTests
         Flow.Begin(closeClient);
         Flow.Confirm();
 
-        Assert.Equal(expectedClose, Flow.LoggedOut());
+        Assert.Equal(expectedClose, Flow.CompleteLogout());
         Assert.False(Flow.IsAwaitingLogout);
     }
 
@@ -97,18 +126,32 @@ public sealed class ExitFlowTests
         Flow.Confirm();
 
         Assert.False(Flow.Begin(true));
-        Assert.True(Flow.LoggedOut());
+        Assert.Equal(ExitStep.CloseClient, Flow.Tick(ExitFlow.GRACE_SECONDS));
     }
 
-    //a server logout that the client did not ask for, or one after the grace time, goes to the login screen
     [Fact]
     public void ALogoutWithNoExitInProgressDoesNotClose()
     {
-        Assert.False(Flow.LoggedOut());
+        Assert.False(Flow.CompleteLogout());
+    }
 
+    //the logout came during the confirmation, before the client sent the confirm: the server logged the player out
+    [Fact]
+    public void ALogoutDuringTheConfirmationDoesNotClose()
+    {
         Flow.Begin(true);
 
-        Assert.False(Flow.LoggedOut());
+        Assert.False(Flow.CompleteLogout());
         Assert.False(Flow.IsConfirming);
+    }
+
+    [Fact]
+    public void ALogoutAfterTheGraceTimeDoesNotClose()
+    {
+        Flow.Begin(true);
+        Flow.Confirm();
+        Flow.Tick(ExitFlow.GRACE_SECONDS);
+
+        Assert.False(Flow.CompleteLogout());
     }
 }

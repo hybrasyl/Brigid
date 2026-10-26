@@ -91,11 +91,7 @@ public sealed class PauseMenuControl : CenteredModalPanel
             X = exitsX + BUTTON_W + BUTTON_GAP,
             Y = exitsY
         };
-        exitGame.Clicked += () =>
-        {
-            Hide();
-            OnExitGame?.Invoke();
-        };
+        exitGame.Clicked += ExitGame;
         AddChild(exitGame);
     }
 
@@ -123,6 +119,12 @@ public sealed class PauseMenuControl : CenteredModalPanel
         OnExitToMenu?.Invoke();
     }
 
+    private void ExitGame()
+    {
+        Hide();
+        OnExitGame?.Invoke();
+    }
+
     public int GetMusicVolume() => MusicSlider.Value;
 
     public int GetSoundVolume() => SoundSlider.Value;
@@ -146,8 +148,8 @@ public sealed class PauseMenuControl : CenteredModalPanel
     //a panel hotkey closes it and opens its panel
     protected override bool LetsKeysThrough => true;
 
-    //X closes the menu and exits to the menu, as before BRIG-139: Exit Game closes the client, so it takes a click. The
-    //base closes the menu on Escape
+    //X closes the menu and exits to the menu. Exit Game closes the client, so it has no key. The base closes the menu on
+    //Escape
     public override void OnKeyDown(KeyDownEvent e)
     {
         if (e.Key == Keys.X)
