@@ -36,14 +36,11 @@ public sealed class DirectoryEntriesTests : IDisposable
     [Fact]
     public void TheKindLimitsTheEntries()
     {
-        Assert.Equal(
-            "Legend.dat",
-            DirectoryEntries.FindName(Root, "legend.dat", StringComparison.OrdinalIgnoreCase, DirectoryEntryKind.Files));
-        Assert.Null(
-            DirectoryEntries.FindName(Root, "legend.dat", StringComparison.OrdinalIgnoreCase, DirectoryEntryKind.Directories));
-        Assert.Equal(
-            "Erisco",
-            DirectoryEntries.FindName(Root, "erisco", StringComparison.OrdinalIgnoreCase, DirectoryEntryKind.Directories));
+        const StringComparison NO_CASE = StringComparison.OrdinalIgnoreCase;
+
+        Assert.Equal("Legend.dat", DirectoryEntries.FindName(Root, "legend.dat", NO_CASE, DirectoryEntryKind.Files));
+        Assert.Null(DirectoryEntries.FindName(Root, "legend.dat", NO_CASE, DirectoryEntryKind.Directories));
+        Assert.Equal("Erisco", DirectoryEntries.FindName(Root, "erisco", NO_CASE, DirectoryEntryKind.Directories));
         Assert.Null(DirectoryEntries.FindName(Root, "Erisco", StringComparison.Ordinal, DirectoryEntryKind.Files));
     }
 
@@ -58,14 +55,11 @@ public sealed class DirectoryEntriesTests : IDisposable
     [Fact]
     public void TwoMatchesGiveTheFirstInOrdinalOrder()
     {
-        File.WriteAllBytes(Path.Combine(Root, "legend.dat"), [2]);
+        string?[] listing = ["legend.dat", "khanpal.dat", "Legend.dat", "LEGEND.DAT"];
+        const StringComparison NO_CASE = StringComparison.OrdinalIgnoreCase;
 
-        var names = Directory.GetFiles(Root).Select(Path.GetFileName).ToArray();
-
-        //Windows and macOS (by default) do not tell the two names apart, so there is one file
-        if (names.Count(n => string.Equals(n, "legend.dat", StringComparison.OrdinalIgnoreCase)) < 2)
-            return;
-
-        Assert.Equal("Legend.dat", DirectoryEntries.FindName(Root, "LEGEND.DAT", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("LEGEND.DAT", DirectoryEntries.FirstMatch(listing, "legend.dat", NO_CASE));
+        Assert.Equal("legend.dat", DirectoryEntries.FirstMatch(listing, "legend.dat", StringComparison.Ordinal));
+        Assert.Null(DirectoryEntries.FirstMatch(listing, "legend", NO_CASE));
     }
 }

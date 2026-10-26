@@ -13,7 +13,11 @@ public static class FileNames
 {
     //the characters Windows refuses in a file name, including both separators. They are refused on every platform, so
     //a name that one platform accepts, every platform accepts.
-    private static readonly char[] InvalidChars = ['"', '<', '>', '|', ':', '*', '?', '\\', '/', .. Enumerable.Range(0, 32).Select(i => (char)i)];
+    private static readonly char[] InvalidChars =
+    [
+        '"', '<', '>', '|', ':', '*', '?', '\\', '/',
+        .. Enumerable.Range(0, 32).Select(i => (char)i)
+    ];
 
     //Windows opens a device, not a file, for these names, with or without an extension. The superscript digits are
     //reserved too.
@@ -27,15 +31,16 @@ public static class FileNames
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    ///     Returns true only for a bare file name that names the same file on every platform: not empty, no separator, no
-    ///     character that Windows refuses, not rooted, no trailing dot or space, and not a Windows device name.
+    ///     Returns true only for a bare file name that names the same file on every platform: not empty, no separator,
+    ///     no character that Windows refuses, not rooted, no trailing dot or space, and not a Windows device name.
     /// </summary>
     public static bool IsSafeName([NotNullWhen(true)] string? name)
     {
         if (string.IsNullOrWhiteSpace(name) || (name.IndexOfAny(InvalidChars) >= 0))
             return false;
 
-        //Windows removes a trailing dot or space, so the file on disk gets another name. This also refuses "." and "..".
+        //Windows removes a trailing dot or space, so the file on disk gets another name. This also refuses "." and
+        //"..".
         if (name.EndsWith('.') || name.EndsWith(' '))
             return false;
 
@@ -47,16 +52,18 @@ public static class FileNames
     }
 
     /// <summary>
-    ///     Makes a safe name (<see cref="IsSafeName" />) from <paramref name="name" />: removes the characters that Windows
-    ///     refuses, the outer spaces and the trailing dots, and puts <c>_</c> before a Windows device name. An empty result
-    ///     is <c>_</c>. A name that is safe does not change.
+    ///     Makes a safe name (<see cref="IsSafeName" />) from <paramref name="name" />: removes the characters that
+    ///     Windows refuses, the outer white space and the trailing dots, and puts <c>_</c> before a Windows device
+    ///     name. An empty result is <c>_</c>. A safe name with no outer white space does not change.
     /// </summary>
     public static string ToSafeName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name))
             return "_";
 
-        var cleaned = new string(name.Where(c => Array.IndexOf(InvalidChars, c) < 0).ToArray()).Trim().TrimEnd('.', ' ');
+        var cleaned = new string(name.Where(c => Array.IndexOf(InvalidChars, c) < 0).ToArray())
+                      .Trim()
+                      .TrimEnd('.', ' ');
 
         if (cleaned.Length == 0)
             return "_";

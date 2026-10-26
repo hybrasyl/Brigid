@@ -7,8 +7,9 @@ namespace Brigid.Data;
 
 /// <summary>
 ///     The local cache of server metafiles in <see cref="AppPaths.MetaFileDir" />. The server names each metafile, and
-///     the client stores it under that name, so every method here refuses a name that
-///     <see cref="FileNames.IsSafeName" /> refuses. A name that is not a bare file name lets a server write outside the directory.
+///     the client stores it under that name, so <see cref="GetChecksum" /> and <see cref="TryWrite" /> refuse a name
+///     that <see cref="FileNames.IsSafeName" /> refuses, and <see cref="MetaFileSync" /> drops such a name before
+///     <see cref="PruneUnlisted" />. A name that is not a bare file name lets a server write outside the directory.
 /// </summary>
 public static class MetaFileCache
 {

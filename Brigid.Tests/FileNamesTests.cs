@@ -4,10 +4,10 @@ using Xunit;
 namespace Brigid.Tests;
 
 /// <summary>
-///     BRIG-111: one rule for a file name that Brigid makes from data it does not control.
-///     <see cref="FileNames.IsSafeName" /> refuses a server-sent metafile name that is not the same bare file on every
-///     platform, and <see cref="FileNames.ToSafeName" /> makes a profile folder name from a character name with the same
-///     rule.
+///     BRIG-111: one rule for a file name that Brigid makes from data it does not control. <see
+///     cref="FileNames.IsSafeName" /> refuses a server-sent metafile name that is not the same bare file on every
+///     platform, and <see cref="FileNames.ToSafeName" /> makes a profile folder name from a character name with the
+///     same rule.
 /// </summary>
 public sealed class FileNamesTests
 {
@@ -59,6 +59,7 @@ public sealed class FileNamesTests
     [Theory]
     [InlineData("Angelique", "Angelique")]
     [InlineData("  Sabrael  ", "Sabrael")]
+    [InlineData(" x", "x")]
     [InlineData("a:b|c", "abc")]
     [InlineData(@"..\x", "..x")]
     [InlineData("../x", "..x")]
@@ -78,5 +79,6 @@ public sealed class FileNamesTests
 
         Assert.Equal(expected, safe);
         Assert.True(FileNames.IsSafeName(safe));
+        Assert.Equal(safe, FileNames.ToSafeName(safe));
     }
 }

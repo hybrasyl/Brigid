@@ -29,9 +29,9 @@ public sealed class LocalPlayerSettingsRepository
     public string MacroPath => Path.Combine(PlayerDirectory, MACRO_FILE);
 
     /// <summary>
-    ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a bare,
-    ///     cross-platform file name (see <see cref="FileNames.IsSafeName" />). A caller can pass a server-sent name,
-    ///     and Path.Combine follows a rooted name or ".." out of the folder.
+    ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a
+    ///     bare, cross-platform file name (see <see cref="FileNames.IsSafeName" />). A caller can pass a server-sent
+    ///     name, and Path.Combine follows a rooted name or ".." out of the folder.
     /// </summary>
     public bool TryGetFilePath(string fileName, [NotNullWhen(true)] out string? path)
     {
@@ -113,13 +113,9 @@ public sealed class LocalPlayerSettingsRepository
         if (string.IsNullOrEmpty(DataContext.DataPath))
             return;
 
-        //characterName is server-supplied. The legacy folder is always a single direct child of DataPath, so reject any
-        //name that isn't a plain segment — blank, "."/"..", or anything carrying a separator or drive/volume qualifier
-        //(GetFileName strips those, so it would differ). This stops a crafted name from pointing the import source
-        //outside the game folder, including via Path.Combine honoring a rooted second argument.
-        if (string.IsNullOrWhiteSpace(characterName)
-            || characterName is "." or ".."
-            || !string.Equals(characterName, Path.GetFileName(characterName), StringComparison.Ordinal))
+        //characterName is server-supplied. The legacy folder is always a single direct child of DataPath, so a name
+        //that is not a bare file name does not import: Path.Combine would follow it out of the game folder
+        if (!FileNames.IsSafeName(characterName))
             return;
 
         var legacyDir = Path.Combine(DataContext.DataPath, characterName);

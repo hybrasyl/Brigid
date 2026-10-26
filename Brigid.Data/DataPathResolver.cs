@@ -23,7 +23,9 @@ public static class DataPathResolver
 
             current = Path.Exists(asGiven)
                 ? asGiven
-                : Path.Combine(current, DirectoryEntries.FindName(current, segment, StringComparison.OrdinalIgnoreCase) ?? segment);
+                : Path.Combine(
+                    current,
+                    DirectoryEntries.FindName(current, segment, StringComparison.OrdinalIgnoreCase) ?? segment);
         }
 
         return current;

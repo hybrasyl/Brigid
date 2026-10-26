@@ -135,8 +135,11 @@ public static class AppPaths
         var found = false;
 
         DataDiagnostics.Try(
-            () => found = DirectoryEntries.FindName(parent, name, StringComparison.Ordinal, DirectoryEntryKind.Directories)
-                          is not null,
+            () => found = DirectoryEntries.FindName(
+                              parent,
+                              name,
+                              StringComparison.Ordinal,
+                              DirectoryEntryKind.Directories) is not null,
             $"list {parent}");
 
         return found;
