@@ -145,7 +145,7 @@ public sealed class EffectRenderer : IDisposable
             var texture = RenderTexture(() => Graphics.RenderImage(efaFrame, efaFile.BlendingType), $"effect {effectId} frame {i}");
 
             frames[i] = new SpriteFrame(
-                texture!,
+                texture,
                 efaFrame.CenterX,
                 efaFrame.CenterY,
                 efaFrame.Left,
@@ -202,7 +202,7 @@ public sealed class EffectRenderer : IDisposable
             var centerY = centerPoints is not null ? centerPoints[epfFrameIndex].Y : (short)70;
 
             frames[i] = new SpriteFrame(
-                texture!,
+                texture,
                 centerX,
                 centerY,
                 epfFrame.Left,
@@ -231,7 +231,7 @@ public sealed class EffectRenderer : IDisposable
             var centerY = spfFrame.HasCenterPoint ? spfFrame.CenterY : (short)70;
 
             frames[i] = new SpriteFrame(
-                texture!,
+                texture,
                 centerX,
                 centerY,
                 (short)spfFrame.Left,

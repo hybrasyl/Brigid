@@ -114,6 +114,4 @@ public sealed class WorldEntity
     /// </summary>
     public bool IsRenderedAsCreatureSprite
         => (Type == ClientEntityType.Creature) || ((Type == ClientEntityType.Aisling) && Appearance is null && (SpriteId > 0));
-
-    public bool UsesCreatureWalkTiming => IsRenderedAsCreatureSprite;
 }

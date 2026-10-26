@@ -119,14 +119,12 @@ public sealed class CreatureRenderer : IDisposable
     {
         var spriteFrame = GetFrame(spriteId, frameIndex);
 
-        if (spriteFrame is null)
+        if (spriteFrame is not { Texture: { } texture } frame)
             return 0;
-
-        var frame = spriteFrame.Value;
 
         var texCenterX = frame.CenterX - Math.Min(0, (int)frame.Left);
         var texCenterY = frame.CenterY - Math.Min(0, (int)frame.Top);
-        var anchorX = flip ? frame.Texture.Width - texCenterX : texCenterX;
+        var anchorX = flip ? texture.Width - texCenterX : texCenterX;
 
         var drawX = tileCenterX + visualOffset.X - anchorX;
         var drawY = tileCenterY + visualOffset.Y - texCenterY;
@@ -137,17 +135,17 @@ public sealed class CreatureRenderer : IDisposable
             var effects = flip ? SpriteEffects.FlipHorizontally : SpriteEffects.None;
 
             //ground tint baked into a per-(source, paintHeight, color) cache first; entity tint chains on top of the result.
-            var sourceTexture = frame.Texture;
+            var sourceTexture = texture;
 
             if (groundPaintHeight > 0)
             {
-                var key = (Source: frame.Texture, PaintHeight: groundPaintHeight, PackedColor: groundTintColor.PackedValue);
+                var key = (Source: texture, PaintHeight: groundPaintHeight, PackedColor: groundTintColor.PackedValue);
 
                 if (!GroundTintCache.TryGetValue(key, out var groundTinted))
                 {
                     groundTinted = ImageUtil.BuildGroundTinted(
                         TextureConverter.Device,
-                        frame.Texture,
+                        texture,
                         groundPaintHeight,
                         frame.CenterY,
                         groundTintColor);
@@ -177,7 +175,7 @@ public sealed class CreatureRenderer : IDisposable
                 0f);
         }
 
-        return (int)screenPos.Y + frame.Texture.Height;
+        return (int)screenPos.Y + texture.Height;
     }
 
     /// <summary>
@@ -194,12 +192,10 @@ public sealed class CreatureRenderer : IDisposable
 
         if (AssetPackRegistry.GetCreaturePackFor(spriteId) is not null)
         {
-            var packFrame = GetFrame(spriteId, 0);
-
-            if (packFrame is null)
+            if (GetFrame(spriteId, 0)?.Texture is not { } packTexture)
                 return 0;
 
-            var height = packFrame.Value.Texture.Height;
+            var height = packTexture.Height;
             AverageTopOffsetCache[spriteId] = height;
 
             return height;

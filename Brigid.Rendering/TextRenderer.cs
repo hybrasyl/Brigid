@@ -247,14 +247,19 @@ public static class TextRenderer
     ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Adds the same
     ///     <see cref="RunAdvance" /> for each color run that the draw moves the pen by, so a caret placed with this width
     ///     sits where the text is drawn. The sum is rounded once: a rounded width per run loses up to 0.5 px off 1x.
+    ///     With <paramref name="colorCodes" /> false, a code is text and is measured as the glyphs that the draw shows.
     /// </summary>
-    public static int MeasureWidth(string text, int? size = null, float extraSpacing = 0f)
+    public static int MeasureWidth(string text, int? size = null, float extraSpacing = 0f, bool colorCodes = true)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
 
         var engine = FontEngine.Instance;
         var px = size ?? FontEngine.Instance.UiSize;
+
+        if (!colorCodes)
+            return (int)MathF.Round(RunAdvance(engine, text, px, extraSpacing));
+
         var width = 0f;
         var runStart = 0;
 

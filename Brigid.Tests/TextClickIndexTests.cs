@@ -56,6 +56,23 @@ public class TextClickIndexTests
         Assert.Equal(6, element.IndexAtX(text, element.Measure("ab{=bc"), colorCodesEnabled: true));
     }
 
+    //BRIG-111: with codes off, "{=b" is text. The prefixes were measured with the code removed, so their widths did not
+    //only grow, and the binary search could put the caret on the wrong glyph
+    [Fact]
+    public void IndexAtX_WithCodesOffTreatsACodeAsText()
+    {
+        FontEngine.Initialize(0);
+        var element = new TextElement();
+        const string text = "ab{=bcd";
+
+        for (var i = 0; i <= text.Length; i++)
+        {
+            var caretX = element.Measure(text[..i], colorCodesEnabled: false);
+
+            Assert.Equal(i, element.IndexAtX(text, caretX, colorCodesEnabled: false));
+        }
+    }
+
     [Theory]
     [InlineData("", 10, 0)]
     [InlineData("abc", 0, 0)]
