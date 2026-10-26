@@ -18,26 +18,32 @@ public sealed partial class WorldScreen
         if (PendingLoginSwitch)
         {
             PendingLoginSwitch = false;
-            Game.Screens.Switch(new LobbyLoginScreen(true));
+
+            if (PendingClientClose)
+                Game.Exit();
+            else
+                Game.Screens.Switch(new LobbyLoginScreen(true));
 
             return;
         }
 
         var elapsedMs = (float)gameTime.ElapsedGameTime.TotalMilliseconds;
 
-        //auto-confirm exit when the 10s grace period elapses without user input
-        if (ExitConfirmSecondsRemaining > 0f)
+        //the confirmation confirms by itself when its time ends. After the confirm, a disconnect in the grace time is the
+        //logout (HandleStateChanged); when the grace time ends, Exit to Menu leaves the player in the world, and Exit Game
+        //closes the client
+        switch (ExitFlow.Tick(elapsedMs / 1000f))
         {
-            ExitConfirmSecondsRemaining -= elapsedMs / 1000f;
-
-            if (ExitConfirmSecondsRemaining <= 0f)
+            case ExitStep.Confirm:
                 ConfirmExit();
-        }
 
-        //after we've sent the exit confirm, an in-window disconnect counts as expected (handled in
-        //HandleStateChanged). once the window elapses, fall back to normal "Connection Lost" semantics.
-        if (ExitInProgressSecondsRemaining > 0f)
-            ExitInProgressSecondsRemaining -= elapsedMs / 1000f;
+                break;
+
+            case ExitStep.CloseClient:
+                Game.Exit();
+
+                return;
+        }
 
         //ease the transfer loading bar while it's up across the reconnect gap (cosmetic; see MapLoadingBar)
         MapLoading.Tick(elapsedMs);

@@ -74,6 +74,16 @@ public sealed class OkPopupMessageControl : CenteredModalPanel
     }
 
     /// <summary>
+    ///     Shows the popup with <paramref name="title" /> and <paramref name="message" />, for a host that shows one popup
+    ///     for more than one question.
+    /// </summary>
+    public void Show(string title, string message)
+    {
+        SetTitle(title);
+        Show(message);
+    }
+
+    /// <summary>
     ///     Shows the popup with <paramref name="message" />. When the popup is open, the message changes and the popup stays
     ///     open.
     /// </summary>

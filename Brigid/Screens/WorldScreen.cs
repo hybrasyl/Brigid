@@ -123,11 +123,7 @@ public sealed partial class WorldScreen : IScreen
     private GraphicsDevice Device = null!;
     private OkPopupMessageControl DisconnectPopup = null!;
     private OkPopupMessageControl ExitConfirmPopup = null!;
-    private float ExitConfirmSecondsRemaining;
-    //grace window after ConfirmExit fires — if a disconnect arrives within this window we treat it as
-    //the expected logout (suppress the "Connection Lost" popup and transition to login). Defensive against
-    //servers that drop the connection without flushing the Redirect packet.
-    private float ExitInProgressSecondsRemaining;
+    private readonly ExitFlow ExitFlow = new();
 
     //event detail popup (from events tab)
     private EventMetadataDetailsControl EventMetadataDetails = null!;
@@ -173,6 +169,8 @@ public sealed partial class WorldScreen : IScreen
     private uint? PendingDoubleClickEntityId;
     private int PendingDoubleClickTick;
     private bool PendingLoginSwitch;
+    //the logout of Exit Game completed: close the client in place of the switch to the login screen
+    private bool PendingClientClose;
 
     //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.
     private bool TransportSecure;
@@ -498,12 +496,13 @@ public sealed partial class WorldScreen : IScreen
         };
         DisconnectPopup.OnCancel += () => Game.Exit();
 
-        ExitConfirmPopup = new OkPopupMessageControl("Log Out")
+        ExitConfirmPopup = new OkPopupMessageControl("Log Out", showCancel: true)
         {
             ZIndex = 10,
             Name = "ExitConfirmPopup"
         };
         ExitConfirmPopup.OnOk += ConfirmExit;
+        ExitConfirmPopup.OnCancel += CancelExit;
 
         WireExchange();
         WireBoardControls();

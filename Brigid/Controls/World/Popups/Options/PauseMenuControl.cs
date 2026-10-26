@@ -9,9 +9,10 @@ using Microsoft.Xna.Framework.Input;
 namespace Brigid.Controls.World.Popups.Options;
 
 /// <summary>
-///     Center-screen menu opened with Escape or Q (BRIG-55). Contains Sound / Music / Ambience sliders and the Settings and
-///     Exit Game buttons; Close is the bottom bar's. Clicking Settings closes the menu and opens the Options modal
-///     (Friends/Macros now live as tabs there). Escape closes the menu, and X closes it and exits.
+///     Center-screen menu opened with Escape or Q (BRIG-55). Contains Sound / Music / Ambience sliders and the Settings,
+///     Exit to Menu and Exit Game buttons; Close is the bottom bar's. Clicking Settings closes the menu and opens the
+///     Options modal (Friends/Macros now live as tabs there). Exit to Menu logs out to the login screen; Exit Game logs out
+///     the same way, then closes the client (BRIG-139). Escape closes the menu, and X closes it and exits to the menu.
 ///     <para>
 ///         A primitive <see cref="CenteredModalPanel" /> that takes the theme: the frame, the buttons, the sliders and the
 ///         label colours come from the theme, with the flat <see cref="DialogPalette" /> look as the fallback. Every child
@@ -21,7 +22,7 @@ namespace Brigid.Controls.World.Popups.Options;
 public sealed class PauseMenuControl : CenteredModalPanel
 {
     private const int PANEL_W = 260;
-    private const int PANEL_H = 170;
+    private const int PANEL_H = 204;
 
     private const int ROW_STRIDE = 24;
     private const int ROW_H = 16;
@@ -32,6 +33,7 @@ public sealed class PauseMenuControl : CenteredModalPanel
     private const int BUTTON_W = 100;
     private const int BUTTON_H = 22;
     private const int BUTTON_GAP = 12;
+    private const int BUTTON_ROW_GAP = 12;
     private const int SECTION_GAP = 6;
 
     private readonly SliderControl SoundSlider;
@@ -60,11 +62,15 @@ public sealed class PauseMenuControl : CenteredModalPanel
         AddSliderRow(new UILabel { Name = "ambience_label", Text = "Ambience" }, AmbienceSlider, rowsX, ref y);
         AmbienceSlider.ValueChanged += v => OnAmbienceVolumeChanged?.Invoke(v);
 
-        //Settings and Exit Game side by side, centred below the sliders
-        var buttonsX = content.X + (content.Width - (2 * BUTTON_W + BUTTON_GAP)) / 2;
-        var buttonsY = y + SECTION_GAP;
+        //Settings alone and centred below the sliders, then the two exits side by side: three buttons do not fit one row
+        var settingsY = y + SECTION_GAP;
 
-        var settings = new TextButton("Settings", BUTTON_W, BUTTON_H) { Name = "settings", X = buttonsX, Y = buttonsY };
+        var settings = new TextButton("Settings", BUTTON_W, BUTTON_H)
+        {
+            Name = "settings",
+            X = content.X + (content.Width - BUTTON_W) / 2,
+            Y = settingsY
+        };
         settings.Clicked += () =>
         {
             Hide();
@@ -72,14 +78,25 @@ public sealed class PauseMenuControl : CenteredModalPanel
         };
         AddChild(settings);
 
-        var exit = new TextButton("Exit Game", BUTTON_W, BUTTON_H)
+        var exitsX = content.X + (content.Width - (2 * BUTTON_W + BUTTON_GAP)) / 2;
+        var exitsY = settingsY + BUTTON_H + BUTTON_ROW_GAP;
+
+        var exitMenu = new TextButton("Exit to Menu", BUTTON_W, BUTTON_H) { Name = "exit_menu", X = exitsX, Y = exitsY };
+        exitMenu.Clicked += ExitToMenu;
+        AddChild(exitMenu);
+
+        var exitGame = new TextButton("Exit Game", BUTTON_W, BUTTON_H)
         {
-            Name = "exit",
-            X = buttonsX + BUTTON_W + BUTTON_GAP,
-            Y = buttonsY
+            Name = "exit_game",
+            X = exitsX + BUTTON_W + BUTTON_GAP,
+            Y = exitsY
         };
-        exit.Clicked += Exit;
-        AddChild(exit);
+        exitGame.Clicked += () =>
+        {
+            Hide();
+            OnExitGame?.Invoke();
+        };
+        AddChild(exitGame);
     }
 
     //places a row: the label at the left and the slider beside it
@@ -100,10 +117,10 @@ public sealed class PauseMenuControl : CenteredModalPanel
         y += ROW_STRIDE;
     }
 
-    private void Exit()
+    private void ExitToMenu()
     {
         Hide();
-        OnExit?.Invoke();
+        OnExitToMenu?.Invoke();
     }
 
     public int GetMusicVolume() => MusicSlider.Value;
@@ -119,7 +136,8 @@ public sealed class PauseMenuControl : CenteredModalPanel
     public void SetAmbienceVolume(int volume) => AmbienceSlider.SetValue(volume);
 
     public event AmbienceVolumeChangedHandler? OnAmbienceVolumeChanged;
-    public event ExitHandler? OnExit;
+    public event ExitHandler? OnExitGame;
+    public event ExitHandler? OnExitToMenu;
     public event MusicVolumeChangedHandler? OnMusicVolumeChanged;
     public event SettingsHandler? OnSettings;
     public event SoundVolumeChangedHandler? OnSoundVolumeChanged;
@@ -128,12 +146,13 @@ public sealed class PauseMenuControl : CenteredModalPanel
     //a panel hotkey closes it and opens its panel
     protected override bool LetsKeysThrough => true;
 
-    //X closes the menu and exits; the base closes it on Escape
+    //X closes the menu and exits to the menu, as before BRIG-139: Exit Game closes the client, so it takes a click. The
+    //base closes the menu on Escape
     public override void OnKeyDown(KeyDownEvent e)
     {
         if (e.Key == Keys.X)
         {
-            Exit();
+            ExitToMenu();
             e.Handled = true;
 
             return;
