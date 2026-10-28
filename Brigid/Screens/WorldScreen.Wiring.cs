@@ -118,11 +118,8 @@ public sealed partial class WorldScreen
     {
         Exchange.OnOk += () => Game.Connection.SendExchangeInteraction(ExchangeRequestType.Accept, Exchange.OtherUserId);
 
-        Exchange.OnCancel += () =>
-        {
-            Game.Connection.SendExchangeInteraction(ExchangeRequestType.Cancel, Exchange.OtherUserId);
-            WorldState.Exchange.Close();
-        };
+        //the window stays until the server answers the cancel (BRIG-168)
+        Exchange.OnCancel += () => Game.Connection.SendExchangeInteraction(ExchangeRequestType.Cancel, Exchange.OtherUserId);
 
         //the gold button opens the gold prompt over the exchange; its OnConfirm sends SetGold while the exchange is open
         Exchange.OnGoldClicked += () =>

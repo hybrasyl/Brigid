@@ -24,6 +24,11 @@ namespace Brigid.Controls.World.Popups.Exchange;
 ///         on to the screen (D10). Escape cancels the exchange. The screen sends the packets: <see cref="OnOk" /> accepts,
 ///         <see cref="OnCancel" /> cancels, and <see cref="OnGoldClicked" /> opens the gold prompt.
 ///     </para>
+///     <para>
+///         A cancel waits for the server, as on retail (BRIG-168): Accept, Cancel and Gold are disabled, and the window
+///         stays until the server's Cancelled event, or the Accepted event that completes the trade, closes the exchange.
+///         A second Cancel or Escape raises nothing.
+///     </para>
 /// </summary>
 public sealed class ExchangeControl : CenteredModalPanel
 {
@@ -94,7 +99,7 @@ public sealed class ExchangeControl : CenteredModalPanel
 
         //Cancel takes the place of Close, so that closing the window always cancels the exchange
         CloseButton.Visible = false;
-        CancelButton = AddBottomBarButton("Cancel", ACTION_W, () => OnCancel?.Invoke(), "cancel");
+        CancelButton = AddBottomBarButton("Cancel", ACTION_W, Cancel, "cancel");
         OkButton = AddBottomBarButton("Accept", ACTION_W, Accept, "accept");
 
         WorldState.Exchange.Started += OnExchangeStarted;
@@ -151,6 +156,17 @@ public sealed class ExchangeControl : CenteredModalPanel
         OnOk?.Invoke();
     }
 
+    private void Cancel()
+    {
+        if (!WorldState.Exchange.RequestCancel())
+            return;
+
+        OkButton.SetEnabled(false);
+        CancelButton.SetEnabled(false);
+        GoldButton.SetEnabled(false);
+        OnCancel?.Invoke();
+    }
+
     private void OnExchangeClosed(string? message)
     {
         Mine.Reset();
@@ -175,6 +191,7 @@ public sealed class ExchangeControl : CenteredModalPanel
         Mine.NameLabel.Text = WorldState.PlayerName;
         Theirs.NameLabel.Text = WorldState.Exchange.OtherUserName;
         OkButton.SetEnabled(true);
+        CancelButton.SetEnabled(true);
         GoldButton.SetEnabled(true);
         Show();
     }
@@ -185,7 +202,7 @@ public sealed class ExchangeControl : CenteredModalPanel
         //does not run, so the window stays until the exchange closes
         if (e.Key == Keys.Escape)
         {
-            OnCancel?.Invoke();
+            Cancel();
             e.Handled = true;
 
             return;

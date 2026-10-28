@@ -97,6 +97,44 @@ public sealed class ExchangeTests
         Assert.False(Exchange.IsMyAccepted);
     }
 
+    //BRIG-168: the client sends one Cancel request and waits for the server
+    [Fact]
+    public void ACancelIsRequestedOnce_AndTheExchangeStaysOpen()
+    {
+        Assert.True(Exchange.RequestCancel());
+        Assert.False(Exchange.RequestCancel());
+
+        Assert.True(Exchange.IsActive);
+        Assert.True(Exchange.IsCancelPending);
+        Assert.Empty(Closes);
+    }
+
+    [Fact]
+    public void NoCancelIsRequestedWithNoExchangeOpen()
+    {
+        Exchange.Close();
+
+        Assert.False(Exchange.RequestCancel());
+        Assert.False(Exchange.IsCancelPending);
+    }
+
+    [Fact]
+    public void ACloseOrANewExchangeEndsTheWaitingCancel()
+    {
+        Exchange.RequestCancel();
+        Exchange.Close("Exchange cancelled.");
+
+        Assert.False(Exchange.IsCancelPending);
+
+        Exchange.Start(8, "Kedian");
+
+        Assert.True(Exchange.RequestCancel());
+
+        Exchange.Start(9, "Imbas");
+
+        Assert.False(Exchange.IsCancelPending);
+    }
+
     //one side only, so the exchange stays open: a side that a Start does not reset would close the next exchange on the
     //other side's accept alone
     [Theory]

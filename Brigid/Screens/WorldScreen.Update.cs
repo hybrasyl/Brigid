@@ -45,6 +45,10 @@ public sealed partial class WorldScreen
         if (ExitFlow.IsConfirming && (Game.Connection.State != ConnectionState.World))
             CancelExit();
 
+        //the same for an open exchange: the server that had it is gone, and a cancel that waits would wait forever
+        if (WorldState.Exchange.IsActive && (Game.Connection.State != ConnectionState.World))
+            WorldState.Exchange.Close();
+
         //the confirmation confirms by itself when its time ends. After the confirm, a logout goes through
         //HandleStateChanged; when the grace time ends with no logout, Exit to Menu leaves the player in the world, and
         //Exit Game closes the client
