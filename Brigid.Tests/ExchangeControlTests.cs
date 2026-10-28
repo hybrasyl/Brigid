@@ -204,22 +204,73 @@ public sealed class ExchangeControlTests : IDisposable
         Assert.True(Exchange.OkButton.Enabled);
     }
 
-    [Fact]
-    public void EscapeAndCancelRaiseOnCancel()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EscapeOrCancelRaisesOnCancelOnce_AndTheWindowWaitsForTheServer(bool escapeFirst)
     {
         WorldState.Exchange.Start(7, "Sabrael");
         var cancels = 0;
         Exchange.OnCancel += () => cancels++;
-
         var escape = new KeyDownEvent { Key = Keys.Escape };
-        Exchange.OnKeyDown(escape);
+
+        if (escapeFirst)
+            Exchange.OnKeyDown(escape);
+        else
+            Exchange.CancelButton.OnClick(LeftClick());
+
+        //BRIG-168: a second cancel sends nothing, and the buttons wait for the server. The second Escape is still handled,
+        //so it does not go on to the screen
+        var secondEscape = new KeyDownEvent { Key = Keys.Escape };
+        Exchange.CancelButton.OnClick(LeftClick());
+        Exchange.OnKeyDown(secondEscape);
+
+        Assert.Equal(1, cancels);
+        Assert.False(Exchange.OkButton.Enabled);
+        Assert.False(Exchange.CancelButton.Enabled);
+        Assert.False(Exchange.GoldButton.Enabled);
+
+        Assert.True(secondEscape.Handled);
+
+        if (escapeFirst)
+            Assert.True(escape.Handled);
+
+        //the window stays until the server's Cancelled event closes the exchange
+        Assert.True(Exchange.Visible);
+
+        WorldState.ApplyExchange(new CancelExchangeResponsePacket { RightSide = false, Message = "Exchange cancelled." });
+
+        Assert.False(Exchange.Visible);
+    }
+
+    //the partner's last accept was in transit when the player cancelled: the server completed the trade, and its
+    //Accepted event closes the window
+    [Fact]
+    public void ATradeThatCompletesWhileACancelWaitsClosesTheWindow()
+    {
+        WorldState.Exchange.Start(7, "Sabrael");
+        WorldState.Exchange.SetAccepted(false, null);
         Exchange.CancelButton.OnClick(LeftClick());
 
-        Assert.Equal(2, cancels);
-        Assert.True(escape.Handled);
-
-        //the screen closes the window when the exchange closes, not the panel on Escape
         Assert.True(Exchange.Visible);
+
+        WorldState.Exchange.SetAccepted(true, "You exchanged.");
+
+        Assert.False(Exchange.Visible);
+    }
+
+    [Fact]
+    public void ANewExchangeAfterACancelEnablesTheButtons()
+    {
+        WorldState.Exchange.Start(7, "Sabrael");
+        Exchange.CancelButton.OnClick(LeftClick());
+        WorldState.Exchange.Close("Exchange cancelled.");
+
+        WorldState.Exchange.Start(8, "Kedian");
+
+        Assert.True(Exchange.OkButton.Enabled);
+        Assert.True(Exchange.CancelButton.Enabled);
+        Assert.True(Exchange.GoldButton.Enabled);
     }
 
     [Fact]

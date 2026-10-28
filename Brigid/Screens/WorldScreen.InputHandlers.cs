@@ -77,10 +77,12 @@ public sealed partial class WorldScreen
 
     private void HandleInventoryDropInViewport(byte slot, int mouseX, int mouseY)
     {
-        //dropped onto the exchange window — add item to exchange
+        //dropped onto the exchange window — add item to exchange. While a cancel waits, the drop sends nothing, and it does
+        //not fall through to the ground under the window
         if ((slot != 0) && Exchange.Visible && Exchange.ContainsPoint(mouseX, mouseY))
         {
-            Game.Connection.SendExchangeInteraction(ExchangeRequestType.AddItem, Exchange.OtherUserId, slot);
+            if (WorldState.Exchange.TakesOffers)
+                Game.Connection.SendExchangeInteraction(ExchangeRequestType.AddItem, Exchange.OtherUserId, slot);
 
             return;
         }

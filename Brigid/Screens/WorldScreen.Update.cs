@@ -23,6 +23,11 @@ public sealed partial class WorldScreen
 
                 return;
 
+            //a close that came before the game loop handled the server's Redirect: the redirect is under way now, and its
+            //own result (Login, World, or a connect that fails) decides
+            case ConnectionEvent.Closed when RedirectInProgress:
+                break;
+
             //a close in the grace time is the logout (Exit to Menu goes to the login screen, and Exit Game closes the
             //client); any other close is a lost connection
             case ConnectionEvent.Closed when ExitFlow.IsAwaitingLogout:
@@ -30,7 +35,9 @@ public sealed partial class WorldScreen
 
                 return;
 
+            //a world transfer that cannot connect also ends here, so its loading bar goes
             case ConnectionEvent.Closed:
+                MapLoading.Hide();
                 DisconnectPopup.Show("Connection lost.");
 
                 break;
@@ -38,18 +45,30 @@ public sealed partial class WorldScreen
 
         var elapsedMs = (float)gameTime.ElapsedGameTime.TotalMilliseconds;
 
-        //the connection sends the exit packets only in the world: a lost connection or a transfer while the confirmation
-        //is open cancels it, so that its timer does not confirm to no server
-        if (ExitFlow.IsConfirming && (Game.Connection.State != ConnectionState.World))
-            CancelExit();
+        //a lost connection or a transfer ends what only the old world server can finish: an open exit confirmation (its
+        //timer would confirm to no server) and an open exchange (a cancel that waits would wait forever)
+        if (Game.Connection.State != ConnectionState.World)
+        {
+            if (ExitFlow.IsConfirming)
+                CancelExit();
+
+            if (WorldState.Exchange.IsActive)
+                WorldState.Exchange.Close();
+        }
 
         //the confirmation confirms by itself when its time ends. After the confirm, a logout goes through
         //HandleStateChanged; when the grace time ends with no logout, Exit to Menu leaves the player in the world, and
         //Exit Game closes the client
-        switch (ExitFlow.Tick(elapsedMs / 1000f))
+        switch (ExitFlow.Tick(elapsedMs / 1000f, RedirectInProgress))
         {
             case ExitStep.Confirm:
                 ConfirmExit();
+
+                break;
+
+            //the server ignored the confirm: forget it, so that the next world transfer stays in the world (BRIG-169)
+            case ExitStep.ExitIgnored:
+                Game.Connection.ClearExitConfirm();
 
                 break;
 

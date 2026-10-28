@@ -12,7 +12,13 @@ public enum ExitStep
     Confirm,
 
     /// <summary>The grace time ended with no logout, and the player chose Exit Game: close the client.</summary>
-    CloseClient
+    CloseClient,
+
+    /// <summary>
+    ///     The grace time ended with no logout, and the player chose Exit to Menu: the server ignored the exit, and the
+    ///     player stays in the world. The screen tells the connection to forget the confirm (BRIG-169).
+    /// </summary>
+    ExitIgnored
 }
 
 /// <summary>
@@ -24,7 +30,14 @@ public enum ExitStep
 ///     <para>
 ///         Exit to Menu and Exit Game send the same packets. Exit Game closes the client when the logout completes or
 ///         the grace time ends. The confirm is sent before the grace time starts, so the client never closes before the
-///         server has the exit request.
+///         server has the exit request. When the grace time ends with no logout, Exit to Menu leaves the player in the
+///         world, and the screen tells the connection to forget the confirm (<see cref="ExitStep.ExitIgnored" />).
+///     </para>
+///     <para>
+///         A redirect that connects holds the grace time, for up to <see cref="REDIRECT_WAIT_SECONDS" />: the logout
+///         redirect can take longer than the time that is left (a slow TLS upgrade or TCP connect), and its result, a
+///         logout or a failed connect, ends the exit. The limit keeps a login server that does not answer from holding
+///         the exit for the whole TCP connect timeout.
 ///     </para>
 ///     <para>
 ///         Use it only on the game thread. The screen records a state change of the connection, which comes on the
@@ -40,11 +53,18 @@ public sealed class ExitFlow
     /// <summary>The time the confirmation waits for OK or Cancel before it confirms.</summary>
     public const float CONFIRM_SECONDS = 10f;
 
-    /// <summary>The time after the confirm in which a disconnect counts as the logout.</summary>
+    /// <summary>
+    ///     The time after the confirm in which a disconnect counts as the logout. A redirect that connects holds it, for
+    ///     up to <see cref="REDIRECT_WAIT_SECONDS" />.
+    /// </summary>
     public const float GRACE_SECONDS = 10f;
+
+    /// <summary>The longest time that a redirect that connects holds the grace time.</summary>
+    public const float REDIRECT_WAIT_SECONDS = 10f;
 
     private float ConfirmSecondsRemaining;
     private float GraceSecondsRemaining;
+    private float RedirectWaitRemaining;
 
     /// <summary>True when the player chose Exit Game: the client closes after the logout.</summary>
     public bool ClosesClient { get; private set; }
@@ -94,6 +114,7 @@ public sealed class ExitFlow
     {
         ConfirmSecondsRemaining = 0f;
         GraceSecondsRemaining = GRACE_SECONDS;
+        RedirectWaitRemaining = REDIRECT_WAIT_SECONDS;
     }
 
     /// <summary>
@@ -114,9 +135,10 @@ public sealed class ExitFlow
 
     /// <summary>
     ///     Advances the timers by <paramref name="seconds" /> and returns what the screen must do. When the confirmation
-    ///     time ends, the screen calls <see cref="Confirm" />.
+    ///     time ends, the screen calls <see cref="Confirm" />. While <paramref name="redirecting" />, the grace time does
+    ///     not run, for up to <see cref="REDIRECT_WAIT_SECONDS" />.
     /// </summary>
-    public ExitStep Tick(float seconds)
+    public ExitStep Tick(float seconds, bool redirecting)
     {
         if (ConfirmSecondsRemaining > 0f)
         {
@@ -132,14 +154,24 @@ public sealed class ExitFlow
 
         if (GraceSecondsRemaining > 0f)
         {
+            if (redirecting && (RedirectWaitRemaining > 0f))
+            {
+                RedirectWaitRemaining -= seconds;
+
+                return ExitStep.None;
+            }
+
             GraceSecondsRemaining -= seconds;
 
-            if ((GraceSecondsRemaining <= 0f) && ClosesClient)
-            {
-                ClosesClient = false;
+            if (GraceSecondsRemaining > 0f)
+                return ExitStep.None;
 
-                return ExitStep.CloseClient;
-            }
+            if (!ClosesClient)
+                return ExitStep.ExitIgnored;
+
+            ClosesClient = false;
+
+            return ExitStep.CloseClient;
         }
 
         return ExitStep.None;
