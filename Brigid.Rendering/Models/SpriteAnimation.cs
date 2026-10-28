@@ -39,13 +39,11 @@ public sealed class SpriteAnimation : IDisposable
             return null;
 
         //if this frame has no texture (skipped during load), use the previous valid frame
-        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         if (Frames[index].Texture is not null)
             return Frames[index];
 
         for (var i = index - 1; i >= 0; i--)
 
-            // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
             if (Frames[i].Texture is not null)
                 return Frames[i];
 

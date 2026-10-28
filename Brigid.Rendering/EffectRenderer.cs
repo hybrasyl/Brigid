@@ -54,12 +54,9 @@ public sealed class EffectRenderer : IDisposable
         float tileCenterY,
         Vector2 visualOffset)
     {
-        var spriteFrame = GetFrame(effectId, currentFrame);
-
-        if (spriteFrame is null)
+        if (GetFrame(effectId, currentFrame) is not { Texture: { } texture } frame)
             return;
 
-        var frame = spriteFrame.Value;
         var drawX = tileCenterX + visualOffset.X - frame.CenterX + Math.Min(0, (int)frame.Left);
         var drawY = tileCenterY + visualOffset.Y - frame.CenterY + Math.Min(0, (int)frame.Top);
         var screenPos = camera.WorldToScreen(new Vector2(drawX, drawY));
@@ -72,7 +69,7 @@ public sealed class EffectRenderer : IDisposable
                 _                         => BlendState.AlphaBlend
             };
 
-        batch.Draw(frame.Texture, screenPos, Color.White);
+        batch.Draw(texture, screenPos, Color.White);
 
         if (blendMode != EffectBlendMode.Normal)
             device.BlendState = BlendState.AlphaBlend;
@@ -145,7 +142,7 @@ public sealed class EffectRenderer : IDisposable
             var texture = RenderTexture(() => Graphics.RenderImage(efaFrame, efaFile.BlendingType), $"effect {effectId} frame {i}");
 
             frames[i] = new SpriteFrame(
-                texture!,
+                texture,
                 efaFrame.CenterX,
                 efaFrame.CenterY,
                 efaFrame.Left,
@@ -202,7 +199,7 @@ public sealed class EffectRenderer : IDisposable
             var centerY = centerPoints is not null ? centerPoints[epfFrameIndex].Y : (short)70;
 
             frames[i] = new SpriteFrame(
-                texture!,
+                texture,
                 centerX,
                 centerY,
                 epfFrame.Left,
@@ -231,7 +228,7 @@ public sealed class EffectRenderer : IDisposable
             var centerY = spfFrame.HasCenterPoint ? spfFrame.CenterY : (short)70;
 
             frames[i] = new SpriteFrame(
-                texture!,
+                texture,
                 centerX,
                 centerY,
                 (short)spfFrame.Left,
@@ -277,7 +274,6 @@ public sealed class EffectRenderer : IDisposable
 
     /// <summary>True when at least one frame has a texture. An animation with none is rejected, not cached as playable.</summary>
     internal static bool HasAnyTexture(SpriteFrame[] frames)
-        // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
         => frames.Any(frame => frame.Texture is not null);
 
     internal SpriteAnimation? GetOrLoadMefcAnimation(int mefcId)
@@ -305,15 +301,13 @@ public sealed class EffectRenderer : IDisposable
             return;
 
         var clampedFrame = Math.Clamp(frameIndex, 0, animation.FrameCount - 1);
-        var frame = animation.GetFrame(clampedFrame);
-
-        if (frame is null)
+        if (animation.GetFrame(clampedFrame) is not { Texture: { } texture } frame)
             return;
 
-        var drawX = worldX - frame.Value.CenterX + Math.Min(0, (int)frame.Value.Left);
-        var drawY = worldY - frame.Value.CenterY + Math.Min(0, (int)frame.Value.Top);
+        var drawX = worldX - frame.CenterX + Math.Min(0, (int)frame.Left);
+        var drawY = worldY - frame.CenterY + Math.Min(0, (int)frame.Top);
         var screenPos = camera.WorldToScreen(new Vector2(drawX, drawY));
 
-        batch.Draw(frame.Value.Texture, screenPos, Color.White);
+        batch.Draw(texture, screenPos, Color.White);
     }
 }

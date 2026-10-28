@@ -715,7 +715,7 @@ public sealed class NpcSessionControl : PrefabPanel
         PortraitSpriteFrame = spriteFrame;
         OwnsPortraitTexture = false;
 
-        NpcTileImage?.Visible = true;
+        NpcTileImage?.Visible = spriteFrame.Texture is not null;
     }
 
     /// <summary>

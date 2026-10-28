@@ -926,11 +926,11 @@ public class UITextBox : UIElement
 
         var displayText = IsMasked ? new string('*', Text.Length) : Text;
 
-        return TextElement.IndexAtX(displayText, localX, ColorCodesEnabled);
+        return TextElement.IndexAtX(displayText, localX);
     }
 
     private int HitTestCursorPosition(int targetPixelX, string lineText)
-        => TextElement.IndexAtX(lineText, targetPixelX, ColorCodesEnabled);
+        => TextElement.IndexAtX(lineText, targetPixelX);
 
     private int HitTestMultiLine(int mouseX, int mouseY)
     {

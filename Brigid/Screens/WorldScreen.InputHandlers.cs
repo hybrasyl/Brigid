@@ -1,4 +1,5 @@
 #region
+using System.Diagnostics.CodeAnalysis;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
@@ -713,7 +714,7 @@ public sealed partial class WorldScreen
         //f1 — help merchant (server-side). Above the stack guard so that it also works while an NPC or vendor window is
         //the top popup; any other popup on top still blocks it
         if (Keybinds.Matches(e, CommandId.World_HelpMerchant)
-            && ((Game.Dispatcher.ControlStackCount == 0) || (Game.Dispatcher.TopControl == NpcSession)))
+            && IsHelpAllowed(Game.Dispatcher.ControlStackCount, Game.Dispatcher.TopControl, NpcSession))
         {
             Game.Connection.ClickEntity(uint.MaxValue);
             e.Handled = true;
@@ -1122,17 +1123,11 @@ public sealed partial class WorldScreen
 
         var hoverEntity = GetEntityAtScreen(e.ScreenX, e.ScreenY);
 
-        //exclude self — the player's own sprite has a hitbox, and a rapid right-click on the tile the
-        //player is walking off of overlaps that hitbox, which would cache the player as a double-click
-        //target and kick off a self-follow loop in OnRootDoubleClick.
-        //exclude a hidden aisling — it has a hitbox only so that spells can target it, and OnRootDoubleClick does not
-        //follow one, so a cached hidden aisling would make this press do nothing
         var isDoubleClickTarget = false;
 
-        if (hoverEntity is { Type: ClientEntityType.Aisling or ClientEntityType.Creature, IsHidden: false } target
-            && (target.Id != Game.Connection.AislingId))
+        if (IsPursuitTarget(hoverEntity, Game.Connection.AislingId))
         {
-            PendingDoubleClickEntityId = target.Id;
+            PendingDoubleClickEntityId = hoverEntity.Id;
             PendingDoubleClickTick = currentTick;
             isDoubleClickTarget = true;
         }
@@ -1155,6 +1150,24 @@ public sealed partial class WorldScreen
 
         e.Handled = true;
     }
+
+    /// <summary>
+    ///     True when the double right-click pursues <paramref name="entity" />: a creature or another aisling that is
+    ///     not hidden. A right-button press on one is the first half of that double click, so the press does not walk.
+    ///     A hidden aisling has a hitbox only for spell targets. The player's own sprite is never a target: a quick
+    ///     right-click on the tile that the player walks off overlaps that hitbox, and following yourself starts a path
+    ///     loop that walks into walls.
+    /// </summary>
+    internal static bool IsPursuitTarget([NotNullWhen(true)] WorldEntity? entity, uint playerId)
+        => entity is { Type: ClientEntityType.Aisling or ClientEntityType.Creature, IsHidden: false }
+           && (entity.Id != playerId);
+
+    /// <summary>
+    ///     True when F1 (help) passes the popup guard: no popup is open, or the NPC window is the top popup. Any other
+    ///     popup on top blocks it.
+    /// </summary>
+    internal static bool IsHelpAllowed(int stackCount, UIPanel? top, UIPanel? npcSession)
+        => (stackCount == 0) || (top == npcSession);
 
     /// <summary>
     ///     Handles mouse clicks that bubble up to the root panel (no child element consumed them).
@@ -1326,11 +1339,7 @@ public sealed partial class WorldScreen
                 entity = WorldState.GetEntityAt(tileX, tileY);
             }
 
-            //reject self — following yourself produces a re-pathfinding loop that walks into walls or oscillates
-            //reject hidden aislings — they have a hitbox for spell targeting but should not be followable
-            if (entity?.Type is ClientEntityType.Aisling or ClientEntityType.Creature
-                && (entity.Id != Game.Connection.AislingId)
-                && !entity.IsHidden)
+            if (IsPursuitTarget(entity, Game.Connection.AislingId))
             {
                 Pathfinding.SetEntityTarget(entity.Id);
                 PathfindToEntity(player, entity);

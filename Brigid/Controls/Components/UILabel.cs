@@ -555,7 +555,7 @@ public class UILabel : UIElement
         var localX = mouseX - drawX;
         var text = PlainText;
 
-        return TextElement.IndexAtX(text, localX, ColorCodesEnabled);
+        return TextElement.IndexAtX(text, localX);
     }
 
     private int HitTestWrapped(int mouseX, int mouseY)
@@ -579,7 +579,7 @@ public class UILabel : UIElement
         var lineText = lines[clickLine];
         var localX = mouseX - ScreenX - PaddingLeft;
 
-        return charOffset + TextElement.IndexAtX(lineText, localX, ColorCodesEnabled);
+        return charOffset + TextElement.IndexAtX(lineText, localX);
     }
 
     private int GetWrappedLineForPosition(int position)

@@ -22,7 +22,7 @@ public class TextClickIndexTests
         FontEngine.Initialize(0);
         var engine = FontEngine.Instance;
         var originalFace = engine.ActiveFontIndex;
-        var element = new TextElement();
+        var element = new TextElement { ColorCodesEnabled = false };
 
         try
         {
@@ -34,7 +34,7 @@ public class TextClickIndexTests
 
                 for (var i = 0; i <= Line.Length; i++)
                     Assert.True(
-                        element.IndexAtX(Line, element.Measure(Line[..i]), colorCodesEnabled: false) == i,
+                        element.IndexAtX(Line, element.Measure(Line[..i])) == i,
                         $"face {face} at {scale}x: a click at the caret of index {i} gave another index");
             }
         } finally
@@ -52,8 +52,21 @@ public class TextClickIndexTests
         const string text = "ab{=bcd";
 
         //before "c" the caret sits after the code, never inside it
-        Assert.Equal(5, element.IndexAtX(text, element.Measure("ab"), colorCodesEnabled: true));
-        Assert.Equal(6, element.IndexAtX(text, element.Measure("ab{=bc"), colorCodesEnabled: true));
+        Assert.Equal(5, element.IndexAtX(text, element.Measure("ab")));
+        Assert.Equal(6, element.IndexAtX(text, element.Measure("ab{=bc")));
+    }
+
+    //BRIG-111: with codes off, "{=b" is text. The prefixes were measured with the code removed, so their widths did not
+    //only grow, and the binary search could put the caret on the wrong glyph
+    [Fact]
+    public void IndexAtX_WithCodesOffTreatsACodeAsText()
+    {
+        FontEngine.Initialize(0);
+        var element = new TextElement { ColorCodesEnabled = false };
+        const string text = "ab{=bcd";
+
+        for (var i = 0; i <= text.Length; i++)
+            Assert.Equal(i, element.IndexAtX(text, element.Measure(text[..i])));
     }
 
     [Theory]
@@ -65,6 +78,6 @@ public class TextClickIndexTests
     {
         FontEngine.Initialize(0);
 
-        Assert.Equal(expected, new TextElement().IndexAtX(text, x, colorCodesEnabled: false));
+        Assert.Equal(expected, new TextElement { ColorCodesEnabled = false }.IndexAtX(text, x));
     }
 }
