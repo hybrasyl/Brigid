@@ -619,19 +619,10 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Sends login credentials to the login server.
     /// </summary>
-    public void Login(
-        string name,
-        string password,
-        uint clientId1 = 1,
-        uint clientId2 = 1)
+    public void Login(string name, string password)
     {
         if (State != ConnectionState.Login)
             return;
-
-        //ClientId1/2 have no DALib LoginPacket field (the integrity trailer is codec-internal); retained on the
-        //signature for caller compatibility but unused.
-        _ = clientId1;
-        _ = clientId2;
 
         AislingName = name;
 
