@@ -132,6 +132,18 @@ public sealed class ExitFlowTests
         Assert.Equal(ExitStep.None, Flow.Tick(1));
     }
 
+    //a slow logout redirect: its result ends the exit, not the grace time
+    [Fact]
+    public void TheGraceTimeDoesNotRunWhileARedirectConnects()
+    {
+        Flow.Begin(false);
+        Flow.Confirm();
+
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS * 3, redirecting: true));
+        Assert.True(Flow.IsAwaitingLogout);
+        Assert.Equal(ExitStep.ExitIgnored, Flow.Tick(ExitFlow.GRACE_SECONDS));
+    }
+
     [Fact]
     public void ExitToMenuLeavesThePlayerInTheWorldWhenTheGraceTimeEnds()
     {

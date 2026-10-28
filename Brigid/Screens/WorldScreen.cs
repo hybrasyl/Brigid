@@ -191,7 +191,8 @@ public sealed partial class WorldScreen : IScreen
     private byte[] PlayerPortrait = [];
     private SelfProfileTextEditorControl SelfProfileTextEditor = null!;
     private Direction? QueuedWalkDirection;
-    //set on the game thread when a redirect arrives; HandleStateChanged reads and clears it on the network thread
+    //set on the game thread when a redirect arrives; HandleStateChanged, which can run on the network thread, reads and
+    //clears it
     private volatile bool RedirectInProgress;
     private TileClickTracker RightClickTracker;
     private RasterizerState ScissorRasterizerState = null!;

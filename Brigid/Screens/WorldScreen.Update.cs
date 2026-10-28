@@ -48,7 +48,7 @@ public sealed partial class WorldScreen
         //the confirmation confirms by itself when its time ends. After the confirm, a logout goes through
         //HandleStateChanged; when the grace time ends with no logout, Exit to Menu leaves the player in the world, and
         //Exit Game closes the client
-        switch (ExitFlow.Tick(elapsedMs / 1000f))
+        switch (ExitFlow.Tick(elapsedMs / 1000f, RedirectInProgress))
         {
             case ExitStep.Confirm:
                 ConfirmExit();

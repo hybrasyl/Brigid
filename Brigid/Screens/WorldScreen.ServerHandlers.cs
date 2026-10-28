@@ -1435,8 +1435,8 @@ public sealed partial class WorldScreen
     /// <summary>
     ///     What a state change of the connection means to the world screen. Login is the logout redirect (the state goes
     ///     World, Connecting, Login). A redirect closes the old connection first, and that Disconnected is not a lost
-    ///     connection; but a Disconnected that comes from Connecting during a redirect is a connect to the next server
-    ///     that failed, and it is (BRIG-170), as the lobby screen already treats it.
+    ///     connection. A Disconnected that comes from Connecting during a redirect is a connect to the next server that
+    ///     failed: that is a lost connection (BRIG-170), as the lobby screen already treats it.
     /// </summary>
     internal static ConnectionEvent ConnectionEventFor(
         ConnectionState oldState,

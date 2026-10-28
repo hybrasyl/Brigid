@@ -32,11 +32,11 @@ public sealed class ExitRedirectTests
         //not in the world, so no packet goes out; the confirm is still recorded
         manager.RequestExit(false);
 
-        Assert.Equal(ConnectionState.Login, ConnectionManager.RedirectTargetFor(ConnectionState.World, manager.IsExitConfirmed));
+        Assert.Equal(ConnectionState.Login, manager.RedirectTargetFor(ConnectionState.World));
 
         manager.ClearExitConfirm();
 
-        Assert.Equal(ConnectionState.World, ConnectionManager.RedirectTargetFor(ConnectionState.World, manager.IsExitConfirmed));
+        Assert.Equal(ConnectionState.World, manager.RedirectTargetFor(ConnectionState.World));
     }
 
     //the expected event is an object, because ConnectionEvent is internal
@@ -56,7 +56,10 @@ public sealed class ExitRedirectTests
 
     //a drop with no redirect
     [InlineData(ConnectionState.World, ConnectionState.Disconnected, false, ConnectionEvent.Closed)]
-    [InlineData(ConnectionState.World, ConnectionState.Connecting, true, ConnectionEvent.None)]
+    [InlineData(ConnectionState.Connecting, ConnectionState.Disconnected, false, ConnectionEvent.Closed)]
+
+    //the redirect starts its connect to the next server
+    [InlineData(ConnectionState.Disconnected, ConnectionState.Connecting, true, ConnectionEvent.None)]
     public void AStateChangeMeansTheEventOfItsKind(
         ConnectionState oldState,
         ConnectionState newState,

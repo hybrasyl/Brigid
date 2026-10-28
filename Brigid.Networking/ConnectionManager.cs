@@ -45,6 +45,7 @@ public sealed class ConnectionManager : IDisposable
     //set when the client confirms a logout (ClientExit endSignal=0). A redirect that arrives while in World
     //means "go back to the login screen" only if we asked to quit; an unsolicited World-state redirect is a
     //server-initiated world transfer (e.g. Temuair↔Medenia) that must reconnect straight back into World.
+    //A redirect clears it, and so does ClearExitConfirm when the server ignored the confirm.
     private bool ExitConfirmed;
 
     /// <summary>
@@ -431,6 +432,16 @@ public sealed class ConnectionManager : IDisposable
             //send clientjoin immediately after connecting.
             //not all servers send acceptconnection before expecting this packet.
             State = PendingTargetState;
+
+            //a close between the connect and the state change above came while the state was Connecting, so
+            //HandleDisconnected kept that state; without this the hop would sit on a dead client (BRIG-170). A
+            //close after the change goes through HandleDisconnected
+            if (!Client.Connected)
+            {
+                State = ConnectionState.Disconnected;
+
+                return;
+            }
         }
 
         Client.Send(
@@ -865,8 +876,8 @@ public sealed class ConnectionManager : IDisposable
     /// </summary>
     public void ClearExitConfirm() => ExitConfirmed = false;
 
-    /// <summary>True after the exit confirm, until a redirect or <see cref="ClearExitConfirm" />. For the tests.</summary>
-    internal bool IsExitConfirmed => ExitConfirmed;
+    /// <summary>The state that a redirect received now in <paramref name="state" /> goes to.</summary>
+    internal ConnectionState RedirectTargetFor(ConnectionState state) => RedirectTargetFor(state, ExitConfirmed);
 
     /// <summary>
     ///     The state that a redirect received in <paramref name="state" /> goes to. A World-state redirect is either a
@@ -1581,7 +1592,7 @@ public sealed class ConnectionManager : IDisposable
     {
         var pkt = (Server.RedirectPacket)p;
 
-        var targetState = RedirectTargetFor(State, ExitConfirmed);
+        var targetState = RedirectTargetFor(State);
 
         //consumed: any redirect resolves the pending quit. A confirm that the server ignored is cleared when the grace
         //time ends (ClearExitConfirm), so it does not send a later world transfer to Login

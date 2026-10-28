@@ -30,7 +30,12 @@ public enum ExitStep
 ///     <para>
 ///         Exit to Menu and Exit Game send the same packets. Exit Game closes the client when the logout completes or
 ///         the grace time ends. The confirm is sent before the grace time starts, so the client never closes before the
-///         server has the exit request.
+///         server has the exit request. When the grace time ends with no logout, Exit to Menu leaves the player in the
+///         world, and the screen tells the connection to forget the confirm (<see cref="ExitStep.ExitIgnored" />).
+///     </para>
+///     <para>
+///         The grace time does not run while a redirect connects: the logout redirect can take longer than the time
+///         that is left (a slow TLS upgrade or TCP connect), and its result, a logout or a failed connect, ends the exit.
 ///     </para>
 ///     <para>
 ///         Use it only on the game thread. The screen records a state change of the connection, which comes on the
@@ -120,9 +125,10 @@ public sealed class ExitFlow
 
     /// <summary>
     ///     Advances the timers by <paramref name="seconds" /> and returns what the screen must do. When the confirmation
-    ///     time ends, the screen calls <see cref="Confirm" />.
+    ///     time ends, the screen calls <see cref="Confirm" />. While <paramref name="redirecting" />, the grace time does
+    ///     not run.
     /// </summary>
-    public ExitStep Tick(float seconds)
+    public ExitStep Tick(float seconds, bool redirecting = false)
     {
         if (ConfirmSecondsRemaining > 0f)
         {
@@ -136,7 +142,7 @@ public sealed class ExitFlow
             return ExitStep.Confirm;
         }
 
-        if (GraceSecondsRemaining > 0f)
+        if ((GraceSecondsRemaining > 0f) && !redirecting)
         {
             GraceSecondsRemaining -= seconds;
 
