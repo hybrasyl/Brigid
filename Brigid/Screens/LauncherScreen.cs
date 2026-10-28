@@ -100,9 +100,9 @@ public sealed class LauncherScreen : IScreen
     //then keeps that connection (BRIG-105)
     private readonly bool LobbyWasReady;
 
-    //from the main menu: the server entry that was selected when the launcher opened. Only a different pick changes the
-    //server, because a client that DA_HOST started is on a server that the list can lack (BRIG-105)
-    private string? SelectedKeyAtOpen;
+    //from the main menu: true after the player picked or added a server entry. Only a pick changes the server, because a
+    //client that DA_HOST started is on a server that the list can lack, and a plain return keeps it (BRIG-105)
+    private bool ServerPicked;
 
     //recomputed each frame from current state
     private Rectangle DropdownButton;
@@ -125,14 +125,12 @@ public sealed class LauncherScreen : IScreen
     }
 
     /// <summary>
-    ///     True when the return from Config changes the lobby server: the player selected an entry other than
-    ///     <paramref name="keyAtOpen" />, the entry selected when Config opened, and it is not the server that the
-    ///     client uses now (BRIG-105).
+    ///     True when the return from Config changes the lobby server: the player <paramref name="picked" /> an entry during
+    ///     this visit, and the selected entry is not the server that the client uses now (BRIG-105). A pick of the entry
+    ///     that was already selected counts, so a client that DA_HOST started can change to that entry.
     /// </summary>
-    internal static bool PicksNewServer(ServerEntry? selected, string? keyAtOpen)
-        => (selected is not null)
-           && !string.Equals(selected.Key, keyAtOpen, StringComparison.OrdinalIgnoreCase)
-           && !GlobalSettings.IsLobbyServer(selected.Host, selected.Port);
+    internal static bool PicksNewServer(ServerEntry? selected, bool picked)
+        => picked && (selected is not null) && !GlobalSettings.IsLobbyServer(selected.Host, selected.Port);
 
     public UIPanel? Root => null;
 
@@ -147,7 +145,6 @@ public sealed class LauncherScreen : IScreen
         RevalidateAssetPath();
 
         ThemeEntries = UiThemeChoices.EntriesFor(AssetPackRegistry.ScanUiThemes());
-        SelectedKeyAtOpen = LauncherConfig.GetSelectedServer()?.Key;
         ThemeValue = OpenedFromMainMenu ? ClientSettings.UiTheme : ClientSettings.ReadSavedUiTheme();
     }
 
@@ -358,12 +355,12 @@ public sealed class LauncherScreen : IScreen
             //normally persists the selection, is hidden in this mode). Data folder is locked, so it is unchanged.
             LauncherConfig.Save();
 
-            //only a different pick changes the server. The lobby connection stays when the server did not change and
-            //the lobby was ready; the lobby screen connects when the connection has gone since
+            //only a pick changes the server. The lobby connection stays when the server did not change and the lobby
+            //was ready; the lobby screen connects when the connection has gone since
             var selected = LauncherConfig.GetSelectedServer();
             var serverChanged = false;
 
-            if (PicksNewServer(selected, SelectedKeyAtOpen))
+            if (PicksNewServer(selected, ServerPicked))
                 serverChanged = Game.UseLobbyServer(selected!.Host, selected.Port);
 
             var keep = !serverChanged && LobbyWasReady;
@@ -489,6 +486,7 @@ public sealed class LauncherScreen : IScreen
             if (row.Contains(cursor))
             {
                 LauncherConfig.SelectedServer = entry.Key;
+                ServerPicked = true;
                 CurrentMode = Mode.Main;
 
                 return;
@@ -616,6 +614,7 @@ public sealed class LauncherScreen : IScreen
 
         LauncherConfig.AddOrSelectServer(host, port, AddText[(int)AddField.Name]);
         LauncherConfig.Save();
+        ServerPicked = true;
         CurrentMode = Mode.Main;
     }
 
@@ -684,7 +683,7 @@ public sealed class LauncherScreen : IScreen
         if (OpenedFromMainMenu)
             DrawButton(
                 ReturnButton,
-                PicksNewServer(selected, SelectedKeyAtOpen) ? "Connect" : "Return to Main Menu",
+                PicksNewServer(selected, ServerPicked) ? "Connect" : "Return to Main Menu",
                 true,
                 new Color(50, 54, 68),
                 FieldBorder);

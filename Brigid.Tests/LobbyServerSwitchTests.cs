@@ -7,8 +7,8 @@ namespace Brigid.Tests;
 
 /// <summary>
 ///     BRIG-105: a server picked in Config from the main menu becomes the lobby server with no restart, and the server
-///     caches follow it. Only a pick of another entry changes the server. The tests read the lobby server and change no
-///     static state.
+///     caches follow it. Only a pick of an entry that is not the current server changes the server. The tests read the
+///     lobby server and change no static state.
 /// </summary>
 public sealed class LobbyServerSwitchTests
 {
@@ -27,23 +27,23 @@ public sealed class LobbyServerSwitchTests
         => Assert.Equal(expected, GlobalSettings.IsSameServer(host, port, otherHost, otherPort));
 
     [Fact]
-    public void OnlyAPickOfAnotherEntryChangesTheServer()
+    public void OnlyAPickOfAnotherServerChangesTheServer()
     {
         var current = new ServerEntry { Host = GlobalSettings.LobbyHost, Port = GlobalSettings.LobbyPort };
         var other = new ServerEntry { Host = "brigid-test.example.org", Port = GlobalSettings.LobbyPort + 1 };
 
-        //no list, or the entry that was selected when Config opened
-        Assert.False(LauncherScreen.PicksNewServer(null, current.Key));
-        Assert.False(LauncherScreen.PicksNewServer(other, other.Key));
+        //no list
+        Assert.False(LauncherScreen.PicksNewServer(null, picked: true));
 
-        //DA_HOST started the client on a server that the list lacks: a return with the saved pick keeps that server
-        Assert.False(LauncherScreen.PicksNewServer(other, other.Key.ToUpperInvariant()));
+        //no pick: a client that DA_HOST started on a server that the list lacks keeps that server
+        Assert.False(LauncherScreen.PicksNewServer(other, picked: false));
 
-        //another entry, which is not the server that the client uses now
-        Assert.True(LauncherScreen.PicksNewServer(other, current.Key));
+        //a pick of an entry that is not the server that the client uses now, also the entry that was selected when
+        //Config opened
+        Assert.True(LauncherScreen.PicksNewServer(other, picked: true));
 
-        //another entry that names the server that the client uses now
-        Assert.False(LauncherScreen.PicksNewServer(current, other.Key));
+        //a pick of the server that the client uses now
+        Assert.False(LauncherScreen.PicksNewServer(current, picked: true));
     }
 
     [Fact]

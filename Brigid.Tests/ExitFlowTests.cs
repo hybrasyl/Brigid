@@ -152,6 +152,31 @@ public sealed class ExitFlowTests
         Assert.Equal(ExitStep.CloseClient, Flow.Tick(ExitFlow.GRACE_SECONDS));
     }
 
+    //the last choice wins: the player who changes their mind to Exit to Menu stays in the client
+    [Fact]
+    public void ExitToMenuWhileTheExitGameConfirmationIsOpenChangesItToExitToMenu()
+    {
+        Flow.Begin(true);
+
+        Assert.False(Flow.Begin(false));
+        Assert.False(Flow.ClosesClient);
+
+        Flow.Confirm();
+
+        Assert.False(Flow.CompleteLogout());
+    }
+
+    [Fact]
+    public void ExitToMenuDuringTheGraceTimeOfExitGameDoesNotCloseTheClient()
+    {
+        Flow.Begin(true);
+        Flow.Confirm();
+
+        Assert.False(Flow.Begin(false));
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS));
+        Assert.False(Flow.IsAwaitingLogout);
+    }
+
     [Fact]
     public void ALogoutWithNoExitInProgressDoesNotClose()
     {

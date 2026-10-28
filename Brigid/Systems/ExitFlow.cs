@@ -63,14 +63,15 @@ public sealed class ExitFlow
 
     /// <summary>
     ///     Starts the confirmation, and returns true: the screen sends the exit query. When an exit is already in progress,
-    ///     it returns false and the screen sends nothing. Exit Game then still closes the client after the logout.
+    ///     it returns false and the screen sends nothing. The last choice then sets whether the client closes after the
+    ///     logout: Exit to Menu after Exit Game goes to the menu.
     /// </summary>
     /// <param name="closeClient">True for Exit Game, false for Exit to Menu.</param>
     public bool Begin(bool closeClient)
     {
         if (IsConfirming || IsAwaitingLogout)
         {
-            ClosesClient |= closeClient;
+            ClosesClient = closeClient;
 
             return false;
         }
