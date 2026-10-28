@@ -110,7 +110,7 @@ public sealed partial class WorldScreen
 
     #region Exchange Wiring
     // Exchange subscriptions are intentionally layered across ExchangeControl and WorldScreen:
-    //   - ExchangeControl subscribes to Started/ItemAdded/GoldSet/OtherAccepted/Closed — updates its own UI
+    //   - ExchangeControl subscribes to Started/ItemAdded/GoldSet/Accepted/Closed — updates its own UI
     //   - WorldScreen (WireServerEvents) subscribes to AmountRequested (spawn amount popup) + Closed (screen-level teardown)
     // Closed is intentionally double-subscribed: the control hides itself, the screen runs side effects.
     // Don't collapse them — they serve different layers.

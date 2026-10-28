@@ -17,7 +17,12 @@ public sealed class Exchange
     public bool IsActive { get; private set; }
 
     /// <summary>
-    ///     Whether the other player has accepted.
+    ///     Whether the server confirmed that you accepted.
+    /// </summary>
+    public bool IsMyAccepted { get; private set; }
+
+    /// <summary>
+    ///     Whether the server confirmed that the other player accepted.
     /// </summary>
     public bool IsOtherAccepted { get; private set; }
 
@@ -70,6 +75,7 @@ public sealed class Exchange
         OtherUserName = string.Empty;
         MyGold = 0;
         OtherGold = 0;
+        IsMyAccepted = false;
         IsOtherAccepted = false;
         MyItems.Clear();
         OtherItems.Clear();
@@ -107,9 +113,9 @@ public sealed class Exchange
     public event ExchangeItemAddedHandler? ItemAdded;
 
     /// <summary>
-    ///     Fired when the other player accepts the exchange.
+    ///     Fired when the server confirms that one side accepted. Argument is true for the other player's side.
     /// </summary>
-    public event ExchangeOtherAcceptedHandler? OtherAccepted;
+    public event ExchangeAcceptedHandler? Accepted;
 
     public void RequestAmount(byte fromSlot) => AmountRequested?.Invoke(fromSlot);
 
@@ -123,10 +129,27 @@ public sealed class Exchange
         GoldSet?.Invoke(rightSide);
     }
 
-    public void SetOtherAccepted()
+    /// <summary>
+    ///     Records the server's confirmation that one side accepted (BRIG-140), and closes the exchange with
+    ///     <paramref name="message" /> when both sides have accepted, as the retail client does. Retail confirms your side
+    ///     to you when you accept, and the other side when the other player accepts; Hybrasyl confirms the other side on
+    ///     each accept, then your side to both players when both have accepted. The rule gives the same result for both.
+    ///     Does nothing when no exchange is active, so that a late confirmation does not close the exchange again.
+    /// </summary>
+    public void SetAccepted(bool rightSide, string? message)
     {
-        IsOtherAccepted = true;
-        OtherAccepted?.Invoke();
+        if (!IsActive)
+            return;
+
+        if (rightSide)
+            IsOtherAccepted = true;
+        else
+            IsMyAccepted = true;
+
+        Accepted?.Invoke(rightSide);
+
+        if (IsMyAccepted && IsOtherAccepted)
+            Close(message);
     }
 
     public void Start(uint otherUserId, string otherUserName)
@@ -136,6 +159,7 @@ public sealed class Exchange
         OtherUserName = otherUserName;
         MyGold = 0;
         OtherGold = 0;
+        IsMyAccepted = false;
         IsOtherAccepted = false;
         MyItems.Clear();
         OtherItems.Clear();
