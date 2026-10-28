@@ -1,6 +1,5 @@
 #region
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text;
 using Brigid.Data;
 using Brigid.Networking;
@@ -12,8 +11,8 @@ namespace Brigid;
 
 /// <summary>
 ///     Static configuration for the client: version, data path, lobby host/port, and sampler state. The static
-///     constructor performs the one-time initialization that does NOT require the asset path (encoding providers, text
-///     colors) and resolves the host/port/asset-path from environment variables and the saved
+///     constructor performs the one-time initialization that does NOT require the asset path (encoding providers, the
+///     DALib assembly preload) and resolves the host/port/asset-path from environment variables and the saved
 ///     <see cref="LauncherConfig" />. Asset-path-dependent initialization (the data archives and repositories) is
 ///     deferred to <see cref="InitializeAssetData" />, which the client calls once a usable asset path is known —
 ///     either from config/env at startup, or from the launcher screen.
@@ -21,7 +20,6 @@ namespace Brigid;
 public static class GlobalSettings
 {
     private static readonly string[] PreLoadedAssemblies = ["DALib"];
-    private static readonly Type[] PreInitializedStatics = [typeof(DataContext)];
     public static readonly SamplerState Sampler = SamplerState.PointClamp; //SamplerState.LinearClamp;
     private static ushort ClientVersion => 741;
 
@@ -85,9 +83,6 @@ public static class GlobalSettings
 
         foreach (var name in PreLoadedAssemblies)
             Assembly.Load(name);
-
-        foreach (var type in PreInitializedStatics)
-            RuntimeHelpers.RunClassConstructor(type.TypeHandle);
     }
 
     /// <summary>
