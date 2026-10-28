@@ -41,7 +41,6 @@ public sealed class ExitRedirectTests
 
     //the expected event is an object, because ConnectionEvent is internal
     [Theory]
-
     //the logout redirect reached the login server
     [InlineData(ConnectionState.Connecting, ConnectionState.Login, true, ConnectionEvent.LoggedOut)]
 
