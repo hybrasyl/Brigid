@@ -26,8 +26,9 @@ namespace Brigid.Controls.World.Popups.Exchange;
 ///     </para>
 ///     <para>
 ///         A cancel waits for the server, as on retail (BRIG-168): Accept, Cancel and Gold are disabled, and the window
-///         stays until the server's Cancelled event, or the Accepted event that completes the trade, closes the exchange.
-///         A second Cancel or Escape raises nothing.
+///         stays until the server's Cancelled event, or the Accepted event that completes the trade, closes the exchange;
+///         a lost connection or a world transfer closes it on the client. A second Cancel or Escape raises nothing. The
+///         control records the cancel in <c>WorldState.Exchange</c>; the screen sends the packet.
 ///     </para>
 /// </summary>
 public sealed class ExchangeControl : CenteredModalPanel
@@ -59,7 +60,7 @@ public sealed class ExchangeControl : CenteredModalPanel
 
     public TextButton CancelButton { get; }
 
-    /// <summary>The button that sets your gold. It is disabled after you accept.</summary>
+    /// <summary>The button that sets your gold. It is disabled after you accept or cancel.</summary>
     public TextButton GoldButton { get; }
 
     public uint OtherUserId => WorldState.Exchange.OtherUserId;
@@ -198,8 +199,8 @@ public sealed class ExchangeControl : CenteredModalPanel
 
     public override void OnKeyDown(KeyDownEvent e)
     {
-        //Escape cancels the exchange, and the screen closes the window when the exchange closes. The base Escape (Hide)
-        //does not run, so the window stays until the exchange closes
+        //Escape cancels the exchange, and waits for the server as Cancel does; the window closes when the exchange
+        //closes. The base Escape (Hide) does not run, and a second Escape is still handled here
         if (e.Key == Keys.Escape)
         {
             Cancel();

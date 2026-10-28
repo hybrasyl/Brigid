@@ -18,9 +18,16 @@ public sealed class Exchange
 
     /// <summary>
     ///     Whether the player cancelled and the client waits for the server's answer (BRIG-168). The server's Cancelled
-    ///     event, or the Accepted event that completes the trade, closes the exchange.
+    ///     event, or the Accepted event that completes the trade, closes the exchange; so does a lost connection or a world
+    ///     transfer, on the client.
     /// </summary>
     public bool IsCancelPending { get; private set; }
+
+    /// <summary>
+    ///     Whether the client sends an item or gold for the exchange: an exchange is active, and no cancel waits for the
+    ///     server.
+    /// </summary>
+    public bool TakesOffers => IsActive && !IsCancelPending;
 
     /// <summary>
     ///     Whether the server confirmed that you accepted.

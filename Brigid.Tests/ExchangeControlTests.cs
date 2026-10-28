@@ -219,14 +219,18 @@ public sealed class ExchangeControlTests : IDisposable
         else
             Exchange.CancelButton.OnClick(LeftClick());
 
-        //BRIG-168: a second cancel sends nothing, and the buttons wait for the server
+        //BRIG-168: a second cancel sends nothing, and the buttons wait for the server. The second Escape is still handled,
+        //so it does not go on to the screen
+        var secondEscape = new KeyDownEvent { Key = Keys.Escape };
         Exchange.CancelButton.OnClick(LeftClick());
-        Exchange.OnKeyDown(new KeyDownEvent { Key = Keys.Escape });
+        Exchange.OnKeyDown(secondEscape);
 
         Assert.Equal(1, cancels);
         Assert.False(Exchange.OkButton.Enabled);
         Assert.False(Exchange.CancelButton.Enabled);
         Assert.False(Exchange.GoldButton.Enabled);
+
+        Assert.True(secondEscape.Handled);
 
         if (escapeFirst)
             Assert.True(escape.Handled);

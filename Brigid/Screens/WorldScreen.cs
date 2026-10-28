@@ -436,7 +436,7 @@ public sealed partial class WorldScreen : IScreen
 
             if (GoldDrop.ForExchange)
             {
-                if (WorldState.Exchange.IsActive)
+                if (WorldState.Exchange.TakesOffers)
                     Game.Connection.SendExchangeInteraction(ExchangeRequestType.SetGold, Exchange.OtherUserId, goldAmount: amount);
             } else if (GoldDrop.TargetEntityId.HasValue)
                 Game.Connection.DropGoldOnCreature(amount, GoldDrop.TargetEntityId.Value);
@@ -455,6 +455,9 @@ public sealed partial class WorldScreen : IScreen
 
         ItemAmount.OnConfirm += amount =>
         {
+            if (!WorldState.Exchange.TakesOffers)
+                return;
+
             Game.Connection.SendExchangeInteraction(
                 ExchangeRequestType.AddStackableItem,
                 Exchange.OtherUserId,

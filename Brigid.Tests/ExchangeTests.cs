@@ -101,12 +101,17 @@ public sealed class ExchangeTests
     [Fact]
     public void ACancelIsRequestedOnce_AndTheExchangeStaysOpen()
     {
+        Assert.True(Exchange.TakesOffers);
+
         Assert.True(Exchange.RequestCancel());
         Assert.False(Exchange.RequestCancel());
 
         Assert.True(Exchange.IsActive);
         Assert.True(Exchange.IsCancelPending);
         Assert.Empty(Closes);
+
+        //the gold and item prompts and a drop on the window send nothing now
+        Assert.False(Exchange.TakesOffers);
     }
 
     [Fact]
