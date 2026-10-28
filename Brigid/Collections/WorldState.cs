@@ -626,10 +626,6 @@ public static class WorldState
         SortVersion++;
     }
 
-    /// <summary>
-    ///     Subscribes to ConnectionManager events and routes them to state mutations.
-    ///     Call once at startup after ConnectionManager is constructed.
-    /// </summary>
     /// <summary>Applies one exchange event from the server to <see cref="Exchange" />. Internal for the tests.</summary>
     internal static void ApplyExchange(ExchangeResponsePacket args)
     {
@@ -675,6 +671,10 @@ public static class WorldState
         }
     }
 
+    /// <summary>
+    ///     Subscribes to ConnectionManager events and routes them to state mutations.
+    ///     Call once at startup after ConnectionManager is constructed.
+    /// </summary>
     public static void SubscribeTo(ConnectionManager connection)
     {
         connection.OnAddSkillToPane += args =>

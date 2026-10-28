@@ -97,10 +97,14 @@ public sealed class ExchangeTests
         Assert.False(Exchange.IsMyAccepted);
     }
 
-    [Fact]
-    public void ANewExchangeStartsWithNeitherSideAccepted()
+    //one side only, so the exchange stays open: a side that a Start does not reset would close the next exchange on the
+    //other side's accept alone
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ANewExchangeStartsWithNeitherSideAccepted(bool rightSide)
     {
-        Exchange.SetAccepted(true, null);
+        Exchange.SetAccepted(rightSide, null);
 
         Exchange.Start(8, "Kedian");
 
