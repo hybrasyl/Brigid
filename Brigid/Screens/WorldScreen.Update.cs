@@ -30,7 +30,9 @@ public sealed partial class WorldScreen
 
                 return;
 
+            //a world transfer that cannot connect also ends here, so its loading bar goes
             case ConnectionEvent.Closed:
+                MapLoading.Hide();
                 DisconnectPopup.Show("Connection lost.");
 
                 break;
@@ -50,6 +52,12 @@ public sealed partial class WorldScreen
         {
             case ExitStep.Confirm:
                 ConfirmExit();
+
+                break;
+
+            //the server ignored the confirm: forget it, so that the next world transfer stays in the world (BRIG-169)
+            case ExitStep.ExitIgnored:
+                Game.Connection.ClearExitConfirm();
 
                 break;
 

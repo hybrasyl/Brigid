@@ -12,7 +12,13 @@ public enum ExitStep
     Confirm,
 
     /// <summary>The grace time ended with no logout, and the player chose Exit Game: close the client.</summary>
-    CloseClient
+    CloseClient,
+
+    /// <summary>
+    ///     The grace time ended with no logout, and the player chose Exit to Menu: the server ignored the exit, and the
+    ///     player stays in the world. The screen tells the connection to forget the confirm (BRIG-169).
+    /// </summary>
+    ExitIgnored
 }
 
 /// <summary>
@@ -134,12 +140,15 @@ public sealed class ExitFlow
         {
             GraceSecondsRemaining -= seconds;
 
-            if ((GraceSecondsRemaining <= 0f) && ClosesClient)
-            {
-                ClosesClient = false;
+            if (GraceSecondsRemaining > 0f)
+                return ExitStep.None;
 
-                return ExitStep.CloseClient;
-            }
+            if (!ClosesClient)
+                return ExitStep.ExitIgnored;
+
+            ClosesClient = false;
+
+            return ExitStep.CloseClient;
         }
 
         return ExitStep.None;

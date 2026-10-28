@@ -138,7 +138,10 @@ public sealed class ExitFlowTests
         Flow.Begin(false);
         Flow.Confirm();
 
-        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS));
+        //BRIG-169: the screen then tells the connection to forget the confirm, once
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS - 1));
+        Assert.Equal(ExitStep.ExitIgnored, Flow.Tick(1));
+        Assert.Equal(ExitStep.None, Flow.Tick(1));
         Assert.False(Flow.IsAwaitingLogout);
     }
 
@@ -173,7 +176,7 @@ public sealed class ExitFlowTests
         Flow.Confirm();
 
         Assert.False(Flow.Begin(false));
-        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS));
+        Assert.Equal(ExitStep.ExitIgnored, Flow.Tick(ExitFlow.GRACE_SECONDS));
         Assert.False(Flow.IsAwaitingLogout);
     }
 

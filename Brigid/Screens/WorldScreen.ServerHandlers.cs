@@ -1406,35 +1406,49 @@ public sealed partial class WorldScreen
 
     private void HandleStateChanged(ConnectionState oldState, ConnectionState newState)
     {
-        //server redirected us back to login (e.g., after logout)
-        //state transitions go world → connecting → login, so just check for login arrival
-        if (newState == ConnectionState.Login)
-        {
-            RedirectInProgress = false;
-            Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.LoggedOut);
+        var connectionEvent = ConnectionEventFor(oldState, newState, RedirectInProgress);
 
-            return;
-        }
-
-        //server transfer (e.g. Temuair↔Medenia) reconnected straight back into World: clear the redirect
-        //latch so a genuine drop afterward still surfaces the "connection lost" popup.
-        if (newState == ConnectionState.World)
-        {
+        //a redirect ends when the next connection reaches Login or World, or when its connect fails. After that, a
+        //drop surfaces the "Connection lost" popup again
+        if ((newState is ConnectionState.Login or ConnectionState.World) || (connectionEvent == ConnectionEvent.Closed))
             RedirectInProgress = false;
 
-            return;
-        }
-
-        if ((newState == ConnectionState.Disconnected) && !RedirectInProgress)
+        switch (connectionEvent)
         {
-            //Update decides: in the grace time it is the logout on a server that closes the connection with no
-            //Redirect (ExitFlow), else a lost connection. A logout recorded first stays
-            Interlocked.CompareExchange(
-                ref PendingConnectionEvent,
-                (int)ConnectionEvent.Closed,
-                (int)ConnectionEvent.None);
+            case ConnectionEvent.LoggedOut:
+                Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.LoggedOut);
+
+                break;
+
+            //Update decides: in the grace time it is the logout (a server that closes the connection with no Redirect,
+            //or a logout redirect that cannot connect), else a lost connection. A logout recorded first stays
+            case ConnectionEvent.Closed:
+                Interlocked.CompareExchange(
+                    ref PendingConnectionEvent,
+                    (int)ConnectionEvent.Closed,
+                    (int)ConnectionEvent.None);
+
+                break;
         }
     }
+
+    /// <summary>
+    ///     What a state change of the connection means to the world screen. Login is the logout redirect (the state goes
+    ///     World, Connecting, Login). A redirect closes the old connection first, and that Disconnected is not a lost
+    ///     connection; but a Disconnected that comes from Connecting during a redirect is a connect to the next server
+    ///     that failed, and it is (BRIG-170), as the lobby screen already treats it.
+    /// </summary>
+    internal static ConnectionEvent ConnectionEventFor(
+        ConnectionState oldState,
+        ConnectionState newState,
+        bool redirectInProgress)
+        => newState switch
+        {
+            ConnectionState.Login => ConnectionEvent.LoggedOut,
+            ConnectionState.Disconnected when !redirectInProgress || (oldState == ConnectionState.Connecting)
+                => ConnectionEvent.Closed,
+            _ => ConnectionEvent.None
+        };
 
     //--- helpers ---
 
