@@ -12,7 +12,8 @@ namespace Brigid.Tests;
 
 /// <summary>
 ///     The BRIG-55 pause menu: every child has a lowercase name, the sliders carry the volumes in both directions, Escape
-///     closes the menu, X closes it and exits, and every other key goes on to the world screen.
+///     closes the menu, X closes it and exits to the menu, and every other key goes on to the world screen. BRIG-139: Exit
+///     to Menu and Exit Game each raise their own event.
 /// </summary>
 [Collection("FontEngine")]
 public class PauseMenuControlTests
@@ -51,12 +52,14 @@ public class PauseMenuControlTests
     }
 
     [Fact]
-    public void XClosesTheMenuAndExits()
+    public void XClosesTheMenuAndExitsToTheMenu()
     {
         var menu = new PauseMenuControl();
-        var exits = 0;
+        var toMenu = 0;
+        var game = 0;
         var closes = 0;
-        menu.OnExit += () => exits++;
+        menu.OnExitToMenu += () => toMenu++;
+        menu.OnExitGame += () => game++;
         menu.OnClose += () => closes++;
         menu.Show();
 
@@ -65,8 +68,45 @@ public class PauseMenuControlTests
 
         Assert.True(x.Handled);
         Assert.False(menu.Visible);
-        Assert.Equal(1, exits);
+        Assert.Equal(1, toMenu);
+        Assert.Equal(0, game);
         Assert.Equal(1, closes);
+    }
+
+    [Theory]
+    [InlineData("exit_menu", 1, 0)]
+    [InlineData("exit_game", 0, 1)]
+    public void EachExitButtonClosesTheMenuAndRaisesItsOwnEvent(string name, int expectedToMenu, int expectedGame)
+    {
+        var menu = new PauseMenuControl();
+        var toMenu = 0;
+        var game = 0;
+        menu.OnExitToMenu += () => toMenu++;
+        menu.OnExitGame += () => game++;
+        menu.Show();
+
+        menu.FindChild<TextButton>(name)!.OnClick(new ClickEvent { Button = MouseButton.Left });
+
+        Assert.False(menu.Visible);
+        Assert.Equal(expectedToMenu, toMenu);
+        Assert.Equal(expectedGame, game);
+    }
+
+    [Fact]
+    public void TheButtonsFitInThePanel()
+    {
+        var menu = new PauseMenuControl();
+        var content = menu.ContentBounds;
+
+        foreach (var name in (string[]) ["settings", "exit_menu", "exit_game"])
+        {
+            var button = menu.FindChild<TextButton>(name)!;
+
+            Assert.True(button.X >= content.X && button.X + button.Width <= content.Right, name);
+            Assert.True(button.Y >= content.Y && button.Y + button.Height <= content.Bottom, name);
+        }
+
+        Assert.True(menu.FindChild<TextButton>("exit_menu")!.Y > menu.FindChild<TextButton>("settings")!.Y);
     }
 
     [Fact]

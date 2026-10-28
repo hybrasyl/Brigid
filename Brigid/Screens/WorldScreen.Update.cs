@@ -3,6 +3,7 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Models;
+using Brigid.Networking.Definitions;
 using Brigid.Systems;
 using Chaos.Geometry.Abstractions.Definitions;
 using Microsoft.Xna.Framework;
@@ -15,29 +16,52 @@ public sealed partial class WorldScreen
 {
     public void Update(GameTime gameTime)
     {
-        if (PendingLoginSwitch)
+        switch ((ConnectionEvent)Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.None))
         {
-            PendingLoginSwitch = false;
-            Game.Screens.Switch(new LobbyLoginScreen(true));
+            case ConnectionEvent.LoggedOut:
+                EndLogout();
 
-            return;
+                return;
+
+            //a close in the grace time is the logout (Exit to Menu goes to the login screen, and Exit Game closes the
+            //client); any other close is a lost connection
+            case ConnectionEvent.Closed when ExitFlow.IsAwaitingLogout:
+                EndLogout();
+
+                return;
+
+            case ConnectionEvent.Closed:
+                DisconnectPopup.Show("Connection lost.");
+
+                break;
         }
 
         var elapsedMs = (float)gameTime.ElapsedGameTime.TotalMilliseconds;
 
-        //auto-confirm exit when the 10s grace period elapses without user input
-        if (ExitConfirmSecondsRemaining > 0f)
-        {
-            ExitConfirmSecondsRemaining -= elapsedMs / 1000f;
+        //the connection sends the exit packets only in the world: a lost connection or a transfer while the confirmation
+        //is open cancels it, so that its timer does not confirm to no server
+        if (ExitFlow.IsConfirming && (Game.Connection.State != ConnectionState.World))
+            CancelExit();
 
-            if (ExitConfirmSecondsRemaining <= 0f)
+        //the confirmation confirms by itself when its time ends. After the confirm, a logout goes through
+        //HandleStateChanged; when the grace time ends with no logout, Exit to Menu leaves the player in the world, and
+        //Exit Game closes the client
+        switch (ExitFlow.Tick(elapsedMs / 1000f))
+        {
+            case ExitStep.Confirm:
                 ConfirmExit();
+
+                break;
+
+            case ExitStep.CloseClient:
+                Game.Exit();
+
+                return;
         }
 
-        //after we've sent the exit confirm, an in-window disconnect counts as expected (handled in
-        //HandleStateChanged). once the window elapses, fall back to normal "Connection Lost" semantics.
-        if (ExitInProgressSecondsRemaining > 0f)
-            ExitInProgressSecondsRemaining -= elapsedMs / 1000f;
+        //the confirmation shows the whole seconds left; its text changes when they change
+        if (ExitFlow.IsConfirming && (ExitFlow.ConfirmSecondsLeft != ShownExitSeconds))
+            ShowExitConfirmation();
 
         //ease the transfer loading bar while it's up across the reconnect gap (cosmetic; see MapLoadingBar)
         MapLoading.Tick(elapsedMs);

@@ -123,11 +123,9 @@ public sealed partial class WorldScreen : IScreen
     private GraphicsDevice Device = null!;
     private OkPopupMessageControl DisconnectPopup = null!;
     private OkPopupMessageControl ExitConfirmPopup = null!;
-    private float ExitConfirmSecondsRemaining;
-    //grace window after ConfirmExit fires — if a disconnect arrives within this window we treat it as
-    //the expected logout (suppress the "Connection Lost" popup and transition to login). Defensive against
-    //servers that drop the connection without flushing the Redirect packet.
-    private float ExitInProgressSecondsRemaining;
+    private readonly ExitFlow ExitFlow = new();
+    //the countdown that the exit confirmation shows; its text changes only when the whole seconds change
+    private int ShownExitSeconds;
 
     //event detail popup (from events tab)
     private EventMetadataDetailsControl EventMetadataDetails = null!;
@@ -172,7 +170,20 @@ public sealed partial class WorldScreen : IScreen
     //entity captured on first right-click so a follow-up double-click can still target it even if pathfinding has shifted the camera between clicks
     private uint? PendingDoubleClickEntityId;
     private int PendingDoubleClickTick;
-    private bool PendingLoginSwitch;
+    //what the connection did, for Update to act on (a ConnectionEvent). HandleStateChanged writes it on the network
+    //thread, so that ExitFlow and the popups change only on the game thread
+    private int PendingConnectionEvent;
+
+    private enum ConnectionEvent
+    {
+        None,
+
+        //the state went to Login: a logout redirect
+        LoggedOut,
+
+        //the connection closed outside a redirect: the logout in the grace time, else a lost connection
+        Closed
+    }
 
     //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.
     private bool TransportSecure;
@@ -498,12 +509,13 @@ public sealed partial class WorldScreen : IScreen
         };
         DisconnectPopup.OnCancel += () => Game.Exit();
 
-        ExitConfirmPopup = new OkPopupMessageControl("Log Out")
+        ExitConfirmPopup = new OkPopupMessageControl("Log Out", showCancel: true)
         {
             ZIndex = 10,
             Name = "ExitConfirmPopup"
         };
         ExitConfirmPopup.OnOk += ConfirmExit;
+        ExitConfirmPopup.OnCancel += CancelExit;
 
         WireExchange();
         WireBoardControls();

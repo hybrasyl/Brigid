@@ -25,16 +25,6 @@ public static class DataContext
 
     public static LightMaskRepository LightMasks { get; private set; } = null!;
 
-    /// <summary>
-    ///     The lobby server hostname or IP address.
-    /// </summary>
-    public static string LobbyHost { get; private set; } = null!;
-
-    /// <summary>
-    ///     TCP port for the lobby server connection.
-    /// </summary>
-    public static int LobbyPort { get; private set; }
-
     public static LocalPlayerSettingsRepository LocalPlayerSettings { get; private set; } = null!;
 
     public static MessageTable Messages { get; private set; } = null!;
@@ -43,16 +33,10 @@ public static class DataContext
     public static TileRepository Tiles { get; private set; } = null!;
     public static UiComponentRepository UserControls { get; private set; } = null!;
 
-    public static void Initialize(
-        ushort clientVersion,
-        string dataPath,
-        string lobbyHost,
-        int lobbyPort)
+    public static void Initialize(ushort clientVersion, string dataPath)
     {
         ClientVersion = clientVersion;
         DataPath = dataPath;
-        LobbyHost = lobbyHost;
-        LobbyPort = lobbyPort;
 
         LegendPalette.Initialize();
 

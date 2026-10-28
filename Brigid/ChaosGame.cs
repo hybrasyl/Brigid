@@ -565,8 +565,7 @@ public sealed class ChaosGame : Game
 
         //the lobby host is settled by now (launcher selection or env override), so scope the server-pushed caches
         //before anything reads or writes them.
-        AppPaths.SetServerScope(GlobalSettings.LobbyHost);
-        DataDiagnostics.Try(() => Directory.CreateDirectory(MetaFilePath), "create metafile dir");
+        ScopeServerCaches();
         ClientSettings.Load();
 
         if (launcherChoices is not null)
@@ -580,6 +579,32 @@ public sealed class ChaosGame : Game
         FontEngine.Instance.SetActiveFont(ClientSettings.FontIndex);
         LoadCustomCursor();
         Screens.Switch(new LobbyLoginScreen());
+    }
+
+    /// <summary>
+    ///     Makes <paramref name="host" />:<paramref name="port" /> the lobby server, for Config from the main menu
+    ///     (BRIG-105). Returns false, and changes nothing, when it is the server that the client uses now. Otherwise
+    ///     the server state follows it: the metafile and map folders, the metafile data in memory, and the certificate
+    ///     prompts of the old server. The data folder does not change.
+    /// </summary>
+    public bool UseLobbyServer(string host, int port)
+    {
+        if (!GlobalSettings.SetLobbyServer(host, port))
+            return false;
+
+        ScopeServerCaches();
+        DataContext.MetaFiles.ClearCaches();
+        CertificateTrustStore.ClearPendingPrompts();
+        NoticeDebugLog.Write($"lobby server changed to {GlobalSettings.LobbyHost}:{GlobalSettings.LobbyPort}");
+
+        return true;
+    }
+
+    //the one place that scopes the server caches (the metafile and map folders) to the lobby server
+    private static void ScopeServerCaches()
+    {
+        AppPaths.SetServerScope(GlobalSettings.LobbyHost);
+        DataDiagnostics.Try(() => Directory.CreateDirectory(MetaFilePath), "create metafile dir");
     }
 
     private void LoadCustomCursor()

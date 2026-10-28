@@ -39,7 +39,7 @@ public sealed class LobbyLoginScreen : IScreen
     private static bool NoSoundAlertAdded;
     private static bool AssetsAlertAdded;
 
-    private readonly bool ReturningFromWorld;
+    private readonly LobbyStart Start;
     private bool AwaitingCharFinalize;
 
     //the checksum of the greeting that the player accepted, and of the greeting that shows now. A reconnect skips only a
@@ -86,7 +86,9 @@ public sealed class LobbyLoginScreen : IScreen
     /// <inheritdoc />
     public UIPanel? Root { get; private set; }
 
-    public LobbyLoginScreen(bool returningFromWorld = false) => ReturningFromWorld = returningFromWorld;
+    public LobbyLoginScreen(LobbyStart start = LobbyStart.Fresh) => Start = start;
+
+    private bool ReturningFromWorld => Start == LobbyStart.ReturningFromWorld;
 
     /// <inheritdoc />
     public void Dispose() => Root?.Dispose();
@@ -233,9 +235,18 @@ public sealed class LobbyLoginScreen : IScreen
             //was accepted before the world, so the menu is ready when the login form closes
             LobbyReady = true;
             LoginForm.Show();
+
+            //the answer to the homepage request of the logout hop came while the world screen was shown
+            Game.Connection.RequestHomepage();
+        } else if ((Start == LobbyStart.ReturningFromConfig) && (Game.Connection.State == ConnectionState.Login))
+        {
+            //back from Config with the same server (BRIG-105): the connection stays, so the menu is ready at once. The
+            //homepage URL came to the screen before Config, so ask for it again
+            LobbyReady = true;
+            Game.Connection.RequestHomepage();
         } else
 
-            //fresh start, or the server closed the connection at logout — connect to lobby
+            //fresh start, a new server from Config, or the server closed the connection — connect to lobby
             BeginLobbyConnect();
     }
 
@@ -277,7 +288,9 @@ public sealed class LobbyLoginScreen : IScreen
         if (PendingConfigSwitch)
         {
             PendingConfigSwitch = false;
-            Game.Screens.Switch(new LauncherScreen(openedFromMainMenu: true));
+            //the lobby connection stays only when the lobby is ready now (BRIG-105)
+            var lobbyReady = LobbyReady && (Game.Connection.State == ConnectionState.Login);
+            Game.Screens.Switch(new LauncherScreen(openedFromMainMenu: true, lobbyReady));
 
             return;
         }
@@ -307,7 +320,10 @@ public sealed class LobbyLoginScreen : IScreen
         //tree. The lobby learns the server name after the connection. The menu changes nothing when the state is the
         //same
         Menu.SetButtonsEnabled(LobbyReady && !AnyFormOpen);
-        Menu.SetConnection(DataContext.LobbyHost, Game.Connection.Client.Negotiated is not null, Game.Connection.ServerName);
+        Menu.SetConnection(
+            GlobalSettings.LobbyHost,
+            Game.Connection.Client.Negotiated is not null,
+            Game.Connection.ServerName);
 
         Root!.Update(gameTime);
     }
@@ -638,7 +654,10 @@ public sealed class LobbyLoginScreen : IScreen
         //a new connection needs the greeting, or the cached greeting, again before the connection buttons are enabled
         LobbyReady = false;
 
-        await Game.Connection.ConnectToLobbyAsync(DataContext.LobbyHost, DataContext.LobbyPort, DataContext.ClientVersion);
+        await Game.Connection.ConnectToLobbyAsync(
+            GlobalSettings.LobbyHost,
+            GlobalSettings.LobbyPort,
+            DataContext.ClientVersion);
     }
 
     private void OnConnectionStateChanged(ConnectionState oldState, ConnectionState newState)

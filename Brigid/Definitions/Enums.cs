@@ -33,6 +33,27 @@ public enum PopupStyle
 }
 
 /// <summary>
+///     Why a <see cref="Screens.LobbyLoginScreen" /> starts. It decides whether the screen connects to the lobby.
+/// </summary>
+public enum LobbyStart
+{
+    /// <summary>The first start, or a start that needs a new connection: the screen connects to the lobby.</summary>
+    Fresh,
+
+    /// <summary>
+    ///     A logout from the world. The redirect leaves the client on the login server, so the screen shows the login
+    ///     form; with no connection it connects to the lobby.
+    /// </summary>
+    ReturningFromWorld,
+
+    /// <summary>
+    ///     A return from Config with the same server, while the lobby was ready (BRIG-105). The screen keeps the
+    ///     connection, and the menu is ready at once; with no connection it connects to the lobby.
+    /// </summary>
+    ReturningFromConfig
+}
+
+/// <summary>
 ///     Identifies which panel is active in the shared "center bottom" tab area of the HUD. Only one tab panel is visible
 ///     at a time.
 /// </summary>

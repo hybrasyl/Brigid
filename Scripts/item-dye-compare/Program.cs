@@ -46,7 +46,7 @@ System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Inst
 
 //the registry and the ramp check write through the data-layer log seam; show those lines
 DataDiagnostics.Log = Console.Error.WriteLine;
-DataContext.Initialize(741, dataPath, string.Empty, 0);
+DataContext.Initialize(741, dataPath);
 
 var table = DataContext.AislingDrawData.DyeColorTable;
 Console.WriteLine($"# Item dye comparison{Environment.NewLine}");

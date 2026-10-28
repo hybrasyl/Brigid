@@ -169,9 +169,9 @@ public static class AppPaths
     public static string ScreenshotsDir => Path.Combine(AppRoot, "screenshots");
 
     /// <summary>
-    ///     Key scoping the server-pushed caches, set once the connection target is known via
-    ///     <see cref="SetServerScope" />. Defaults to a neutral bucket so a path read before that never lands at the
-    ///     cache root.
+    ///     Key scoping the server-pushed caches (metafiles and maps), set when the connection target is known via
+    ///     <see cref="SetServerScope" />, and again when Config picks another server. Defaults to a neutral bucket so a
+    ///     path read before that never lands at the cache root.
     /// </summary>
     private static string ServerScope = "default";
 
@@ -191,8 +191,14 @@ public static class AppPaths
     /// </summary>
     public static string MetaFileDir => Path.Combine(AppRoot, "metafile", ServerScope);
 
-    /// <summary><c>{AppRoot}/maps</c> — cache of downloaded map files (disposable).</summary>
-    public static string MapsDir => Path.Combine(AppRoot, "maps");
+    /// <summary>
+    ///     <c>{AppRoot}/maps/{serverKey}</c> — cache of downloaded map files (disposable). Scoped by the server key
+    ///     (<see cref="ServerProfileKey" />), because retail and Hybrasyl send different maps under one map number
+    ///     (BRIG-105). The key ignores the port, and every host whose name contains "hybrasyl" has one key, so those
+    ///     share a folder; the size and CRC check of <see cref="MapCache.TryLoad" /> keeps a wrong map from loading.
+    ///     The files of the old flat <c>maps</c> folder are not read again.
+    /// </summary>
+    public static string MapsDir => Path.Combine(AppRoot, "maps", ServerScope);
 
     /// <summary>The per-character config directory for a server profile: <c>{ProfilesDir}/{serverKey}/{character}</c>.</summary>
     public static string ProfileDir(string serverKey, string character) => Path.Combine(ProfilesDir, serverKey, character);

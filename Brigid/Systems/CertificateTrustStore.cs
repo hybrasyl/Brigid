@@ -334,6 +334,18 @@ public static class CertificateTrustStore
         Save();
     }
 
+    /// <summary>
+    ///     Discards a pending certificate prompt and a pending downgrade warning with no decision, because the client
+    ///     changed server (BRIG-105): they describe the old server. Nothing is pinned or exempted.
+    /// </summary>
+    public static void ClearPendingPrompts()
+    {
+        using var scope = Gate.EnterScope();
+
+        PendingField = null;
+        PendingDowngradeField = null;
+    }
+
     /// <summary>Discards the pending decision without pinning, for a user who declines.</summary>
     public static void Decline()
     {

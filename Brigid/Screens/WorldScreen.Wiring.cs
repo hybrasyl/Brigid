@@ -870,7 +870,8 @@ public sealed partial class WorldScreen
     {
         PauseMenu.OnSettings += () => OptionsModal.Show(OptionsModalControl.OptionsTab.Settings);
 
-        PauseMenu.OnExit += BeginExit;
+        PauseMenu.OnExitToMenu += () => BeginExit(false);
+        PauseMenu.OnExitGame += () => BeginExit(true);
 
         PauseMenu.OnSoundVolumeChanged += volume =>
         {

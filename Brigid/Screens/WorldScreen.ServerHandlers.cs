@@ -1307,6 +1307,9 @@ public sealed partial class WorldScreen
     {
         DarknessRenderer.ReloadMetadata();
         DarknessRenderer.ReapplyLightLevel();
+
+        //an NPC dialog before the end of the sync can read the old files
+        DataContext.MetaFiles.ClearCaches();
         DataContext.MetaFiles.BuildItemIndex();
     }
 
@@ -1337,36 +1340,52 @@ public sealed partial class WorldScreen
 
     //--- exit / state ---
 
-    private const float EXIT_CONFIRM_SECONDS = 10f;
-    //buggy/older servers (e.g. Hybrasyl, which enqueues the Redirect with a 1200ms TransmitDelay and
-    //drops the user from WorldState before the queue flushes) close the socket without sending Redirect.
-    //this window says "if disconnect arrives within N seconds of us sending the confirm, treat it as a
-    //graceful exit instead of an unexpected drop."
-    private const float EXIT_IN_PROGRESS_GRACE_SECONDS = 10f;
-
-    private void BeginExit()
+    //Exit to Menu (closeClient false) and Exit Game (true) send the same packets; ExitFlow keeps the timers
+    private void BeginExit(bool closeClient)
     {
-        //guard against re-entry while the popup is already up
-        if (ExitConfirmPopup.Visible)
+        //the connection sends the exit packets only in the world, so an exit starts only there
+        if (Game.Connection.State != ConnectionState.World)
             return;
 
-        //retail-compat signal: announce the exit dialog opened. server responds with a cosmetic 0x4C
-        //(no longer auto-confirms — user dismisses the popup or the timer expires before we send 0x0B [0]).
-        Game.Connection.RequestExit(true);
+        //the exit query. The server answers with 0x4C, which changes nothing here: OK, or the end of the confirmation
+        //time, sends the confirm (0x0B 00). Retail sends the confirm when the 0x4C comes. A second exit while one is in
+        //progress sends nothing
+        if (ExitFlow.Begin(closeClient))
+            Game.Connection.RequestExit(true);
 
-        ExitConfirmPopup.Show("Logging out. Press OK to log out now.");
-        ExitConfirmSecondsRemaining = EXIT_CONFIRM_SECONDS;
+        //Exit Game while the Log Out confirmation is open changes the confirmation to Exit Game
+        if (ExitFlow.IsConfirming)
+            ShowExitConfirmation();
+    }
+
+    //the confirmation with its countdown, in two fixed lines, so that the text does not move when the count changes. A
+    //show while it is open changes the title and the text only
+    private void ShowExitConfirmation()
+    {
+        var seconds = ExitFlow.ConfirmSecondsLeft;
+        ShownExitSeconds = seconds;
+
+        if (ExitFlow.ClosesClient)
+            ExitConfirmPopup.Show("Exit Game", $"Exiting the game in {seconds} s.\nPress OK to exit now.");
+        else
+            ExitConfirmPopup.Show("Log Out", $"Logging out in {seconds} s.\nPress OK to log out now.");
     }
 
     private void ConfirmExit()
     {
-        ExitConfirmSecondsRemaining = 0f;
+        ExitFlow.Confirm();
 
         if (ExitConfirmPopup.Visible)
             ExitConfirmPopup.Hide();
 
         Game.Connection.RequestExit(false);
-        ExitInProgressSecondsRemaining = EXIT_IN_PROGRESS_GRACE_SECONDS;
+    }
+
+    //the client has not sent the confirm, so a cancel needs no packet; retail has no cancel
+    private void CancelExit()
+    {
+        ExitFlow.Cancel();
+        ExitConfirmPopup.Hide();
     }
 
     private void HandleExitResponse(ConfirmExitPacket args)
@@ -1376,6 +1395,15 @@ public sealed partial class WorldScreen
         //hook left in place so phase 2 can update the popup text on server ack if desired.
     }
 
+    //the logout completed: Exit Game closes the client, and every other logout goes to the login screen
+    private void EndLogout()
+    {
+        if (ExitFlow.CompleteLogout())
+            Game.Exit();
+        else
+            Game.Screens.Switch(new LobbyLoginScreen(LobbyStart.ReturningFromWorld));
+    }
+
     private void HandleStateChanged(ConnectionState oldState, ConnectionState newState)
     {
         //server redirected us back to login (e.g., after logout)
@@ -1383,8 +1411,7 @@ public sealed partial class WorldScreen
         if (newState == ConnectionState.Login)
         {
             RedirectInProgress = false;
-            ExitInProgressSecondsRemaining = 0f;
-            PendingLoginSwitch = true;
+            Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.LoggedOut);
 
             return;
         }
@@ -1400,19 +1427,12 @@ public sealed partial class WorldScreen
 
         if ((newState == ConnectionState.Disconnected) && !RedirectInProgress)
         {
-            //defensive: a disconnect arriving within the exit-in-progress grace window is the expected
-            //logout outcome on servers that drop the socket without flushing Redirect. transition to
-            //login instead of showing the unexpected-disconnect popup.
-            if (ExitInProgressSecondsRemaining > 0f)
-            {
-                ExitInProgressSecondsRemaining = 0f;
-                PendingLoginSwitch = true;
-
-                return;
-            }
-
-            //unexpected disconnect — show reconnect prompt
-            DisconnectPopup.Show("Connection lost.");
+            //Update decides: in the grace time it is the logout on a server that closes the connection with no
+            //Redirect (ExitFlow), else a lost connection. A logout recorded first stays
+            Interlocked.CompareExchange(
+                ref PendingConnectionEvent,
+                (int)ConnectionEvent.Closed,
+                (int)ConnectionEvent.None);
         }
     }
 
