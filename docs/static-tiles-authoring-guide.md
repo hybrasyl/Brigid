@@ -1,6 +1,6 @@
 # Static Tiles — Authoring Guide
 
-Practical walkthrough for producing a `.datf` pack of **static** floor and wall tiles for Hybrasyl. Companion to [asset-pack-format.md](asset-pack-format.md); that doc defines the pack container, this doc covers the art and the eligibility rules you need to know before drawing anything.
+Practical walkthrough for producing a `.datf` pack of **static** floor and wall tiles for Hybrasyl. Companion to [assetPackList.md](../assetPackList.md); that doc defines the pack container and the manifest, this doc covers the art and the eligibility rules you need to know before drawing anything.
 
 ## What "static tiles" covers
 
@@ -168,7 +168,7 @@ Before shipping:
 
 ## Reference
 
-- Format spec: [asset-pack-format.md](asset-pack-format.md)
+- Pack format: [assetPackList.md](../assetPackList.md) ([What a pack is](../assetPackList.md#what-a-pack-is), [Manifest schema](../assetPackList.md#manifest-schema), [`static_tiles`](../assetPackList.md#static_tiles))
 - Pack class: [Brigid.Data/AssetPacks/StaticTilePack.cs](../Brigid.Data/AssetPacks/StaticTilePack.cs)
 - Renderer hook: `Phase 2.5` in `MapRenderer.PreloadMapTiles` ([MapRenderer.cs](../Brigid.Rendering/MapRenderer.cs))
 - Legacy sources:
