@@ -498,7 +498,7 @@ public static class WorldState
         AnimationSystem.StartWalk(
             entity,
             direction,
-            entity.UsesCreatureWalkTiming,
+            entity.IsRenderedAsCreatureSprite,
             walkFrameOverride: walkFrameCount);
     }
 

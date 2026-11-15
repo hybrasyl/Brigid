@@ -1,6 +1,4 @@
 #region
-using System.Collections.Frozen;
-using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using DALib.Cryptography;
 #endregion
@@ -9,53 +7,19 @@ namespace Brigid.Data;
 
 /// <summary>
 ///     The local cache of server metafiles in <see cref="AppPaths.MetaFileDir" />. The server names each metafile, and
-///     the client stores it under that name, so every method here refuses a name that <see cref="IsSafeName" />
-///     refuses. A name that is not a bare file name lets a server write outside the directory.
+///     the client stores it under that name, so <see cref="GetChecksum" /> and <see cref="TryWrite" /> refuse a name
+///     that <see cref="FileNames.IsSafeName" /> refuses, and <see cref="MetaFileSync" /> drops such a name before
+///     <see cref="PruneUnlisted" />. A name that is not a bare file name lets a server write outside the directory.
 /// </summary>
 public static class MetaFileCache
 {
-    //the characters Windows refuses in a file name, including both separators. They are refused on every platform, so
-    //a name that one platform accepts, every platform accepts.
-    private static readonly char[] InvalidChars = ['"', '<', '>', '|', ':', '*', '?', '\\', '/', .. Enumerable.Range(0, 32).Select(i => (char)i)];
-
-    //Windows opens a device, not a file, for these names, with or without an extension. The superscript digits are
-    //reserved too.
-    private static readonly FrozenSet<string> ReservedNames = new[]
-    {
-        "CON", "PRN", "AUX", "NUL",
-        "COM0", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-        "COM¹", "COM²", "COM³",
-        "LPT0", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
-        "LPT¹", "LPT²", "LPT³"
-    }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    ///     Returns true only for a bare file name that names the same file on every platform: not empty, no separator, no
-    ///     character that Windows refuses, not rooted, no trailing dot or space, and not a Windows device name.
-    /// </summary>
-    public static bool IsSafeName([NotNullWhen(true)] string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name) || (name.IndexOfAny(InvalidChars) >= 0))
-            return false;
-
-        //Windows removes a trailing dot or space, so the file on disk gets another name. This also refuses "." and "..".
-        if (name.EndsWith('.') || name.EndsWith(' '))
-            return false;
-
-        if (Path.IsPathRooted(name) || (Path.GetFileName(name) != name))
-            return false;
-
-        //Windows also removes the spaces before the extension, so "CON .txt" opens the device
-        return !ReservedNames.Contains(name.Split('.')[0].TrimEnd(' '));
-    }
-
     /// <summary>
     ///     Returns the CRC-32 of the decompressed metafile. Returns 0 when the name is refused, or the file is absent,
     ///     unreadable or not valid zlib data. A 0 makes the sync download the file again.
     /// </summary>
     public static uint GetChecksum(string directory, string name)
     {
-        if (!IsSafeName(name))
+        if (!FileNames.IsSafeName(name))
             return 0;
 
         var path = Path.Combine(directory, name);
@@ -113,7 +77,7 @@ public static class MetaFileCache
 
     /// <summary>Writes a metafile, and makes the directory when it is not there. Returns false when the name is refused or the write fails.</summary>
     public static bool TryWrite(string directory, string name, byte[] data)
-        => IsSafeName(name)
+        => FileNames.IsSafeName(name)
            && DataDiagnostics.Try(
                () =>
                {

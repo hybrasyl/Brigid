@@ -9,9 +9,6 @@ using Xunit;
 
 namespace Brigid.Tests;
 
-[CollectionDefinition("AssetPackRegistry", DisableParallelization = true)]
-public sealed class AssetPackRegistryCollection;
-
 /// <summary>
 ///     Several packs of one content type (BRIG-15). A lookup asks the packs in order of priority, the highest first, and
 ///     at the same priority in registration order: a pack with no entry, or with an entry that does not decode, passes

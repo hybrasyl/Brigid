@@ -13,10 +13,6 @@ namespace Brigid.Tests;
 // An aisling in monster form draws as a creature sprite, so it follows creature animation rules: its idle cycle ticks
 // even without paperdoll idle frames. Entering or leaving the form restarts the idle cycle, so a tick from one form
 // cannot select a frame that the other form does not have.
-//WorldState is static, so the tests that change it run alone
-[CollectionDefinition("WorldState", DisableParallelization = true)]
-public sealed class WorldStateCollection;
-
 [Collection("WorldState")]
 public sealed class MonsterFormAnimationTests
 {

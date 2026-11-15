@@ -32,51 +32,6 @@ public sealed class MetaFileCacheTests : IDisposable
         return output.ToArray();
     }
 
-    [Theory]
-    [InlineData("ItemInfo0")]
-    [InlineData("SClass1")]
-    [InlineData("SEvent12")]
-    [InlineData("NationDesc")]
-    [InlineData("Light")]
-    [InlineData("a..b")]
-    [InlineData("CONSOLE")]
-    [InlineData("COM10")]
-    [InlineData("COM⁴")]
-    public void IsSafeName_AcceptsBareFileNames(string name) => Assert.True(MetaFileCache.IsSafeName(name));
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    [InlineData(".")]
-    [InlineData("..")]
-    [InlineData("...")]
-    [InlineData(@"..\x.bat")]
-    [InlineData("../x.bat")]
-    [InlineData(@"sub\x")]
-    [InlineData("sub/x")]
-    [InlineData(@"C:\Users\u\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\x.bat")]
-    [InlineData("/home/u/.bashrc")]
-    [InlineData(@"\\host\share\x")]
-    [InlineData("x\0y")]
-    [InlineData("a:b")]
-    [InlineData("a|b")]
-    [InlineData("Light.")]
-    [InlineData("Light ")]
-    [InlineData("NUL")]
-    [InlineData("con.txt")]
-    [InlineData("Com1")]
-    [InlineData("COM0")]
-    [InlineData("LPT0.txt")]
-    [InlineData("COM¹")]
-    [InlineData("com².dat")]
-    [InlineData("LPT³")]
-    [InlineData("lpt¹.txt")]
-    [InlineData("CON .txt")]
-    [InlineData("nul  .dat")]
-    public void IsSafeName_RejectsAnythingThatIsNotTheSameBareFileOnEveryPlatform(string? name)
-        => Assert.False(MetaFileCache.IsSafeName(name));
-
     [Fact]
     public void GetChecksum_IsTheCrcOfTheDecompressedFile()
     {

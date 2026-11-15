@@ -72,17 +72,21 @@ public static class DataContext
     ///     True when <paramref name="path" /> is a usable Dark Ages data directory: it exists and contains the core
     ///     archives the client always loads (<c>khanpal.dat</c> for palettes, <c>legend.dat</c>). Matched
     ///     case-insensitively because data directories vary in filename casing across platforms. Used to validate a
-    ///     candidate asset path before <see cref="Initialize" /> loads from it.
+    ///     candidate asset path before <see cref="Initialize" /> loads from it. A folder that cannot be listed is not
+    ///     usable, and the log says why.
     /// </summary>
     public static bool IsValidDataDirectory(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        if (string.IsNullOrWhiteSpace(path))
             return false;
 
-        var present = Directory.EnumerateFiles(path)
-                               .Select(Path.GetFileName)
-                               .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var valid = false;
+        DataDiagnostics.Try(() => valid = HasFile(path, "khanpal.dat") && HasFile(path, "legend.dat"), $"list {path}");
 
-        return present.Contains("khanpal.dat") && present.Contains("legend.dat");
+        return valid;
+
+        static bool HasFile(string directory, string name)
+            => DirectoryEntries.FindName(directory, name, StringComparison.OrdinalIgnoreCase, DirectoryEntryKind.Files)
+               is not null;
     }
 }

@@ -171,8 +171,8 @@ public static class TextRenderer
         //whole-string fast path: one MeasureString instead of one per character, and it is the measurement the draw
         //actually uses. Autofit exists to make a full-width line fit without wrapping, so this is the dominant case by
         //construction — and re-wrapping the chat backlog on a resize drag pays this per message, per frame.
-        //Only valid when color codes are skipped, which is the one thing MeasureWidth always does.
-        if (colorCodesEnabled && (MeasureWidth(text, size, extraSpacing) <= maxWidth))
+        //MeasureWidth takes the same code rule, so the fast path is valid with codes on and off.
+        if (MeasureWidth(text, size, extraSpacing, colorCodesEnabled) <= maxWidth)
             return text.Length;
 
         //summed unrounded (MeasureWidthExact): rounding each glyph lost up to half a pixel apiece off 1x, so wrapped
@@ -245,16 +245,26 @@ public static class TextRenderer
 
     /// <summary>
     ///     Measures the pixel width of a text string. Skips {=x} color codes (zero visual width). Adds the same
-    ///     <see cref="RunAdvance" /> for each color run that the draw moves the pen by, so a caret placed with this width
-    ///     sits where the text is drawn. The sum is rounded once: a rounded width per run loses up to 0.5 px off 1x.
+    ///     <see cref="RunAdvance" /> for each color run that the draw moves the pen by, so a caret placed with this
+    ///     width sits where the text is drawn. The sum is rounded once: a rounded width per run loses up to 0.5 px off
+    ///     1x. With <paramref name="colorCodesEnabled" /> false, a code is text and is measured as the glyphs that the
+    ///     draw shows.
     /// </summary>
-    public static int MeasureWidth(string text, int? size = null, float extraSpacing = 0f)
+    public static int MeasureWidth(
+        string text,
+        int? size = null,
+        float extraSpacing = 0f,
+        bool colorCodesEnabled = true)
     {
         if (string.IsNullOrEmpty(text))
             return 0;
 
         var engine = FontEngine.Instance;
         var px = size ?? FontEngine.Instance.UiSize;
+
+        if (!colorCodesEnabled)
+            return (int)MathF.Round(RunAdvance(engine, text, px, extraSpacing));
+
         var width = 0f;
         var runStart = 0;
 
@@ -278,7 +288,8 @@ public static class TextRenderer
 
     /// <summary>
     ///     How far the pen moves for one color run, drawn at <paramref name="extraSpacing" /> on top of the default
-    ///     tracking. The draw and <see cref="MeasureWidth(string, int?, float)" /> both use it, so they cannot disagree.
+    ///     tracking. The draw and <see cref="MeasureWidth(string, int?, float, bool)" /> both use it, so they cannot
+    ///     disagree.
     /// </summary>
     private static float RunAdvance(FontEngine engine, string run, int px, float extraSpacing)
         => engine.MeasureWidthExact(run, px, FontStyle.Regular, extraSpacing);
@@ -309,9 +320,15 @@ public static class TextRenderer
     /// <summary>
     ///     Word-wraps text into lines that fit within maxWidth pixels. Splits on explicit newlines, then wraps each
     ///     paragraph by character width. An inline {=x} color code continues onto the lines after it, as in
-    ///     <see cref="WrapText" />.
+    ///     <see cref="WrapText" />. With <paramref name="colorCodesEnabled" /> false, a code is text: it has a width
+    ///     and does not continue.
     /// </summary>
-    public static List<string> WrapLines(string text, int maxWidth, int? size = null, float extraSpacing = 0f)
+    public static List<string> WrapLines(
+        string text,
+        int maxWidth,
+        int? size = null,
+        float extraSpacing = 0f,
+        bool colorCodesEnabled = true)
     {
         var lines = new List<string>();
 
@@ -324,16 +341,30 @@ public static class TextRenderer
             if (paragraph.Length == 0)
                 lines.Add(string.Empty);
             else
-                WrapParagraph(paragraph, maxWidth, size, extraSpacing, trimLeading: true, lines, ref activeColorCode);
+                WrapParagraph(
+                    paragraph,
+                    maxWidth,
+                    size,
+                    extraSpacing,
+                    colorCodesEnabled,
+                    trimLeading: true,
+                    lines,
+                    ref activeColorCode);
 
         return lines;
     }
 
     /// <summary>
-    ///     Word-wraps text with full escape sequence preprocessing. Handles literal \n, \r, tab collapsing, and splits on
-    ///     \r, \n, \t delimiters before word-wrapping each paragraph.
+    ///     Word-wraps text with full escape sequence preprocessing. Handles literal \n, \r, tab collapsing, and splits
+    ///     on \r, \n, \t delimiters before word-wrapping each paragraph. With <paramref name="colorCodesEnabled" />
+    ///     false, a {=x} code is text: it has a width and does not continue onto the next line.
     /// </summary>
-    public static List<string> WrapText(string text, int maxWidth, int? size = null, float extraSpacing = 0f)
+    public static List<string> WrapText(
+        string text,
+        int maxWidth,
+        int? size = null,
+        float extraSpacing = 0f,
+        bool colorCodesEnabled = true)
     {
         var lines = new List<string>();
 
@@ -357,7 +388,15 @@ public static class TextRenderer
                 continue;
             }
 
-            WrapParagraph(paragraph, maxWidth, size, extraSpacing, trimLeading: false, lines, ref activeColorCode);
+            WrapParagraph(
+                paragraph,
+                maxWidth,
+                size,
+                extraSpacing,
+                colorCodesEnabled,
+                trimLeading: false,
+                lines,
+                ref activeColorCode);
         }
 
         return lines;
@@ -373,6 +412,7 @@ public static class TextRenderer
         int maxWidth,
         int? size,
         float extraSpacing,
+        bool colorCodesEnabled,
         bool trimLeading,
         List<string> lines,
         ref string? activeColorCode)
@@ -381,10 +421,13 @@ public static class TextRenderer
 
         while (remaining.Length > 0)
         {
-            var lineEnd = FindLineBreak(remaining, maxWidth, size: size, extraSpacing: extraSpacing);
+            var lineEnd = FindLineBreak(remaining, maxWidth, colorCodesEnabled, size, extraSpacing);
             var line = remaining[..lineEnd].TrimEnd();
             lines.Add(line);
-            activeColorCode = FindLastColorCode(line) ?? activeColorCode;
+
+            //with codes off a code is text, and nothing continues onto the next line
+            if (colorCodesEnabled)
+                activeColorCode = FindLastColorCode(line) ?? activeColorCode;
             remaining = trimLeading ? remaining[lineEnd..].TrimStart() : remaining[lineEnd..];
 
             //only re-prepend the active color code when the prepended length is strictly

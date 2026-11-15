@@ -21,20 +21,13 @@ public static class DataPathResolver
         {
             var asGiven = Path.Combine(current, segment);
 
-            current = Path.Exists(asGiven) ? asGiven : Path.Combine(current, FindIgnoringCase(current, segment) ?? segment);
+            current = Path.Exists(asGiven)
+                ? asGiven
+                : Path.Combine(
+                    current,
+                    DirectoryEntries.FindName(current, segment, StringComparison.OrdinalIgnoreCase) ?? segment);
         }
 
         return current;
-    }
-
-    private static string? FindIgnoringCase(string directory, string name)
-    {
-        if (!Directory.Exists(directory))
-            return null;
-
-        return Directory.EnumerateFileSystemEntries(directory)
-                        .Select(Path.GetFileName)
-                        .Order(StringComparer.Ordinal)
-                        .FirstOrDefault(entry => string.Equals(entry, name, StringComparison.OrdinalIgnoreCase));
     }
 }

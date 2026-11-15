@@ -112,16 +112,12 @@ public sealed partial class WorldScreen
         var info = animInfo.Value;
         (var frameIndex, var flip) = AnimationSystem.GetCreatureFrame(entity, in info);
 
-        var spriteFrame = creatureRenderer.GetFrame(entity.SpriteId, frameIndex);
-
-        if (spriteFrame is null)
+        if (creatureRenderer.GetFrame(entity.SpriteId, frameIndex) is not { Texture: { } texture } frame)
             return;
-
-        var frame = spriteFrame.Value;
 
         var dyingEffect = new EntityRemovalAnimation(
             Device,
-            frame.Texture,
+            texture,
             entity.TileX,
             entity.TileY,
             frame.CenterX,
@@ -174,12 +170,14 @@ public sealed partial class WorldScreen
         player.TileY = newY;
         WorldState.MarkSortDirty();
 
-        var walkFrames = player.UsesCreatureWalkTiming ? Game.CreatureRenderer.GetWalkFrameCount(player.SpriteId) : null;
+        var walkFrames = player.IsRenderedAsCreatureSprite
+            ? Game.CreatureRenderer.GetWalkFrameCount(player.SpriteId)
+            : null;
 
         AnimationSystem.StartWalk(
             player,
             direction,
-            player.UsesCreatureWalkTiming,
+            player.IsRenderedAsCreatureSprite,
             true,
             walkFrames);
         UpdateHuds(HudOps.SetCoords, player.TileX, player.TileY);
@@ -214,12 +212,14 @@ public sealed partial class WorldScreen
         player.TileY = serverY;
         WorldState.MarkSortDirty();
 
-        var walkFrames = player.UsesCreatureWalkTiming ? Game.CreatureRenderer.GetWalkFrameCount(player.SpriteId) : null;
+        var walkFrames = player.IsRenderedAsCreatureSprite
+            ? Game.CreatureRenderer.GetWalkFrameCount(player.SpriteId)
+            : null;
 
         AnimationSystem.StartWalk(
             player,
             direction,
-            player.UsesCreatureWalkTiming,
+            player.IsRenderedAsCreatureSprite,
             true,
             walkFrames);
 

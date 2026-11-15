@@ -72,7 +72,7 @@ public sealed class MetaFileSync
 
         foreach (var entry in entries)
         {
-            if (MetaFileCache.IsSafeName(entry.Name))
+            if (FileNames.IsSafeName(entry.Name))
                 listed.Add(entry);
             else
                 Log($"Ignored a metafile checksum with an unsafe name: \"{entry.Name}\".");
@@ -106,7 +106,7 @@ public sealed class MetaFileSync
             return;
 
         //never pending: the checksum list drops an unsafe name before the client requests anything
-        if (!MetaFileCache.IsSafeName(name))
+        if (!FileNames.IsSafeName(name))
         {
             Log($"Ignored a metafile with an unsafe name: \"{name}\".");
 

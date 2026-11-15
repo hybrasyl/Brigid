@@ -29,9 +29,9 @@ public sealed class LocalPlayerSettingsRepository
     public string MacroPath => Path.Combine(PlayerDirectory, MACRO_FILE);
 
     /// <summary>
-    ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a bare,
-    ///     cross-platform file name (see <see cref="MetaFileCache.IsSafeName" />). A caller can pass a server-sent name,
-    ///     and Path.Combine follows a rooted name or ".." out of the folder.
+    ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a
+    ///     bare, cross-platform file name (see <see cref="FileNames.IsSafeName" />). A caller can pass a server-sent
+    ///     name, and Path.Combine follows a rooted name or ".." out of the folder.
     /// </summary>
     public bool TryGetFilePath(string fileName, [NotNullWhen(true)] out string? path)
     {
@@ -41,7 +41,7 @@ public sealed class LocalPlayerSettingsRepository
     }
 
     internal static string? CombineBareName(string directory, string fileName)
-        => MetaFileCache.IsSafeName(fileName) ? Path.Combine(directory, fileName) : null;
+        => FileNames.IsSafeName(fileName) ? Path.Combine(directory, fileName) : null;
     public string SkillBookPath => Path.Combine(PlayerDirectory, SKILL_BOOK_FILE);
     public string SpellBookPath => Path.Combine(PlayerDirectory, SPELL_BOOK_FILE);
 
@@ -63,7 +63,7 @@ public sealed class LocalPlayerSettingsRepository
     {
         //the character name is server-supplied — sanitize it before it becomes a path segment so a hostile/odd name
         //can't escape the profiles root. The legacy import still reads the raw-named legacy folder as its source.
-        PlayerDirectory = AppPaths.ProfileDir(serverKey, SafeSegment(characterName));
+        PlayerDirectory = AppPaths.ProfileDir(serverKey, FileNames.ToSafeName(characterName));
         DataDiagnostics.Try(() => Directory.CreateDirectory(PlayerDirectory), "create profile dir");
 
         //only pull in the old in-game-folder config if the user opted into the one-time import
@@ -102,19 +102,6 @@ public sealed class LocalPlayerSettingsRepository
         return found;
     }
 
-    /// <summary>Strips path-unsafe characters from a name so it can be used as a single directory segment.</summary>
-    private static string SafeSegment(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return "_";
-
-        var invalid = Path.GetInvalidFileNameChars();
-        var cleaned = new string(name.Where(c => Array.IndexOf(invalid, c) < 0).ToArray()).Trim();
-
-        //reject empties and dot-only names (".", "..") that would self-reference or traverse
-        return (cleaned.Length == 0) || cleaned.All(c => c == '.') ? "_" : cleaned;
-    }
-
     /// <summary>
     ///     One-time best-effort import of a character's legacy config from the old <c>{DataPath}/{characterName}</c>
     ///     location (where retail Dark Ages and older Brigid builds wrote it) into the new per-user profile directory.
@@ -126,13 +113,9 @@ public sealed class LocalPlayerSettingsRepository
         if (string.IsNullOrEmpty(DataContext.DataPath))
             return;
 
-        //characterName is server-supplied. The legacy folder is always a single direct child of DataPath, so reject any
-        //name that isn't a plain segment — blank, "."/"..", or anything carrying a separator or drive/volume qualifier
-        //(GetFileName strips those, so it would differ). This stops a crafted name from pointing the import source
-        //outside the game folder, including via Path.Combine honoring a rooted second argument.
-        if (string.IsNullOrWhiteSpace(characterName)
-            || characterName is "." or ".."
-            || !string.Equals(characterName, Path.GetFileName(characterName), StringComparison.Ordinal))
+        //characterName is server-supplied. The legacy folder is always a single direct child of DataPath, so a name
+        //that is not a bare file name does not import: Path.Combine would follow it out of the game folder
+        if (!FileNames.IsSafeName(characterName))
             return;
 
         var legacyDir = Path.Combine(DataContext.DataPath, characterName);

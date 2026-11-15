@@ -463,7 +463,7 @@ public abstract class UIElement : IDisposable
 
         //measure at the size/spacing this will actually draw with: a caller that sizes its text but measures at the
         //default gets a caret and selection placed against a run width the glyphs never occupy
-        var textWidth = TextRenderer.MeasureWidth(text, size, characterSpacing);
+        var textWidth = TextRenderer.MeasureWidth(text, size, characterSpacing, colorCodesEnabled);
         var textBounds = new Rectangle((int)position.X, (int)position.Y, textWidth, TextRenderer.CHAR_HEIGHT);
 
         //fully outside
