@@ -69,18 +69,17 @@ public sealed class GameClient : IDisposable
     private readonly Lock ConnectLock = new();
     private CancellationTokenSource? ConnectCts;
     private Task PendingConnect = Task.CompletedTask;
-    private int ConnectionGeneration;
     private bool Disposed;
-    private volatile bool IsAlive;
     private int ReceiveCount;
-    private CancellationTokenSource? ReceiveCts;
     private IMemoryOwner<byte>? ReceiveMemoryOwner;
-    private Task? ReceiveTask;
+
+    //the pumps of the live connection, or null. A server close and a Disconnect can come at the same time; the one that
+    //ends the pump set tears it down and raises OnDisconnected
+    private PumpSet? Pumps;
 
     //encoded frames queued for the send pump. Written under SendLock so channel order matches the
-    //order the codec allocated crypto ordinals in; drained by the single SendTask.
+    //order the codec allocated crypto ordinals in; drained by the single send pump.
     private Channel<byte[]>? SendQueue;
-    private Task? SendTask;
 
     private Socket? Socket;
 
@@ -165,6 +164,12 @@ public sealed class GameClient : IDisposable
     ///     Whether the client is currently connected to a server.
     /// </summary>
     public bool Connected => IsAlive && (Socket?.Connected ?? false);
+
+    private bool IsAlive => Pumps?.IsAlive ?? false;
+
+    /// <summary>True while the client holds a socket, a stream, a receive buffer or a pump set, for the tests.</summary>
+    internal bool HoldsConnection
+        => Socket is not null || Transport is not null || ReceiveMemoryOwner is not null || Pumps is not null;
 
     /// <summary>
     ///     The remote endpoint of the active socket, or null when not connected.
@@ -499,21 +504,31 @@ public sealed class GameClient : IDisposable
 
     //tears down the connection, and drops the packets of the connection that the game loop did not handle yet: a new
     //session must not handle an answer to the old one. The receive loop can add a packet until it stops, so the queue
-    //clears after the loops end. Call it under ConnectLock
+    //clears after the loops end. A server close tears down from the receive loop and keeps the queue, because a Redirect
+    //that came before the close is still for the game loop. Call it under ConnectLock
     private void DisconnectTransport()
     {
-        if (!IsAlive)
+        if (Pumps is not { } pumps || !pumps.TryEnd())
         {
             InboundQueue.Clear();
 
             return;
         }
 
-        IsAlive = false;
+        Teardown(pumps);
+        InboundQueue.Clear();
 
+        OnDisconnected?.Invoke();
+    }
+
+    //frees the resources of one pump set, and clears each shared field that still holds one of them: a new connect can
+    //set the socket and the stream before a late teardown of the old pumps runs. Call it under ConnectLock, after
+    //TryEnd returned true
+    private void Teardown(PumpSet pumps)
+    {
         try
         {
-            ReceiveCts?.Cancel();
+            pumps.Cts.Cancel();
         } catch
         {
             /* ignored */
@@ -521,11 +536,11 @@ public sealed class GameClient : IDisposable
 
         //stop accepting sends before the transport goes away, so a Send racing this call is dropped
         //rather than writing to a disposed stream.
-        SendQueue?.Writer.TryComplete();
+        pumps.SendQueue.Writer.TryComplete();
 
         try
         {
-            Socket?.Shutdown(SocketShutdown.Both);
+            pumps.Socket?.Shutdown(SocketShutdown.Both);
         } catch
         {
             /* ignored */
@@ -533,65 +548,68 @@ public sealed class GameClient : IDisposable
 
         try
         {
-            Transport?.Dispose();
+            pumps.Transport.Dispose();
         } catch
         {
             /* ignored */
         }
-
-        Transport = null;
 
         try
         {
-            Socket?.Dispose();
+            pumps.Socket?.Dispose();
         } catch
         {
             /* ignored */
         }
 
-        Socket = null;
-
-        //wait for the receive task to fully exit before cleaning up.
-        //this prevents a race where the old task's finally block runs after
-        //a new connection sets isalive=true, killing the new connection.
-        try
-        {
-            ReceiveTask?.GetAwaiter()
-                       .GetResult();
-        } catch
-        {
-            /* ignored */
-        }
-
-        ReceiveTask = null;
+        //the receive loop must end before its buffer is returned. A server close tears down on the thread that leaves
+        //the receive loop, and that thread does not wait for itself
+        if (Environment.CurrentManagedThreadId != pumps.ReceiveExitThreadId)
+            try
+            {
+                pumps.ReceiveTask?.GetAwaiter()
+                     .GetResult();
+            } catch
+            {
+                /* ignored */
+            }
 
         try
         {
-            SendTask?.GetAwaiter()
-                    .GetResult();
+            pumps.SendTask?.GetAwaiter()
+                 .GetResult();
         } catch
         {
             /* ignored */
         }
-
-        SendTask = null;
-        SendQueue = null;
 
         try
         {
-            ReceiveMemoryOwner?.Dispose();
+            pumps.Buffer.Dispose();
         } catch
         {
             /* ignored */
         }
 
-        ReceiveMemoryOwner = null;
-        ReceiveCount = 0;
-        ReceiveCts?.Dispose();
-        ReceiveCts = null;
-        InboundQueue.Clear();
+        pumps.Cts.Dispose();
 
-        OnDisconnected?.Invoke();
+        if (ReferenceEquals(Pumps, pumps))
+            Pumps = null;
+
+        if (ReferenceEquals(Socket, pumps.Socket))
+            Socket = null;
+
+        if (ReferenceEquals(Transport, pumps.Transport))
+            Transport = null;
+
+        if (ReferenceEquals(SendQueue, pumps.SendQueue))
+            SendQueue = null;
+
+        if (ReferenceEquals(ReceiveMemoryOwner, pumps.Buffer))
+        {
+            ReceiveMemoryOwner = null;
+            ReceiveCount = 0;
+        }
     }
 
     /// <summary>
@@ -899,10 +917,10 @@ public sealed class GameClient : IDisposable
 
     private void StartPumps(ReadOnlySpan<byte> carryOver)
     {
-        ReceiveMemoryOwner = MemoryPool<byte>.Shared.Rent(RECEIVE_BUFFER_SIZE);
-        carryOver.CopyTo(ReceiveMemoryOwner.Memory.Span);
+        var buffer = MemoryPool<byte>.Shared.Rent(RECEIVE_BUFFER_SIZE);
+        ReceiveMemoryOwner = buffer;
+        carryOver.CopyTo(buffer.Memory.Span);
         ReceiveCount = carryOver.Length;
-        IsAlive = true;
 
         //single reader: the send pump is the only writer to the transport, which is what serializes
         //writes now that SslStream (which forbids overlapping writes) is a possible transport.
@@ -913,11 +931,9 @@ public sealed class GameClient : IDisposable
                 SingleWriter = false
             });
 
-        var generation = Interlocked.Increment(ref ConnectionGeneration);
-        ReceiveCts = new CancellationTokenSource();
-
-        var token = ReceiveCts.Token;
-        var reader = SendQueue.Reader;
+        var pumps = new PumpSet(Socket, Transport!, buffer, new CancellationTokenSource(), SendQueue);
+        Pumps = pumps;
+        var token = pumps.Cts.Token;
 
         //release the greeting now that a reply can actually be sent: IsAlive and the send queue are both
         //up, so the handler this wakes reaches the pump rather than being dropped. Ahead of the carry-over
@@ -934,8 +950,9 @@ public sealed class GameClient : IDisposable
         if (ReceiveCount > 0)
             ProcessReceivedData();
 
-        ReceiveTask = Task.Run(() => ReceiveLoopAsync(token, generation), token);
-        SendTask = Task.Run(() => SendLoopAsync(reader, token), token);
+        //both tasks are set under ConnectLock, so a teardown, which takes the lock, always sees them
+        pumps.ReceiveTask = Task.Run(() => ReceiveLoopAsync(pumps), token);
+        pumps.SendTask = Task.Run(() => SendLoopAsync(pumps.SendQueue.Reader, token), token);
     }
 
     private async Task SendLoopAsync(ChannelReader<byte[]> reader, CancellationToken ct)
@@ -966,26 +983,28 @@ public sealed class GameClient : IDisposable
     }
 
     #region Private
-    private async Task ReceiveLoopAsync(CancellationToken ct, int generation)
+    private async Task ReceiveLoopAsync(PumpSet pumps)
     {
+        var ct = pumps.Cts.Token;
+
         try
         {
-            while (!ct.IsCancellationRequested && IsAlive)
+            while (!ct.IsCancellationRequested && pumps.IsAlive)
             {
-                var memory = ReceiveMemoryOwner!.Memory[ReceiveCount..];
+                var memory = pumps.Buffer.Memory[ReceiveCount..];
 
                 if (memory.Length == 0)
                 {
                     //buffer overflow — reset
                     ReceiveCount = 0;
-                    memory = ReceiveMemoryOwner.Memory;
+                    memory = pumps.Buffer.Memory;
                 }
 
                 int bytesRead;
 
                 try
                 {
-                    bytesRead = await Transport!.ReadAsync(memory, ct);
+                    bytesRead = await pumps.Transport.ReadAsync(memory, ct);
                 } catch (OperationCanceledException)
                 {
                     break;
@@ -1003,14 +1022,46 @@ public sealed class GameClient : IDisposable
             }
         } finally
         {
-            //only fire ondisconnected if this is still the active connection.
-            //during redirects, a new connection may already be established.
-            if (IsAlive && (generation == Volatile.Read(ref ConnectionGeneration)))
+            //the server closed the connection, or the read failed. A Disconnect that came first ended the pump set and
+            //tears it down itself
+            if (pumps.TryEnd())
             {
-                IsAlive = false;
+                pumps.ReceiveExitThreadId = Environment.CurrentManagedThreadId;
+
+                using (ConnectLock.EnterScope())
+                    Teardown(pumps);
+
                 OnDisconnected?.Invoke();
             }
         }
+    }
+
+    //one connection's pumps and the resources they use. Each pump set has its own alive flag, so a teardown frees only
+    //its own connection, and only the caller that ends the set tears it down
+    private sealed class PumpSet(
+        Socket? socket,
+        Stream transport,
+        IMemoryOwner<byte> buffer,
+        CancellationTokenSource cts,
+        Channel<byte[]> sendQueue)
+    {
+        private int AliveFlag = 1;
+
+        public Socket? Socket { get; } = socket;
+        public Stream Transport { get; } = transport;
+        public IMemoryOwner<byte> Buffer { get; } = buffer;
+        public CancellationTokenSource Cts { get; } = cts;
+        public Channel<byte[]> SendQueue { get; } = sendQueue;
+        public Task? ReceiveTask { get; set; }
+        public Task? SendTask { get; set; }
+
+        //the thread that left the receive loop after a server close; the teardown on it does not wait for that loop
+        public int ReceiveExitThreadId { get; set; }
+
+        public bool IsAlive => Volatile.Read(ref AliveFlag) == 1;
+
+        //true for the one caller that ends the set
+        public bool TryEnd() => Interlocked.Exchange(ref AliveFlag, 0) == 1;
     }
 
     private void ProcessReceivedData()
