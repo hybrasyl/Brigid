@@ -118,9 +118,7 @@ public sealed class SpellBookPanel : PanelBase
                 spellSlot.SpellType = data.SpellType;
                 spellSlot.Prompt = data.Prompt ?? string.Empty;
                 spellSlot.CastLines = data.CastLines;
-
-                if (data.Chants is not null)
-                    Array.Copy(data.Chants, spellSlot.Chants, Math.Min(data.Chants.Length, 10));
+                spellSlot.SetChants(data.Chants);
             }
 
             SetSlotName(slot, data.Name);
