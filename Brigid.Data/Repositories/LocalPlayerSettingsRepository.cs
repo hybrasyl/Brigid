@@ -20,15 +20,22 @@ public enum CharacterFile
 /// <summary>What a save of a per-character file did.</summary>
 public enum SaveResult
 {
+    /// <summary>The file was written.</summary>
     Saved,
 
-    //the file could not be read this session, so the client holds no good copy of it
+    /// <summary>
+    ///     Nothing was written: the last read of the file failed, so the client holds no good copy of it, and empty data
+    ///     must not replace the file.
+    /// </summary>
     Unreadable,
 
-    //the file changed on disk after the client read it; the caller reads it again
+    /// <summary>
+    ///     Nothing was written: the file changed on disk after the client read it, so a hand edit is kept. The caller reads
+    ///     the file again into its window.
+    /// </summary>
     ChangedOnDisk,
 
-    //the write failed
+    /// <summary>The write failed, and the failure was logged.</summary>
     Failed
 }
 
@@ -41,9 +48,10 @@ public enum SaveResult
 /// <remarks>
 ///     Each read goes through <see cref="DataDiagnostics.Try" />: a file that another program holds, or that is denied,
 ///     loads as empty and logs one line (BRIG-177). The repository records each file's last-write time when it reads or
-///     saves the file. A save refuses a file that could not be read this session, so that empty data never replaces
-///     good data, and refuses a file that changed on disk after the read, so that a hand edit is not lost.
-///     <see cref="HasChangedOnDisk" /> lets a caller read a file again when a hand edit changed it.
+///     saves the file. A save refuses a file whose last read failed, until a read of it succeeds, so that empty data
+///     never replaces good data; and it refuses a file that changed on disk after the read, so that a hand edit is not
+///     lost. <see cref="HasChangedOnDisk" /> reports a hand edit, and also a file whose last read failed, so that each
+///     place that uses the data tries that file again.
 /// </remarks>
 public sealed class LocalPlayerSettingsRepository
 {
@@ -60,7 +68,7 @@ public sealed class LocalPlayerSettingsRepository
 
     private sealed class FileState
     {
-        public bool Read;
+        public bool Loaded;
         public bool Unreadable;
         public DateTime? WriteTimeUtc;
     }
@@ -125,7 +133,8 @@ public sealed class LocalPlayerSettingsRepository
 
     /// <summary>
     ///     True when the file's last-write time on disk differs from the time that the last read or save of it recorded,
-    ///     so a hand edit changed it. False for a file that was not read yet.
+    ///     so a hand edit changed it, and true while the last read of it failed, so that the caller tries it again (a lock
+    ///     that another program held at world entry can end with no write). False for a file that was not read yet.
     /// </summary>
     public bool HasChangedOnDisk(CharacterFile file)
     {
@@ -134,7 +143,9 @@ public sealed class LocalPlayerSettingsRepository
 
         var name = FileNameOf(file);
 
-        return States.TryGetValue(name, out var state) && state.Read && (WriteTimeOf(PathOf(name)) != state.WriteTimeUtc);
+        return States.TryGetValue(name, out var state)
+               && state.Loaded
+               && (state.Unreadable || (WriteTimeOf(PathOf(name)) != state.WriteTimeUtc));
     }
 
     private static string FileNameOf(CharacterFile file)
@@ -172,11 +183,12 @@ public sealed class LocalPlayerSettingsRepository
     }
 
     //reads one file through DataDiagnostics.Try. A missing file reads as empty; a file that cannot be read reads as empty
-    //and is marked unreadable, so its save is refused. The last-write time is recorded either way, so a locked file is
-    //not tried again at each use, only when a hand edit changes it
+    //and is marked unreadable, so its save is refused. The time is taken before the read: a hand edit during the read then
+    //shows as a change, and the next use reads the file again
     private T Read<T>(string fileName, Func<string, T> read, T empty)
     {
         var path = PathOf(fileName);
+        var timeBeforeRead = WriteTimeOf(path);
         var value = empty;
         var ok = DataDiagnostics.Try(
             () =>
@@ -186,9 +198,9 @@ public sealed class LocalPlayerSettingsRepository
             }, $"read {fileName}");
 
         var state = StateOf(fileName);
-        state.Read = true;
+        state.Loaded = true;
         state.Unreadable = !ok;
-        state.WriteTimeUtc = WriteTimeOf(path);
+        state.WriteTimeUtc = timeBeforeRead;
 
         return ok ? value : empty;
     }
@@ -200,12 +212,12 @@ public sealed class LocalPlayerSettingsRepository
 
         if (state.Unreadable)
         {
-            DataDiagnostics.Log?.Invoke($"[data] did not save {fileName}: it could not be read this session");
+            DataDiagnostics.Log?.Invoke($"[data] did not save {fileName}: the last read of it failed");
 
             return SaveResult.Unreadable;
         }
 
-        if (state.Read && (WriteTimeOf(path) != state.WriteTimeUtc))
+        if (state.Loaded && (WriteTimeOf(path) != state.WriteTimeUtc))
         {
             DataDiagnostics.Log?.Invoke($"[data] did not save {fileName}: it changed on disk after the client read it");
 
@@ -215,7 +227,7 @@ public sealed class LocalPlayerSettingsRepository
         if (!DataDiagnostics.Try(() => write(path), $"save {fileName}"))
             return SaveResult.Failed;
 
-        state.Read = true;
+        state.Loaded = true;
         state.WriteTimeUtc = WriteTimeOf(path);
 
         return SaveResult.Saved;
@@ -565,13 +577,16 @@ public sealed class LocalPlayerSettingsRepository
 
     /// <summary>
     ///     Loads the player's own portrait, <c>{name}.jpg</c> or a file named <c>{name}</c>, from the character folder, as
-    ///     retail does (BRIG-106). Returns no bytes when there is no portrait or it cannot be read. The name comes from the
-    ///     server, so <see cref="TryGetFilePath" /> refuses a name that leaves the character folder.
+    ///     retail does (BRIG-106). Gives no bytes when there is no portrait. Returns false when a portrait file exists but
+    ///     cannot be read, so that the caller keeps the portrait it has. The name comes from the server, so
+    ///     <see cref="TryGetFilePath" /> refuses a name that leaves the character folder.
     /// </summary>
-    public byte[] LoadPortrait(string name)
+    public bool TryLoadPortrait(string name, out byte[] portrait)
     {
+        portrait = [];
+
         if (string.IsNullOrEmpty(name))
-            return [];
+            return true;
 
         foreach (var fileName in new[] { $"{name}.jpg", name })
         {
@@ -580,11 +595,17 @@ public sealed class LocalPlayerSettingsRepository
 
             byte[]? bytes = null;
 
-            if (DataDiagnostics.Try(() => bytes = File.Exists(path) ? File.ReadAllBytes(path) : null, $"read {fileName}")
-                && bytes is not null)
-                return bytes;
+            if (!DataDiagnostics.Try(() => bytes = File.Exists(path) ? File.ReadAllBytes(path) : null, $"read {fileName}"))
+                return false;
+
+            if (bytes is not null)
+            {
+                portrait = bytes;
+
+                return true;
+            }
         }
 
-        return [];
+        return true;
     }
 }

@@ -40,22 +40,7 @@ public sealed partial class WorldScreen
             WorldState.PlayerName = args.Name;
             UpdateHuds(HudOps.SetPlayerName, args.Name);
             UpdateHuds(HudOps.SetServerName, Game.Connection.ServerName);
-            var serverKey = ServerProfileKey.Resolve(GlobalSettings.LobbyHost, Game.Connection.ServerName);
-            var filesKey = $"{serverKey}/{args.Name}";
-
-            //world entry, a relog (a new screen) or another character. A later display of the same character, at each
-            //map change, does not load the files again: a hand edit is read again where the data is used
-            if (filesKey != LocalFilesKey)
-            {
-                LocalFilesKey = filesKey;
-                var importLegacy = ClientSettings.LegacyCharacterImport == ClientSettings.MigrationImport;
-                DataContext.LocalPlayerSettings.Initialize(args.Name, serverKey, importLegacy);
-                LoadPlayerFamilyList();
-                LoadPlayerFriendList();
-                LoadPlayerMacros();
-                WorldState.ReloadChants();
-                LoadOwnProfile(args.Name);
-            }
+            LoadLocalFilesOnEntry(args.Name);
 
             //the class — and so the SClass ability metadata behind the castable popup's Details tab — is only
             //revealed by a self-profile reply. Ask for one unsolicited (SelfProfileRequested stays false, so the
@@ -810,19 +795,19 @@ public sealed partial class WorldScreen
 
     private void HandleEditableProfileRequest() => Game.Connection.SendEditableProfile(PlayerPortrait, StatusBook.GetProfileText());
 
-    //the player's own portrait and profile text from the character folder, into the status book. This runs on each map
-    //change, so a changed portrait file shows after the next one; an unchanged portrait is not decoded again
+    //the player's own portrait and profile text from the character folder, into the status book, at world entry
     private void LoadOwnProfile(string name)
     {
         LoadOwnPortrait(name);
         StatusBook.SetProfileText(DataContext.LocalPlayerSettings.LoadProfileText());
     }
 
-    //the portrait is read each time the status book opens, so a new portrait file shows; the status book changes only
-    //when the bytes differ
+    //the portrait is read again each time the status book opens, so a new portrait file shows. The status book changes
+    //only when the bytes differ, and a portrait file that cannot be read keeps the portrait that it has
     private void LoadOwnPortrait(string name)
     {
-        var portrait = DataContext.LocalPlayerSettings.LoadPortrait(name);
+        if (!DataContext.LocalPlayerSettings.TryLoadPortrait(name, out var portrait))
+            return;
 
         if (!portrait.AsSpan().SequenceEqual(PlayerPortrait))
         {
@@ -831,7 +816,6 @@ public sealed partial class WorldScreen
         }
     }
 
-    //a hand edit of profile.txt while the editor was open is kept: the save is refused, and the status book shows the file
     private void SaveProfileText(string text)
     {
         if (DataContext.LocalPlayerSettings.SaveProfileText(text) == SaveResult.ChangedOnDisk)
@@ -903,7 +887,8 @@ public sealed partial class WorldScreen
         //family info — DALib self-profile has no spouse field; derived below from the group string.
         StatusBook.SetFamilyInfo(string.Empty);
 
-        //the status book opens with this reply: a hand edit of the family list, the profile text or the portrait shows
+        //a requested status book opens at the end of this reply: a hand edit of the family list, the profile text or the
+        //portrait shows
         RefreshFamilyIfChanged();
         RefreshProfileTextIfChanged();
         LoadOwnPortrait(WorldState.PlayerName);

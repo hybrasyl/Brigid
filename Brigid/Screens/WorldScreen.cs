@@ -330,6 +330,8 @@ public sealed partial class WorldScreen : IScreen
         OptionsModal.SettingsRequested += () => Game.Connection.SendOptionToggle(UserOption.Request);
         OptionsModal.FriendsCommitted += SavePlayerFriendList;
 
+        OptionsModal.MacrosCommitted += SavePlayerMacros;
+
         //a hand edit of Macro.cfg or Friendlist.cfg shows when Options opens
         OptionsModal.Opening += () =>
         {

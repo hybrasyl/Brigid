@@ -6,8 +6,9 @@ namespace Brigid.Tests;
 
 // A per-character file that another program holds with no read sharing threw from a raw read: world entry stopped, a
 // relog crashed, and an empty load was then saved over the good file. Each read is guarded now: it loads as empty, and
-// the save of that file is refused for the session. A save also refuses a file that a hand edit changed after the read
-// (BRIG-177, and the load rule of fix/connection-and-input phase 3).
+// the save of that file is refused until a read of it succeeds. A save also refuses a file that a hand edit changed
+// after the read, and HasChangedOnDisk reports a hand edit and a failed read, so the client reads the file again where it
+// uses the data (BRIG-177).
 public sealed class CharacterFileSafetyTests : IDisposable
 {
     private readonly string Folder = Path.Combine(Path.GetTempPath(), "brigid-charfile-" + Guid.NewGuid().ToString("N"));
@@ -89,6 +90,23 @@ public sealed class CharacterFileSafetyTests : IDisposable
         Assert.Equal(GoodContents[file], File.ReadAllText(path));
     }
 
+    //a lock that another program held at world entry can end with no write: the file is then tried again where the
+    //client uses the data
+    [Theory]
+    [MemberData(nameof(AllFiles))]
+    public void AFileWhoseReadFailedShowsAsAChangeUntilAReadSucceeds(CharacterFile file)
+    {
+        var path = WriteGood(file);
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            LoadFindsContents(file);
+
+        Assert.True(Settings.HasChangedOnDisk(file));
+        Assert.True(LoadFindsContents(file));
+        Assert.False(Settings.HasChangedOnDisk(file));
+        Assert.Equal(SaveResult.Saved, SaveEmpty(file));
+    }
+
     [Theory]
     [MemberData(nameof(AllFiles))]
     public void ANewSessionReadsAFileThatWasLockedAgain(CharacterFile file)
@@ -168,15 +186,24 @@ public sealed class CharacterFileSafetyTests : IDisposable
         Assert.True(File.Exists(PathOf(file)));
     }
 
+    //the caller keeps the portrait that it has when the file cannot be read
     [Fact]
-    public void ALockedPortraitGivesNoBytes()
+    public void ALockedPortraitIsAFailedRead()
     {
         var path = Path.Combine(Folder, "Angelique.jpg");
         File.WriteAllBytes(path, [1, 2, 3]);
 
         using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
-            Assert.Empty(Settings.LoadPortrait("Angelique"));
+            Assert.False(Settings.TryLoadPortrait("Angelique", out _));
 
-        Assert.Equal([1, 2, 3], Settings.LoadPortrait("Angelique"));
+        Assert.True(Settings.TryLoadPortrait("Angelique", out var portrait));
+        Assert.Equal([1, 2, 3], portrait);
+    }
+
+    [Fact]
+    public void NoPortraitIsASuccessWithNoBytes()
+    {
+        Assert.True(Settings.TryLoadPortrait("Angelique", out var portrait));
+        Assert.Empty(portrait);
     }
 }

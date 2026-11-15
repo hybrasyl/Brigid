@@ -4,7 +4,6 @@ using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Data;
 using Brigid.Data.AssetPacks;
-using Brigid.Data.Repositories;
 using Brigid.Rendering;
 using Brigid.Systems;
 using Brigid.Systems.Keybinds;
@@ -27,7 +26,9 @@ namespace Brigid.Controls.World.Popups.Options;
 ///         legacy OK/Cancel (save/discard) split is replaced by lossless auto-save (both persist locally).</item>
 ///     </list>
 ///     Settings/Friends server/host coordination is exposed via <see cref="SettingsRequested" /> (request option
-///     data on show) and <see cref="FriendsCommitted" /> (the host saves + mirrors the friend list).
+///     data on show), <see cref="FriendsCommitted" /> (the host saves + mirrors the friend list),
+///     <see cref="MacrosCommitted" /> (the host saves the macros) and <see cref="Opening" /> (the host reads changed
+///     character files again before a tab fills). The modal reads and writes no character file itself.
 /// </summary>
 public sealed class OptionsModalControl : CenteredModalPanel
 {
@@ -88,6 +89,9 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     /// <summary>Raised when the Friends tab is committed (tab-left/close), so the host can save + mirror the list.</summary>
     public event Action? FriendsCommitted;
+
+    /// <summary>Raised when the Macros tab commits; the host saves the macros.</summary>
+    public event Action? MacrosCommitted;
 
     /// <summary>Raised when the closed modal opens, before its tab fills, so the host can read changed files again.</summary>
     public event Action? Opening;
@@ -343,10 +347,8 @@ public sealed class OptionsModalControl : CenteredModalPanel
     {
         switch (tab)
         {
-            //a hand edit while the tab was open is kept: the save is refused, and the boxes show the file
             case OptionsTab.Macros:
-                if (DataContext.LocalPlayerSettings.SaveMacros(GetMacroValues()) == SaveResult.ChangedOnDisk)
-                    SetMacros(DataContext.LocalPlayerSettings.LoadMacros());
+                MacrosCommitted?.Invoke();
 
                 break;
 

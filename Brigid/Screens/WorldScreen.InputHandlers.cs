@@ -399,9 +399,8 @@ public sealed partial class WorldScreen
             case HudTab.Chat:
             case HudTab.MessageHistory:
             {
-                //a hand edit of Macro.cfg shows at the next macro key; an open Options window keeps its typing
-                if (!OptionsModal.Visible)
-                    RefreshMacrosIfChanged();
+                //a hand edit of Macro.cfg shows at the next macro key
+                RefreshMacrosIfChanged();
 
                 var macroText = OptionsModal.GetMacroValue(slot - 1);
 
@@ -434,6 +433,9 @@ public sealed partial class WorldScreen
 
     private void OpenCastablePopup(PanelBase source, byte slot)
     {
+        //a hand edit of SkillBook.cfg or SpellBook.cfg shows in the popup
+        RefreshChantsIfChanged();
+
         var control = source.GetSlotControl(slot) as AbilitySlotControl;
 
         if (control is null || string.IsNullOrEmpty(control.AbilityName))
@@ -485,6 +487,7 @@ public sealed partial class WorldScreen
                     spellSlot.Chants[i] = chantLines[i];
             }
 
+            //a refused save (a hand edit while the popup was open) is logged, and the reload puts the file back: the file wins
             SaveSpellChants();
             WorldState.ReloadChants();
         } else
@@ -508,6 +511,27 @@ public sealed partial class WorldScreen
 
     //--- cache / persistence helpers ---
 
+    //the files load at world entry, a relog (a new screen) or another character, and not at each later display of the
+    //same character: a load at each map change wrote the saved macros and friends over unsaved typing in Options. A hand
+    //edit is read again where the data is used (the Refresh helpers below)
+    private void LoadLocalFilesOnEntry(string name)
+    {
+        var serverKey = ServerProfileKey.Resolve(GlobalSettings.LobbyHost, Game.Connection.ServerName);
+        var filesKey = $"{serverKey}/{name}";
+
+        if (filesKey == LocalFilesKey)
+            return;
+
+        LocalFilesKey = filesKey;
+        var importLegacy = ClientSettings.LegacyCharacterImport == ClientSettings.MigrationImport;
+        DataContext.LocalPlayerSettings.Initialize(name, serverKey, importLegacy);
+        LoadPlayerFamilyList();
+        LoadPlayerFriendList();
+        LoadPlayerMacros();
+        WorldState.ReloadChants();
+        LoadOwnProfile(name);
+    }
+
     private void LoadPlayerFamilyList()
     {
         var family = DataContext.LocalPlayerSettings.LoadFamilyList();
@@ -522,7 +546,6 @@ public sealed partial class WorldScreen
         if (family is null)
             return;
 
-        //a hand edit while the status book was open is kept: the save is refused, and the file shows again
         if (DataContext.LocalPlayerSettings.SaveFamilyList(family) == SaveResult.ChangedOnDisk)
             LoadPlayerFamilyList();
         else
@@ -541,49 +564,59 @@ public sealed partial class WorldScreen
     {
         var names = OptionsModal.GetFriendNames();
 
-        //a hand edit while the Friends tab was open is kept: the save is refused, and the file shows again
         if (DataContext.LocalPlayerSettings.SaveFriendList(names) == SaveResult.ChangedOnDisk)
             LoadPlayerFriendList();
         else
             WorldList.SetFriendNames(names);
     }
 
-    //each one reads its file again only when a hand edit changed it on disk after the client read or saved it
+    private void SavePlayerMacros()
+    {
+        if (DataContext.LocalPlayerSettings.SaveMacros(OptionsModal.GetMacroValues()) == SaveResult.ChangedOnDisk)
+            LoadPlayerMacros();
+    }
+
+    //each one reads its file again when a hand edit changed it on disk, or when its last read failed. A window that is
+    //open keeps its typing: the Options modal holds the macros and friends, and the status book the family list and the
+    //profile text. A requested status book and Options both open after their refresh
 
     private void RefreshFamilyIfChanged()
     {
-        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.FamilyList))
+        if (!StatusBook.Visible && DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.FamilyList))
             LoadPlayerFamilyList();
     }
 
     private void RefreshFriendsIfChanged()
     {
-        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.FriendList))
+        if (!OptionsModal.Visible && DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.FriendList))
             LoadPlayerFriendList();
     }
 
     private void RefreshMacrosIfChanged()
     {
-        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.Macros))
+        if (!OptionsModal.Visible && DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.Macros))
             LoadPlayerMacros();
     }
 
     private void RefreshProfileTextIfChanged()
     {
-        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.ProfileText))
+        if (!StatusBook.Visible && DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.ProfileText))
             StatusBook.SetProfileText(DataContext.LocalPlayerSettings.LoadProfileText());
     }
 
-    //the world list marks friends and family: a hand edit of either list shows when the list opens. An open window keeps
-    //its typing
+    //the chants go into the ability slots, which no window holds open
+    private void RefreshChantsIfChanged()
+    {
+        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.SkillChants)
+            || DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.SpellChants))
+            WorldState.ReloadChants();
+    }
+
+    //the world list marks friends and family: a hand edit of either list shows when the list opens
     private void RequestWorldList()
     {
-        if (!OptionsModal.Visible)
-            RefreshFriendsIfChanged();
-
-        if (!StatusBook.Visible)
-            RefreshFamilyIfChanged();
-
+        RefreshFriendsIfChanged();
+        RefreshFamilyIfChanged();
         Game.Connection.RequestWorldList();
     }
 
