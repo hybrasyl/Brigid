@@ -186,6 +186,30 @@ public sealed partial class WorldScreen : IScreen
         Closed
     }
 
+    //what Update does with a ConnectionEvent
+    internal enum ConnectionOutcome
+    {
+        None,
+        EndLogout,
+        ConnectionLost
+    }
+
+    /// <summary>
+    ///     What Update does with a connection event. A close that came before the game loop handled the server's Redirect
+    ///     does nothing: the redirect is under way, and its own result (Login, World, or a connect that fails) decides. A
+    ///     close in the grace time is the logout (Exit to Menu goes to the login screen, and Exit Game closes the client).
+    ///     Any other close is a lost connection.
+    /// </summary>
+    internal static ConnectionOutcome OutcomeFor(ConnectionEvent connectionEvent, bool redirectInProgress, bool awaitingLogout)
+        => connectionEvent switch
+        {
+            ConnectionEvent.LoggedOut => ConnectionOutcome.EndLogout,
+            ConnectionEvent.Closed when redirectInProgress => ConnectionOutcome.None,
+            ConnectionEvent.Closed when awaitingLogout => ConnectionOutcome.EndLogout,
+            ConnectionEvent.Closed => ConnectionOutcome.ConnectionLost,
+            _ => ConnectionOutcome.None
+        };
+
     //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.
     private bool TransportSecure;
     private byte[] PlayerPortrait = [];

@@ -141,7 +141,10 @@ public sealed class ExitFlowTests
 
         Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.REDIRECT_WAIT_SECONDS - 1, redirecting: true));
         Assert.True(Flow.IsAwaitingLogout);
-        Assert.Equal(ExitStep.ExitIgnored, Flow.Tick(ExitFlow.GRACE_SECONDS, redirecting: false));
+
+        //the held seconds did not count: the whole grace time is still left after the redirect (BRIG-181)
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS - 1, redirecting: false));
+        Assert.Equal(ExitStep.ExitIgnored, Flow.Tick(1, redirecting: false));
     }
 
     //a login server that does not answer the connect cannot hold the exit for the whole TCP connect timeout

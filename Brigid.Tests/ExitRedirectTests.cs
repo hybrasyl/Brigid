@@ -42,6 +42,21 @@ public sealed class ExitRedirectTests
         Assert.Equal(ConnectionState.World, manager.RedirectTargetFor(ConnectionState.World));
     }
 
+    //the expected outcome is an object, because ConnectionOutcome is internal (BRIG-181)
+    [Theory]
+    [InlineData(ConnectionEvent.LoggedOut, false, false, WorldScreen.ConnectionOutcome.EndLogout)]
+    [InlineData(ConnectionEvent.Closed, true, false, WorldScreen.ConnectionOutcome.None)]
+    [InlineData(ConnectionEvent.Closed, true, true, WorldScreen.ConnectionOutcome.None)]
+    [InlineData(ConnectionEvent.Closed, false, true, WorldScreen.ConnectionOutcome.EndLogout)]
+    [InlineData(ConnectionEvent.Closed, false, false, WorldScreen.ConnectionOutcome.ConnectionLost)]
+    [InlineData(ConnectionEvent.None, false, true, WorldScreen.ConnectionOutcome.None)]
+    public void AConnectionEventHasTheOutcomeOfItsCase(
+        object connectionEvent,
+        bool redirectInProgress,
+        bool awaitingLogout,
+        object expected)
+        => Assert.Equal(expected, WorldScreen.OutcomeFor((ConnectionEvent)connectionEvent, redirectInProgress, awaitingLogout));
+
     //BRIG-180: the server's close can come on the network thread before the game loop handles the Redirect. The state is
     //then Disconnected, and the redirect must take its target from the state that the connection was in
     [Theory]

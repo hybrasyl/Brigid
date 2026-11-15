@@ -16,27 +16,17 @@ public sealed partial class WorldScreen
 {
     public void Update(GameTime gameTime)
     {
-        switch ((ConnectionEvent)Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.None))
+        var connectionEvent = (ConnectionEvent)Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.None);
+
+        switch (OutcomeFor(connectionEvent, RedirectInProgress, ExitFlow.IsAwaitingLogout))
         {
-            case ConnectionEvent.LoggedOut:
-                EndLogout();
-
-                return;
-
-            //a close that came before the game loop handled the server's Redirect: the redirect is under way now, and its
-            //own result (Login, World, or a connect that fails) decides
-            case ConnectionEvent.Closed when RedirectInProgress:
-                break;
-
-            //a close in the grace time is the logout (Exit to Menu goes to the login screen, and Exit Game closes the
-            //client); any other close is a lost connection
-            case ConnectionEvent.Closed when ExitFlow.IsAwaitingLogout:
+            case ConnectionOutcome.EndLogout:
                 EndLogout();
 
                 return;
 
             //a world transfer that cannot connect also ends here, so its loading bar goes
-            case ConnectionEvent.Closed:
+            case ConnectionOutcome.ConnectionLost:
                 MapLoading.Hide();
                 DisconnectPopup.Show("Connection lost.");
 
