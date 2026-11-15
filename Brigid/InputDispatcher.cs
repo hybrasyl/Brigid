@@ -154,6 +154,17 @@ public sealed class InputDispatcher : IDisposable
     /// </summary>
     public void ClearExplicitFocus() => SetExplicitFocus(null);
 
+    /// <summary>
+    ///     Forgets <paramref name="textBox" /> as the chat input when it is still the registered one. The world screen's
+    ///     chat box goes away with that screen, and the lobby that follows has no chat box, so the no-hand-over rule of
+    ///     <see cref="RemoveControl" /> holds there again.
+    /// </summary>
+    public void ReleaseChatInput(UITextBox textBox)
+    {
+        if (ChatInputTextBox == textBox)
+            ChatInputTextBox = null;
+    }
+
     //── control stack ──
 
     /// <summary>
@@ -228,7 +239,7 @@ public sealed class InputDispatcher : IDisposable
 
         if (!wasTop)
         {
-            PassStashUp(panel, stashed, ControlStack[index]);
+            PassStashUp(panel, stashed, index);
 
             if (!focusWasInside)
                 return;
@@ -973,14 +984,21 @@ public sealed class InputDispatcher : IDisposable
 
     //a stash of the panel above that is empty or points into the removed panel was set while the removed panel was open,
     //so the focus to give back when the panel above closes is the removed panel's own stash. A panel that keeps the text
-    //focus has no stash
-    private void PassStashUp(UIPanel removed, UIElement? removedStash, UIPanel above)
+    //focus (an open drop-down list) has no stash, so the stash goes to the first panel above it that has one
+    private void PassStashUp(UIPanel removed, UIElement? removedStash, int firstAboveIndex)
     {
-        if (!StashedFocus.TryGetValue(above, out var aboveStash))
-            return;
+        for (var i = firstAboveIndex; i < ControlStack.Count; i++)
+        {
+            var above = ControlStack[i];
 
-        if (aboveStash is null || IsSelfOrDescendantOf(removed, aboveStash))
-            StashedFocus[above] = removedStash;
+            if (!StashedFocus.TryGetValue(above, out var aboveStash))
+                continue;
+
+            if (aboveStash is null || IsSelfOrDescendantOf(removed, aboveStash))
+                StashedFocus[above] = removedStash;
+
+            return;
+        }
     }
 
     /// <summary>

@@ -319,6 +319,7 @@ public class GameClientTransportTests
 
         public async Task<Stream> AcceptAsync()
         {
+            Accepted?.Dispose();
             Accepted = await Listener.AcceptTcpClientAsync()
                                      .WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
 

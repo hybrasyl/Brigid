@@ -109,30 +109,37 @@ public sealed class ConnectionManager : IDisposable
     /// </summary>
     public ConnectionState State
     {
-        get;
+        get => StateValue;
+        private set => SetState(value, keepConnecting: false);
+    }
 
-        private set
+    private ConnectionState StateValue = ConnectionState.Disconnected;
+
+    //one lock for the read, the check and both writes, so HandleRedirect never sees Disconnected with an older
+    //StateAtClose, and a disconnect cannot replace a Connecting that the game loop sets at the same time. StateChanged is
+    //raised after the lock, so its handlers never run under it
+    private void SetState(ConnectionState value, bool keepConnecting)
+    {
+        ConnectionState old;
+
+        using (StateLock.EnterScope())
         {
-            if (field == value)
+            old = State;
+
+            if ((old == value) || (keepConnecting && (old == ConnectionState.Connecting)))
                 return;
 
-            var old = field;
+            if (value == ConnectionState.Disconnected && old is ConnectionState.Lobby or ConnectionState.Login or ConnectionState.World)
+                StateAtClose = old;
 
-            //one lock for both writes, so HandleRedirect never sees Disconnected with an older StateAtClose
-            using (StateLock.EnterScope())
-            {
-                if (value == ConnectionState.Disconnected && old is ConnectionState.Lobby or ConnectionState.Login or ConnectionState.World)
-                    StateAtClose = old;
-
-                field = value;
-            }
-
-            NoticeDebugLog.Write($"ConnectionState {old} -> {value}");
-            StateChanged?.Invoke(old, value);
+            StateValue = value;
         }
-    } = ConnectionState.Disconnected;
 
-    //moves the state as a connection does, for the tests
+        NoticeDebugLog.Write($"ConnectionState {old} -> {value}");
+        StateChanged?.Invoke(old, value);
+    }
+
+    /// <summary>Moves the state as a connection does, for the tests.</summary>
     internal void SetStateForTests(ConnectionState state) => State = state;
 
     //the state that the last connection was in when it closed. A server close sets Disconnected on the network thread,
@@ -1559,7 +1566,10 @@ public sealed class ConnectionManager : IDisposable
         PacketHandlers[(byte)ServerOpcode.Metafile] = HandleMetaData;
     }
 
-    //internal so that a test can hand one packet to its handler without the redirect follow-up of ProcessPackets
+    /// <summary>
+    ///     Hands one packet to its handler. Internal so that a test can do that without the redirect follow-up of
+    ///     <see cref="ProcessPackets" />.
+    /// </summary>
     internal void HandlePacket(IServerPacket pkt)
     {
         var handler = PacketHandlers[pkt.Opcode];
@@ -1846,11 +1856,9 @@ public sealed class ConnectionManager : IDisposable
 
     private void HandleMetaData(IServerPacket p) => OnMetaData?.Invoke((Server.MetafilePacket)p);
 
-    private void HandleDisconnected()
-    {
-        if (State != ConnectionState.Connecting)
-            State = ConnectionState.Disconnected;
-    }
+    //runs on the network thread. The check and the write are one step under the state lock: the game loop can set
+    //Connecting for a redirect at the same time, and a Disconnected over it would show "Connection lost" during the hop
+    private void HandleDisconnected() => SetState(ConnectionState.Disconnected, keepConnecting: true);
     #endregion
 }
 

@@ -573,7 +573,14 @@ public sealed class LocalPlayerSettingsRepository
 
     /// <summary>Saves the player's own profile text to profile.txt.</summary>
     public SaveResult SaveProfileText(string text)
-        => IsInitialized ? Write(PROFILE_TEXT_FILE, path => File.WriteAllText(path, text)) : SaveResult.Failed;
+    {
+        if (IsInitialized)
+            return Write(PROFILE_TEXT_FILE, path => File.WriteAllText(path, text));
+
+        DataDiagnostics.Log?.Invoke("[data] did not save profile.txt: no character is open");
+
+        return SaveResult.Failed;
+    }
 
     /// <summary>
     ///     Loads the player's own portrait, <c>{name}.jpg</c> or a file named <c>{name}</c>, from the character folder, as
