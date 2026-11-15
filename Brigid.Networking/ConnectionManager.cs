@@ -118,10 +118,22 @@ public sealed class ConnectionManager : IDisposable
 
             var old = field;
             field = value;
+
+            if (value == ConnectionState.Disconnected && old is ConnectionState.Lobby or ConnectionState.Login or ConnectionState.World)
+                LastLiveState = old;
+
             NoticeDebugLog.Write($"ConnectionState {old} -> {value}");
             StateChanged?.Invoke(old, value);
         }
     } = ConnectionState.Disconnected;
+
+    //moves the state as a connection does, for the tests
+    internal void SetStateForTests(ConnectionState state) => State = state;
+
+    //the state that the last connection was in when it closed. A server close sets Disconnected on the network thread,
+    //and a Redirect that came before the close is handled after it on the game loop; that redirect goes where its own
+    //connection sent it (BRIG-180)
+    private ConnectionState LastLiveState = ConnectionState.Disconnected;
 
     /// <summary>
     ///     The low-level TCP client used for packet I/O, encryption, and socket management.
@@ -1592,7 +1604,7 @@ public sealed class ConnectionManager : IDisposable
     {
         var pkt = (Server.RedirectPacket)p;
 
-        var targetState = RedirectTargetFor(State);
+        var targetState = RedirectTargetFor(State == ConnectionState.Disconnected ? LastLiveState : State);
 
         //consumed: any redirect resolves the pending quit. A confirm that the server ignored is cleared when the grace
         //time ends (ClearExitConfirm), so it does not send a later world transfer to Login

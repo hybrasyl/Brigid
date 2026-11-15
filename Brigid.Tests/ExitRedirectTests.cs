@@ -1,6 +1,9 @@
+using System.Net;
+using System.Net.Sockets;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
+using DALib.Networking.Packets.Server;
 using Xunit;
 using ConnectionEvent = Brigid.Screens.WorldScreen.ConnectionEvent;
 
@@ -37,6 +40,49 @@ public sealed class ExitRedirectTests
         manager.ClearExitConfirm();
 
         Assert.Equal(ConnectionState.World, manager.RedirectTargetFor(ConnectionState.World));
+    }
+
+    //BRIG-180: the server's close can come on the network thread before the game loop handles the Redirect. The state is
+    //then Disconnected, and the redirect must take its target from the state that the connection was in
+    [Theory]
+    [InlineData(ConnectionState.World, false, ConnectionState.World)]
+    [InlineData(ConnectionState.World, true, ConnectionState.Login)]
+    [InlineData(ConnectionState.Login, false, ConnectionState.World)]
+    public void ARedirectHandledAfterTheCloseKeepsTheTargetOfItsConnection(
+        ConnectionState liveState,
+        bool exitConfirmed,
+        ConnectionState expected)
+    {
+        using var manager = new ConnectionManager();
+        RedirectInfo? received = null;
+        manager.OnRedirectReceived += info => received = info;
+
+        if (exitConfirmed)
+            manager.RequestExit(false);
+
+        manager.SetStateForTests(liveState);
+        manager.SetStateForTests(ConnectionState.Disconnected);
+
+        manager.ProcessPackets([ClosedPortRedirect()]);
+
+        Assert.Equal(expected, received?.TargetState);
+    }
+
+    //a redirect to a port with no listener, so the connect that follows it fails at once
+    private static RedirectPacket ClosedPortRedirect()
+    {
+        using var unused = new TcpListener(IPAddress.Loopback, 0);
+        unused.Start();
+
+        return new RedirectPacket
+        {
+            IpAddress = IPAddress.Loopback,
+            Port = (ushort)((IPEndPoint)unused.LocalEndpoint).Port,
+            EncryptionSeed = 1,
+            EncryptionKey = [1, 2, 3],
+            Name = "brigid",
+            RedirectId = 7
+        };
     }
 
     //the expected event is an object, because ConnectionEvent is internal
