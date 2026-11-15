@@ -204,24 +204,38 @@ public sealed class InputDispatcher : IDisposable
 
     /// <summary>
     ///     Removes a panel from the control stack. If the removed panel contains the explicitly focused element, clears
-    ///     explicit focus. A panel that is not on the stack changes nothing: a Hide on a hidden panel calls this. A focused
-    ///     text box in the top panel keeps the focus when a lower panel goes away.
+    ///     explicit focus. A panel that is not on the stack changes nothing: a Hide on a hidden panel calls this. A lower
+    ///     panel changes no focus in the panels above it, and gives its stashed focus to the panel directly above it.
     /// </summary>
     public void RemoveControl(UIPanel panel)
     {
-        if (!ControlStack.Remove(panel))
+        var index = ControlStack.IndexOf(panel);
+
+        if (index < 0)
             return;
+
+        var wasTop = index == (ControlStack.Count - 1);
+        ControlStack.RemoveAt(index);
 
         if (TextFocusKeepers.Remove(panel))
             return;
 
         StashedFocus.Remove(panel, out var stashed);
+        var focusWasInside = ExplicitFocusElement is not null && IsDescendantOf(panel, ExplicitFocusElement);
 
-        if (ExplicitFocusElement is not null && IsDescendantOf(panel, ExplicitFocusElement))
+        if (focusWasInside)
             ClearExplicitFocus();
 
-        if (TopControl is { } top && HasLiveTextFocusIn(top))
-            return;
+        if (!wasTop)
+        {
+            PassStashUp(panel, stashed, ControlStack[index]);
+
+            if (!focusWasInside)
+                return;
+
+            //the stash now belongs to the panel above, so the focus goes to the top
+            stashed = null;
+        }
 
         //prefer the focus that was active before this panel pushed (typically a textbox
         //in the panel below). without this, a popup over a login textbox would leave
@@ -955,11 +969,17 @@ public sealed class InputDispatcher : IDisposable
     private static bool IsSelfOrDescendantOf(UIPanel ancestor, UIElement element)
         => (element == ancestor) || IsDescendantOf(ancestor, element);
 
-    //the explicit focus is a focused, visible text box in the panel, so the player is typing there
-    private bool HasLiveTextFocusIn(UIPanel panel)
-        => ExplicitFocusElement is UITextBox { IsFocused: true } box
-           && IsEffectivelyVisible(box)
-           && IsDescendantOf(panel, box);
+    //a stash of the panel above that is empty or points into the removed panel was set while the removed panel was open,
+    //so the focus to give back when the panel above closes is the removed panel's own stash. A panel that keeps the text
+    //focus has no stash
+    private void PassStashUp(UIPanel removed, UIElement? removedStash, UIPanel above)
+    {
+        if (!StashedFocus.TryGetValue(above, out var aboveStash))
+            return;
+
+        if (aboveStash is null || IsSelfOrDescendantOf(removed, aboveStash))
+            StashedFocus[above] = removedStash;
+    }
 
     /// <summary>
     ///     True if <paramref name="descendant" /> is a child, grandchild, etc. of <paramref name="ancestor" />.

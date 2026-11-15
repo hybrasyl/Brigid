@@ -443,6 +443,13 @@ public abstract class UIElement : IDisposable
         DrawRectClipped(spriteBatch, new Rectangle(bounds.Right - 1, bounds.Y, 1, bounds.Height), color);
     }
 
+    internal enum TextClip
+    {
+        Outside,
+        Inside,
+        Partial
+    }
+
     /// <summary>
     ///     Draws single-line text clipped to this element's ClipRect.
     /// </summary>
@@ -461,7 +468,7 @@ public abstract class UIElement : IDisposable
         if (string.IsNullOrEmpty(text))
             return;
 
-        var fit = TextClipFit(ClipRect, position, text, colorCodesEnabled, size, characterSpacing);
+        var fit = FitTextToClip(ClipRect, position, text, colorCodesEnabled, size, characterSpacing);
 
         if (fit == TextClip.Outside)
             return;
@@ -486,19 +493,12 @@ public abstract class UIElement : IDisposable
             size);
     }
 
-    internal enum TextClip
-    {
-        Outside,
-        Inside,
-        Partial
-    }
-
     /// <summary>
     ///     Where one line of text falls against a clip rectangle. It measures at the size, spacing and color-code rule that
     ///     the text draws with: a caller that sizes its text but measures at the default gets a run width that the glyphs
     ///     never occupy.
     /// </summary>
-    internal static TextClip TextClipFit(
+    internal static TextClip FitTextToClip(
         Rectangle clipRect,
         Vector2 position,
         string text,

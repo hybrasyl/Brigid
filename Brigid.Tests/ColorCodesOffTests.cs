@@ -5,9 +5,9 @@ using Xunit;
 
 namespace Brigid.Tests;
 
-// BRIG-181 item 2. With color codes off, a {=x} code is text and has width. Three paths measured it as a code, and a
-// revert of any one of them left the suite green: the fast path of FindLineBreak, the clip measure of
-// UIElement.DrawTextClipped, and the wrap in TextElement.Update.
+// With color codes off, a {=x} code is text and has width. A revert of any one of these paths to measure it as a code
+// left the suite green: the fast path of FindLineBreak, the clip measure of UIElement.DrawTextClipped, and the wrap in
+// TextElement.Update (BRIG-181).
 [Collection("FontEngine")]
 public class ColorCodesOffTests
 {
@@ -28,14 +28,14 @@ public class ColorCodesOffTests
     }
 
     [Fact]
-    public void TextClipFit_WithCodesOffMeasuresTheCodesAsText()
+    public void FitTextToClip_WithCodesOffMeasuresTheCodesAsText()
     {
         FontEngine.Initialize(0);
         const string text = Codes + "abcdef";
         var clip = new Rectangle(0, 0, TextRenderer.MeasureWidth(text, colorCodesEnabled: true), 40);
 
-        Assert.Equal(UIElement.TextClip.Inside, UIElement.TextClipFit(clip, Vector2.Zero, text, true, null, 0f));
-        Assert.Equal(UIElement.TextClip.Partial, UIElement.TextClipFit(clip, Vector2.Zero, text, false, null, 0f));
+        Assert.Equal(UIElement.TextClip.Inside, UIElement.FitTextToClip(clip, Vector2.Zero, text, true, null, 0f));
+        Assert.Equal(UIElement.TextClip.Partial, UIElement.FitTextToClip(clip, Vector2.Zero, text, false, null, 0f));
     }
 
     [Fact]

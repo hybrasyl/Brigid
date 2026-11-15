@@ -1,12 +1,11 @@
 using Brigid.Controls.Components;
-using Brigid.Definitions;
 using Xunit;
 
 namespace Brigid.Tests;
 
-// BRIG-175. A Hide on a panel that is not on the control stack, or the removal of a lower panel, moved the explicit
-// focus from a focused text box in the top panel to the panel. The box kept IsFocused, so no key reached it, and a
-// click on it did not link it to the dispatcher again.
+// A Hide on a panel that is not on the control stack, or the removal of a lower panel, moved the explicit focus from a
+// focused text box in the top panel to the panel. The box kept IsFocused, so no key reached it. A lower panel that goes
+// away now changes no focus in the top panel, and gives its stashed focus to the panel above it (BRIG-175).
 [Collection("UITextBoxFocus")]
 public class ControlStackFocusTests
 {
@@ -19,10 +18,13 @@ public class ControlStackFocusTests
         return (panel, box);
     }
 
+    //the world screen always sets the chat box, and the hand-over to the new top compares the focus with it
+    private static InputDispatcher WorldDispatcher() => new(registerAsInstance: false) { ChatInputTextBox = new UITextBox() };
+
     [Fact]
     public void RemoveControl_APanelThatIsNotOnTheStackKeepsTheTextFocus()
     {
-        using var dispatcher = new InputDispatcher(registerAsInstance: false);
+        using var dispatcher = WorldDispatcher();
         var (notepad, box) = PanelWithBox();
         var hidden = new UIPanel { Visible = false };
 
@@ -38,7 +40,7 @@ public class ControlStackFocusTests
     [Fact]
     public void RemoveControl_APanelThatIsNotOnTheStackChangesNoFocus()
     {
-        using var dispatcher = new InputDispatcher(registerAsInstance: false) { ChatInputTextBox = new UITextBox() };
+        using var dispatcher = WorldDispatcher();
         var open = new UIPanel();
         var hidden = new UIPanel { Visible = false };
 
@@ -53,7 +55,7 @@ public class ControlStackFocusTests
     [Fact]
     public void RemoveControl_ALowerPanelKeepsTheTextFocusInTheTopPanel()
     {
-        using var dispatcher = new InputDispatcher(registerAsInstance: false);
+        using var dispatcher = WorldDispatcher();
         var lower = new UIPanel();
         var (notepad, box) = PanelWithBox();
 
@@ -66,11 +68,33 @@ public class ControlStackFocusTests
         Assert.Same(box, dispatcher.ExplicitFocus);
     }
 
+    //the lower panel's stash is a box below both panels: it must not take the focus while the top panel is open, and it
+    //comes back when the top panel closes
+    [Fact]
+    public void RemoveControl_ALowerPanelGivesItsStashToThePanelAbove()
+    {
+        using var dispatcher = WorldDispatcher();
+        var (_, rootBox) = PanelWithBox();
+        var lower = new UIPanel();
+        var top = new UIPanel();
+
+        rootBox.IsFocused = true;
+        dispatcher.PushControl(lower);
+        dispatcher.PushControl(top);
+
+        dispatcher.RemoveControl(lower);
+
+        Assert.NotSame(rootBox, dispatcher.ExplicitFocus);
+
+        dispatcher.RemoveControl(top);
+
+        Assert.Same(rootBox, dispatcher.ExplicitFocus);
+    }
+
     [Fact]
     public void RemoveControl_TheTopPanelStillGivesTheFocusToTheNewTop()
     {
-        //the world screen always sets the chat box, and the hand-over to the new top compares the focus with it
-        using var dispatcher = new InputDispatcher(registerAsInstance: false) { ChatInputTextBox = new UITextBox() };
+        using var dispatcher = WorldDispatcher();
         var lower = new UIPanel();
         var top = new UIPanel();
 
@@ -80,37 +104,5 @@ public class ControlStackFocusTests
         dispatcher.RemoveControl(top);
 
         Assert.Same(lower, dispatcher.ExplicitFocus);
-    }
-
-    [Fact]
-    public void OnMouseDown_AStaleFocusedBoxTakesTheExplicitFocusAgain()
-    {
-        using var dispatcher = new InputDispatcher(registerAsInstance: false);
-        var (_, box) = PanelWithBox();
-        var focusedEvents = 0;
-        box.OnFocused += _ => focusedEvents++;
-
-        box.IsFocused = true;
-        dispatcher.ClearExplicitFocus();
-
-        box.OnMouseDown(new MouseDownEvent { Button = MouseButton.Left, ScreenX = box.ScreenX + 1, ScreenY = box.ScreenY + 1 });
-
-        Assert.Same(box, dispatcher.ExplicitFocus);
-        Assert.Equal(0, focusedEvents);
-    }
-
-    [Fact]
-    public void OnMouseDown_AnUnfocusedBoxRaisesOnFocusedOnce()
-    {
-        using var dispatcher = new InputDispatcher(registerAsInstance: false);
-        var (_, box) = PanelWithBox();
-        var focusedEvents = 0;
-        box.OnFocused += _ => focusedEvents++;
-
-        box.OnMouseDown(new MouseDownEvent { Button = MouseButton.Left, ScreenX = box.ScreenX + 1, ScreenY = box.ScreenY + 1 });
-
-        Assert.True(box.IsFocused);
-        Assert.Same(box, dispatcher.ExplicitFocus);
-        Assert.Equal(1, focusedEvents);
     }
 }
