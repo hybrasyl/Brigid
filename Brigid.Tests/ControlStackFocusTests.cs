@@ -91,6 +91,41 @@ public class ControlStackFocusTests
         Assert.Same(rootBox, dispatcher.ExplicitFocus);
     }
 
+    //the lobby has no chat box: the new top gets no focus, because a panel that holds the explicit focus blocks each
+    //click outside it
+    [Fact]
+    public void RemoveControl_WithNoChatBoxGivesNoFocusAndKeepsTheMouseFree()
+    {
+        using var dispatcher = new InputDispatcher(registerAsInstance: false);
+        var lower = new UIPanel();
+        var top = new UIPanel();
+
+        dispatcher.PushControl(lower);
+        dispatcher.PushControl(top);
+
+        dispatcher.RemoveControl(top);
+
+        Assert.Null(dispatcher.ExplicitFocus);
+        Assert.False(dispatcher.IsMouseBlocked(10, 10));
+    }
+
+    [Fact]
+    public void RemoveControl_TheChatBoxKeepsItsFocus()
+    {
+        using var dispatcher = WorldDispatcher();
+        var chat = dispatcher.ChatInputTextBox!;
+        var lower = new UIPanel();
+        var top = new UIPanel();
+
+        dispatcher.PushControl(lower);
+        dispatcher.PushControl(top);
+        dispatcher.SetExplicitFocus(chat);
+
+        dispatcher.RemoveControl(top);
+
+        Assert.Same(chat, dispatcher.ExplicitFocus);
+    }
+
     [Fact]
     public void RemoveControl_TheTopPanelStillGivesTheFocusToTheNewTop()
     {

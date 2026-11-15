@@ -258,9 +258,11 @@ public sealed class InputDispatcher : IDisposable
         //focus follows the stack top: after removal, the new top becomes the focus
         //target so keys route into it via Phase 1/1.5 before Phase 2 stack dispatch.
         //when the stack is now empty, leave focus clear (root-level hotkeys take over).
-        //exception: don't override the chat input textbox — it owns its focus track.
+        //exception: don't override the chat input textbox — it owns its focus track. the lobby has no chat box and gets
+        //no hand-over: a panel that holds the explicit focus blocks each click outside it (IsMouseBlocked)
         if (TopControl is { } newTop
             && IsEffectivelyVisible(newTop)
+            && ChatInputTextBox is not null
             && (ExplicitFocusElement != ChatInputTextBox))
             SetExplicitFocus(newTop);
     }
