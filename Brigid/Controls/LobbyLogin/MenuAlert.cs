@@ -1,3 +1,7 @@
+#region
+using Brigid.Data;
+#endregion
+
 namespace Brigid.Controls.LobbyLogin;
 
 /// <summary>One button on a menu alert. A click runs <paramref name="Run" />, and the alert then goes away.</summary>
@@ -17,6 +21,7 @@ public static class MenuAlerts
     public const string OFFLINE_ID = "offline";
     public const string GREETING_UNREADABLE_ID = "greetingunreadable";
     public const string ASSETS_UNLISTABLE_ID = "assetsunlistable";
+    public const string NOT_SAVED_ID_PREFIX = "notsaved:";
 
     /// <summary>The install command for each distribution family, in display order.</summary>
     public static IReadOnlyList<(string Distro, string Command)> InstallCommands { get; } =
@@ -74,6 +79,31 @@ public static class MenuAlerts
             "Notice",
             "**The server notice could not be read.**\n\nThe server sent a notice, but Brigid could not read it. You can still log in.",
             [new MenuAlertAction("OK")]);
+
+    /// <summary>
+    ///     Tells the player that Brigid did not save a settings file: the last read of it failed, so the save was refused
+    ///     (<see cref="SaveResult.Unreadable" />), or the write failed (<see cref="SaveResult.Failed" />). Another program
+    ///     holds the file, or it is denied. Each file path has its own alert.
+    /// </summary>
+    public static MenuAlert NotSaved(GuardedFile file, SaveResult result)
+        => new(
+            NOT_SAVED_ID_PREFIX + file.Path,
+            "Not Saved",
+            $"**Brigid did not save your {file.Description}:** `{file.FileName}` {ProblemOf(result)}.\n\n{NextStepFor(file, result)}",
+            [new MenuAlertAction("Dismiss")]);
+
+    /// <summary>The one-line text of a save that did not go through, for the orange bar in the world.</summary>
+    public static string NotSavedLine(GuardedFile file, SaveResult result)
+        => $"Brigid did not save your {file.Description}: {file.FileName} {ProblemOf(result)}. {NextStepFor(file, result)}";
+
+    private static string ProblemOf(SaveResult result) => result == SaveResult.Unreadable ? "could not be read" : "could not be written";
+
+    //a failed write is tried again at the next change. After a failed read, the client reads a character file again at
+    //the next login, and a settings file at the next start
+    private static string NextStepFor(GuardedFile file, SaveResult result)
+        => result != SaveResult.Unreadable ? "Close the program that holds it, then change it again."
+            : file.ReadAgainAtLogin ? "Close the program that holds it, then log in again."
+            : "Close the program that holds it, then start Brigid again.";
 
     /// <summary>
     ///     Offers to import the character settings of the legacy Dark Ages client. The alert does not record a decision when

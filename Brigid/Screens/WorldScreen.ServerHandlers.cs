@@ -795,32 +795,20 @@ public sealed partial class WorldScreen
 
     private void HandleEditableProfileRequest() => Game.Connection.SendEditableProfile(PlayerPortrait, StatusBook.GetProfileText());
 
-    //the player's own portrait and profile text from the character folder, into the status book, at world entry
+    //the player's own portrait and profile text from the character folder, into the status book, at world entry. A
+    //portrait file that cannot be read keeps the portrait that the screen has
     private void LoadOwnProfile(string name)
     {
-        LoadOwnPortrait(name);
-        StatusBook.SetProfileText(DataContext.LocalPlayerSettings.LoadProfileText());
-    }
-
-    //the portrait is read again each time the status book opens, so a new portrait file shows. The status book changes
-    //only when the bytes differ, and a portrait file that cannot be read keeps the portrait that it has
-    private void LoadOwnPortrait(string name)
-    {
-        if (!DataContext.LocalPlayerSettings.TryLoadPortrait(name, out var portrait))
-            return;
-
-        if (!portrait.AsSpan().SequenceEqual(PlayerPortrait))
+        if (DataContext.LocalPlayerSettings.TryLoadPortrait(name, out var portrait))
         {
             PlayerPortrait = portrait;
             StatusBook.SetPortrait(portrait);
         }
+
+        StatusBook.SetProfileText(DataContext.LocalPlayerSettings.LoadProfileText());
     }
 
-    private void SaveProfileText(string text)
-    {
-        if (DataContext.LocalPlayerSettings.SaveProfileText(text) == SaveResult.ChangedOnDisk)
-            StatusBook.SetProfileText(DataContext.LocalPlayerSettings.LoadProfileText());
-    }
+    private void SaveProfileText(string text) => DataContext.LocalPlayerSettings.SaveProfileText(text);
 
     private void HandleSelfProfile(SelfProfilePacket args)
     {
@@ -886,12 +874,6 @@ public sealed partial class WorldScreen
 
         //family info — DALib self-profile has no spouse field; derived below from the group string.
         StatusBook.SetFamilyInfo(string.Empty);
-
-        //a requested status book opens at the end of this reply: a hand edit of the family list, the profile text or the
-        //portrait shows
-        RefreshFamilyIfChanged();
-        RefreshProfileTextIfChanged();
-        LoadOwnPortrait(WorldState.PlayerName);
 
         //paperdoll — render the player's full aisling at south-facing idle
         var playerEntity = WorldState.GetPlayerEntity();

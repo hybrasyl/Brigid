@@ -37,6 +37,7 @@ public static class LauncherConfig
     //frozen: the config filename in the pre-Erisco home, used only to locate the file to migrate FROM. The live
     //config name is owned by AppPaths.ConfigFile and may diverge from this without affecting migration.
     private const string LEGACY_FILE_NAME = "config.json";
+    private const string FILE_DESCRIPTION = "server list";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -82,23 +83,31 @@ public static class LauncherConfig
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Brigid", LEGACY_FILE_NAME);
 
     /// <summary>
-    ///     Loads the config file into the static state. Missing/corrupt files yield a fresh default list. Always ensures at
-    ///     least the default <c>da0.kru.com:2610</c> server exists, and migrates the legacy single host/port shape (from the
-    ///     first version of this file) into a list entry.
+    ///     Loads the config file into the static state. A missing file yields a fresh default list. A file that cannot be
+    ///     read yields the defaults, and its save is refused, so the defaults do not replace the player's servers; a file
+    ///     that does not parse yields the defaults and is kept as a <c>.bad</c> copy (see <see cref="GuardedFile" />).
+    ///     Always ensures at least the default <c>da0.kru.com:2610</c> server exists, and migrates the legacy single
+    ///     host/port shape (from the first version of this file) into a list entry.
     /// </summary>
     public static void Load()
     {
         TryMigrateLegacyConfig();
+        Load(FilePath);
+    }
 
+    /// <summary>Loads the config file at <paramref name="path" />, with no legacy migration. Internal for the tests.</summary>
+    internal static void Load(string path)
+    {
+        var file = GuardedFile.ForSession(path, FILE_DESCRIPTION);
         Model? model = null;
 
-        if (File.Exists(FilePath))
+        if (file.Read(File.ReadAllText, (string?)null) is { } text)
             try
             {
-                model = JsonSerializer.Deserialize<Model>(File.ReadAllText(FilePath), SerializerOptions);
-            } catch
+                model = JsonSerializer.Deserialize<Model>(text, SerializerOptions);
+            } catch (JsonException ex)
             {
-                //corrupt config — fall through to defaults
+                file.MarkCorrupt(ex.Message);
             }
 
         Servers = model?.Servers ?? [];
@@ -145,26 +154,28 @@ public static class LauncherConfig
         }
     }
 
-    public static void Save()
+    /// <summary>Saves the config file. Best effort: a failed write is logged, and a file whose read failed is not written.</summary>
+    public static void Save() => Save(FilePath);
+
+    /// <summary>Saves the config to the file at <paramref name="path" />. Internal for the tests.</summary>
+    internal static SaveResult Save(string path)
     {
-        try
+        var model = new Model
         {
-            Directory.CreateDirectory(ConfigDirectory);
+            Servers = Servers,
+            SelectedServer = SelectedServer,
+            AssetPath = AssetPath,
+            WindowMultiplier = WindowMultiplier,
+            SuppressLauncher = SuppressLauncher
+        };
 
-            var model = new Model
-            {
-                Servers = Servers,
-                SelectedServer = SelectedServer,
-                AssetPath = AssetPath,
-                WindowMultiplier = WindowMultiplier,
-                SuppressLauncher = SuppressLauncher
-            };
-
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(model, SerializerOptions));
-        } catch
-        {
-            //best effort — don't crash on save failure
-        }
+        return GuardedFile.ForSession(path, FILE_DESCRIPTION)
+                          .Save(
+                              p =>
+                              {
+                                  Directory.CreateDirectory(Path.GetDirectoryName(p)!);
+                                  File.WriteAllText(p, JsonSerializer.Serialize(model, SerializerOptions));
+                              });
     }
 
     /// <summary>Returns the currently-selected server, falling back to the first entry (or null if the list is empty).</summary>

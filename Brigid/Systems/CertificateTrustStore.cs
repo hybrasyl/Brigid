@@ -146,6 +146,8 @@ public static class CertificateTrustStore
 
     private static string FilePath => Path.Combine(AppPaths.AppRoot, "known-servers.json");
 
+    private const string FILE_DESCRIPTION = "accepted servers";
+
     /// <summary>
     ///     The store's key format. Version 1 keyed entries by <c>host:port</c>; version 2 keys them by
     ///     host alone. Version 1 entries are discarded rather than migrated: stripping the port would
@@ -155,8 +157,15 @@ public static class CertificateTrustStore
     /// </summary>
     private const int STORE_VERSION = 2;
 
-    /// <summary>Loads pins from disk, replacing anything held in memory.</summary>
-    public static void Load()
+    /// <summary>
+    ///     Loads pins from disk, replacing anything held in memory. A file that cannot be read keeps only the shipped pins,
+    ///     and its save is refused, so the player's accepted servers are not lost; a file that does not parse keeps only
+    ///     the shipped pins and is kept as a <c>.bad</c> copy (see <see cref="GuardedFile" />).
+    /// </summary>
+    public static void Load() => Load(FilePath);
+
+    /// <summary>Loads the pins from the file at <paramref name="path" />. Internal for the tests.</summary>
+    internal static void Load(string path)
     {
         using var scope = Gate.EnterScope();
 
@@ -173,10 +182,7 @@ public static class CertificateTrustStore
                 Path = CertificateTrustPath.PublicCa
             };
 
-        if (!File.Exists(FilePath))
-            return;
-
-        var model = ReadModel();
+        var model = ReadModel(GuardedFile.ForSession(path, FILE_DESCRIPTION));
 
         if (model?.Servers is null)
             return;
@@ -199,21 +205,32 @@ public static class CertificateTrustStore
                 Entries[server] = entry;
     }
 
-    private static Model? ReadModel()
+    //a corrupt or unreadable store must not block connecting: fall back to pre-pins only, which costs the user a re-prompt
+    //rather than a client that cannot connect
+    private static Model? ReadModel(GuardedFile file)
     {
+        if (file.Read(File.ReadAllText, (string?)null) is not { } text)
+            return null;
+
         try
         {
-            return JsonSerializer.Deserialize<Model>(File.ReadAllText(FilePath), SerializerOptions);
-        } catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
+            return JsonSerializer.Deserialize<Model>(text, SerializerOptions);
+        } catch (JsonException ex)
         {
-            //a corrupt or unreadable store must not block connecting: fall back to pre-pins only, which
-            //costs the user a re-prompt rather than a dead client.
+            file.MarkCorrupt(ex.Message);
+
             return null;
         }
     }
 
-    /// <summary>Writes pins to disk. Best effort — a failure costs a re-prompt, not a connection.</summary>
-    public static void Save()
+    /// <summary>
+    ///     Writes pins to disk. Best effort — a failure costs a re-prompt, not a connection. A file whose read failed is
+    ///     not written.
+    /// </summary>
+    public static void Save() => Save(FilePath);
+
+    /// <summary>Writes the pins to the file at <paramref name="path" />. Internal for the tests.</summary>
+    internal static SaveResult Save(string path)
     {
         Model model;
 
@@ -224,14 +241,13 @@ public static class CertificateTrustStore
                 Servers = new Dictionary<string, TrustEntry>(Entries, StringComparer.OrdinalIgnoreCase)
             };
 
-        try
-        {
-            Directory.CreateDirectory(AppPaths.AppRoot);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(model, SerializerOptions));
-        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            //ignored by design; see summary.
-        }
+        return GuardedFile.ForSession(path, FILE_DESCRIPTION)
+                          .Save(
+                              p =>
+                              {
+                                  Directory.CreateDirectory(Path.GetDirectoryName(p)!);
+                                  File.WriteAllText(p, JsonSerializer.Serialize(model, SerializerOptions));
+                              });
     }
 
     /// <summary>

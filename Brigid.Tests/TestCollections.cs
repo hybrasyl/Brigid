@@ -39,6 +39,11 @@ public sealed class UITextBoxFocusCollection;
 [CollectionDefinition("GameClientTransport", DisableParallelization = true)]
 public sealed class GameClientTransportCollection;
 
+// The settings files (Keybinds, LauncherConfig, CertificateTrustStore) keep static state that their Load and Save change.
+// The tests that load or save them run in series with each other; the other tests do not load them.
+[CollectionDefinition("SettingsFiles")]
+public sealed class SettingsFilesCollection;
+
 // WorldState is static. The tests that change it run alone.
 [CollectionDefinition("WorldState", DisableParallelization = true)]
 public sealed class WorldStateCollection;

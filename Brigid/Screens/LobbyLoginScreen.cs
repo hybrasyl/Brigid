@@ -576,6 +576,9 @@ public sealed class LobbyLoginScreen : IScreen
 
     private void OnLobbyLoginPopupMessageOk() => LobbyLoginPopupMessage.Hide();
 
+    /// <summary>Shows a save that did not go through as a main-menu alert (<see cref="SaveNotices" />).</summary>
+    public void ShowSaveNotice(GuardedFile file, SaveResult result) => Menu.Alerts.Add(MenuAlerts.NotSaved(file, result));
+
     //── once-per-process alert that the audio libraries are missing ──
     private void MaybeAddNoSoundAlert()
     {

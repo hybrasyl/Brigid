@@ -332,13 +332,6 @@ public sealed partial class WorldScreen : IScreen
 
         OptionsModal.MacrosCommitted += SavePlayerMacros;
 
-        //a hand edit of Macro.cfg or Friendlist.cfg shows when Options opens
-        OptionsModal.Opening += () =>
-        {
-            RefreshMacrosIfChanged();
-            RefreshFriendsIfChanged();
-        };
-
         //the keybind capture modal rides above the Options modal (ZIndex 11 > 10). The tab requests a rebind
         //for a command/slot; on commit we persist the override and repaint the tab underneath. Reset routes
         //through here too, so mutate-then-persist-then-repaint lives in one keybind seam.

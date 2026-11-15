@@ -1,3 +1,4 @@
+using Brigid.Data;
 using Brigid.Data.Models;
 using Brigid.Data.Repositories;
 using Xunit;
@@ -6,9 +7,8 @@ namespace Brigid.Tests;
 
 // A per-character file that another program holds with no read sharing threw from a raw read: world entry stopped, a
 // relog crashed, and an empty load was then saved over the good file. Each read is guarded now: it loads as empty, and
-// the save of that file is refused until a read of it succeeds. A save also refuses a file that a hand edit changed
-// after the read, and HasChangedOnDisk reports a hand edit and a failed read, so the client reads the file again where it
-// uses the data (BRIG-177).
+// the save of that file is refused until a read of it succeeds (BRIG-177). The client does not support a hand edit while
+// it runs, so a save does not check the file's time.
 public sealed class CharacterFileSafetyTests : IDisposable
 {
     private readonly string Folder = Path.Combine(Path.GetTempPath(), "brigid-charfile-" + Guid.NewGuid().ToString("N"));
@@ -90,20 +90,16 @@ public sealed class CharacterFileSafetyTests : IDisposable
         Assert.Equal(GoodContents[file], File.ReadAllText(path));
     }
 
-    //a lock that another program held at world entry can end with no write: the file is then tried again where the
-    //client uses the data
     [Theory]
     [MemberData(nameof(AllFiles))]
-    public void AFileWhoseReadFailedShowsAsAChangeUntilAReadSucceeds(CharacterFile file)
+    public void AReadThatSucceedsLaterAllowsTheSave(CharacterFile file)
     {
         var path = WriteGood(file);
 
         using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
             LoadFindsContents(file);
 
-        Assert.True(Settings.HasChangedOnDisk(file));
         Assert.True(LoadFindsContents(file));
-        Assert.False(Settings.HasChangedOnDisk(file));
         Assert.Equal(SaveResult.Saved, SaveEmpty(file));
     }
 
@@ -145,36 +141,17 @@ public sealed class CharacterFileSafetyTests : IDisposable
         }
     }
 
+    //a hand edit made while the client runs is written over at the next save
     [Theory]
     [MemberData(nameof(AllFiles))]
-    public void AHandEditAfterTheReadShowsAsAChangeAndRefusesTheSave(CharacterFile file)
+    public void AHandEditAfterTheReadDoesNotBlockTheSave(CharacterFile file)
     {
         var path = WriteGood(file);
         Assert.True(LoadFindsContents(file));
-        Assert.False(Settings.HasChangedOnDisk(file));
 
-        //a hand edit: the file's time moves, whatever the resolution of the file system
         File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddMinutes(1));
 
-        Assert.True(Settings.HasChangedOnDisk(file));
-        Assert.Equal(SaveResult.ChangedOnDisk, SaveEmpty(file));
-        Assert.Equal(GoodContents[file], File.ReadAllText(path));
-
-        //the caller reads it again, and then the save goes through
-        Assert.True(LoadFindsContents(file));
-        Assert.False(Settings.HasChangedOnDisk(file));
         Assert.Equal(SaveResult.Saved, SaveEmpty(file));
-    }
-
-    [Theory]
-    [MemberData(nameof(AllFiles))]
-    public void TheClientsOwnSaveIsNotAChange(CharacterFile file)
-    {
-        WriteGood(file);
-        LoadFindsContents(file);
-
-        Assert.Equal(SaveResult.Saved, SaveEmpty(file));
-        Assert.False(Settings.HasChangedOnDisk(file));
     }
 
     [Theory]

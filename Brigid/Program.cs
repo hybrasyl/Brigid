@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Brigid;
 using Brigid.Data;
 using Brigid.Networking;
+using Brigid.Systems;
 #endregion
 
 NoticeDebugLog.Reset();
@@ -11,6 +12,10 @@ NoticeDebugLog.Write("Program.Main entered");
 
 //route data-layer IO diagnostics (best-effort file writes that are caught, never rethrown) into the notice log
 DataDiagnostics.Log = NoticeDebugLog.Write;
+
+//a settings file whose read failed is not saved over, and the player sees a notice for a save that did not go through;
+//start before the first save
+SaveNotices.Start();
 
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 {

@@ -38,6 +38,8 @@ public static class ClientSettings
     public static int Speed { get; set; } = 100;
     public static bool UseShiftKeyForAltPanels { get; set; } = true;
 
+    private const string FILE_DESCRIPTION = "settings";
+
     private static string FilePath => AppPaths.SettingsFile;
 
     //legacy in-game-folder location, read once on first run when the new file doesn't exist yet
@@ -100,7 +102,8 @@ public static class ClientSettings
     /// <summary>
     ///     Loads settings into static properties. Reads the per-user <c>brigid.cfg</c>; on first run (before it exists)
     ///     falls back to the legacy <c>Darkages.cfg</c> and migrates it to the new location. Uses defaults if neither
-    ///     file exists or the file is corrupt.
+    ///     file exists. A <c>brigid.cfg</c> that cannot be read gives the defaults, and its save is refused, so the
+    ///     defaults do not replace the player's settings (see <see cref="GuardedFile" />).
     /// </summary>
     public static void Load()
     {
@@ -111,122 +114,132 @@ public static class ClientSettings
         if (loadPath is null)
             return;
 
-        try
-        {
-            foreach (var line in File.ReadLines(loadPath))
-            {
-                if (!TrySplit(line, out var key, out var value))
-                    continue;
-
-                switch (key)
-                {
-                    case "Sound Volume":
-                        if (int.TryParse(value, out var sv))
-                            SoundVolume = Math.Clamp(sv, 0, 10);
-
-                        break;
-
-                    case "Music Volume":
-                        if (int.TryParse(value, out var mv))
-                            MusicVolume = Math.Clamp(mv, 0, 10);
-
-                        break;
-
-                    case "Ambience Volume":
-                        if (int.TryParse(value, out var av))
-                            AmbienceVolume = Math.Clamp(av, 0, 10);
-
-                        break;
-
-                    case "doGroundAnimation":
-                        DoGroundAnimation = value == "1";
-
-                        break;
-
-                    case "SkillSpellSelectByToggle":
-                        UseShiftKeyForAltPanels = value != "1";
-
-                        break;
-
-                    case "GroupAnswer":
-                        GroupOpen = value == "1";
-
-                        break;
-
-                    case "ScrollLevel":
-                        if (int.TryParse(value, out var sl))
-                            ScrollLevel = sl;
-
-                        break;
-
-                    case "UserClickMode":
-                        EnableProfileClick = value != "1";
-
-                        break;
-
-                    case "MonsterSayRecordMode":
-                        RecordNpcChat = value == "1";
-
-                        break;
-
-                    case "GroupObjectOption":
-                        UseGroupWindow = value == "1";
-
-                        break;
-
-                    case "Chatting Mode":
-                        if (int.TryParse(value, out var cm))
-                            ChattingMode = cm;
-
-                        break;
-
-                    case "Speed":
-                        if (int.TryParse(value, out var spd))
-                            Speed = spd;
-
-                        break;
-
-                    case "EngFont":
-                        if (int.TryParse(value, out var ef) && ef >= 0)
-                            FontIndex = ef;
-
-                        break;
-
-                    case "ImportCharacterData":
-                        if (int.TryParse(value, out var ci))
-                            LegacyCharacterImport = ci;
-
-                        break;
-
-                    case "UiTheme":
-                        UiTheme = value.Length > 0 ? value : null;
-
-                        break;
-                }
-            }
-        } catch
-        {
-            //corrupted file — use whatever defaults/partial state was already set
-        }
-
-        //first-run migration: if we just read the legacy file, persist to the new per-user location
-        if (loadPath != FilePath)
+        //first-run migration: if we just read the legacy file, persist to the new per-user location. A legacy file that
+        //could not be read is not migrated here; a later save writes the defaults to brigid.cfg, as before
+        if (Load(loadPath) && (loadPath != FilePath))
             Save();
     }
 
     /// <summary>
+    ///     Loads the settings file at <paramref name="path" /> into the static properties. Returns false when the file
+    ///     cannot be read. Internal for the tests.
+    /// </summary>
+    internal static bool Load(string path)
+    {
+        var file = GuardedFile.ForSession(path, FILE_DESCRIPTION);
+        var lines = file.Read(File.ReadAllLines, []);
+
+        if (file.IsUnreadable)
+            return false;
+
+        foreach (var line in lines)
+        {
+            if (!TrySplit(line, out var key, out var value))
+                continue;
+
+            switch (key)
+            {
+                case "Sound Volume":
+                    if (int.TryParse(value, out var sv))
+                        SoundVolume = Math.Clamp(sv, 0, 10);
+
+                    break;
+
+                case "Music Volume":
+                    if (int.TryParse(value, out var mv))
+                        MusicVolume = Math.Clamp(mv, 0, 10);
+
+                    break;
+
+                case "Ambience Volume":
+                    if (int.TryParse(value, out var av))
+                        AmbienceVolume = Math.Clamp(av, 0, 10);
+
+                    break;
+
+                case "doGroundAnimation":
+                    DoGroundAnimation = value == "1";
+
+                    break;
+
+                case "SkillSpellSelectByToggle":
+                    UseShiftKeyForAltPanels = value != "1";
+
+                    break;
+
+                case "GroupAnswer":
+                    GroupOpen = value == "1";
+
+                    break;
+
+                case "ScrollLevel":
+                    if (int.TryParse(value, out var sl))
+                        ScrollLevel = sl;
+
+                    break;
+
+                case "UserClickMode":
+                    EnableProfileClick = value != "1";
+
+                    break;
+
+                case "MonsterSayRecordMode":
+                    RecordNpcChat = value == "1";
+
+                    break;
+
+                case "GroupObjectOption":
+                    UseGroupWindow = value == "1";
+
+                    break;
+
+                case "Chatting Mode":
+                    if (int.TryParse(value, out var cm))
+                        ChattingMode = cm;
+
+                    break;
+
+                case "Speed":
+                    if (int.TryParse(value, out var spd))
+                        Speed = spd;
+
+                    break;
+
+                case "EngFont":
+                    if (int.TryParse(value, out var ef) && ef >= 0)
+                        FontIndex = ef;
+
+                    break;
+
+                case "ImportCharacterData":
+                    if (int.TryParse(value, out var ci))
+                        LegacyCharacterImport = ci;
+
+                    break;
+
+                case "UiTheme":
+                    UiTheme = value.Length > 0 ? value : null;
+
+                    break;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     ///     Saves the current settings to <c>brigid.cfg</c> (per-user app root) in the original format. Best-effort —
-    ///     never throws on a write failure.
+    ///     never throws on a write failure, and does not write a file whose read failed.
     /// </summary>
     public static void Save() => Save(FilePath);
 
     /// <summary>Saves the current settings to the file at <paramref name="path" />. Internal for the tests.</summary>
-    internal static void Save(string path) => DataDiagnostics.Try(
-        () =>
+    internal static SaveResult Save(string path) => GuardedFile.ForSession(path, FILE_DESCRIPTION).Save(
+        p =>
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(p)!);
 
-            using var writer = new StreamWriter(path, false);
+            using var writer = new StreamWriter(p, false);
             writer.WriteLine("Version: 9728");
             writer.WriteLine("Port: 5");
             writer.WriteLine($"Speed: {Speed}");
@@ -251,5 +264,5 @@ public static class ClientSettings
             writer.WriteLine($"UserClickMode : {(EnableProfileClick ? 0 : 1)}");
             writer.WriteLine($"MonsterSayRecordMode : {(RecordNpcChat ? 1 : 0)}");
             writer.WriteLine($"GroupObjectOption : {(UseGroupWindow ? 1 : 0)}");
-        }, "ClientSettings.Save");
+        });
 }

@@ -572,7 +572,7 @@ public sealed partial class WorldScreen
                 }
 
                 hud.UsersButton!.IsSelected = true;
-                RequestWorldList();
+                Game.Connection.RequestWorldList();
             };
 
             WorldList.OnClose += () => hud.UsersButton.IsSelected = false;

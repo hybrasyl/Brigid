@@ -399,9 +399,6 @@ public sealed partial class WorldScreen
             case HudTab.Chat:
             case HudTab.MessageHistory:
             {
-                //a hand edit of Macro.cfg shows at the next macro key
-                RefreshMacrosIfChanged();
-
                 var macroText = OptionsModal.GetMacroValue(slot - 1);
 
                 if (macroText.Length > 0)
@@ -433,9 +430,6 @@ public sealed partial class WorldScreen
 
     private void OpenCastablePopup(PanelBase source, byte slot)
     {
-        //a hand edit of SkillBook.cfg or SpellBook.cfg shows in the popup
-        RefreshChantsIfChanged();
-
         var control = source.GetSlotControl(slot) as AbilitySlotControl;
 
         if (control is null || string.IsNullOrEmpty(control.AbilityName))
@@ -487,9 +481,10 @@ public sealed partial class WorldScreen
                     spellSlot.Chants[i] = chantLines[i];
             }
 
-            //a refused save (a hand edit while the popup was open) is logged, and the reload puts the file back: the file wins
-            SaveSpellChants();
-            WorldState.ReloadChants();
+            //the reload reads the file that the save wrote. After a save that did not go through, the slots keep their
+            //chants: a read of a locked file gives no chants, and the reload would clear every slot
+            if (SaveSpellChants() == SaveResult.Saved)
+                WorldState.ReloadChants();
         } else
         {
             foreach (var panel in new[]
@@ -504,16 +499,16 @@ public sealed partial class WorldScreen
                 skillSlot?.Chant = chantLines.Length > 0 ? chantLines[0] : string.Empty;
             }
 
-            SaveSkillChants();
-            WorldState.ReloadChants();
+            if (SaveSkillChants() == SaveResult.Saved)
+                WorldState.ReloadChants();
         }
     }
 
     //--- cache / persistence helpers ---
 
     //the files load at world entry, a relog (a new screen) or another character, and not at each later display of the
-    //same character: a load at each map change wrote the saved macros and friends over unsaved typing in Options. A hand
-    //edit is read again where the data is used (the Refresh helpers below)
+    //same character: a load at each map change wrote the saved macros and friends over unsaved typing in Options. The
+    //client does not support a hand edit of these files while it runs: the next save writes over it
     private void LoadLocalFilesOnEntry(string name)
     {
         var serverKey = ServerProfileKey.Resolve(GlobalSettings.LobbyHost, Game.Connection.ServerName);
@@ -546,10 +541,8 @@ public sealed partial class WorldScreen
         if (family is null)
             return;
 
-        if (DataContext.LocalPlayerSettings.SaveFamilyList(family) == SaveResult.ChangedOnDisk)
-            LoadPlayerFamilyList();
-        else
-            WorldList.SetFamilyNames(family);
+        DataContext.LocalPlayerSettings.SaveFamilyList(family);
+        WorldList.SetFamilyNames(family);
     }
 
     private void LoadPlayerFriendList()
@@ -564,61 +557,11 @@ public sealed partial class WorldScreen
     {
         var names = OptionsModal.GetFriendNames();
 
-        if (DataContext.LocalPlayerSettings.SaveFriendList(names) == SaveResult.ChangedOnDisk)
-            LoadPlayerFriendList();
-        else
-            WorldList.SetFriendNames(names);
+        DataContext.LocalPlayerSettings.SaveFriendList(names);
+        WorldList.SetFriendNames(names);
     }
 
-    private void SavePlayerMacros()
-    {
-        if (DataContext.LocalPlayerSettings.SaveMacros(OptionsModal.GetMacroValues()) == SaveResult.ChangedOnDisk)
-            LoadPlayerMacros();
-    }
-
-    //each one reads its file again when a hand edit changed it on disk, or when its last read failed. A window that is
-    //open keeps its typing: the Options modal holds the macros and friends, and the status book the family list and the
-    //profile text. A requested status book and Options both open after their refresh
-
-    private void RefreshFamilyIfChanged()
-    {
-        if (!StatusBook.Visible && DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.FamilyList))
-            LoadPlayerFamilyList();
-    }
-
-    private void RefreshFriendsIfChanged()
-    {
-        if (!OptionsModal.Visible && DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.FriendList))
-            LoadPlayerFriendList();
-    }
-
-    private void RefreshMacrosIfChanged()
-    {
-        if (!OptionsModal.Visible && DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.Macros))
-            LoadPlayerMacros();
-    }
-
-    private void RefreshProfileTextIfChanged()
-    {
-        if (!StatusBook.Visible && DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.ProfileText))
-            StatusBook.SetProfileText(DataContext.LocalPlayerSettings.LoadProfileText());
-    }
-
-    //the chants go into the ability slots, which no window holds open
-    private void RefreshChantsIfChanged()
-    {
-        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.SkillChants)
-            || DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.SpellChants))
-            WorldState.ReloadChants();
-    }
-
-    //the world list marks friends and family: a hand edit of either list shows when the list opens
-    private void RequestWorldList()
-    {
-        RefreshFriendsIfChanged();
-        RefreshFamilyIfChanged();
-        Game.Connection.RequestWorldList();
-    }
+    private void SavePlayerMacros() => DataContext.LocalPlayerSettings.SaveMacros(OptionsModal.GetMacroValues());
 
     private void LoadPlayerMacros()
     {
@@ -626,7 +569,7 @@ public sealed partial class WorldScreen
         OptionsModal.SetMacros(macros);
     }
 
-    private void SaveSkillChants()
+    private SaveResult SaveSkillChants()
     {
         var entries = new List<SkillChantEntry>();
 
@@ -647,10 +590,10 @@ public sealed partial class WorldScreen
                 });
         }
 
-        DataContext.LocalPlayerSettings.SaveSkillChants(entries);
+        return DataContext.LocalPlayerSettings.SaveSkillChants(entries);
     }
 
-    private void SaveSpellChants()
+    private SaveResult SaveSpellChants()
     {
         var entries = new List<SpellChantEntry>();
 
@@ -671,7 +614,7 @@ public sealed partial class WorldScreen
             entries.Add(entry);
         }
 
-        DataContext.LocalPlayerSettings.SaveSpellChants(entries);
+        return DataContext.LocalPlayerSettings.SaveSpellChants(entries);
     }
     #endregion
 
@@ -779,7 +722,7 @@ public sealed partial class WorldScreen
             {
                 WorldHud.UsersButton?.IsSelected = true;
 
-                RequestWorldList();
+                Game.Connection.RequestWorldList();
             }
 
             e.Handled = true;
