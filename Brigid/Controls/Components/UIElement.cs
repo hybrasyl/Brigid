@@ -461,17 +461,12 @@ public abstract class UIElement : IDisposable
         if (string.IsNullOrEmpty(text))
             return;
 
-        //measure at the size/spacing this will actually draw with: a caller that sizes its text but measures at the
-        //default gets a caret and selection placed against a run width the glyphs never occupy
-        var textWidth = TextRenderer.MeasureWidth(text, size, characterSpacing, colorCodesEnabled);
-        var textBounds = new Rectangle((int)position.X, (int)position.Y, textWidth, TextRenderer.CHAR_HEIGHT);
+        var fit = TextClipFit(ClipRect, position, text, colorCodesEnabled, size, characterSpacing);
 
-        //fully outside
-        if (!ClipRect.Intersects(textBounds))
+        if (fit == TextClip.Outside)
             return;
 
-        //fully inside — fast path
-        if (ClipRect.Contains(textBounds))
+        if (fit == TextClip.Inside)
         {
             TextRenderer.DrawText(spriteBatch, position, text, color, colorCodesEnabled, opacity, characterSpacing, size);
 
@@ -489,6 +484,35 @@ public abstract class UIElement : IDisposable
             opacity,
             characterSpacing,
             size);
+    }
+
+    internal enum TextClip
+    {
+        Outside,
+        Inside,
+        Partial
+    }
+
+    /// <summary>
+    ///     Where one line of text falls against a clip rectangle. It measures at the size, spacing and color-code rule that
+    ///     the text draws with: a caller that sizes its text but measures at the default gets a run width that the glyphs
+    ///     never occupy.
+    /// </summary>
+    internal static TextClip TextClipFit(
+        Rectangle clipRect,
+        Vector2 position,
+        string text,
+        bool colorCodesEnabled,
+        int? size,
+        float characterSpacing)
+    {
+        var textWidth = TextRenderer.MeasureWidth(text, size, characterSpacing, colorCodesEnabled);
+        var textBounds = new Rectangle((int)position.X, (int)position.Y, textWidth, TextRenderer.CHAR_HEIGHT);
+
+        if (!clipRect.Intersects(textBounds))
+            return TextClip.Outside;
+
+        return clipRect.Contains(textBounds) ? TextClip.Inside : TextClip.Partial;
     }
 
     //── event handlers (dispatched by inputdispatcher) ──

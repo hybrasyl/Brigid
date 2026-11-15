@@ -67,6 +67,11 @@ public class DebugOverlayFpsTests
     [Fact]
     public void FramesPerSecond_StartsTheWindowAgainAfterAStall() => Assert.Equal(25, MeasureFps(111, 20, 2, 60));
 
+    //the window that the stall closes holds 5 frames in 5.2 s of wall time, so it reads 1, not the 5 frames it counted
+    //(BRIG-181)
+    [Fact]
+    public void FramesPerSecond_DividesALongWindowByItsLength() => Assert.Equal(1, MeasureFps(61, 20, 2, 60));
+
     //each 20 ms game step takes 40 ms of real time: 25 Updates and 25 Draws each real second. On game time the window
     //closed after 50 Updates, which is two real seconds, and showed 50
     [Fact]
