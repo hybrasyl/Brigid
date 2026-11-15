@@ -70,16 +70,10 @@ public sealed class GameClient : IDisposable
     private CancellationTokenSource? ConnectCts;
     private Task PendingConnect = Task.CompletedTask;
     private bool Disposed;
-    private int ReceiveCount;
-    private IMemoryOwner<byte>? ReceiveMemoryOwner;
 
     //the pumps of the live connection, or null. A server close and a Disconnect can come at the same time; the one that
-    //ends the pump set tears it down and raises OnDisconnected
+    //ends the pump set tears it down
     private PumpSet? Pumps;
-
-    //encoded frames queued for the send pump. Written under SendLock so channel order matches the
-    //order the codec allocated crypto ordinals in; drained by the single send pump.
-    private Channel<byte[]>? SendQueue;
 
     private Socket? Socket;
 
@@ -167,9 +161,8 @@ public sealed class GameClient : IDisposable
 
     private bool IsAlive => Pumps?.IsAlive ?? false;
 
-    /// <summary>True while the client holds a socket, a stream, a receive buffer or a pump set, for the tests.</summary>
-    internal bool HoldsConnection
-        => Socket is not null || Transport is not null || ReceiveMemoryOwner is not null || Pumps is not null;
+    /// <summary>True while the client holds a socket, a stream or a pump set, for the tests.</summary>
+    internal bool HoldsConnection => Socket is not null || Transport is not null || Pumps is not null;
 
     /// <summary>
     ///     The remote endpoint of the active socket, or null when not connected.
@@ -515,16 +508,17 @@ public sealed class GameClient : IDisposable
             return;
         }
 
-        Teardown(pumps);
+        Teardown(pumps, waitForReceive: true);
         InboundQueue.Clear();
 
         OnDisconnected?.Invoke();
     }
 
-    //frees the resources of one pump set, and clears each shared field that still holds one of them: a new connect can
-    //set the socket and the stream before a late teardown of the old pumps runs. Call it under ConnectLock, after
-    //TryEnd returned true
-    private void Teardown(PumpSet pumps)
+    //frees the resources of one pump set, and clears the shared socket and stream only while they still hold this set's
+    //objects: a new connect sets them outside ConnectLock, and a late teardown of the old pumps must not clear them. A
+    //server close tears down on the thread that leaves the receive loop, so it does not wait for that loop. Call it
+    //under ConnectLock, after TryEnd returned true
+    private void Teardown(PumpSet pumps, bool waitForReceive)
     {
         try
         {
@@ -562,9 +556,8 @@ public sealed class GameClient : IDisposable
             /* ignored */
         }
 
-        //the receive loop must end before its buffer is returned. A server close tears down on the thread that leaves
-        //the receive loop, and that thread does not wait for itself
-        if (Environment.CurrentManagedThreadId != pumps.ReceiveExitThreadId)
+        //the receive loop must end before its buffer is returned
+        if (waitForReceive)
             try
             {
                 pumps.ReceiveTask?.GetAwaiter()
@@ -583,33 +576,14 @@ public sealed class GameClient : IDisposable
             /* ignored */
         }
 
-        try
-        {
-            pumps.Buffer.Dispose();
-        } catch
-        {
-            /* ignored */
-        }
-
+        pumps.Buffer.Dispose();
         pumps.Cts.Dispose();
 
         if (ReferenceEquals(Pumps, pumps))
             Pumps = null;
 
-        if (ReferenceEquals(Socket, pumps.Socket))
-            Socket = null;
-
-        if (ReferenceEquals(Transport, pumps.Transport))
-            Transport = null;
-
-        if (ReferenceEquals(SendQueue, pumps.SendQueue))
-            SendQueue = null;
-
-        if (ReferenceEquals(ReceiveMemoryOwner, pumps.Buffer))
-        {
-            ReceiveMemoryOwner = null;
-            ReceiveCount = 0;
-        }
+        Interlocked.CompareExchange(ref Socket, null, pumps.Socket);
+        Interlocked.CompareExchange(ref Transport, null, pumps.Transport);
     }
 
     /// <summary>
@@ -643,7 +617,7 @@ public sealed class GameClient : IDisposable
     /// <param name="packet">The client packet to send.</param>
     public void Send(IClientPacket packet)
     {
-        var writer = SendQueue?.Writer;
+        var writer = Pumps?.SendQueue.Writer;
 
         if (!Connected || writer is null)
         {
@@ -674,7 +648,7 @@ public sealed class GameClient : IDisposable
     {
         ArgumentNullException.ThrowIfNull(packet);
 
-        var writer = SendQueue?.Writer;
+        var writer = Pumps?.SendQueue.Writer;
 
         if (ExtensionChannel is not { } channel || !Connected || writer is null)
         {
@@ -918,20 +892,21 @@ public sealed class GameClient : IDisposable
     private void StartPumps(ReadOnlySpan<byte> carryOver)
     {
         var buffer = MemoryPool<byte>.Shared.Rent(RECEIVE_BUFFER_SIZE);
-        ReceiveMemoryOwner = buffer;
         carryOver.CopyTo(buffer.Memory.Span);
-        ReceiveCount = carryOver.Length;
 
         //single reader: the send pump is the only writer to the transport, which is what serializes
         //writes now that SslStream (which forbids overlapping writes) is a possible transport.
-        SendQueue = Channel.CreateUnbounded<byte[]>(
+        var sendQueue = Channel.CreateUnbounded<byte[]>(
             new UnboundedChannelOptions
             {
                 SingleReader = true,
                 SingleWriter = false
             });
 
-        var pumps = new PumpSet(Socket, Transport!, buffer, new CancellationTokenSource(), SendQueue);
+        var pumps = new PumpSet(Socket, Transport!, buffer, new CancellationTokenSource(), sendQueue)
+        {
+            ReceiveCount = carryOver.Length
+        };
         Pumps = pumps;
         var token = pumps.Cts.Token;
 
@@ -947,30 +922,26 @@ public sealed class GameClient : IDisposable
         //drain anything that arrived alongside the greeting; the pump only processes after a read, so
         //a complete frame already in the buffer would otherwise wait on unrelated traffic. Safe to do
         //here because no pump is running yet.
-        if (ReceiveCount > 0)
-            ProcessReceivedData();
+        if (pumps.ReceiveCount > 0)
+            ProcessReceivedData(pumps);
 
         //both tasks are set under ConnectLock, so a teardown, which takes the lock, always sees them
         pumps.ReceiveTask = Task.Run(() => ReceiveLoopAsync(pumps), token);
-        pumps.SendTask = Task.Run(() => SendLoopAsync(pumps.SendQueue.Reader, token), token);
+        pumps.SendTask = Task.Run(() => SendLoopAsync(pumps), token);
     }
 
-    private async Task SendLoopAsync(ChannelReader<byte[]> reader, CancellationToken ct)
+    private async Task SendLoopAsync(PumpSet pumps)
     {
+        var ct = pumps.Cts.Token;
+
         try
         {
-            await foreach (var wire in reader.ReadAllAsync(ct))
+            await foreach (var wire in pumps.SendQueue.Reader.ReadAllAsync(ct))
             {
-                //read the transport at dispatch rather than capturing it: a STARTTLS upgrade replaces it,
-                //and a frame queued before the swap must go out on whichever stream is current when it is
-                //actually written.
-                var transport = Transport;
-
-                if (transport is null)
-                    break;
-
-                await transport.WriteAsync(wire, ct);
-                await transport.FlushAsync(ct);
+                //the stream of this connection, not the shared one: the STARTTLS upgrade ends before the pumps start,
+                //and a new connect can set the shared stream before the old pumps are torn down
+                await pumps.Transport.WriteAsync(wire, ct);
+                await pumps.Transport.FlushAsync(ct);
             }
         } catch (OperationCanceledException)
         {
@@ -991,12 +962,12 @@ public sealed class GameClient : IDisposable
         {
             while (!ct.IsCancellationRequested && pumps.IsAlive)
             {
-                var memory = pumps.Buffer.Memory[ReceiveCount..];
+                var memory = pumps.Buffer.Memory[pumps.ReceiveCount..];
 
                 if (memory.Length == 0)
                 {
                     //buffer overflow — reset
-                    ReceiveCount = 0;
+                    pumps.ReceiveCount = 0;
                     memory = pumps.Buffer.Memory;
                 }
 
@@ -1016,9 +987,9 @@ public sealed class GameClient : IDisposable
                 if (bytesRead == 0)
                     break;
 
-                ReceiveCount += bytesRead;
+                pumps.ReceiveCount += bytesRead;
 
-                ProcessReceivedData();
+                ProcessReceivedData(pumps);
             }
         } finally
         {
@@ -1026,12 +997,18 @@ public sealed class GameClient : IDisposable
             //tears it down itself
             if (pumps.TryEnd())
             {
-                pumps.ReceiveExitThreadId = Environment.CurrentManagedThreadId;
+                bool wasLive;
 
                 using (ConnectLock.EnterScope())
-                    Teardown(pumps);
+                {
+                    //a new connect can start its pumps before this teardown runs; the close of the old connection is
+                    //then no news to the session that the new connection serves
+                    wasLive = ReferenceEquals(Pumps, pumps);
+                    Teardown(pumps, waitForReceive: false);
+                }
 
-                OnDisconnected?.Invoke();
+                if (wasLive)
+                    OnDisconnected?.Invoke();
             }
         }
     }
@@ -1051,12 +1028,16 @@ public sealed class GameClient : IDisposable
         public Stream Transport { get; } = transport;
         public IMemoryOwner<byte> Buffer { get; } = buffer;
         public CancellationTokenSource Cts { get; } = cts;
+
+        //encoded frames queued for the send pump. Written under SendLock so channel order matches the order the codec
+        //allocated crypto ordinals in; drained by the single send pump
         public Channel<byte[]> SendQueue { get; } = sendQueue;
+
         public Task? ReceiveTask { get; set; }
         public Task? SendTask { get; set; }
 
-        //the thread that left the receive loop after a server close; the teardown on it does not wait for that loop
-        public int ReceiveExitThreadId { get; set; }
+        //the bytes in Buffer that the receive loop did not parse yet
+        public int ReceiveCount { get; set; }
 
         public bool IsAlive => Volatile.Read(ref AliveFlag) == 1;
 
@@ -1064,13 +1045,13 @@ public sealed class GameClient : IDisposable
         public bool TryEnd() => Interlocked.Exchange(ref AliveFlag, 0) == 1;
     }
 
-    private void ProcessReceivedData()
+    private void ProcessReceivedData(PumpSet pumps)
     {
         var offset = 0;
 
-        while (ReceiveCount - offset > 0)
+        while (pumps.ReceiveCount - offset > 0)
         {
-            var remaining = ReceiveMemoryOwner!.Memory.Slice(offset, ReceiveCount - offset);
+            var remaining = pumps.Buffer.Memory.Slice(offset, pumps.ReceiveCount - offset);
             var span = remaining.Span;
 
             //route by byte 0, per the coexistence rule: retail and extension frames genuinely share one
@@ -1085,12 +1066,12 @@ public sealed class GameClient : IDisposable
                 continue;
             }
 
-            if (ReceiveCount - offset < WireFrameHeaderLength)
+            if (pumps.ReceiveCount - offset < WireFrameHeaderLength)
                 break; //incomplete retail header; wait for more bytes
 
             var frameLength = WireFrameHeaderLength + ((span[1] << 8) | span[2]);
 
-            if (frameLength > ReceiveCount - offset)
+            if (frameLength > pumps.ReceiveCount - offset)
                 break; //incomplete frame; wait for more bytes
 
             var opcode = frameLength > WireFrameHeaderLength ? span[WireFrameHeaderLength] : (byte)0;
@@ -1108,11 +1089,11 @@ public sealed class GameClient : IDisposable
             offset += frameLength;
         }
 
-        ReceiveCount -= offset;
+        pumps.ReceiveCount -= offset;
 
-        if (ReceiveCount > 0)
-            ReceiveMemoryOwner!.Memory.Slice(offset, ReceiveCount)
-                              .CopyTo(ReceiveMemoryOwner.Memory);
+        if (pumps.ReceiveCount > 0)
+            pumps.Buffer.Memory.Slice(offset, pumps.ReceiveCount)
+                              .CopyTo(pumps.Buffer.Memory);
     }
 
     /// <summary>
@@ -1129,7 +1110,7 @@ public sealed class GameClient : IDisposable
             NoticeDebugLog.Write(
                 $"!!! frame marker mismatch 0x{remaining.Span[0]:X2} with no dialect engaged; dropping {remaining.Length} buffered byte(s)");
 
-            offset = ReceiveCount;
+            offset += remaining.Length;
 
             return false;
         }
@@ -1152,7 +1133,7 @@ public sealed class GameClient : IDisposable
             NoticeDebugLog.Write(
                 $"!!! extension decode failed: {ex.GetType().Name}: {ex.Message}; dropping {remaining.Length} buffered byte(s)");
 
-            offset = ReceiveCount;
+            offset += remaining.Length;
 
             return false;
         }

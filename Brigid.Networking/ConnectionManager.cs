@@ -117,10 +117,15 @@ public sealed class ConnectionManager : IDisposable
                 return;
 
             var old = field;
-            field = value;
 
-            if (value == ConnectionState.Disconnected && old is ConnectionState.Lobby or ConnectionState.Login or ConnectionState.World)
-                LastLiveState = old;
+            //one lock for both writes, so HandleRedirect never sees Disconnected with an older StateAtClose
+            using (StateLock.EnterScope())
+            {
+                if (value == ConnectionState.Disconnected && old is ConnectionState.Lobby or ConnectionState.Login or ConnectionState.World)
+                    StateAtClose = old;
+
+                field = value;
+            }
 
             NoticeDebugLog.Write($"ConnectionState {old} -> {value}");
             StateChanged?.Invoke(old, value);
@@ -132,8 +137,10 @@ public sealed class ConnectionManager : IDisposable
 
     //the state that the last connection was in when it closed. A server close sets Disconnected on the network thread,
     //and a Redirect that came before the close is handled after it on the game loop; that redirect goes where its own
-    //connection sent it (BRIG-180)
-    private ConnectionState LastLiveState = ConnectionState.Disconnected;
+    //connection sent it (BRIG-180). It is never reset: each connect clears the inbound queue, so a Redirect handled in
+    //Disconnected always comes from the connection that closed last
+    private ConnectionState StateAtClose = ConnectionState.Disconnected;
+    private readonly Lock StateLock = new();
 
     /// <summary>
     ///     The low-level TCP client used for packet I/O, encryption, and socket management.
@@ -1552,7 +1559,8 @@ public sealed class ConnectionManager : IDisposable
         PacketHandlers[(byte)ServerOpcode.Metafile] = HandleMetaData;
     }
 
-    private void HandlePacket(IServerPacket pkt)
+    //internal so that a test can hand one packet to its handler without the redirect follow-up of ProcessPackets
+    internal void HandlePacket(IServerPacket pkt)
     {
         var handler = PacketHandlers[pkt.Opcode];
         NoticeDebugLog.Write($"inbound opcode=0x{pkt.Opcode:X2} handled={handler is not null} state={State}");
@@ -1604,7 +1612,13 @@ public sealed class ConnectionManager : IDisposable
     {
         var pkt = (Server.RedirectPacket)p;
 
-        var targetState = RedirectTargetFor(State == ConnectionState.Disconnected ? LastLiveState : State);
+        //read the state and StateAtClose together: a close between two reads would send a world transfer to Login
+        ConnectionState sentFrom;
+
+        using (StateLock.EnterScope())
+            sentFrom = State == ConnectionState.Disconnected ? StateAtClose : State;
+
+        var targetState = RedirectTargetFor(sentFrom);
 
         //consumed: any redirect resolves the pending quit. A confirm that the server ignored is cleared when the grace
         //time ends (ClearExitConfirm), so it does not send a later world transfer to Login

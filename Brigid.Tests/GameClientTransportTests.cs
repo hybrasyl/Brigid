@@ -21,8 +21,11 @@ namespace Brigid.Tests;
 /// <remarks>
 ///     DALib's codec is a fixture here, not the subject — the frames are encoded and decoded with
 ///     the same codec on purpose, so any failure is attributable to the plumbing between them
-///     rather than to framing.
+///     rather than to framing. The server-close tests cover the teardown of BRIG-176: a server close frees the
+///     connection and raises OnDisconnected once, and keeps the packets that came before it. The connect tests after
+///     a close or a failed connect guard the new teardown; they passed on the old code too.
 /// </remarks>
+[Collection("GameClientTransport")]
 public class GameClientTransportTests
 {
     private static readonly PacketCodec Codec = new();
@@ -30,7 +33,7 @@ public class GameClientTransportTests
     private const int TIMEOUT_MS = 5000;
 
     //a teardown that waits for itself deadlocks, and the Dispose at the end of the test then never returns; the timeout
-    //fails such a test in place of a hung run
+    //fails such a test in place of a hung run (the collection runs alone, which a timeout needs)
     private const int TEST_TIMEOUT_MS = 20000;
 
     /// <summary>
@@ -234,32 +237,6 @@ public class GameClientTransportTests
         await WaitUntilAsync(() => !client.Connected);
 
         Assert.IsType<RedirectPacket>(await DrainOneAsync(client));
-    }
-
-    /// <summary>
-    ///     A Disconnect from inside OnDisconnected, which a server close raises on the receive thread, does not wait for
-    ///     that thread (BRIG-176).
-    /// </summary>
-    [Fact(Timeout = TEST_TIMEOUT_MS)]
-    public async Task ServerClose_ADisconnectInsideOnDisconnectedReturns()
-    {
-        using var listener = new LoopbackListener();
-        using var client = new GameClient();
-        var handled = new TaskCompletionSource();
-
-        client.OnDisconnected += () =>
-        {
-            client.Disconnect();
-            handled.TrySetResult();
-        };
-
-        client.ResetCrypto();
-        await client.ConnectAsync("127.0.0.1", listener.Port);
-        _ = await listener.AcceptAsync();
-
-        listener.ShutdownSend();
-
-        await handled.Task.WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)

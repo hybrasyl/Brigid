@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
@@ -12,7 +11,9 @@ namespace Brigid.Tests;
 /// <summary>
 ///     BRIG-169: the exit confirm sends the next World-state redirect to Login. When the server ignores the confirm, the
 ///     grace time ends and the confirm is cleared, so a later world transfer stays in the world. BRIG-170: a redirect
-///     whose connect to the next server fails is a lost connection on the world screen, not a silent stop.
+///     whose connect to the next server fails is a lost connection on the world screen, not a silent stop. BRIG-180: a
+///     redirect that the game loop handles after the server's close goes where its own connection sent it. BRIG-181:
+///     what the world screen does with each connection event.
 /// </summary>
 public sealed class ExitRedirectTests
 {
@@ -55,7 +56,7 @@ public sealed class ExitRedirectTests
         bool redirectInProgress,
         bool awaitingLogout,
         object expected)
-        => Assert.Equal(expected, WorldScreen.OutcomeFor((ConnectionEvent)connectionEvent, redirectInProgress, awaitingLogout));
+        => Assert.Equal(expected, WorldScreen.ConnectionOutcomeFor((ConnectionEvent)connectionEvent, redirectInProgress, awaitingLogout));
 
     //BRIG-180: the server's close can come on the network thread before the game loop handles the Redirect. The state is
     //then Disconnected, and the redirect must take its target from the state that the connection was in
@@ -78,26 +79,19 @@ public sealed class ExitRedirectTests
         manager.SetStateForTests(liveState);
         manager.SetStateForTests(ConnectionState.Disconnected);
 
-        manager.ProcessPackets([ClosedPortRedirect()]);
+        //the handler alone: ProcessPackets would also start the connect to the next server
+        manager.HandlePacket(
+            new RedirectPacket
+            {
+                IpAddress = IPAddress.Loopback,
+                Port = 2611,
+                EncryptionSeed = 1,
+                EncryptionKey = [1, 2, 3],
+                Name = "brigid",
+                RedirectId = 7
+            });
 
         Assert.Equal(expected, received?.TargetState);
-    }
-
-    //a redirect to a port with no listener, so the connect that follows it fails at once
-    private static RedirectPacket ClosedPortRedirect()
-    {
-        using var unused = new TcpListener(IPAddress.Loopback, 0);
-        unused.Start();
-
-        return new RedirectPacket
-        {
-            IpAddress = IPAddress.Loopback,
-            Port = (ushort)((IPEndPoint)unused.LocalEndpoint).Port,
-            EncryptionSeed = 1,
-            EncryptionKey = [1, 2, 3],
-            Name = "brigid",
-            RedirectId = 7
-        };
     }
 
     //the expected event is an object, because ConnectionEvent is internal

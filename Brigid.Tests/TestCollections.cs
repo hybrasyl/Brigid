@@ -34,6 +34,11 @@ public sealed class GameClientTimeoutsCollection;
 [CollectionDefinition("UITextBoxFocus", DisableParallelization = true)]
 public sealed class UITextBoxFocusCollection;
 
+// The GameClient transport tests use a test timeout, which xunit supports only when the tests run alone: a teardown that
+// waits for itself deadlocks, and the timeout fails that test in place of a hung run.
+[CollectionDefinition("GameClientTransport", DisableParallelization = true)]
+public sealed class GameClientTransportCollection;
+
 // WorldState is static. The tests that change it run alone.
 [CollectionDefinition("WorldState", DisableParallelization = true)]
 public sealed class WorldStateCollection;
