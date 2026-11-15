@@ -1183,11 +1183,13 @@ public class UITextBox : UIElement
         LastEditKind = EditKind.Other;
         ResetCursor();
 
-        if (!IsFocused)
-        {
-            IsFocused = true;
+        //always set: on a box that is already focused, the setter links it to the dispatcher again, so a click recovers a
+        //box whose explicit focus a popup took
+        var wasFocused = IsFocused;
+        IsFocused = true;
+
+        if (!wasFocused)
             OnFocused?.Invoke(this);
-        }
 
         e.Handled = true;
     }

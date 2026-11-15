@@ -203,12 +203,14 @@ public sealed class InputDispatcher : IDisposable
     }
 
     /// <summary>
-    ///     Removes a panel from the control stack. If the removed panel contains the
-    ///     explicitly focused element, clears explicit focus.
+    ///     Removes a panel from the control stack. If the removed panel contains the explicitly focused element, clears
+    ///     explicit focus. A panel that is not on the stack changes nothing: a Hide on a hidden panel calls this. A focused
+    ///     text box in the top panel keeps the focus when a lower panel goes away.
     /// </summary>
     public void RemoveControl(UIPanel panel)
     {
-        ControlStack.Remove(panel);
+        if (!ControlStack.Remove(panel))
+            return;
 
         if (TextFocusKeepers.Remove(panel))
             return;
@@ -217,6 +219,9 @@ public sealed class InputDispatcher : IDisposable
 
         if (ExplicitFocusElement is not null && IsDescendantOf(panel, ExplicitFocusElement))
             ClearExplicitFocus();
+
+        if (TopControl is { } top && HasLiveTextFocusIn(top))
+            return;
 
         //prefer the focus that was active before this panel pushed (typically a textbox
         //in the panel below). without this, a popup over a login textbox would leave
@@ -949,6 +954,12 @@ public sealed class InputDispatcher : IDisposable
 
     private static bool IsSelfOrDescendantOf(UIPanel ancestor, UIElement element)
         => (element == ancestor) || IsDescendantOf(ancestor, element);
+
+    //the explicit focus is a focused, visible text box in the panel, so the player is typing there
+    private bool HasLiveTextFocusIn(UIPanel panel)
+        => ExplicitFocusElement is UITextBox { IsFocused: true } box
+           && IsEffectivelyVisible(box)
+           && IsDescendantOf(panel, box);
 
     /// <summary>
     ///     True if <paramref name="descendant" /> is a child, grandchild, etc. of <paramref name="ancestor" />.
