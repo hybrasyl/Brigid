@@ -4,6 +4,7 @@ using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Data;
 using Brigid.Data.AssetPacks;
+using Brigid.Data.Repositories;
 using Brigid.Rendering;
 using Brigid.Systems;
 using Brigid.Systems.Keybinds;
@@ -87,6 +88,9 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     /// <summary>Raised when the Friends tab is committed (tab-left/close), so the host can save + mirror the list.</summary>
     public event Action? FriendsCommitted;
+
+    /// <summary>Raised when the closed modal opens, before its tab fills, so the host can read changed files again.</summary>
+    public event Action? Opening;
 
     /// <summary>Raised when a Keybinds row's chord field is clicked, so the host can open the capture modal for
     ///     that command/slot.</summary>
@@ -339,8 +343,10 @@ public sealed class OptionsModalControl : CenteredModalPanel
     {
         switch (tab)
         {
+            //a hand edit while the tab was open is kept: the save is refused, and the boxes show the file
             case OptionsTab.Macros:
-                DataContext.LocalPlayerSettings.SaveMacros(GetMacroValues());
+                if (DataContext.LocalPlayerSettings.SaveMacros(GetMacroValues()) == SaveResult.ChangedOnDisk)
+                    SetMacros(DataContext.LocalPlayerSettings.LoadMacros());
 
                 break;
 
@@ -363,6 +369,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
             return;
         }
 
+        Opening?.Invoke();
         SelectTabInternal(tab);
         base.Show();
     }

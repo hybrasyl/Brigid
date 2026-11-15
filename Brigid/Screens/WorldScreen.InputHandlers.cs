@@ -9,6 +9,7 @@ using Brigid.Controls.World.Popups;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Data;
 using Brigid.Data.Models;
+using Brigid.Data.Repositories;
 using Brigid.Extensions;
 using Brigid.Models;
 using Brigid.Systems;
@@ -398,6 +399,10 @@ public sealed partial class WorldScreen
             case HudTab.Chat:
             case HudTab.MessageHistory:
             {
+                //a hand edit of Macro.cfg shows at the next macro key; an open Options window keeps its typing
+                if (!OptionsModal.Visible)
+                    RefreshMacrosIfChanged();
+
                 var macroText = OptionsModal.GetMacroValue(slot - 1);
 
                 if (macroText.Length > 0)
@@ -514,11 +519,14 @@ public sealed partial class WorldScreen
     {
         var family = StatusBook.GetFamilyMembers();
 
-        if (family is not null)
-        {
-            DataContext.LocalPlayerSettings.SaveFamilyList(family);
+        if (family is null)
+            return;
+
+        //a hand edit while the status book was open is kept: the save is refused, and the file shows again
+        if (DataContext.LocalPlayerSettings.SaveFamilyList(family) == SaveResult.ChangedOnDisk)
+            LoadPlayerFamilyList();
+        else
             WorldList.SetFamilyNames(family);
-        }
     }
 
     private void LoadPlayerFriendList()
@@ -532,8 +540,51 @@ public sealed partial class WorldScreen
     private void SavePlayerFriendList()
     {
         var names = OptionsModal.GetFriendNames();
-        DataContext.LocalPlayerSettings.SaveFriendList(names);
-        WorldList.SetFriendNames(names);
+
+        //a hand edit while the Friends tab was open is kept: the save is refused, and the file shows again
+        if (DataContext.LocalPlayerSettings.SaveFriendList(names) == SaveResult.ChangedOnDisk)
+            LoadPlayerFriendList();
+        else
+            WorldList.SetFriendNames(names);
+    }
+
+    //each one reads its file again only when a hand edit changed it on disk after the client read or saved it
+
+    private void RefreshFamilyIfChanged()
+    {
+        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.FamilyList))
+            LoadPlayerFamilyList();
+    }
+
+    private void RefreshFriendsIfChanged()
+    {
+        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.FriendList))
+            LoadPlayerFriendList();
+    }
+
+    private void RefreshMacrosIfChanged()
+    {
+        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.Macros))
+            LoadPlayerMacros();
+    }
+
+    private void RefreshProfileTextIfChanged()
+    {
+        if (DataContext.LocalPlayerSettings.HasChangedOnDisk(CharacterFile.ProfileText))
+            StatusBook.SetProfileText(DataContext.LocalPlayerSettings.LoadProfileText());
+    }
+
+    //the world list marks friends and family: a hand edit of either list shows when the list opens. An open window keeps
+    //its typing
+    private void RequestWorldList()
+    {
+        if (!OptionsModal.Visible)
+            RefreshFriendsIfChanged();
+
+        if (!StatusBook.Visible)
+            RefreshFamilyIfChanged();
+
+        Game.Connection.RequestWorldList();
     }
 
     private void LoadPlayerMacros()
@@ -695,7 +746,7 @@ public sealed partial class WorldScreen
             {
                 WorldHud.UsersButton?.IsSelected = true;
 
-                Game.Connection.RequestWorldList();
+                RequestWorldList();
             }
 
             e.Handled = true;

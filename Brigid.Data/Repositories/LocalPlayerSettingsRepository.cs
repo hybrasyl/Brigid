@@ -6,12 +6,45 @@ using Brigid.Data.Models;
 
 namespace Brigid.Data.Repositories;
 
+/// <summary>The per-character files that the client reads and saves.</summary>
+public enum CharacterFile
+{
+    FamilyList,
+    FriendList,
+    Macros,
+    SkillChants,
+    SpellChants,
+    ProfileText
+}
+
+/// <summary>What a save of a per-character file did.</summary>
+public enum SaveResult
+{
+    Saved,
+
+    //the file could not be read this session, so the client holds no good copy of it
+    Unreadable,
+
+    //the file changed on disk after the client read it; the caller reads it again
+    ChangedOnDisk,
+
+    //the write failed
+    Failed
+}
+
 /// <summary>
 ///     Manages per-character config files (macros, chants, friends, family) stored per-server, per-character under
 ///     <c>{AppPaths.ProfilesDir}/{serverKey}/{characterName}</c> — a writable per-user location, keyed by server so the
 ///     same character name on different servers no longer shares one folder. Legacy config from the old in-game-folder
 ///     location is imported once on init.
 /// </summary>
+/// <remarks>
+///     Each read goes through <see cref="DataDiagnostics.Try" />: a file that another program holds, or that is denied,
+///     loads as empty and logs one line (BRIG-177). The repository records each file's last-write time when it reads or
+///     saves the file. A save refuses a file that could not be read this session, so that empty data never replaces
+///     good data, and refuses a file that changed on disk after the read, so that a hand edit is not lost.
+///     <see cref="HasChangedOnDisk" /> lets a caller read a file again when a hand edit changed it.
+/// </remarks>
 public sealed class LocalPlayerSettingsRepository
 {
     private const string FAMILY_LIST_FILE = "Familylist.cfg";
@@ -19,14 +52,21 @@ public sealed class LocalPlayerSettingsRepository
     private const string MACRO_FILE = "Macro.cfg";
     private const string SKILL_BOOK_FILE = "SkillBook.cfg";
     private const string SPELL_BOOK_FILE = "SpellBook.cfg";
+    private const string PROFILE_TEXT_FILE = "profile.txt";
     private string PlayerDirectory { get; set; } = null!;
 
-    public string FamilyListPath => Path.Combine(PlayerDirectory, FAMILY_LIST_FILE);
-    public string FriendListPath => Path.Combine(PlayerDirectory, FRIEND_LIST_FILE);
+    //the read state of each file of this character, by file name
+    private readonly Dictionary<string, FileState> States = new(StringComparer.Ordinal);
+
+    private sealed class FileState
+    {
+        public bool Read;
+        public bool Unreadable;
+        public DateTime? WriteTimeUtc;
+    }
 
     // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
     public bool IsInitialized => PlayerDirectory is not null;
-    public string MacroPath => Path.Combine(PlayerDirectory, MACRO_FILE);
 
     /// <summary>
     ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a
@@ -42,8 +82,6 @@ public sealed class LocalPlayerSettingsRepository
 
     internal static string? CombineBareName(string directory, string fileName)
         => FileNames.IsSafeName(fileName) ? Path.Combine(directory, fileName) : null;
-    public string SkillBookPath => Path.Combine(PlayerDirectory, SKILL_BOOK_FILE);
-    public string SpellBookPath => Path.Combine(PlayerDirectory, SPELL_BOOK_FILE);
 
     private void EnsureFileExists(string fileName)
     {
@@ -63,8 +101,7 @@ public sealed class LocalPlayerSettingsRepository
     {
         //the character name is server-supplied — sanitize it before it becomes a path segment so a hostile/odd name
         //can't escape the profiles root. The legacy import still reads the raw-named legacy folder as its source.
-        PlayerDirectory = AppPaths.ProfileDir(serverKey, FileNames.ToSafeName(characterName));
-        DataDiagnostics.Try(() => Directory.CreateDirectory(PlayerDirectory), "create profile dir");
+        Open(AppPaths.ProfileDir(serverKey, FileNames.ToSafeName(characterName)));
 
         //only pull in the old in-game-folder config if the user opted into the one-time import
         if (importLegacy)
@@ -73,6 +110,115 @@ public sealed class LocalPlayerSettingsRepository
         EnsureFileExists(FAMILY_LIST_FILE);
         EnsureFileExists(FRIEND_LIST_FILE);
         EnsureFileExists(MACRO_FILE);
+    }
+
+    //a new character or session reads every file again, so a file that could not be read gets another try
+    private void Open(string directory)
+    {
+        PlayerDirectory = directory;
+        States.Clear();
+        DataDiagnostics.Try(() => Directory.CreateDirectory(PlayerDirectory), "create profile dir");
+    }
+
+    /// <summary>Opens the repository on a folder, with no legacy import and no default files, for the tests.</summary>
+    internal void OpenForTests(string directory) => Open(directory);
+
+    /// <summary>
+    ///     True when the file's last-write time on disk differs from the time that the last read or save of it recorded,
+    ///     so a hand edit changed it. False for a file that was not read yet.
+    /// </summary>
+    public bool HasChangedOnDisk(CharacterFile file)
+    {
+        if (!IsInitialized)
+            return false;
+
+        var name = FileNameOf(file);
+
+        return States.TryGetValue(name, out var state) && state.Read && (WriteTimeOf(PathOf(name)) != state.WriteTimeUtc);
+    }
+
+    private static string FileNameOf(CharacterFile file)
+        => file switch
+        {
+            CharacterFile.FamilyList  => FAMILY_LIST_FILE,
+            CharacterFile.FriendList  => FRIEND_LIST_FILE,
+            CharacterFile.Macros      => MACRO_FILE,
+            CharacterFile.SkillChants => SKILL_BOOK_FILE,
+            CharacterFile.SpellChants => SPELL_BOOK_FILE,
+            CharacterFile.ProfileText => PROFILE_TEXT_FILE,
+            _                         => throw new ArgumentOutOfRangeException(nameof(file), file, null)
+        };
+
+    private string PathOf(string fileName) => Path.Combine(PlayerDirectory, fileName);
+
+    private FileState StateOf(string fileName)
+    {
+        if (!States.TryGetValue(fileName, out var state))
+        {
+            state = new FileState();
+            States[fileName] = state;
+        }
+
+        return state;
+    }
+
+    //null when the file is missing or its time cannot be read
+    private static DateTime? WriteTimeOf(string path)
+    {
+        DateTime? time = null;
+        DataDiagnostics.Try(() => time = File.Exists(path) ? File.GetLastWriteTimeUtc(path) : null, $"time of {Path.GetFileName(path)}");
+
+        return time;
+    }
+
+    //reads one file through DataDiagnostics.Try. A missing file reads as empty; a file that cannot be read reads as empty
+    //and is marked unreadable, so its save is refused. The last-write time is recorded either way, so a locked file is
+    //not tried again at each use, only when a hand edit changes it
+    private T Read<T>(string fileName, Func<string, T> read, T empty)
+    {
+        var path = PathOf(fileName);
+        var value = empty;
+        var ok = DataDiagnostics.Try(
+            () =>
+            {
+                if (File.Exists(path))
+                    value = read(path);
+            }, $"read {fileName}");
+
+        var state = StateOf(fileName);
+        state.Read = true;
+        state.Unreadable = !ok;
+        state.WriteTimeUtc = WriteTimeOf(path);
+
+        return ok ? value : empty;
+    }
+
+    private SaveResult Write(string fileName, Action<string> write)
+    {
+        var path = PathOf(fileName);
+        var state = StateOf(fileName);
+
+        if (state.Unreadable)
+        {
+            DataDiagnostics.Log?.Invoke($"[data] did not save {fileName}: it could not be read this session");
+
+            return SaveResult.Unreadable;
+        }
+
+        if (state.Read && (WriteTimeOf(path) != state.WriteTimeUtc))
+        {
+            DataDiagnostics.Log?.Invoke($"[data] did not save {fileName}: it changed on disk after the client read it");
+
+            return SaveResult.ChangedOnDisk;
+        }
+
+        if (!DataDiagnostics.Try(() => write(path), $"save {fileName}"))
+            return SaveResult.Failed;
+
+        state.Read = true;
+        state.WriteTimeUtc = WriteTimeOf(path);
+
+        return SaveResult.Saved;
     }
 
     /// <summary>
@@ -103,6 +249,14 @@ public sealed class LocalPlayerSettingsRepository
     }
 
     /// <summary>
+    ///     The legacy character folder, <c>{dataPath}/{characterName}</c>, or null when there is no data folder or the name
+    ///     is not a bare file name. The name comes from the server, and the legacy folder is always a direct child of the
+    ///     data folder, so a name that Path.Combine would follow out of the game folder does not import.
+    /// </summary>
+    internal static string? LegacyFolderFor(string? dataPath, string characterName)
+        => !string.IsNullOrEmpty(dataPath) && FileNames.IsSafeName(characterName) ? Path.Combine(dataPath, characterName) : null;
+
+    /// <summary>
     ///     One-time best-effort import of a character's legacy config from the old <c>{DataPath}/{characterName}</c>
     ///     location (where retail Dark Ages and older Brigid builds wrote it) into the new per-user profile directory.
     ///     Copies only files that don't already exist in the target, so it runs harmlessly on every init and does nothing
@@ -110,15 +264,8 @@ public sealed class LocalPlayerSettingsRepository
     /// </summary>
     private void ImportLegacyCharacterFiles(string characterName)
     {
-        if (string.IsNullOrEmpty(DataContext.DataPath))
+        if (LegacyFolderFor(DataContext.DataPath, characterName) is not { } legacyDir)
             return;
-
-        //characterName is server-supplied. The legacy folder is always a single direct child of DataPath, so a name
-        //that is not a bare file name does not import: Path.Combine would follow it out of the game folder
-        if (!FileNames.IsSafeName(characterName))
-            return;
-
-        var legacyDir = Path.Combine(DataContext.DataPath, characterName);
 
         if (!Directory.Exists(legacyDir) || string.Equals(legacyDir, PlayerDirectory, StringComparison.OrdinalIgnoreCase))
             return;
@@ -142,15 +289,10 @@ public sealed class LocalPlayerSettingsRepository
     /// <remarks>
     ///     File format: LF-delimited, first line is a header, then repeating pairs of (skill name, "Skill:" + chant text).
     /// </remarks>
-    private static List<SkillChantEntry> LoadChantBook(string path)
+    private static List<SkillChantEntry> ParseChantBook(string text)
     {
         var entries = new List<SkillChantEntry>();
-
-        if (!File.Exists(path))
-            return entries;
-
-        var lines = File.ReadAllText(path)
-                        .Split('\n');
+        var lines = text.Split('\n');
 
         //skip first line (header), then read pairs
         for (var i = 1; i < (lines.Length - 1); i += 2)
@@ -186,11 +328,7 @@ public sealed class LocalPlayerSettingsRepository
     public FamilyList LoadFamilyList()
     {
         var family = new FamilyList();
-
-        if (!File.Exists(FamilyListPath))
-            return family;
-
-        var lines = File.ReadAllLines(FamilyListPath);
+        var lines = Read(FAMILY_LIST_FILE, File.ReadAllLines, []);
 
         if (lines.Length > 0)
             family.Mother = lines[0];
@@ -229,26 +367,15 @@ public sealed class LocalPlayerSettingsRepository
     ///     Loads friend names from Friendlist.cfg. Returns the first 20 non-empty lines.
     /// </summary>
     public List<string> LoadFriendList()
-        => !File.Exists(FriendListPath)
-            ? []
-            : File.ReadAllLines(FriendListPath)
-                  .Where(line => !string.IsNullOrWhiteSpace(line))
-                  .Take(20)
-                  .ToList();
+        => Read(FRIEND_LIST_FILE, File.ReadAllLines, [])
+           .Where(line => !string.IsNullOrWhiteSpace(line))
+           .Take(20)
+           .ToList();
 
     /// <summary>
     ///     Loads macro text from Macro.cfg. Returns a 10-element array of macro strings.
     /// </summary>
-    public string[] LoadMacros()
-    {
-        string[] lines = [];
-
-        //an unreadable file loads as no macros, and the failure is logged
-        if (File.Exists(MacroPath))
-            DataDiagnostics.Try(() => lines = File.ReadAllLines(MacroPath), "LoadMacros");
-
-        return ParseMacros(lines);
-    }
+    public string[] LoadMacros() => ParseMacros(Read(MACRO_FILE, File.ReadAllLines, []));
 
     /// <summary>
     ///     Parses Macro.cfg lines into the 10 macro slots. A slot with no line is empty, never null: Initialize writes an
@@ -280,7 +407,7 @@ public sealed class LocalPlayerSettingsRepository
         return macros;
     }
 
-    public List<SkillChantEntry> LoadSkillChants() => LoadChantBook(SkillBookPath);
+    public List<SkillChantEntry> LoadSkillChants() => ParseChantBook(Read(SKILL_BOOK_FILE, File.ReadAllText, string.Empty));
 
     /// <summary>
     ///     Loads spell chant entries from SpellBook.cfg.
@@ -291,12 +418,8 @@ public sealed class LocalPlayerSettingsRepository
     public List<SpellChantEntry> LoadSpellChants()
     {
         var entries = new List<SpellChantEntry>();
-
-        if (!File.Exists(SpellBookPath))
-            return entries;
-
-        var lines = File.ReadAllText(SpellBookPath)
-                        .Split('\n');
+        var lines = Read(SPELL_BOOK_FILE, File.ReadAllText, string.Empty)
+            .Split('\n');
 
         //skip first line (header), then read groups of 11 (name + 10 chant lines)
         var i = 1;
@@ -341,8 +464,9 @@ public sealed class LocalPlayerSettingsRepository
     /// <summary>
     ///     Saves skill chant entries to a chant book config file.
     /// </summary>
-    private static void SaveChantBook(string path, List<SkillChantEntry> entries) => DataDiagnostics.Try(
-        () =>
+    private SaveResult SaveChantBook(string fileName, List<SkillChantEntry> entries) => Write(
+        fileName,
+        path =>
         {
             using var writer = new StreamWriter(path, false, Encoding.UTF8);
             writer.NewLine = "\n";
@@ -354,12 +478,12 @@ public sealed class LocalPlayerSettingsRepository
                 writer.WriteLine(entry.Name);
                 writer.WriteLine($"Skill:{entry.Chant}");
             }
-        }, "SaveChantBook");
+        });
 
     /// <summary>
     ///     Saves the family list to Familylist.cfg.
     /// </summary>
-    public void SaveFamilyList(FamilyList family)
+    public SaveResult SaveFamilyList(FamilyList family)
     {
         var lines = new[]
         {
@@ -375,23 +499,23 @@ public sealed class LocalPlayerSettingsRepository
             family.Brother6
         };
 
-        DataDiagnostics.Try(() => File.WriteAllLines(FamilyListPath, lines), "SaveFamilyList");
+        return Write(FAMILY_LIST_FILE, path => File.WriteAllLines(path, lines));
     }
 
     /// <summary>
     ///     Saves friend names to Friendlist.cfg.
     /// </summary>
-    public void SaveFriendList(List<string> names) =>
-        DataDiagnostics.Try(() => File.WriteAllLines(FriendListPath, names.Take(20)), "SaveFriendList");
+    public SaveResult SaveFriendList(List<string> names)
+        => Write(FRIEND_LIST_FILE, path => File.WriteAllLines(path, names.Take(20)));
 
     /// <summary>
     ///     Saves macro text to Macro.cfg.
     /// </summary>
-    public void SaveMacros(string[] macros)
+    public SaveResult SaveMacros(string[] macros)
     {
         var lines = FormatMacros(macros);
 
-        DataDiagnostics.Try(() => File.WriteAllLines(MacroPath, lines), "SaveMacros");
+        return Write(MACRO_FILE, path => File.WriteAllLines(path, lines));
     }
 
     /// <summary>Formats the 10 macro slots as Macro.cfg lines; <see cref="ParseMacros" /> reads them back.</summary>
@@ -409,15 +533,16 @@ public sealed class LocalPlayerSettingsRepository
         return lines;
     }
 
-    public void SaveSkillChants(List<SkillChantEntry> entries) => SaveChantBook(SkillBookPath, entries);
+    public SaveResult SaveSkillChants(List<SkillChantEntry> entries) => SaveChantBook(SKILL_BOOK_FILE, entries);
 
     /// <summary>
     ///     Saves spell chant entries to SpellBook.cfg.
     /// </summary>
-    public void SaveSpellChants(List<SpellChantEntry> entries) => DataDiagnostics.Try(
-        () =>
+    public SaveResult SaveSpellChants(List<SpellChantEntry> entries) => Write(
+        SPELL_BOOK_FILE,
+        path =>
         {
-            using var writer = new StreamWriter(SpellBookPath, false, Encoding.UTF8);
+            using var writer = new StreamWriter(path, false, Encoding.UTF8);
             writer.NewLine = "\n";
 
             writer.WriteLine("SpellbookUsed");
@@ -429,5 +554,37 @@ public sealed class LocalPlayerSettingsRepository
                 for (var i = 0; i < 10; i++)
                     writer.WriteLine($"Spell{i}:{entry.Chants[i]}");
             }
-        }, "SaveSpellChants");
+        });
+
+    /// <summary>Loads the player's own profile text from profile.txt, or an empty text.</summary>
+    public string LoadProfileText() => IsInitialized ? Read(PROFILE_TEXT_FILE, File.ReadAllText, string.Empty) : string.Empty;
+
+    /// <summary>Saves the player's own profile text to profile.txt.</summary>
+    public SaveResult SaveProfileText(string text)
+        => IsInitialized ? Write(PROFILE_TEXT_FILE, path => File.WriteAllText(path, text)) : SaveResult.Failed;
+
+    /// <summary>
+    ///     Loads the player's own portrait, <c>{name}.jpg</c> or a file named <c>{name}</c>, from the character folder, as
+    ///     retail does (BRIG-106). Returns no bytes when there is no portrait or it cannot be read. The name comes from the
+    ///     server, so <see cref="TryGetFilePath" /> refuses a name that leaves the character folder.
+    /// </summary>
+    public byte[] LoadPortrait(string name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return [];
+
+        foreach (var fileName in new[] { $"{name}.jpg", name })
+        {
+            if (!TryGetFilePath(fileName, out var path))
+                continue;
+
+            byte[]? bytes = null;
+
+            if (DataDiagnostics.Try(() => bytes = File.Exists(path) ? File.ReadAllBytes(path) : null, $"read {fileName}")
+                && bytes is not null)
+                return bytes;
+        }
+
+        return [];
+    }
 }

@@ -197,6 +197,10 @@ public sealed partial class WorldScreen : IScreen
     //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.
     private bool TransportSecure;
     private byte[] PlayerPortrait = [];
+
+    //the server and character whose local files this screen loaded. The files load once at world entry, not at each
+    //map change, so unsaved typing in Options stays
+    private string? LocalFilesKey;
     private SelfProfileTextEditorControl SelfProfileTextEditor = null!;
     private Direction? QueuedWalkDirection;
     //set on the game thread when a redirect arrives; HandleStateChanged, which can run on the network thread, reads and
@@ -325,6 +329,13 @@ public sealed partial class WorldScreen : IScreen
         };
         OptionsModal.SettingsRequested += () => Game.Connection.SendOptionToggle(UserOption.Request);
         OptionsModal.FriendsCommitted += SavePlayerFriendList;
+
+        //a hand edit of Macro.cfg or Friendlist.cfg shows when Options opens
+        OptionsModal.Opening += () =>
+        {
+            RefreshMacrosIfChanged();
+            RefreshFriendsIfChanged();
+        };
 
         //the keybind capture modal rides above the Options modal (ZIndex 11 > 10). The tab requests a rebind
         //for a command/slot; on commit we persist the override and repaint the tab underneath. Reset routes
@@ -705,10 +716,6 @@ public sealed partial class WorldScreen : IScreen
 
         //build ui atlas after all hud controls are constructed
         UiRenderer.Instance?.BuildAtlas();
-
-        //load local portrait and profile text from character folder
-        var playerName = Game.Connection.AislingName;
-        LoadOwnProfile(playerName);
     }
 
     //single keybind-persistence seam: mutate the registry, persist, then repaint the Options tab. Both the
