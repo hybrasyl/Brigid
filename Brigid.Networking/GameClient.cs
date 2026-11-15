@@ -75,6 +75,10 @@ public sealed class GameClient : IDisposable
     //ends the pump set tears it down
     private PumpSet? Pumps;
 
+    //the number of the last pump set that started, and the last number given
+    private int CurrentConnectionField;
+    private int LastConnectionNumber;
+
     private Socket? Socket;
 
     /// <summary>
@@ -160,6 +164,13 @@ public sealed class GameClient : IDisposable
     public bool Connected => IsAlive && (Socket?.Connected ?? false);
 
     private bool IsAlive => Pumps?.IsAlive ?? false;
+
+    /// <summary>
+    ///     The number of the last connection whose pumps started; 0 before the first. <see cref="OnDisconnected" />
+    ///     carries the number of the connection that closed, so a receiver can ignore a late close of a connection that a
+    ///     new one replaced.
+    /// </summary>
+    internal int CurrentConnection => Volatile.Read(ref CurrentConnectionField);
 
     /// <summary>True while the client holds a socket, a stream or a pump set, for the tests.</summary>
     internal bool HoldsConnection => Socket is not null || Transport is not null || Pumps is not null;
@@ -511,7 +522,7 @@ public sealed class GameClient : IDisposable
         Teardown(pumps, waitForReceive: true);
         InboundQueue.Clear();
 
-        OnDisconnected?.Invoke();
+        OnDisconnected?.Invoke(pumps.Number);
     }
 
     //frees the resources of one pump set, and clears the shared socket and stream only while they still hold this set's
@@ -903,11 +914,14 @@ public sealed class GameClient : IDisposable
                 SingleWriter = false
             });
 
-        var pumps = new PumpSet(Socket, Transport!, buffer, new CancellationTokenSource(), sendQueue)
+        var pumps = new PumpSet(Interlocked.Increment(ref LastConnectionNumber), Socket, Transport!, buffer, new CancellationTokenSource(), sendQueue)
         {
             ReceiveCount = carryOver.Length
         };
         Pumps = pumps;
+
+        //before the pumps start: a state that this connection's packets set comes after the number
+        Volatile.Write(ref CurrentConnectionField, pumps.Number);
         var token = pumps.Cts.Token;
 
         //release the greeting now that a reply can actually be sent: IsAlive and the send queue are both
@@ -1002,13 +1016,14 @@ public sealed class GameClient : IDisposable
                 using (ConnectLock.EnterScope())
                 {
                     //a new connect can start its pumps before this teardown runs; the close of the old connection is
-                    //then no news to the session that the new connection serves
+                    //then no news to the session that the new connection serves. A new connect can also start after
+                    //this check and before the event, so the event carries the connection's number (BRIG-176)
                     wasLive = ReferenceEquals(Pumps, pumps);
                     Teardown(pumps, waitForReceive: false);
                 }
 
                 if (wasLive)
-                    OnDisconnected?.Invoke();
+                    OnDisconnected?.Invoke(pumps.Number);
             }
         }
     }
@@ -1016,6 +1031,7 @@ public sealed class GameClient : IDisposable
     //one connection's pumps and the resources they use. Each pump set has its own alive flag, so a teardown frees only
     //its own connection, and only the caller that ends the set tears it down
     private sealed class PumpSet(
+        int number,
         Socket? socket,
         Stream transport,
         IMemoryOwner<byte> buffer,
@@ -1023,6 +1039,9 @@ public sealed class GameClient : IDisposable
         Channel<byte[]> sendQueue)
     {
         private int AliveFlag = 1;
+
+        //the connection's number, which OnDisconnected carries
+        public int Number { get; } = number;
 
         public Socket? Socket { get; } = socket;
         public Stream Transport { get; } = transport;

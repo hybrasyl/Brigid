@@ -139,7 +139,7 @@ public class GameClientTransportTests
         using var listener = new LoopbackListener();
         using var client = new GameClient();
         var disconnects = 0;
-        client.OnDisconnected += () => Interlocked.Increment(ref disconnects);
+        client.OnDisconnected += _ => Interlocked.Increment(ref disconnects);
 
         client.ResetCrypto();
         await client.ConnectAsync("127.0.0.1", listener.Port);
@@ -156,6 +156,36 @@ public class GameClientTransportTests
         client.Disconnect();
 
         Assert.Equal(1, Volatile.Read(ref disconnects));
+    }
+
+    /// <summary>
+    ///     The close event carries the number of its connection, and the next connection has a new number, so that the
+    ///     connection manager can ignore a late close of a connection that a new one replaced.
+    /// </summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task ServerClose_CarriesTheNumberOfItsConnection()
+    {
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+        var closed = -1;
+        client.OnDisconnected += connection => Volatile.Write(ref closed, connection);
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+        var first = client.CurrentConnection;
+
+        Assert.NotEqual(0, first);
+
+        listener.ShutdownSend();
+        await WaitUntilAsync(() => Volatile.Read(ref closed) != -1);
+
+        Assert.Equal(first, Volatile.Read(ref closed));
+
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+
+        Assert.NotEqual(first, client.CurrentConnection);
     }
 
     /// <summary>A connect after a server close works (BRIG-176).</summary>

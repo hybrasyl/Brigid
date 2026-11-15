@@ -118,12 +118,17 @@ public sealed class ConnectionManager : IDisposable
     //one lock for the read, the check and both writes, so HandleRedirect never sees Disconnected with an older
     //StateAtClose, and a disconnect cannot replace a Connecting that the game loop sets at the same time. StateChanged is
     //raised after the lock, so its handlers never run under it
-    private void SetState(ConnectionState value, bool keepConnecting)
+    private void SetState(ConnectionState value, bool keepConnecting, int? closedConnection = null)
     {
         ConnectionState old;
 
         using (StateLock.EnterScope())
         {
+            //a late close of a connection that a new one replaced: the new connection's state stays. A state that the
+            //new connection's packets set comes after its number, so the check and the write are one step here
+            if (closedConnection is { } closed && (closed != Client.CurrentConnection))
+                return;
+
             old = State;
 
             if ((old == value) || (keepConnecting && (old == ConnectionState.Connecting)))
@@ -1857,8 +1862,10 @@ public sealed class ConnectionManager : IDisposable
     private void HandleMetaData(IServerPacket p) => OnMetaData?.Invoke((Server.MetafilePacket)p);
 
     //runs on the network thread. The check and the write are one step under the state lock: the game loop can set
-    //Connecting for a redirect at the same time, and a Disconnected over it would show "Connection lost" during the hop
-    private void HandleDisconnected() => SetState(ConnectionState.Disconnected, keepConnecting: true);
+    //Connecting for a redirect at the same time, and a Disconnected over it would show "Connection lost" during the hop.
+    //A close of a connection that is not the client's current one changes nothing. Internal for the tests
+    internal void HandleDisconnected(int connection)
+        => SetState(ConnectionState.Disconnected, keepConnecting: true, closedConnection: connection);
     #endregion
 }
 

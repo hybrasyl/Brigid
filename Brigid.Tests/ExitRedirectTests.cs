@@ -43,6 +43,24 @@ public sealed class ExitRedirectTests
         Assert.Equal(ConnectionState.World, manager.RedirectTargetFor(ConnectionState.World));
     }
 
+    //the server close of the old connection can raise its event after a redirect's new connection reached the world; a
+    //Disconnected then stopped the world actions on a live socket. A close of a connection that is not the current one
+    //changes nothing, and a close of the current one still goes to Disconnected
+    [Fact]
+    public void ALateCloseOfAReplacedConnectionLeavesTheStateAsItIs()
+    {
+        using var manager = new ConnectionManager();
+        manager.SetStateForTests(ConnectionState.World);
+
+        manager.HandleDisconnected(manager.Client.CurrentConnection - 1);
+
+        Assert.Equal(ConnectionState.World, manager.State);
+
+        manager.HandleDisconnected(manager.Client.CurrentConnection);
+
+        Assert.Equal(ConnectionState.Disconnected, manager.State);
+    }
+
     //the expected outcome is an object, because ConnectionOutcome is internal (BRIG-181)
     [Theory]
     [InlineData(ConnectionEvent.LoggedOut, false, false, WorldScreen.ConnectionOutcome.EndLogout)]
