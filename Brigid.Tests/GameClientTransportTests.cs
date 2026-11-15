@@ -145,7 +145,10 @@ public class GameClientTransportTests
         listener.ShutdownSend();
 
         Assert.True(await listener.ReadsEndOfStreamAsync(), "the client did not close its socket");
-        await WaitUntilAsync(() => !client.HoldsConnection);
+
+        //the teardown frees the connection and then raises the event, so wait for the event
+        await WaitUntilAsync(() => Volatile.Read(ref disconnects) == 1);
+        Assert.False(client.HoldsConnection);
 
         client.Disconnect();
 
