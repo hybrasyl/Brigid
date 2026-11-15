@@ -315,6 +315,22 @@ public sealed class LocalPlayerSettingsRepository
 
     public List<SkillChantEntry> LoadSkillChants() => ParseChantBook(Files[CharacterFile.SkillChants].Read(File.ReadAllText, string.Empty));
 
+    /// <summary>Loads the skill chants. Returns false when the file cannot be read, so that the caller keeps the chants it has.</summary>
+    public bool TryLoadSkillChants(out List<SkillChantEntry> entries)
+    {
+        entries = LoadSkillChants();
+
+        return !Files[CharacterFile.SkillChants].IsUnreadable;
+    }
+
+    /// <summary>Loads the spell chants. Returns false when the file cannot be read, so that the caller keeps the chants it has.</summary>
+    public bool TryLoadSpellChants(out List<SpellChantEntry> entries)
+    {
+        entries = LoadSpellChants();
+
+        return !Files[CharacterFile.SpellChants].IsUnreadable;
+    }
+
     /// <summary>
     ///     Loads spell chant entries from SpellBook.cfg.
     /// </summary>

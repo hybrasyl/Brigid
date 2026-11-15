@@ -68,8 +68,17 @@ public sealed class GuardedFile
     /// <summary>True when the client reads the file again at the next login; false when it reads it again at the next start.</summary>
     public bool ReadAgainAtLogin { get; }
 
-    /// <summary>True while the last read of the file failed. A save is refused while it is true.</summary>
-    public bool IsUnreadable { get; private set; }
+    /// <summary>
+    ///     True while the last read of the file failed. A save is refused while it is true. A file can be read on one
+    ///     thread and saved on another (the trust store saves on the handshake thread), so the flag is volatile.
+    /// </summary>
+    public bool IsUnreadable
+    {
+        get => UnreadableFlag;
+        private set => UnreadableFlag = value;
+    }
+
+    private volatile bool UnreadableFlag;
 
     /// <summary>
     ///     Raised when a save does not go through, with why: <see cref="SaveResult.Unreadable" /> (the last read failed,

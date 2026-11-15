@@ -5,10 +5,9 @@ using Xunit;
 
 namespace Brigid.Tests;
 
-// The four settings files fell back to their defaults when a read failed, and the next save wrote the defaults over the
-// player's file: a locked keybinds.json lost every saved key at the next rebind. Each one reads and saves through
-// GuardedFile now: a locked file loads as defaults and its save leaves the file as it was, and a file that does not parse
-// is kept as a .bad copy. A locked or corrupt load returns before it changes Keybinds or ClientSettings; the launcher
+// The four settings files read and save through GuardedFile, so a locked file never loses the player's contents: it loads
+// as defaults and its save leaves the file as it was, and a file that does not parse is kept as a .bad copy. Before, a
+// locked keybinds.json lost every saved key at the next rebind (BRIG-177). A locked or corrupt load returns before it changes Keybinds or ClientSettings; the launcher
 // config and the trust store load their defaults (the SettingsFiles collection).
 [Collection("SettingsFiles")]
 public sealed class SettingsFileSafetyTests : IDisposable

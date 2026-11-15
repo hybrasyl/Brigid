@@ -2,6 +2,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.LobbyLogin;
 using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Hud.Panel.Slots;
@@ -506,9 +507,10 @@ public sealed partial class WorldScreen
 
     //--- cache / persistence helpers ---
 
-    //the files load at world entry, a relog (a new screen) or another character, and not at each later display of the
-    //same character: a load at each map change wrote the saved macros and friends over unsaved typing in Options. The
-    //client does not support a hand edit of these files while it runs: the next save writes over it
+    /// <summary>Shows a save that did not go through on the orange bar (<see cref="SaveNotices" />).</summary>
+    public void ShowSaveNotice(GuardedFile file, SaveResult result) => WorldState.Chat.AddOrangeBarMessage(MenuAlerts.NotSavedLine(file, result));
+
+    //the files load at world entry, a relog (a new screen) or another character (see LocalFilesKey)
     private void LoadLocalFilesOnEntry(string name)
     {
         var serverKey = ServerProfileKey.Resolve(GlobalSettings.LobbyHost, Game.Connection.ServerName);

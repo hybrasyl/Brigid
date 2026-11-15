@@ -1647,10 +1647,10 @@ public sealed class ConnectionManager : IDisposable
             pkt.RedirectId,
             targetState);
 
-        //order matters: fire the redirect event BEFORE Disconnect. Disconnect synchronously fires
-        //OnDisconnected → State setter → StateChanged, and the world-screen handler suppresses its
-        //"Connection lost" popup based on a flag set by OnRedirectReceived. Inverting this order
-        //races the popup against the redirect flag.
+        //fire the redirect event before Disconnect: a Disconnect of a live connection raises OnDisconnected at once, and
+        //the screens read the redirect flag that OnRedirectReceived sets. After a server close, the Disconnected came
+        //first, on the network thread; the screens then decide in Update, after the game loop handled this Redirect
+        //(WorldScreen.ConnectionOutcomeFor, LobbyLoginScreen.IsLostConnection).
         OnRedirectReceived?.Invoke(PendingRedirect.Value);
 
         //begin teardown — the redirect will be followed from the game loop once the old connection is fully dead.

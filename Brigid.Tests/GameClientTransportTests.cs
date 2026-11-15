@@ -188,6 +188,28 @@ public class GameClientTransportTests
         Assert.NotEqual(first, client.CurrentConnection);
     }
 
+    /// <summary>
+    ///     A Disconnect of a live connection raises OnDisconnected once, with the connection's number, after it releases
+    ///     the connect lock: a handler can then connect again on the same thread.
+    /// </summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task Disconnect_RaisesOnDisconnectedOnceWithTheConnectionsNumber()
+    {
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+        var closed = new List<int>();
+        client.OnDisconnected += connection => closed.Add(connection);
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+
+        client.Disconnect();
+        client.Disconnect();
+
+        Assert.Equal([client.CurrentConnection], closed);
+    }
+
     /// <summary>A connect after a server close works (BRIG-176).</summary>
     [Fact(Timeout = TEST_TIMEOUT_MS)]
     public async Task ServerClose_ThenAConnectWorks()

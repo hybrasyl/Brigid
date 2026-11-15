@@ -3,10 +3,10 @@ using Xunit;
 
 namespace Brigid.Tests;
 
-// A settings file whose read failed was saved over with defaults (BRIG-177, and the four settings files in phase 4 of
-// fix/connection-and-input). GuardedFile refuses that save, keeps a file that does not parse in a .bad copy, and raises
-// one notice for each file in a session, also for a write that fails. NotSaved is static, so each test counts only the
-// events of its own folder.
+// A settings file whose read failed was saved over with defaults (BRIG-177). GuardedFile refuses that save, keeps a file
+// that does not parse in a .bad copy, and raises one notice for each file in a session, also for a write that fails.
+// NotSaved is static, so each test counts only the events of its own folder.
+[Collection("GuardedFileNotices")]
 public sealed class GuardedFileTests : IDisposable
 {
     private readonly string Folder = Path.Combine(Path.GetTempPath(), "brigid-guarded-" + Guid.NewGuid().ToString("N"));
@@ -168,7 +168,7 @@ public sealed class GuardedFileTests : IDisposable
         {
             ReadText(file);
 
-            //only this class listens, and its tests run in series, so nothing listens here
+            //the listeners of NotSaved are in the GuardedFileNotices collection, so nothing listens here
             SaveText(file, "x");
 
             var refusals = RefusalsDuring(() => SaveText(file, "x"));

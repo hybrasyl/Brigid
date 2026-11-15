@@ -301,8 +301,12 @@ public sealed class LobbyLoginScreen : IScreen
         if (ConnectionLost)
         {
             ConnectionLost = false;
-            StopWaitsOnConnectionLoss();
-            ShowOffline();
+
+            if (IsLostConnection(FollowingRedirect, Game.Connection.State))
+            {
+                StopWaitsOnConnectionLoss();
+                ShowOffline();
+            }
         }
 
         StopWaitsThatTimedOut();
@@ -701,6 +705,15 @@ public sealed class LobbyLoginScreen : IScreen
                 break;
         }
     }
+
+    /// <summary>
+    ///     Whether a close that the network thread reported is a lost connection, decided on the game loop. A server can
+    ///     send a Redirect and close in one read: the close then comes before the game loop handles the Redirect, and the
+    ///     redirect goes on to the next server, so a form that waits keeps waiting (BRIG-180). A redirect that cannot
+    ///     connect goes to Disconnected, which is a lost connection.
+    /// </summary>
+    internal static bool IsLostConnection(bool followingRedirect, ConnectionState state)
+        => !followingRedirect || (state == ConnectionState.Disconnected);
 
     private void OnConnectionError(string error)
     {

@@ -7,7 +7,6 @@ using Brigid.Data;
 using Brigid.Data.AssetPacks;
 using DALib.Utility;
 using Brigid.Controls.Generic;
-using Brigid.Controls.LobbyLogin;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
@@ -924,9 +923,9 @@ public sealed class ChaosGame : Game
     {
         switch (Screens.ActiveScreen)
         {
-            case WorldScreen:
+            case WorldScreen world:
                 while (SaveNotices.TryTake(out var file, out var result))
-                    WorldState.Chat.AddOrangeBarMessage(MenuAlerts.NotSavedLine(file, result));
+                    world.ShowSaveNotice(file, result);
 
                 break;
 

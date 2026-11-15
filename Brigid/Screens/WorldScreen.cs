@@ -199,7 +199,8 @@ public sealed partial class WorldScreen : IScreen
     private byte[] PlayerPortrait = [];
 
     //the server and character whose local files this screen loaded. The files load once at world entry, not at each
-    //map change, so unsaved typing in Options stays
+    //map change, so unsaved typing in Options stays. The client does not support a hand edit of these files while it
+    //runs: the next save writes over it
     private string? LocalFilesKey;
     private SelfProfileTextEditorControl SelfProfileTextEditor = null!;
     private Direction? QueuedWalkDirection;
@@ -329,7 +330,6 @@ public sealed partial class WorldScreen : IScreen
         };
         OptionsModal.SettingsRequested += () => Game.Connection.SendOptionToggle(UserOption.Request);
         OptionsModal.FriendsCommitted += SavePlayerFriendList;
-
         OptionsModal.MacrosCommitted += SavePlayerMacros;
 
         //the keybind capture modal rides above the Options modal (ZIndex 11 > 10). The tab requests a rebind

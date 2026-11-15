@@ -39,10 +39,16 @@ public sealed class UITextBoxFocusCollection;
 [CollectionDefinition("GameClientTransport", DisableParallelization = true)]
 public sealed class GameClientTransportCollection;
 
-// The settings files (Keybinds, LauncherConfig, CertificateTrustStore) keep static state that their Load and Save change.
-// The tests that load or save them run in series with each other; the other tests do not load them.
+// The settings files (Keybinds, ClientSettings, LauncherConfig, CertificateTrustStore) keep static state that their Load
+// and Save change. The tests that load or save them run in series with each other. UiThemeIdRoundTripTests saves
+// ClientSettings beside them: it uses its own path, and a locked or corrupt ClientSettings load changes no state.
 [CollectionDefinition("SettingsFiles")]
 public sealed class SettingsFilesCollection;
+
+// GuardedFile.NotSaved is static. The tests that listen to it run in series with each other, so a test can check an
+// event that has no listener.
+[CollectionDefinition("GuardedFileNotices")]
+public sealed class GuardedFileNoticesCollection;
 
 // WorldState is static. The tests that change it run alone.
 [CollectionDefinition("WorldState", DisableParallelization = true)]

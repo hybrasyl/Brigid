@@ -423,12 +423,15 @@ public sealed class GameClient : IDisposable
         bool expectGreeting,
         string tlsHost)
     {
+        int? closed;
+
         using (ConnectLock.EnterScope())
         {
             ct.ThrowIfCancellationRequested();
-            DisconnectTransport();
+            closed = DisconnectTransport();
         }
 
+        RaiseDisconnected(closed);
         ServerCapability = null;
         Negotiated = null;
         ExtensionChannel = null;
@@ -501,28 +504,42 @@ public sealed class GameClient : IDisposable
     /// </summary>
     public void Disconnect()
     {
-        using var scope = ConnectLock.EnterScope();
-        ConnectCts?.Cancel();
-        DisconnectTransport();
+        int? closed;
+
+        using (ConnectLock.EnterScope())
+        {
+            ConnectCts?.Cancel();
+            closed = DisconnectTransport();
+        }
+
+        RaiseDisconnected(closed);
+    }
+
+    //OnDisconnected is raised after ConnectLock, on each path, so a handler never runs under the lock
+    private void RaiseDisconnected(int? closedConnection)
+    {
+        if (closedConnection is { } connection)
+            OnDisconnected?.Invoke(connection);
     }
 
     //tears down the connection, and drops the packets of the connection that the game loop did not handle yet: a new
     //session must not handle an answer to the old one. The receive loop can add a packet until it stops, so the queue
     //clears after the loops end. A server close tears down from the receive loop and keeps the queue, because a Redirect
-    //that came before the close is still for the game loop. Call it under ConnectLock
-    private void DisconnectTransport()
+    //that came before the close is still for the game loop. Call it under ConnectLock. Returns the number of the connection
+    //that it ended, or null; the caller raises OnDisconnected with it after the lock
+    private int? DisconnectTransport()
     {
         if (Pumps is not { } pumps || !pumps.TryEnd())
         {
             InboundQueue.Clear();
 
-            return;
+            return null;
         }
 
         Teardown(pumps, waitForReceive: true);
         InboundQueue.Clear();
 
-        OnDisconnected?.Invoke(pumps.Number);
+        return pumps.Number;
     }
 
     //frees the resources of one pump set, and clears the shared socket and stream only while they still hold this set's
@@ -1022,8 +1039,7 @@ public sealed class GameClient : IDisposable
                     Teardown(pumps, waitForReceive: false);
                 }
 
-                if (wasLive)
-                    OnDisconnected?.Invoke(pumps.Number);
+                RaiseDisconnected(wasLive ? pumps.Number : null);
             }
         }
     }

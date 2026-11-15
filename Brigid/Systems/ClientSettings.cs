@@ -122,7 +122,7 @@ public static class ClientSettings
 
     /// <summary>
     ///     Loads the settings file at <paramref name="path" /> into the static properties. Returns false when the file
-    ///     cannot be read. Internal for the tests.
+    ///     cannot be read, so the first-run migration does not save. Internal for the tests.
     /// </summary>
     internal static bool Load(string path)
     {

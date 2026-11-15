@@ -163,6 +163,28 @@ public sealed class CharacterFileSafetyTests : IDisposable
         Assert.True(File.Exists(PathOf(file)));
     }
 
+    //the world state keeps the chants of its slots when a chant file cannot be read, and does not cache the failed read
+    [Fact]
+    public void AChantFileThatCannotBeReadIsAFailedLoad()
+    {
+        var skills = WriteGood(CharacterFile.SkillChants);
+        var spells = WriteGood(CharacterFile.SpellChants);
+
+        using (new FileStream(skills, FileMode.Open, FileAccess.Read, FileShare.None))
+        using (new FileStream(spells, FileMode.Open, FileAccess.Read, FileShare.None))
+        {
+            Assert.False(Settings.TryLoadSkillChants(out var noSkills));
+            Assert.False(Settings.TryLoadSpellChants(out var noSpells));
+            Assert.Empty(noSkills);
+            Assert.Empty(noSpells);
+        }
+
+        Assert.True(Settings.TryLoadSkillChants(out var skillChants));
+        Assert.True(Settings.TryLoadSpellChants(out var spellChants));
+        Assert.Equal("Hya!", skillChants.Single().Chant);
+        Assert.Equal("Armachd", spellChants.Single().Chants[0]);
+    }
+
     //the caller keeps the portrait that it has when the file cannot be read
     [Fact]
     public void ALockedPortraitIsAFailedRead()

@@ -544,13 +544,32 @@ public static class WorldState
         if (string.IsNullOrEmpty(name) || !DataContext.LocalPlayerSettings.IsInitialized)
             return null;
 
-        CachedSkillChants ??= DataContext.LocalPlayerSettings.LoadSkillChants();
+        if (SkillChants() is not { } chants)
+            return null;
 
-        foreach (var entry in CachedSkillChants)
+        foreach (var entry in chants)
             if (entry.Name.EqualsI(name))
                 return entry.Chant;
 
         return null;
+    }
+
+    //the chants of the file, or null when the file cannot be read. A failed read is not cached, so the next use reads the
+    //file again
+    private static List<SkillChantEntry>? SkillChants()
+    {
+        if (CachedSkillChants is null && DataContext.LocalPlayerSettings.TryLoadSkillChants(out var loaded))
+            CachedSkillChants = loaded;
+
+        return CachedSkillChants;
+    }
+
+    private static List<SpellChantEntry>? SpellChants()
+    {
+        if (CachedSpellChants is null && DataContext.LocalPlayerSettings.TryLoadSpellChants(out var loaded))
+            CachedSpellChants = loaded;
+
+        return CachedSpellChants;
     }
 
     private static string[]? LookupSpellChants(string? name)
@@ -558,9 +577,10 @@ public static class WorldState
         if (string.IsNullOrEmpty(name) || !DataContext.LocalPlayerSettings.IsInitialized)
             return null;
 
-        CachedSpellChants ??= DataContext.LocalPlayerSettings.LoadSpellChants();
+        if (SpellChants() is not { } chants)
+            return null;
 
-        foreach (var entry in CachedSpellChants)
+        foreach (var entry in chants)
             if (entry.Name.EqualsI(name))
                 return entry.Chants;
 
@@ -575,13 +595,17 @@ public static class WorldState
 
     /// <summary>
     ///     Re-applies chant data to all occupied skill/spell slots. Call after PlayerData becomes available (first
-    ///     DisplayAisling for the player).
+    ///     DisplayAisling for the player). A chant file that cannot be read changes no slot: a failed read gives no chants,
+    ///     and the slots keep the chants they have.
     /// </summary>
     public static void ReloadChants()
     {
         InvalidateChantCache();
 
-        for (byte i = 1; i <= SpellBook.MAX_SLOTS; i++)
+        if (!DataContext.LocalPlayerSettings.IsInitialized)
+            return;
+
+        for (byte i = 1; (i <= SpellBook.MAX_SLOTS) && SpellChants() is not null; i++)
         {
             var spell = SpellBook.GetSlot(i);
 
@@ -600,7 +624,7 @@ public static class WorldState
             }
         }
 
-        for (byte i = 1; i <= SkillBook.MAX_SLOTS; i++)
+        for (byte i = 1; (i <= SkillBook.MAX_SLOTS) && SkillChants() is not null; i++)
         {
             var skill = SkillBook.GetSlot(i);
 
