@@ -174,14 +174,15 @@ public sealed partial class WorldScreen : IScreen
     //thread, so that ExitFlow and the popups change only on the game thread
     private int PendingConnectionEvent;
 
-    private enum ConnectionEvent
+    internal enum ConnectionEvent
     {
         None,
 
         //the state went to Login: a logout redirect
         LoggedOut,
 
-        //the connection closed outside a redirect: the logout in the grace time, else a lost connection
+        //the connection closed outside a redirect, or the connect of a redirect failed: the logout in the grace time,
+        //else a lost connection
         Closed
     }
 
@@ -190,7 +191,9 @@ public sealed partial class WorldScreen : IScreen
     private byte[] PlayerPortrait = [];
     private SelfProfileTextEditorControl SelfProfileTextEditor = null!;
     private Direction? QueuedWalkDirection;
-    private bool RedirectInProgress;
+    //set on the game thread when a redirect arrives; HandleStateChanged, which can run on the network thread, reads and
+    //clears it
+    private volatile bool RedirectInProgress;
     private TileClickTracker RightClickTracker;
     private RasterizerState ScissorRasterizerState = null!;
 
@@ -433,7 +436,7 @@ public sealed partial class WorldScreen : IScreen
 
             if (GoldDrop.ForExchange)
             {
-                if (WorldState.Exchange.IsActive)
+                if (WorldState.Exchange.TakesOffers)
                     Game.Connection.SendExchangeInteraction(ExchangeRequestType.SetGold, Exchange.OtherUserId, goldAmount: amount);
             } else if (GoldDrop.TargetEntityId.HasValue)
                 Game.Connection.DropGoldOnCreature(amount, GoldDrop.TargetEntityId.Value);
@@ -452,6 +455,9 @@ public sealed partial class WorldScreen : IScreen
 
         ItemAmount.OnConfirm += amount =>
         {
+            if (!WorldState.Exchange.TakesOffers)
+                return;
+
             Game.Connection.SendExchangeInteraction(
                 ExchangeRequestType.AddStackableItem,
                 Exchange.OtherUserId,

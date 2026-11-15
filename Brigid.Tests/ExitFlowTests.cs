@@ -16,9 +16,9 @@ public sealed class ExitFlowTests
     {
         Assert.True(Flow.Begin(false));
 
-        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.CONFIRM_SECONDS - 1));
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.CONFIRM_SECONDS - 1, redirecting: false));
         Assert.True(Flow.IsConfirming);
-        Assert.Equal(ExitStep.Confirm, Flow.Tick(1));
+        Assert.Equal(ExitStep.Confirm, Flow.Tick(1, redirecting: false));
         Assert.False(Flow.IsConfirming);
 
         //the screen confirms: it sends the exit confirm, and the grace time starts
@@ -36,12 +36,12 @@ public sealed class ExitFlowTests
 
         Assert.Equal((int)ExitFlow.CONFIRM_SECONDS, Flow.ConfirmSecondsLeft);
 
-        Flow.Tick(0.25f);
+        Flow.Tick(0.25f, redirecting: false);
 
         Assert.Equal((int)ExitFlow.CONFIRM_SECONDS, Flow.ConfirmSecondsLeft);
 
         //0.75 s left
-        Flow.Tick(ExitFlow.CONFIRM_SECONDS - 1f);
+        Flow.Tick(ExitFlow.CONFIRM_SECONDS - 1f, redirecting: false);
 
         Assert.Equal(1, Flow.ConfirmSecondsLeft);
 
@@ -56,8 +56,8 @@ public sealed class ExitFlowTests
     {
         Flow.Begin(true);
 
-        Assert.Equal(ExitStep.Confirm, Flow.Tick(ExitFlow.CONFIRM_SECONDS + ExitFlow.GRACE_SECONDS + 5));
-        Assert.Equal(ExitStep.None, Flow.Tick(1));
+        Assert.Equal(ExitStep.Confirm, Flow.Tick(ExitFlow.CONFIRM_SECONDS + ExitFlow.GRACE_SECONDS + 5, redirecting: false));
+        Assert.Equal(ExitStep.None, Flow.Tick(1, redirecting: false));
         Assert.True(Flow.ClosesClient);
     }
 
@@ -71,7 +71,7 @@ public sealed class ExitFlowTests
 
         Assert.False(Flow.IsConfirming);
         Assert.False(Flow.ClosesClient);
-        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.CONFIRM_SECONDS + ExitFlow.GRACE_SECONDS));
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.CONFIRM_SECONDS + ExitFlow.GRACE_SECONDS, redirecting: false));
         Assert.False(Flow.IsAwaitingLogout);
     }
 
@@ -127,9 +127,33 @@ public sealed class ExitFlowTests
         Flow.Begin(true);
         Flow.Confirm();
 
-        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS - 1));
-        Assert.Equal(ExitStep.CloseClient, Flow.Tick(1));
-        Assert.Equal(ExitStep.None, Flow.Tick(1));
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS - 1, redirecting: false));
+        Assert.Equal(ExitStep.CloseClient, Flow.Tick(1, redirecting: false));
+        Assert.Equal(ExitStep.None, Flow.Tick(1, redirecting: false));
+    }
+
+    //a slow logout redirect: its result ends the exit, not the grace time
+    [Fact]
+    public void TheGraceTimeDoesNotRunWhileARedirectConnects()
+    {
+        Flow.Begin(false);
+        Flow.Confirm();
+
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.REDIRECT_WAIT_SECONDS - 1, redirecting: true));
+        Assert.True(Flow.IsAwaitingLogout);
+        Assert.Equal(ExitStep.ExitIgnored, Flow.Tick(ExitFlow.GRACE_SECONDS, redirecting: false));
+    }
+
+    //a login server that does not answer the connect cannot hold the exit for the whole TCP connect timeout
+    [Fact]
+    public void ARedirectHoldsTheGraceTimeForUpToItsWait()
+    {
+        Flow.Begin(true);
+        Flow.Confirm();
+
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.REDIRECT_WAIT_SECONDS, redirecting: true));
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS - 1, redirecting: true));
+        Assert.Equal(ExitStep.CloseClient, Flow.Tick(1, redirecting: true));
     }
 
     [Fact]
@@ -138,7 +162,10 @@ public sealed class ExitFlowTests
         Flow.Begin(false);
         Flow.Confirm();
 
-        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS));
+        //BRIG-169: the screen then tells the connection to forget the confirm, once
+        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS - 1, redirecting: false));
+        Assert.Equal(ExitStep.ExitIgnored, Flow.Tick(1, redirecting: false));
+        Assert.Equal(ExitStep.None, Flow.Tick(1, redirecting: false));
         Assert.False(Flow.IsAwaitingLogout);
     }
 
@@ -149,7 +176,7 @@ public sealed class ExitFlowTests
         Flow.Confirm();
 
         Assert.False(Flow.Begin(true));
-        Assert.Equal(ExitStep.CloseClient, Flow.Tick(ExitFlow.GRACE_SECONDS));
+        Assert.Equal(ExitStep.CloseClient, Flow.Tick(ExitFlow.GRACE_SECONDS, redirecting: false));
     }
 
     //the last choice wins: the player who changes their mind to Exit to Menu stays in the client
@@ -173,7 +200,7 @@ public sealed class ExitFlowTests
         Flow.Confirm();
 
         Assert.False(Flow.Begin(false));
-        Assert.Equal(ExitStep.None, Flow.Tick(ExitFlow.GRACE_SECONDS));
+        Assert.Equal(ExitStep.ExitIgnored, Flow.Tick(ExitFlow.GRACE_SECONDS, redirecting: false));
         Assert.False(Flow.IsAwaitingLogout);
     }
 
@@ -198,7 +225,7 @@ public sealed class ExitFlowTests
     {
         Flow.Begin(true);
         Flow.Confirm();
-        Flow.Tick(ExitFlow.GRACE_SECONDS);
+        Flow.Tick(ExitFlow.GRACE_SECONDS, redirecting: false);
 
         Assert.False(Flow.CompleteLogout());
     }

@@ -532,11 +532,7 @@ public sealed class LobbyLoginScreen : IScreen
         //logging in...
         WorldState.PlayerName = username;
 
-        Game.Connection.Login(
-            username,
-            password,
-            MachineIdentity.ClientId1,
-            MachineIdentity.ClientId2);
+        Game.Connection.Login(username, password);
     }
 
     private void OnLoginCancelClicked() => CloseForm(LoginForm);

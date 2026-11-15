@@ -17,6 +17,19 @@ public sealed class Exchange
     public bool IsActive { get; private set; }
 
     /// <summary>
+    ///     Whether the player cancelled and the client waits for the server's answer (BRIG-168). The server's Cancelled
+    ///     event, or the Accepted event that completes the trade, closes the exchange; so does a lost connection or a world
+    ///     transfer, on the client.
+    /// </summary>
+    public bool IsCancelPending { get; private set; }
+
+    /// <summary>
+    ///     Whether the client sends an item or gold for the exchange: an exchange is active, and no cancel waits for the
+    ///     server.
+    /// </summary>
+    public bool TakesOffers => IsActive && !IsCancelPending;
+
+    /// <summary>
     ///     Whether the server confirmed that you accepted.
     /// </summary>
     public bool IsMyAccepted { get; private set; }
@@ -77,6 +90,7 @@ public sealed class Exchange
         OtherGold = 0;
         IsMyAccepted = false;
         IsOtherAccepted = false;
+        IsCancelPending = false;
         MyItems.Clear();
         OtherItems.Clear();
         Closed?.Invoke(message);
@@ -118,6 +132,21 @@ public sealed class Exchange
     public event ExchangeAcceptedHandler? Accepted;
 
     public void RequestAmount(byte fromSlot) => AmountRequested?.Invoke(fromSlot);
+
+    /// <summary>
+    ///     Records that the player cancelled, and returns true: the client sends the Cancel request. As on retail, the
+    ///     exchange stays open until the server answers. Returns false, and the client sends nothing, when no exchange is
+    ///     active or a cancel already waits for the server.
+    /// </summary>
+    public bool RequestCancel()
+    {
+        if (!IsActive || IsCancelPending)
+            return false;
+
+        IsCancelPending = true;
+
+        return true;
+    }
 
     public void SetGold(bool rightSide, int amount)
     {
@@ -161,6 +190,7 @@ public sealed class Exchange
         OtherGold = 0;
         IsMyAccepted = false;
         IsOtherAccepted = false;
+        IsCancelPending = false;
         MyItems.Clear();
         OtherItems.Clear();
         Started?.Invoke();
