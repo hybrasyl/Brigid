@@ -460,21 +460,39 @@ public sealed class MetaFileSyncTests : IDisposable
         sync.OnChecksums(Listing("ItemInfo0", "ItemInfo1"));
 
         At(sync, t - 1);
-        sync.OnData("ItemInfo1", ContentChecksum, Compress([9, 9])); //ItemInfo1 request 2, at t - 1
-        At(sync, t);                                                  //ItemInfo0 request 2
-        At(sync, (2 * t) - 1);                                        //ItemInfo1 request 3
-        At(sync, 2 * t);                                              //ItemInfo0 request 3
+        sync.OnData("ItemInfo1", ContentChecksum, Compress([9, 9])); //ItemInfo1 request 2; both times restart at t - 1
+        At(sync, (2 * t) - 1);                                        //ItemInfo1 request 3, ItemInfo0 request 2
 
-        Assert.Equal(6, Requests.Count);
+        Assert.Equal(5, Requests.Count);
 
-        At(sync, (3 * t) - 1); //ItemInfo1 stops at the limit; ItemInfo0 waits
+        At(sync, (3 * t) - 1); //ItemInfo1 stops at the limit; ItemInfo0 request 3
 
         Assert.Equal(1, sync.PendingCount);
         Assert.Equal(0, Completions);
 
-        At(sync, 3 * t); //ItemInfo0 stops at the limit
+        At(sync, (4 * t) - 1); //ItemInfo0 stops at the limit
 
         Assert.Equal(1, Completions);
+    }
+
+    //the server answers in order: a slow download of the whole catalog keeps the files that wait, while answers come
+    [Fact]
+    public void Tick_AnAnswerRestartsTheTimeOfTheFilesThatWait()
+    {
+        const long t = TIMEOUT_MS;
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0", "ItemInfo1"));
+
+        At(sync, t - 1);
+        Answer(sync, "ItemInfo1");
+        At(sync, t);
+
+        Assert.Equal(2, Requests.Count);
+
+        At(sync, (2 * t) - 1);
+
+        Assert.Equal(3, Requests.Count);
+        Assert.Equal("ItemInfo0", Requests[^1]);
     }
 
     //the cache keeps its old copy of a file that has no answer

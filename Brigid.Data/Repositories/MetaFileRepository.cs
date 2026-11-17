@@ -24,7 +24,7 @@ public sealed class MetaFileRepository
         Share = FileShare.ReadWrite
     };
 
-    //reads the server-pushed metafile cache written by ChaosGame; must match its write location
+    //reads the server-pushed metafile cache that MetaFileSync writes; must match its write location
     //(AppPaths.MetaFileDir), which lives under %LOCALAPPDATA% and is scoped per server. Resolved per access, not
     //captured, because this repository is constructed before the connection target is known.
     private readonly Func<string> DirectoryOf;

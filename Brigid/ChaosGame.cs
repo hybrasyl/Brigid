@@ -930,6 +930,11 @@ public sealed class ChaosGame : Game
     #region Metadata Sync
     private void HandleMetaData(ServerPackets.MetafilePacket pkt)
     {
+        //the sync runs only in World: a list or an answer handled after a close is dropped, and the next world entry asks
+        //for a new list
+        if (Connection.State != ConnectionState.World)
+            return;
+
         switch (pkt)
         {
             case ServerPackets.MetafileChecksumsPacket checksums:
