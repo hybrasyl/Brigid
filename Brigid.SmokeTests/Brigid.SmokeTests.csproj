@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- BRIG-184: the smoke tests start the built client with the test driver and drive it. They skip unless
+         BRIGID_SMOKE=1 and BRIGID_SMOKE_DATA are set, so `dotnet test Brigid.slnx` starts no client. The client and
+         the driver are built first and not referenced; smoke-paths.txt gives the tests their paths. -->
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsPublishable>false</IsPublishable>
+        <IsTestProject>true</IsTestProject>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" />
+        <PackageReference Include="xunit" />
+        <PackageReference Include="xunit.runner.visualstudio">
+            <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+            <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Brigid\Brigid.csproj" ReferenceOutputAssembly="false" OutputItemType="SmokeClientAssembly" />
+        <ProjectReference Include="..\Brigid.TestDriver\Brigid.TestDriver.csproj" ReferenceOutputAssembly="false" OutputItemType="SmokeDriverAssembly" />
+    </ItemGroup>
+
+    <Target Name="WriteSmokePaths" AfterTargets="Build">
+        <WriteLinesToFile File="$(OutDir)smoke-paths.txt"
+                          Lines="@(SmokeClientAssembly->'client=%(FullPath)');@(SmokeDriverAssembly->'driver=%(FullPath)')"
+                          Overwrite="true"
+                          WriteOnlyWhenDifferent="true" />
+    </Target>
+</Project>

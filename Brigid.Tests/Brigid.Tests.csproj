@@ -15,6 +15,8 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Brigid\Brigid.csproj" />
+        <!-- the pure parts of the BRIG-184 test driver: the locator, the key map and the text pieces -->
+        <ProjectReference Include="..\Brigid.TestDriver\Brigid.TestDriver.csproj" />
     </ItemGroup>
 
     <!-- The dev module of the loader tests: built first and copied to devmodule-sample/, not referenced, so it never

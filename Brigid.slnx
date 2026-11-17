@@ -12,4 +12,6 @@
     <Project Path="Brigid/Brigid.csproj" />
     <Project Path="Brigid.Tests/Brigid.Tests.csproj" />
     <Project Path="Brigid.Tests.SampleModule/Brigid.Tests.SampleModule.csproj" />
+    <Project Path="Brigid.TestDriver/Brigid.TestDriver.csproj" />
+    <Project Path="Brigid.SmokeTests/Brigid.SmokeTests.csproj" />
 </Solution>
