@@ -6,6 +6,10 @@ using Brigid.Data;
 using Brigid.Networking;
 #endregion
 
+//a temporary app folder (BRIGID_APP_ROOT, the smoke tests) keeps its own log, so the run does not touch the developer's
+if (AppPaths.IsAppRootOverridden && DataDiagnostics.Try(() => Directory.CreateDirectory(AppPaths.AppRoot), "create the app folder"))
+    NoticeDebugLog.UseFolder(AppPaths.AppRoot);
+
 NoticeDebugLog.Reset();
 NoticeDebugLog.Write("Program.Main entered");
 

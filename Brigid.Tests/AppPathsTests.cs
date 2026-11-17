@@ -37,6 +37,19 @@ public sealed class AppPathsTests : IDisposable
     [Fact]
     public void VendorRoot_UsesTheHouseStandardCase() => Assert.Equal("Erisco", Path.GetFileName(AppPaths.VendorRoot));
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveAppRootOverride_AnEmptyValueGivesNoOverride(string? value) => Assert.Null(AppPaths.ResolveAppRootOverride(value));
+
+    [Fact]
+    public void ResolveAppRootOverride_GivesTheFullPath()
+    {
+        Assert.Equal(Root, AppPaths.ResolveAppRootOverride($"  {Root}  "));
+        Assert.Equal(Path.GetFullPath("smoke-root"), AppPaths.ResolveAppRootOverride("smoke-root"));
+    }
+
     [Fact]
     public void MigrateLegacyVendorFolder_LeavesTheConfigReadableAtTheStandardPath()
     {

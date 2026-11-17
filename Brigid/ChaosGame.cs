@@ -520,8 +520,12 @@ public sealed class ChaosGame : Game
 
         Window.ClientSizeChanged += OnClientSizeChanged;
 
-        //best-effort async release check; the start screen polls UpdateChecker.Available
-        UpdateChecker.BeginCheck();
+        //best-effort async release check; the start screen polls UpdateChecker.Available. A test client (BRIGID_APP_ROOT)
+        //does not call GitHub: each smoke client would use one of the 60 requests an hour that GitHub allows
+        if (AppPaths.IsAppRootOverridden)
+            NoticeDebugLog.Write("[update] BRIGID_APP_ROOT is set, so the release check does not run");
+        else
+            UpdateChecker.BeginCheck();
     }
 
     protected override void LoadContent()

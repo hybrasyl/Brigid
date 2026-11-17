@@ -126,6 +126,10 @@ public static class LauncherConfig
     /// </summary>
     private static void TryMigrateLegacyConfig()
     {
+        //a temporary app folder (BRIGID_APP_ROOT) starts with only what the test put in it
+        if (AppPaths.IsAppRootOverridden)
+            return;
+
         try
         {
             if (!File.Exists(LegacyFilePath))

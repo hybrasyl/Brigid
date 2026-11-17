@@ -20,6 +20,23 @@ public static class AppPaths
     //the lower-case vendor folder Brigid wrote before it matched the standard; read only to migrate from
     private const string LEGACY_VENDOR = "erisco";
 
+    /// <summary>The environment variable that puts <see cref="AppRoot" /> in another folder (BRIG-184).</summary>
+    public const string APP_ROOT_VARIABLE = "BRIGID_APP_ROOT";
+
+    //read one time: every path below is relative to it, so it must not change while the client runs
+    private static readonly string? AppRootOverride = ResolveAppRootOverride(Environment.GetEnvironmentVariable(APP_ROOT_VARIABLE));
+
+    /// <summary>
+    ///     True when <c>BRIGID_APP_ROOT</c> gives <see cref="AppRoot" />. The smoke tests set it, so that a run never reads
+    ///     or writes the developer's own settings. With it set, no migration into <see cref="AppRoot" /> runs: the folder
+    ///     has only what the test put in it.
+    /// </summary>
+    public static bool IsAppRootOverridden => AppRootOverride is not null;
+
+    /// <summary>The full path that <paramref name="value" /> gives, or null when it is empty.</summary>
+    internal static string? ResolveAppRootOverride(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : Path.GetFullPath(value.Trim());
+
     /// <summary>
     ///     <c>%LOCALAPPDATA%\Erisco</c> on Windows; <c>~/.config/Erisco</c> on macOS/Linux. The platform split is
     ///     deliberate: .NET maps <see cref="Environment.SpecialFolder.LocalApplicationData" /> to <c>~/.local/share</c>
@@ -55,6 +72,13 @@ public static class AppPaths
     /// </summary>
     public static void MigrateLegacyVendorFolder()
     {
+        if (IsAppRootOverridden)
+        {
+            DataDiagnostics.Log?.Invoke($"[paths] {APP_ROOT_VARIABLE} is set: the app folder is {AppRoot}, and no folder migration runs");
+
+            return;
+        }
+
         var result = MigrateLegacyVendorFolder(VendorBaseDirectory);
 
         if (result.Moved.Count > 0)
@@ -145,8 +169,11 @@ public static class AppPaths
         return found;
     }
 
-    /// <summary><c>{VendorRoot}/Brigid</c> — the root of all per-user state Brigid writes.</summary>
-    public static string AppRoot => Path.Combine(VendorRoot, APP_NAME);
+    /// <summary>
+    ///     <c>{VendorRoot}/Brigid</c> — the root of all per-user state Brigid writes, or the folder that
+    ///     <c>BRIGID_APP_ROOT</c> gives.
+    /// </summary>
+    public static string AppRoot => AppRootOverride ?? Path.Combine(VendorRoot, APP_NAME);
 
     /// <summary><c>{AppRoot}/assets</c> — where modern <c>.datf</c> asset packs are discovered.</summary>
     public static string AssetsDir => Path.Combine(AppRoot, "assets");
@@ -159,6 +186,12 @@ public static class AppPaths
     ///     <c>Darkages.cfg</c> inside the game-data folder. Client-wide, not per-server/character.
     /// </summary>
     public static string SettingsFile => Path.Combine(AppRoot, "brigid.cfg");
+
+    /// <summary>
+    ///     <c>{AppRoot}/keybinds.json</c> — the keybind overrides. Client-wide, not per character. Clients before BRIG-184
+    ///     wrote it in the game data folder; <c>Keybinds.Load</c> moves that file here one time.
+    /// </summary>
+    public static string KeybindsFile => Path.Combine(AppRoot, "keybinds.json");
 
     /// <summary>
     ///     <c>{AppRoot}/profiles</c> — root of per-server, per-character config. Individual character config lives under
