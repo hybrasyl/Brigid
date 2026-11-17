@@ -2,6 +2,7 @@
 using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Brigid.Data;
 using Brigid.Definitions;
 using Brigid.Networking;
 using Microsoft.Xna.Framework.Input;
@@ -417,14 +418,61 @@ public static class Keybinds
     }
 
     /// <summary>
-    ///     Loads overrides-only from <c>keybinds.json</c>. Missing/corrupt file → pure defaults. Unknown
-    ///     command names (a renamed/removed <see cref="CommandId" /> or a hand-edited typo) are skipped
+    ///     Loads overrides-only from <see cref="AppPaths.KeybindsFile" />, after it moves a <c>keybinds.json</c> that an
+    ///     older client wrote in the game data folder (see <see cref="MoveFromDataFolder" />). Missing/corrupt file → pure
+    ///     defaults. Unknown command names (a renamed/removed <see cref="CommandId" /> or a hand-edited typo) are skipped
     ///     per-entry so one stale key doesn't discard every valid override.
     /// </summary>
     public static void Load()
-    {
-        var path = Path.Combine(GlobalSettings.DataPath, FILE_NAME);
+        => Load(AppPaths.IsAppRootOverridden ? AppPaths.KeybindsFile : MoveFromDataFolder(GlobalSettings.DataPath, AppPaths.KeybindsFile));
 
+    /// <summary>
+    ///     Moves <c>keybinds.json</c> from <paramref name="dataPath" /> (the game data folder, where clients before
+    ///     BRIG-184 wrote it) to <paramref name="target" />, when the target has no file, and returns the file to read.
+    ///     Keybinds are client-wide, like the other settings in <see cref="AppPaths.AppRoot" />; with two data folders, the
+    ///     file of the first one that the client opens wins. A move that fails (a data folder that the player cannot
+    ///     change) copies the file; a copy that fails returns the old file, so the player keeps the binds, and the next
+    ///     <see cref="Save()" /> writes <paramref name="target" />. Not called when <c>BRIGID_APP_ROOT</c> is set, because a
+    ///     temporary app folder must not take the player's file.
+    /// </summary>
+    internal static string MoveFromDataFolder(string dataPath, string target)
+    {
+        if (string.IsNullOrWhiteSpace(dataPath) || File.Exists(target))
+            return target;
+
+        var legacy = Path.Combine(dataPath, FILE_NAME);
+
+        if (!File.Exists(legacy))
+            return target;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Move(legacy, target);
+            NoticeDebugLog.Write($"[Keybinds] moved {FILE_NAME} from {dataPath} to {target}");
+
+            return target;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            NoticeDebugLog.Write($"[Keybinds] could not move {FILE_NAME} from {dataPath}: {ex.Message}");
+        }
+
+        try
+        {
+            File.Copy(legacy, target);
+            NoticeDebugLog.Write($"[Keybinds] copied {FILE_NAME} from {dataPath} to {target}; the old file stays");
+
+            return target;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            NoticeDebugLog.Write($"[Keybinds] could not copy {FILE_NAME} from {dataPath}, so it is read in place: {ex.Message}");
+
+            return legacy;
+        }
+    }
+
+    internal static void Load(string path)
+    {
         if (!File.Exists(path))
             return;
 
@@ -463,18 +511,19 @@ public static class Keybinds
             NoticeDebugLog.Write($"[Keybinds] skipped {skipped} unknown command(s) in {FILE_NAME}");
     }
 
-    /// <summary>Writes overrides-only to <c>keybinds.json</c>. Defaults are never serialized.</summary>
-    public static void Save()
+    /// <summary>Writes overrides-only to <see cref="AppPaths.KeybindsFile" />. Defaults are never serialized.</summary>
+    public static void Save() => Save(AppPaths.KeybindsFile);
+
+    internal static void Save(string path)
     {
         Dictionary<CommandId, KeyBinding> snapshot;
 
         using (Gate.EnterScope())
             snapshot = new Dictionary<CommandId, KeyBinding>(Overrides);
 
-        var path = Path.Combine(GlobalSettings.DataPath, FILE_NAME);
-
         try
         {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, JsonSerializer.Serialize(snapshot, JsonOptions));
         } catch (IOException ex)
         {
