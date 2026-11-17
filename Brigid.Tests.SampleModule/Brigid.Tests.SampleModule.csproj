@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- A dev module for the BRIG-29 loader tests. Brigid.Tests copies its DLL into a temporary module folder; it is
+         never loaded into the test process directly. It references the client the way every dev module does:
+         Private=false, so the client is not copied beside it and its client types come from the client itself. -->
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsPublishable>false</IsPublishable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Brigid\Brigid.csproj" Private="false" />
+    </ItemGroup>
+</Project>

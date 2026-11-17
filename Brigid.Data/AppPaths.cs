@@ -171,6 +171,12 @@ public static class AppPaths
     public static string ScreenshotsDir => Path.Combine(AppRoot, "screenshots");
 
     /// <summary>
+    ///     <c>{AppRoot}/devmodules</c> — the developer tools that the client loads when <c>BRIGID_DEV_MODULES</c> is set
+    ///     (BRIG-29). A dev module never ships to players.
+    /// </summary>
+    public static string DevModulesDir => Path.Combine(AppRoot, "devmodules");
+
+    /// <summary>
     ///     Key scoping the server-pushed caches (metafiles and maps), set when the connection target is known via
     ///     <see cref="SetServerScope" />, and again when Config picks another server. Defaults to a neutral bucket so a
     ///     path read before that never lands at the cache root.

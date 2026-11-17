@@ -7,6 +7,7 @@ using Brigid.Data;
 using Brigid.Data.AssetPacks;
 using DALib.Utility;
 using Brigid.Controls.Generic;
+using Brigid.DevModules;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
@@ -116,6 +117,9 @@ public sealed class ChaosGame : Game
     private static string MetaFilePath => AppPaths.MetaFileDir;
     private readonly MetaFileSync MetaSync;
     private readonly List<IServerPacket> PacketBuffer = [];
+
+    //the host of the dev modules (BRIG-29); null unless BRIGID_DEV_MODULES is set
+    private DevHost? DevModuleHost;
     private int CursorOffsetX;
     private int CursorOffsetY;
     private Texture2D? CursorTexture;
@@ -578,6 +582,9 @@ public sealed class ChaosGame : Game
         //Instance; now that ClientSettings is loaded, switch to the user's saved face before the lobby appears.
         FontEngine.Instance.SetActiveFont(ClientSettings.FontIndex);
         LoadCustomCursor();
+
+        //the data context, the screens and the dispatcher are ready here, and the first ScreenChanged is the lobby's
+        DevModuleHost = DevModuleLoader.Load(this);
         Screens.Switch(new LobbyLoginScreen());
     }
 
@@ -844,6 +851,8 @@ public sealed class ChaosGame : Game
 
     protected override void UnloadContent()
     {
+        //before the screens: a module can hold panels on a screen root
+        DevModuleLoader.UnloadAll();
         Window.ClientSizeChanged -= OnClientSizeChanged;
         CursorTexture?.Dispose();
         RenderTarget.Dispose();
@@ -866,12 +875,21 @@ public sealed class ChaosGame : Game
 
         SyncScalesToBackBuffer();
 
+        //a dev module that gives input pushes it here, so that the freeze below takes it into this update
+        DevModuleHost?.RaiseUpdateStarted(gameTime);
+
         //freeze buffered input for this frame before anything reads it
         InputBuffer.Update(IsActive);
 
-        //f11 — toggle debug overlay (handled globally before screen update)
+        //f11 — toggle debug overlay (handled globally before screen update); shift+f11 opens the dev menu instead while
+        //dev modules are on
         if (InputBuffer.WasKeyPressed(Keys.F11))
-            DebugOverlay.Toggle();
+        {
+            if (DevModuleHost is not null && (InputBuffer.IsKeyHeld(Keys.LeftShift) || InputBuffer.IsKeyHeld(Keys.RightShift)))
+                DevMenuControl.Toggle(Screens.ActiveScreen?.Root, DevModuleLoader.Modules, DevModuleHost.Log);
+            else
+                DebugOverlay.Toggle();
+        }
 
         //debug key layer — numpad acts as per-feature toggles, but only while the overlay is up. Gating the reads on
         //IsActive keeps the numpad free for normal use when debug is off.

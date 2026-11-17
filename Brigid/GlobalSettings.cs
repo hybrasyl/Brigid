@@ -73,6 +73,13 @@ public static class GlobalSettings
     /// </summary>
     public static bool RequireSwimmingSkill => false;
 
+    /// <summary>
+    ///     True when <c>BRIGID_DEV_MODULES</c> is set: the client loads the dev modules in <see cref="AppPaths.DevModulesDir" />
+    ///     and Shift+F11 opens the dev menu (BRIG-29). This keeps developer tools away from players by default. It is not
+    ///     a security control: the client is open source, and a fork can remove it.
+    /// </summary>
+    public static bool DevModulesEnabled { get; private set; }
+
     static GlobalSettings() => InitializeCore();
 
     private static void InitializeCore()
@@ -80,6 +87,11 @@ public static class GlobalSettings
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
         ResolveConnectionConfig();
+
+        DevModulesEnabled = IsTruthy(Environment.GetEnvironmentVariable("BRIGID_DEV_MODULES"));
+
+        if (DevModulesEnabled)
+            NoticeDebugLog.Write($"[dev-module] BRIGID_DEV_MODULES is set; dev modules load from {AppPaths.DevModulesDir}");
 
         foreach (var name in PreLoadedAssemblies)
             Assembly.Load(name);

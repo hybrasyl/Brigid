@@ -14,6 +14,10 @@ public sealed class AssetPackRegistryCollection;
 [CollectionDefinition("DataDiagnostics", DisableParallelization = true)]
 public sealed class DataDiagnosticsCollection;
 
+// DevModuleLoader keeps the loaded modules in a static list. The tests that load modules run alone.
+[CollectionDefinition("DevModules", DisableParallelization = true)]
+public sealed class DevModulesCollection;
+
 // DebugOverlay is static. The tests that change it run alone.
 [CollectionDefinition("DebugOverlay", DisableParallelization = true)]
 public sealed class DebugOverlayCollection;
