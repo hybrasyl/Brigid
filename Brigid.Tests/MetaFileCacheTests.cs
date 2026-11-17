@@ -44,18 +44,40 @@ public sealed class MetaFileCacheTests : IDisposable
     [Theory]
     [InlineData("Absent")]
     [InlineData("../Light")]
-    public void GetChecksum_IsZeroForAnAbsentFileOrARefusedName(string name)
+    public void GetChecksum_IsNullForAnAbsentFileOrARefusedName(string name)
     {
         File.WriteAllBytes(Path.Combine(Root, "Light"), Compress([1]));
 
-        Assert.Equal(0u, MetaFileCache.GetChecksum(Path.Combine(Root, "sub"), name));
+        Assert.Null(MetaFileCache.GetChecksum(Path.Combine(Root, "sub"), name));
     }
 
     [Fact]
-    public void GetChecksum_IsZeroForAFileThatIsNotZlib()
+    public void GetChecksum_IsNullForAFileThatIsNotZlib()
     {
         Touch("Light");
 
+        Assert.Null(MetaFileCache.GetChecksum(Root, "Light"));
+    }
+
+    [Fact]
+    public void GetChecksum_IsNullForAFileThatCannotBeRead()
+    {
+        var path = Path.Combine(Root, "Light");
+        File.WriteAllBytes(path, Compress([1]));
+
+        using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            Assert.Null(MetaFileCache.GetChecksum(Root, "Light"));
+    }
+
+    //BRIG-166: a CRC-32 can be 0, so a file that is not there must not read as a checksum of 0
+    [Fact]
+    public void GetChecksum_OfAFileWhoseCrcIsZeroIsZero()
+    {
+        //the CRC-32 of these four bytes is 0
+        byte[] content = [0x9D, 0x0A, 0xD9, 0x6D];
+        File.WriteAllBytes(Path.Combine(Root, "Light"), Compress(content));
+
+        Assert.Equal(0u, CRC32.Calculate(content));
         Assert.Equal(0u, MetaFileCache.GetChecksum(Root, "Light"));
     }
 
@@ -79,6 +101,11 @@ public sealed class MetaFileCacheTests : IDisposable
     [Fact]
     public void IsValidPayload_RefusesAnEmptyPayloadForAZeroChecksum()
         => Assert.False(MetaFileCache.IsValidPayload([], 0));
+
+    //one garbage byte decompresses to no data with no error, and must not match a checksum of 0 either
+    [Fact]
+    public void IsValidPayload_RefusesAPayloadThatDecompressesToNothing()
+        => Assert.False(MetaFileCache.IsValidPayload([1], 0));
 
     [Fact]
     public void TryWrite_MakesTheDirectoryWhenItIsNotThere()

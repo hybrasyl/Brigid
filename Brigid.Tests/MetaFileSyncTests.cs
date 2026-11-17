@@ -20,6 +20,7 @@ public sealed class MetaFileSyncTests : IDisposable
     private readonly List<string> Logs = [];
     private readonly Action<string>? OriginalLog = DataDiagnostics.Log;
     private int Completions;
+    private readonly List<IReadOnlyCollection<string>> ListedNames = [];
 
     public MetaFileSyncTests()
     {
@@ -43,7 +44,7 @@ public sealed class MetaFileSyncTests : IDisposable
         return output.ToArray();
     }
 
-    private MetaFileSync NewSync(Func<string, byte[], bool>? write = null) => new(() => Root, Requests.Add, () => Completions++, write);
+    private MetaFileSync NewSync(Func<string, byte[], bool>? write = null) => new(() => Root, Requests.Add, () => Completions++, ListedNames.Add, write);
 
     private static (string, uint)[] Listing(params string[] names) => [.. names.Select(name => (name, ContentChecksum))];
 
@@ -264,6 +265,41 @@ public sealed class MetaFileSyncTests : IDisposable
         Assert.Equal(1, Completions);
         Assert.Equal(0, sync.PendingCount);
         Assert.False(OnDisk("ItemInfo0"));
+    }
+
+    //BRIG-166: a file that is not in the cache had a checksum of 0, so a listed checksum of 0 counted as current
+    [Fact]
+    public void OnChecksums_RequestsAMissingFileWhoseListedChecksumIsZero()
+    {
+        var sync = NewSync();
+
+        sync.OnChecksums([("Light", 0u)]);
+
+        Assert.Equal(["Light"], Requests);
+        Assert.Equal(0, Completions);
+    }
+
+    //BRIG-167: the repository reads only the files that the last list names, so a stale file that could not be deleted
+    //is not read
+    [Fact]
+    public void OnChecksums_GivesTheRepositoryTheSafeListedNames()
+    {
+        var sync = NewSync();
+
+        sync.OnChecksums([("ItemInfo0", ContentChecksum), ("../ItemInfo1", ContentChecksum), ("Light", ContentChecksum)]);
+
+        Assert.Equal([["ItemInfo0", "Light"]], ListedNames.Select(names => names.Order().ToArray()));
+    }
+
+    //a null list changes nothing in the cache, so the repository keeps the names it has
+    [Fact]
+    public void OnChecksums_ANullListGivesNoNames()
+    {
+        var sync = NewSync();
+
+        sync.OnChecksums(null);
+
+        Assert.Empty(ListedNames);
     }
 
     [Fact]

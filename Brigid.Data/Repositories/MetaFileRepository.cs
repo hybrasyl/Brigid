@@ -27,16 +27,58 @@ public sealed class MetaFileRepository
     //reads the server-pushed metafile cache written by ChaosGame; must match its write location
     //(AppPaths.MetaFileDir), which lives under %LOCALAPPDATA% and is scoped per server. Resolved per access, not
     //captured, because this repository is constructed before the connection target is known.
-    private static string MetaFileDirectory => AppPaths.MetaFileDir;
-    private FrozenDictionary<int, ushort>? ItemIndex;
+    private readonly Func<string> DirectoryOf;
+    private string MetaFileDirectory => DirectoryOf();
+    //item name hash to the name of the ItemInfo file that holds it
+    private FrozenDictionary<int, string>? ItemIndex;
     private NpcIllustrationMetadata? NpcIllustrationMetadataCache;
+
+    //the names of the last checksum list, or null before the first list of a server
+    private volatile ListedFiles? Listed;
+
+    //a scan of the folder compares a file name exactly, as the prune does, so the repository reads the files that the
+    //prune keeps. A lookup by a fixed name (Light, SClass1) finds the listed name in any case, and reads the file under
+    //the listed name, which is the name that the sync writes
+    private sealed record ListedFiles(FrozenSet<string> Exact, FrozenDictionary<string, string> AnyCase);
+
+    public MetaFileRepository() : this(() => AppPaths.MetaFileDir) { }
+
+    /// <summary>A repository that reads the metafiles in <paramref name="directory" />, for the tests.</summary>
+    internal MetaFileRepository(string directory) : this(() => directory) { }
+
+    private MetaFileRepository(Func<string> directory) => DirectoryOf = directory;
+
+    /// <summary>
+    ///     Sets the names of the server's last checksum list. The repository then reads only those files, so a stale file
+    ///     that the sync could not delete is not read (BRIG-167).
+    /// </summary>
+    public void SetListedNames(IReadOnlyCollection<string> names)
+        => Listed = new ListedFiles(
+            names.ToFrozenSet(StringComparer.Ordinal),
+            names.DistinctBy(name => name, StringComparer.OrdinalIgnoreCase)
+                 .ToFrozenDictionary(name => name, name => name, StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>
+    ///     Forgets the names of the last checksum list, so the repository reads every file in the folder, as before the
+    ///     first list of a server. Call it at a server change.
+    /// </summary>
+    public void ForgetListedNames() => Listed = null;
+
+    //for a scan of the folder
+    private bool IsListed(string fileName) => Listed is not { } listed || listed.Exact.Contains(fileName);
+
+    //for a lookup by name: the name of the file to read, or null when the list does not name it
+    private string? ListedNameFor(string name)
+        => Listed is not { } listed ? name
+            : listed.AnyCase.TryGetValue(name, out var listedName) ? listedName
+            : null;
 
     /// <summary>
     ///     Builds the item name-to-file index for fast lookups. Must be called once after metadata files are synced to disk.
     /// </summary>
     public void BuildItemIndex()
     {
-        var index = new ConcurrentDictionary<int, ushort>();
+        var index = new ConcurrentDictionary<int, string>();
 
         if (!Directory.Exists(MetaFileDirectory))
         {
@@ -47,9 +89,8 @@ public sealed class MetaFileRepository
 
         var files = Directory.GetFiles(MetaFileDirectory)
                              .Select(f => (Path: f, Name: Path.GetFileName(f)))
-                             .Where(f => f.Name.StartsWithI("ItemInfo"))
-                             .Select(f => (f.Path, Parsed: ushort.TryParse(f.Name.AsSpan("ItemInfo".Length), out var n), Number: n))
-                             .Where(f => f.Parsed)
+                             .Where(f => f.Name.StartsWithI("ItemInfo") && IsListed(f.Name))
+                             .Where(f => ushort.TryParse(f.Name.AsSpan("ItemInfo".Length), out _))
                              .ToArray();
 
         Parallel.ForEach(
@@ -60,7 +101,7 @@ public sealed class MetaFileRepository
                     return;
 
                 foreach (var entry in metaFile)
-                    index.TryAdd(StringComparer.OrdinalIgnoreCase.GetHashCode(entry.Key), file.Number);
+                    index.TryAdd(StringComparer.OrdinalIgnoreCase.GetHashCode(entry.Key), file.Name);
             });
 
         ItemIndex = index.ToFrozenDictionary();
@@ -81,7 +122,10 @@ public sealed class MetaFileRepository
     /// </summary>
     public MetaFile? Get(string name)
     {
-        var filePath = Path.Combine(MetaFileDirectory, name);
+        if (ListedNameFor(name) is not { } fileName)
+            return null;
+
+        var filePath = Path.Combine(MetaFileDirectory, fileName);
 
         if (!File.Exists(filePath))
             return null;
@@ -124,7 +168,7 @@ public sealed class MetaFileRepository
         {
             var fileName = Path.GetFileName(filePath);
 
-            if (!fileName.StartsWithI(prefix))
+            if (!fileName.StartsWithI(prefix) || !IsListed(fileName))
                 continue;
 
             if (!TryLoadMetaFile(filePath, out var metaFile))
@@ -150,20 +194,21 @@ public sealed class MetaFileRepository
         if (ItemIndex is null || (itemNames.Length == 0))
             return new Dictionary<string, ItemMetadataEntry>(StringComparer.OrdinalIgnoreCase);
 
-        //group requested names by file number
-        var fileGroups = new Dictionary<ushort, HashSet<string>>();
+        //group requested names by file. An index from an earlier list can name a file that the last list drops, and that
+        //file is not read
+        var fileGroups = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
         foreach (var name in itemNames)
         {
             var hash = StringComparer.OrdinalIgnoreCase.GetHashCode(name);
 
-            if (!ItemIndex.TryGetValue(hash, out var fileNumber))
+            if (!ItemIndex.TryGetValue(hash, out var fileName) || !IsListed(fileName))
                 continue;
 
-            if (!fileGroups.TryGetValue(fileNumber, out var names))
+            if (!fileGroups.TryGetValue(fileName, out var names))
             {
                 names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                fileGroups[fileNumber] = names;
+                fileGroups[fileName] = names;
             }
 
             names.Add(name);
@@ -175,7 +220,7 @@ public sealed class MetaFileRepository
             fileGroups,
             group =>
             {
-                var filePath = Path.Combine(MetaFileDirectory, $"ItemInfo{group.Key}");
+                var filePath = Path.Combine(MetaFileDirectory, group.Key);
 
                 if (!File.Exists(filePath))
                     return;

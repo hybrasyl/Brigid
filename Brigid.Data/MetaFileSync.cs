@@ -17,6 +17,7 @@ public sealed class MetaFileSync
     private readonly Func<string> DirectoryOf;
     private readonly Action<string> Request;
     private readonly Action Complete;
+    private readonly Action<IReadOnlyCollection<string>> Listed;
     private readonly Func<string, byte[], bool> Write;
 
     //the files that the client requested and has not completed. A file is written under the listed name, because the
@@ -32,18 +33,29 @@ public sealed class MetaFileSync
     /// <param name="directory">The metafile folder. It is read each time, because it depends on the server scope.</param>
     /// <param name="request">Sends the request for one file by name.</param>
     /// <param name="complete">Called when the sync completes.</param>
-    public MetaFileSync(Func<string> directory, Action<string> request, Action complete)
-        : this(directory, request, complete, null) { }
+    /// <param name="listed">
+    ///     Takes the safe names of each checksum list, before the prune, so that the repository reads only those files
+    ///     (BRIG-167).
+    /// </param>
+    public MetaFileSync(Func<string> directory, Action<string> request, Action complete, Action<IReadOnlyCollection<string>> listed)
+        : this(directory, request, complete, listed, null) { }
 
     /// <param name="directory">The metafile folder.</param>
     /// <param name="request">Sends the request for one file by name.</param>
     /// <param name="complete">Called when the sync completes.</param>
+    /// <param name="listed">Takes the safe names of each checksum list.</param>
     /// <param name="write">Writes one file and returns false on a failure; null writes with <see cref="MetaFileCache.TryWrite" />.</param>
-    internal MetaFileSync(Func<string> directory, Action<string> request, Action complete, Func<string, byte[], bool>? write)
+    internal MetaFileSync(
+        Func<string> directory,
+        Action<string> request,
+        Action complete,
+        Action<IReadOnlyCollection<string>> listed,
+        Func<string, byte[], bool>? write)
     {
         DirectoryOf = directory;
         Request = request;
         Complete = complete;
+        Listed = listed;
         Write = write ?? ((name, data) => MetaFileCache.TryWrite(directory(), name, data));
     }
 
@@ -78,9 +90,11 @@ public sealed class MetaFileSync
                 Log($"Ignored a metafile checksum with an unsafe name: \"{entry.Name}\".");
         }
 
+        //the repository reads only the listed files, so a stale file that the prune cannot delete is not read
+        Listed([.. listed.Select(entry => entry.Name)]);
+
         //the list is the server's whole catalog, so a local file that it does not name is stale. An empty list empties
-        //the cache. Retail clears only its store in memory, but MetaFileRepository reads every file in the folder, so a
-        //file left on disk stays in use.
+        //the cache. Retail clears only its store in memory, but a file left on disk stays on disk.
         foreach (var name in MetaFileCache.PruneUnlisted(directory, listed.Select(entry => entry.Name)))
             Log($"Deleted a metafile that the server no longer lists: {name}.");
 

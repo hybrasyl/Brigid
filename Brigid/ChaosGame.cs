@@ -217,7 +217,8 @@ public sealed class ChaosGame : Game
         MetaSync = new MetaFileSync(
             static () => MetaFilePath,
             name => Connection.SendMetaDataRequest(MetaDataRequestType.DataByName, name),
-            () => OnMetaDataSyncComplete?.Invoke());
+            () => OnMetaDataSyncComplete?.Invoke(),
+            names => DataContext.MetaFiles.SetListedNames(names));
         Connection.OnMetaData += HandleMetaData;
         Connection.OnWorldEntryComplete += () => Connection.SendMetaDataRequest(MetaDataRequestType.AllCheckSums);
         Connection.StateChanged += OnConnectionStateChanged;
@@ -594,6 +595,7 @@ public sealed class ChaosGame : Game
 
         ScopeServerCaches();
         DataContext.MetaFiles.ClearCaches();
+        DataContext.MetaFiles.ForgetListedNames();
         CertificateTrustStore.ClearPendingPrompts();
         NoticeDebugLog.Write($"lobby server changed to {GlobalSettings.LobbyHost}:{GlobalSettings.LobbyPort}");
 
