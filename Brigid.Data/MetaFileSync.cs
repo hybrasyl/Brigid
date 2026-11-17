@@ -3,8 +3,9 @@ namespace Brigid.Data;
 /// <summary>
 ///     The metafile sync (0x6F). The server sends a checksum list; the client deletes the cached files that the list does
 ///     not name, and requests each file whose checksum differs. It writes a file only when it requested the file and the
-///     CRC-32 of the data matches the checksum in the data packet, as retail does (BRIG-114). The sync completes when no
-///     request is open.
+///     CRC-32 of the data matches the checksum in the data packet, as retail does (BRIG-114). A request with no answer
+///     after <see cref="REQUEST_TIMEOUT_SECONDS" /> is sent again, under the same limit as a bad payload (BRIG-165). The
+///     sync completes when no request is open. Call its methods on one thread (the game loop).
 /// </summary>
 public sealed class MetaFileSync
 {
@@ -14,11 +15,20 @@ public sealed class MetaFileSync
     /// </summary>
     public const int MAX_REQUESTS = 3;
 
+    /// <summary>
+    ///     The time for an answer to one request. A server that does not know a name sends nothing (Hybrasyl). Without a
+    ///     time limit, one such file holds the sync open for the session.
+    /// </summary>
+    public const int REQUEST_TIMEOUT_SECONDS = 10;
+
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(REQUEST_TIMEOUT_SECONDS);
+
     private readonly Func<string> DirectoryOf;
     private readonly Action<string> Request;
     private readonly Action Complete;
     private readonly Action<IReadOnlyCollection<string>> Listed;
     private readonly Func<string, byte[], bool> Write;
+    private readonly TimeProvider Clock;
 
     //the files that the client requested and has not completed. A file is written under the listed name, because the
     //repository and the prune match names exactly
@@ -28,7 +38,8 @@ public sealed class MetaFileSync
     /// <param name="Requests">The number of requests sent.</param>
     /// <param name="Listed">The checksum in the list.</param>
     /// <param name="Replaced">The checksum in a list that this list replaced while the file was pending, when it differs.</param>
-    private readonly record struct Entry(string Name, int Requests, uint Listed, uint? Replaced);
+    /// <param name="SentAt">The clock timestamp of the last request.</param>
+    private readonly record struct Entry(string Name, int Requests, uint Listed, uint? Replaced, long SentAt);
 
     /// <param name="directory">The metafile folder. It is read each time, because it depends on the server scope.</param>
     /// <param name="request">Sends the request for one file by name.</param>
@@ -38,25 +49,28 @@ public sealed class MetaFileSync
     ///     (BRIG-167).
     /// </param>
     public MetaFileSync(Func<string> directory, Action<string> request, Action complete, Action<IReadOnlyCollection<string>> listed)
-        : this(directory, request, complete, listed, null) { }
+        : this(directory, request, complete, listed, null, null) { }
 
     /// <param name="directory">The metafile folder.</param>
     /// <param name="request">Sends the request for one file by name.</param>
     /// <param name="complete">Called when the sync completes.</param>
     /// <param name="listed">Takes the safe names of each checksum list.</param>
     /// <param name="write">Writes one file and returns false on a failure; null writes with <see cref="MetaFileCache.TryWrite" />.</param>
+    /// <param name="clock">The clock of the time limit; null is the system clock.</param>
     internal MetaFileSync(
         Func<string> directory,
         Action<string> request,
         Action complete,
         Action<IReadOnlyCollection<string>> listed,
-        Func<string, byte[], bool>? write)
+        Func<string, byte[], bool>? write,
+        TimeProvider? clock)
     {
         DirectoryOf = directory;
         Request = request;
         Complete = complete;
         Listed = listed;
         Write = write ?? ((name, data) => MetaFileCache.TryWrite(directory(), name, data));
+        Clock = clock ?? TimeProvider.System;
     }
 
     /// <summary>The number of files that the client requested and has not completed.</summary>
@@ -98,9 +112,11 @@ public sealed class MetaFileSync
         foreach (var name in MetaFileCache.PruneUnlisted(directory, listed.Select(entry => entry.Name)))
             Log($"Deleted a metafile that the server no longer lists: {name}.");
 
+        var now = Clock.GetTimestamp();
+
         foreach (var (name, checksum) in listed)
             if (MetaFileCache.GetChecksum(directory, name) != checksum)
-                Pending[name] = new Entry(name, 1, checksum, replaced.TryGetValue(name, out var old) && (old != checksum) ? old : null);
+                Pending[name] = new Entry(name, 1, checksum, replaced.TryGetValue(name, out var old) && (old != checksum) ? old : null, now);
 
         foreach (var name in Pending.Keys)
             Request(name);
@@ -134,7 +150,7 @@ public sealed class MetaFileSync
             return;
         }
 
-        var (listedName, requests, listedChecksum, replacedChecksum) = pending;
+        var (listedName, requests, listedChecksum, replacedChecksum, _) = pending;
         var valid = MetaFileCache.IsValidPayload(data, checksum);
 
         //a late answer to the replaced list matches the replaced checksum: drop it once and request the file again. After
@@ -142,7 +158,7 @@ public sealed class MetaFileSync
         if (valid && (checksum == replacedChecksum) && (checksum != listedChecksum))
         {
             Log($"{listedName} answers a checksum list that a later list replaced. Requesting it again.");
-            Pending[name] = pending with { Requests = requests + 1, Replaced = null };
+            Pending[name] = pending with { Requests = requests + 1, Replaced = null, SentAt = Clock.GetTimestamp() };
             Request(listedName);
 
             return;
@@ -157,7 +173,7 @@ public sealed class MetaFileSync
             if (requests < MAX_REQUESTS)
             {
                 Log($"{listedName} {problem}. Requesting it again ({requests + 1} of {MAX_REQUESTS}).");
-                Pending[name] = pending with { Requests = requests + 1 };
+                Pending[name] = pending with { Requests = requests + 1, SentAt = Clock.GetTimestamp() };
                 Request(listedName);
 
                 return;
@@ -170,6 +186,58 @@ public sealed class MetaFileSync
 
         if (Pending.Count == 0)
             Complete();
+    }
+
+    /// <summary>
+    ///     Sends each request that has had no answer for <see cref="REQUEST_TIMEOUT_SECONDS" /> again, up to
+    ///     <see cref="MAX_REQUESTS" /> requests; then the cache keeps its old copy and the entry completes. Call it once each
+    ///     frame while the connection is in World.
+    /// </summary>
+    public void Tick()
+    {
+        List<Entry>? due = null;
+
+        foreach (var entry in Pending.Values)
+            if (Clock.GetElapsedTime(entry.SentAt) >= RequestTimeout)
+                (due ??= []).Add(entry);
+
+        if (due is null)
+            return;
+
+        var completed = false;
+
+        foreach (var entry in due)
+        {
+            if (entry.Requests < MAX_REQUESTS)
+            {
+                Log($"{entry.Name} has no answer. Requesting it again ({entry.Requests + 1} of {MAX_REQUESTS}).");
+                Pending[entry.Name] = entry with { Requests = entry.Requests + 1, SentAt = Clock.GetTimestamp() };
+                Request(entry.Name);
+
+                continue;
+            }
+
+            Log($"{entry.Name} has no answer after {entry.Requests} requests. The cache keeps its old copy, if it has one.");
+            Pending.Remove(entry.Name);
+            completed = true;
+        }
+
+        if (completed && (Pending.Count == 0))
+            Complete();
+    }
+
+    /// <summary>
+    ///     Ends a sync that is open, with no completion: call it when the connection leaves World (a loss, a logout or a
+    ///     world transfer) and when the server changes. Nothing waits for the sync then, and the next world entry asks for
+    ///     a new checksum list. A late answer is dropped.
+    /// </summary>
+    public void End()
+    {
+        if (Pending.Count == 0)
+            return;
+
+        Log($"The sync ended with {Pending.Count} file(s) open.");
+        Pending.Clear();
     }
 
     private static void Log(string message) => DataDiagnostics.Log?.Invoke($"[meta] {message}");

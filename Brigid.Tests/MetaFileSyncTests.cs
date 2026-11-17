@@ -21,6 +21,9 @@ public sealed class MetaFileSyncTests : IDisposable
     private readonly Action<string>? OriginalLog = DataDiagnostics.Log;
     private int Completions;
     private readonly List<IReadOnlyCollection<string>> ListedNames = [];
+    private readonly ManualClock Clock = new();
+
+    private const long TIMEOUT_MS = MetaFileSync.REQUEST_TIMEOUT_SECONDS * 1000;
 
     public MetaFileSyncTests()
     {
@@ -44,7 +47,17 @@ public sealed class MetaFileSyncTests : IDisposable
         return output.ToArray();
     }
 
-    private MetaFileSync NewSync(Func<string, byte[], bool>? write = null) => new(() => Root, Requests.Add, () => Completions++, ListedNames.Add, write);
+    private MetaFileSync NewSync(Func<string, byte[], bool>? write = null) => new(() => Root, Requests.Add, () => Completions++, ListedNames.Add, write, Clock);
+
+    //moves the clock and lets the sync check its requests
+    private void Wait(MetaFileSync sync, long ms) => At(sync, Clock.Ms + ms);
+
+    //sets the clock to a time from the start of the test and lets the sync check its requests
+    private void At(MetaFileSync sync, long ms)
+    {
+        Clock.Ms = ms;
+        sync.Tick();
+    }
 
     private static (string, uint)[] Listing(params string[] names) => [.. names.Select(name => (name, ContentChecksum))];
 
@@ -371,5 +384,176 @@ public sealed class MetaFileSyncTests : IDisposable
 
         Assert.Equal(1, Completions);
         Assert.Equal(0, sync.PendingCount);
+    }
+
+    //BRIG-165: a request that the server never answers (Hybrasyl sends nothing for a name it does not know) held the sync
+    //open for the session, so the item index and the light metadata were never built again
+
+    [Fact]
+    public void Tick_DoesNothingBeforeTheTimeLimit()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+
+        Wait(sync, TIMEOUT_MS - 1);
+
+        Assert.Equal(["ItemInfo0"], Requests);
+        Assert.Equal(1, sync.PendingCount);
+    }
+
+    [Fact]
+    public void Tick_RequestsAFileWithNoAnswerAgain_AndCompletesAtTheLimit()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+
+        for (var request = 2; request <= MetaFileSync.MAX_REQUESTS; request++)
+        {
+            Wait(sync, TIMEOUT_MS);
+
+            Assert.Equal(request, Requests.Count);
+            Assert.Equal(0, Completions);
+        }
+
+        Wait(sync, TIMEOUT_MS);
+
+        Assert.Equal(MetaFileSync.MAX_REQUESTS, Requests.Count);
+        Assert.Equal(1, Completions);
+        Assert.Equal(0, sync.PendingCount);
+        Assert.False(OnDisk("ItemInfo0"));
+    }
+
+    //each request has its own time: a request again after a bad payload starts a new time limit
+    [Fact]
+    public void Tick_TimesARequestFromWhenItWasSent()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+
+        Wait(sync, TIMEOUT_MS - 1);
+        sync.OnData("ItemInfo0", ContentChecksum, Compress([9, 9]));
+        Wait(sync, TIMEOUT_MS - 1);
+
+        Assert.Equal(2, Requests.Count);
+    }
+
+    //a request again after a time limit has a time limit of its own
+    [Fact]
+    public void Tick_TimesARequestAgainFromWhenItWasSent()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+
+        Wait(sync, TIMEOUT_MS);
+        Wait(sync, 1);
+
+        Assert.Equal(2, Requests.Count);
+    }
+
+    //a file that stops at the limit while another file waits does not complete the sync. Both files are requested at 0;
+    //a bad payload puts ItemInfo1 one request ahead, so it reaches the limit first
+    [Fact]
+    public void Tick_DoesNotCompleteWhileAnotherFileWaits()
+    {
+        const long t = TIMEOUT_MS;
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0", "ItemInfo1"));
+
+        At(sync, t - 1);
+        sync.OnData("ItemInfo1", ContentChecksum, Compress([9, 9])); //ItemInfo1 request 2, at t - 1
+        At(sync, t);                                                  //ItemInfo0 request 2
+        At(sync, (2 * t) - 1);                                        //ItemInfo1 request 3
+        At(sync, 2 * t);                                              //ItemInfo0 request 3
+
+        Assert.Equal(6, Requests.Count);
+
+        At(sync, (3 * t) - 1); //ItemInfo1 stops at the limit; ItemInfo0 waits
+
+        Assert.Equal(1, sync.PendingCount);
+        Assert.Equal(0, Completions);
+
+        At(sync, 3 * t); //ItemInfo0 stops at the limit
+
+        Assert.Equal(1, Completions);
+    }
+
+    //the cache keeps its old copy of a file that has no answer
+    [Fact]
+    public void Tick_KeepsTheOldCopyOfAFileWithNoAnswer()
+    {
+        var old = Compress(Encoding.ASCII.GetBytes("old ItemInfo0"));
+        File.WriteAllBytes(Path.Combine(Root, "ItemInfo0"), old);
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+
+        for (var i = 0; i < MetaFileSync.MAX_REQUESTS; i++)
+            Wait(sync, TIMEOUT_MS);
+
+        Assert.Equal(1, Completions);
+        Assert.Equal(old, File.ReadAllBytes(Path.Combine(Root, "ItemInfo0")));
+    }
+
+    //a time limit and a bad payload use the one count, so the sync ends after MAX_REQUESTS requests in all
+    [Fact]
+    public void Tick_AndABadPayloadShareTheRequestCount()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+
+        sync.OnData("ItemInfo0", ContentChecksum, Compress([9, 9]));
+        Wait(sync, TIMEOUT_MS);
+
+        Assert.Equal(MetaFileSync.MAX_REQUESTS, Requests.Count);
+
+        Wait(sync, TIMEOUT_MS);
+
+        Assert.Equal(MetaFileSync.MAX_REQUESTS, Requests.Count);
+        Assert.Equal(1, Completions);
+    }
+
+    //only the file with no answer stops at the limit; the sync completes when the other file comes
+    [Fact]
+    public void Tick_CompletesOnlyWhenTheOtherFilesAreDone()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0", "ItemInfo1"));
+        Answer(sync, "ItemInfo1");
+
+        for (var i = 0; i < MetaFileSync.MAX_REQUESTS; i++)
+            Wait(sync, TIMEOUT_MS);
+
+        Assert.Equal(1, Completions);
+        Assert.True(OnDisk("ItemInfo1"));
+    }
+
+    //the connection left World, or the server changed: nothing waits for the sync, and the next world entry starts a new one
+    [Fact]
+    public void End_ClearsTheSyncWithNoCompletion()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+
+        sync.End();
+
+        Assert.Equal(0, sync.PendingCount);
+        Assert.Equal(0, Completions);
+
+        Wait(sync, TIMEOUT_MS * MetaFileSync.MAX_REQUESTS);
+
+        Assert.Equal(["ItemInfo0"], Requests);
+        Assert.Equal(0, Completions);
+    }
+
+    [Fact]
+    public void End_DropsALateAnswer()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+        sync.End();
+
+        Answer(sync, "ItemInfo0");
+
+        Assert.False(OnDisk("ItemInfo0"));
+        Assert.Equal(0, Completions);
     }
 }

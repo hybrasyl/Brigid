@@ -594,6 +594,7 @@ public sealed class ChaosGame : Game
             return false;
 
         ScopeServerCaches();
+        MetaSync.End();
         DataContext.MetaFiles.ClearCaches();
         DataContext.MetaFiles.ForgetListedNames();
         CertificateTrustStore.ClearPendingPrompts();
@@ -912,6 +913,14 @@ public sealed class ChaosGame : Game
         //drain and process network packets each frame
         PacketBuffer.Clear();
         Connection.ProcessPackets(PacketBuffer);
+
+        //the metafile sync runs on this thread, and only while the connection is in World: a loss, a logout and a world
+        //transfer each leave World, and each world entry asks for a new list. The state is read here, because a close
+        //raises StateChanged on the network thread
+        if (Connection.State == ConnectionState.World)
+            MetaSync.Tick();
+        else
+            MetaSync.End();
 
         Screens.Update(gameTime);
 

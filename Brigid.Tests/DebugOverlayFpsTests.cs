@@ -13,16 +13,6 @@ public class DebugOverlayFpsTests
 {
     private static readonly GameTime Step = new(TimeSpan.Zero, TimeSpan.FromMilliseconds(20));
 
-    //a clock in milliseconds that the test moves
-    private sealed class ManualClock : TimeProvider
-    {
-        public long Ms;
-
-        public override long TimestampFrequency => 1000;
-
-        public override long GetTimestamp() => Ms;
-    }
-
     //runs updates with a wall clock that moves wallMsPerUpdate at each Update, and draws on every drawEvery-th Update
     private static int MeasureFps(int updates, int wallMsPerUpdate, int drawEvery, int stallBeforeUpdate = -1)
     {
