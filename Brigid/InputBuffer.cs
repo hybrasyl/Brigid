@@ -33,6 +33,10 @@ public static class InputBuffer
     private static float VirtualScaleX = 1f;
     private static float VirtualScaleY = 1f;
 
+    //the cursor position that the BRIG-184 test driver gives, in virtual pixels, used in place of SDL_GetMouseState while
+    //it is set. A pushed SDL motion event does not move SDL's cursor, and SDL_WarpMouseInWindow moves the real one.
+    private static (int X, int Y)? PointerOverride;
+
     //─────────────────────────────────────────────────────────────────────────────
     //  accumulation buffer (filled by the watcher between Update() calls)
     //─────────────────────────────────────────────────────────────────────────────
@@ -90,6 +94,26 @@ public static class InputBuffer
     //(the render target is stretch-drawn to fill in that case, not letterboxed).
     private static int ToVirtualX(int raw) => (int)(raw / VirtualScaleX);
     private static int ToVirtualY(int raw) => (int)(raw / VirtualScaleY);
+
+    /// <summary>
+    ///     The window pixel that <see cref="MouseX" />/<see cref="MouseY" /> read back as the virtual point
+    ///     (<paramref name="x" />, <paramref name="y" />): the centre of that virtual pixel. For the BRIG-184 test driver,
+    ///     which puts a mouse event at a control.
+    /// </summary>
+    internal static (int X, int Y) ToWindowPoint(int x, int y) => ToWindowPoint(x, y, VirtualScaleX, VirtualScaleY);
+
+    internal static (int X, int Y) ToWindowPoint(int x, int y, float scaleX, float scaleY)
+        => ((int)((x + 0.5f) * scaleX), (int)((y + 0.5f) * scaleY));
+
+    /// <summary>
+    ///     Puts the cursor at the virtual point (<paramref name="x" />, <paramref name="y" />) from the next
+    ///     <see cref="Update" /> on, in place of the real cursor. Only the BRIG-184 test driver calls it; the real cursor
+    ///     does not move.
+    /// </summary>
+    internal static void SetPointerOverride(int x, int y) => PointerOverride = (x, y);
+
+    /// <summary>Gives the cursor back to SDL from the next <see cref="Update" /> on.</summary>
+    internal static void ClearPointerOverride() => PointerOverride = null;
 
     /// <summary>
     ///     Returns true if the key is currently held down (event-tracked, not polled).
@@ -261,7 +285,11 @@ public static class InputBuffer
         //read the latest cursor position from SDL's internal state. the pump at the
         //top of this method guarantees this reflects every OS event up to now, so
         //MouseX / MouseY always show the true end-state of the cursor this frame.
-        _ = Sdl.SDL_GetMouseState(out RawMouseX, out RawMouseY);
+        //mapped at each update, so a new window scale (another display) keeps the same virtual point
+        if (PointerOverride is { } pointer)
+            (RawMouseX, RawMouseY) = ToWindowPoint(pointer.X, pointer.Y);
+        else
+            _ = Sdl.SDL_GetMouseState(out RawMouseX, out RawMouseY);
     }
 
     /// <summary>
@@ -439,7 +467,8 @@ public static class InputBuffer
     //to the main number row and numpad Enter to main Enter so hotkeys don't care which
     //one the user hits. Scancodes are physical-key positions, so hotkey behavior is
     //stable across keyboard layouts.
-    private static Keys TranslateScancode(int scancode) => scancode switch
+    /// <summary>The key of an SDL scancode, or <see cref="Keys.None" />. Internal for the BRIG-184 test driver.</summary>
+    internal static Keys TranslateScancode(int scancode) => scancode switch
     {
         4   => Keys.A,
         5   => Keys.B,
