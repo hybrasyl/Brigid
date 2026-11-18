@@ -109,7 +109,7 @@ public sealed class ChatPanel : ExpandablePanel
         Model.Changed += _ => LogVersion++;
 
         AddChild(Bar);
-        WorldState.Chat.MessageAdded += OnMessageAdded;
+        WorldState.Chat.EntryAdded += OnEntryAdded;
     }
 
     private void AddMessage(string text, Color color)
@@ -186,14 +186,18 @@ public sealed class ChatPanel : ExpandablePanel
 
     public override void Dispose()
     {
-        WorldState.Chat.MessageAdded -= OnMessageAdded;
+        WorldState.Chat.EntryAdded -= OnEntryAdded;
 
         base.Dispose();
     }
 
     //labels are children — drawn automatically by base.draw()
 
-    private void OnMessageAdded(Chat.ChatMessage msg) => AddMessage(msg.Text, msg.Color);
+    private void OnEntryAdded(ChatEntry entry)
+    {
+        if (Chat.ShowsInChatPanel(entry.Channel))
+            AddMessage(entry.Text, entry.Color);
+    }
 
     /// <summary>
     ///     Recomputes the autofit glyph size and re-wraps every held message at it. Wrapping is derived state: the size

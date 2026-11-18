@@ -151,7 +151,7 @@ public sealed partial class WorldScreen
             && !IsGameMaster
             && !WorldState.SkillBook.HasSkillByName("swimming"))
         {
-            WorldState.Chat.AddMessage("You need to learn how to swim.", Color.White);
+            WorldState.Chat.Add(ChatChannel.System, "You need to learn how to swim.", TextColors.System);
 
             return;
         }
@@ -254,7 +254,7 @@ public sealed partial class WorldScreen
         };
 
         if (!isNpc || ClientSettings.RecordNpcChat)
-            WorldState.Chat.AddMessage(args.Message, color);
+            WorldState.Chat.Add(PublicChannelOf(messageType, isNpc), args.Message, color);
 
         if (entity is null)
             return;
@@ -262,6 +262,46 @@ public sealed partial class WorldScreen
         var isShout = messageType == PublicMessageType.Shout;
         Overlays.AddChatBubble(args.SourceId, args.Message, isShout);
     }
+
+    /// <summary>The channel of a public message: a shout, the speech of a creature or a merchant, else a say.</summary>
+    internal static ChatChannel PublicChannelOf(PublicMessageType type, bool isNpc)
+        => type == PublicMessageType.Shout ? ChatChannel.Shout
+            : isNpc ? ChatChannel.Npc
+            : ChatChannel.Say;
+
+    /// <summary>
+    ///     The chat channel of a server message, or null for a type that the chat log does not hold (a window, the
+    ///     persistent message, the user options). A group message that is a line of Hybrasyl's combat log is
+    ///     <see cref="ChatChannel.Combat" />. Every other type, also an unknown one, is a system notice.
+    /// </summary>
+    internal static ChatChannel? ServerChannelOf(ServerMessageType type, string text)
+        => type switch
+        {
+            ServerMessageType.Whisper   => ChatChannel.Whisper,
+            ServerMessageType.GroupChat => CombatLog.IsCombatLine(text) ? ChatChannel.Combat : ChatChannel.Group,
+            ServerMessageType.GuildChat => ChatChannel.Guild,
+            ServerMessageType.PersistentMessage
+                or ServerMessageType.ScrollWindow
+                or ServerMessageType.NonScrollWindow
+                or ServerMessageType.WoodenBoard
+                or ServerMessageType.UserOptions
+                or ServerMessageType.ClosePopup => null,
+            _ => ChatChannel.System
+        };
+
+    /// <summary>True for the server message types that the system message pane of the viewport also shows.</summary>
+    internal static bool ShowsInSystemPane(ServerMessageType type)
+        => type is ServerMessageType.Whisper or ServerMessageType.GroupChat or ServerMessageType.GuildChat
+            or ServerMessageType.ActiveMessage;
+
+    private static Color ServerMessageColor(ChatChannel channel)
+        => channel switch
+        {
+            ChatChannel.Whisper                      => TextColors.Whisper,
+            ChatChannel.Group or ChatChannel.Combat => TextColors.GroupChat,
+            ChatChannel.Guild                        => TextColors.GuildChat,
+            _                                        => TextColors.System
+        };
 
     private void HandleServerMessage(SystemMessagePacket args)
     {
@@ -273,44 +313,22 @@ public sealed partial class WorldScreen
             return;
         }
 
-        switch ((ServerMessageType)(byte)args.MessageType)
+        var type = (ServerMessageType)(byte)args.MessageType;
+
+        if (ServerChannelOf(type, args.Message) is { } channel)
         {
-            case ServerMessageType.Whisper:
-                WorldState.Chat.AddMessage(args.Message, TextColors.Whisper);
-                WorldState.Chat.AddOrangeBarMessage(args.Message, TextColors.Whisper);
-                SystemMessagePane.AddMessage(args.Message, TextColors.Whisper);
+            var color = ServerMessageColor(channel);
+            WorldState.Chat.Add(channel, args.Message, color);
 
-                break;
+            //the pane draws an active message in its own default colour
+            if (ShowsInSystemPane(type))
+                SystemMessagePane.AddMessage(args.Message, channel == ChatChannel.System ? null : color);
 
-            case ServerMessageType.GroupChat:
-                WorldState.Chat.AddMessage(args.Message, TextColors.GroupChat);
-                WorldState.Chat.AddOrangeBarMessage(args.Message, TextColors.GroupChat);
-                SystemMessagePane.AddMessage(args.Message, TextColors.GroupChat);
+            return;
+        }
 
-                break;
-
-            case ServerMessageType.GuildChat:
-                WorldState.Chat.AddMessage(args.Message, TextColors.GuildChat);
-                WorldState.Chat.AddOrangeBarMessage(args.Message, TextColors.GuildChat);
-                SystemMessagePane.AddMessage(args.Message, TextColors.GuildChat);
-
-                break;
-
-            case ServerMessageType.ActiveMessage:
-                WorldState.Chat.AddOrangeBarMessage(args.Message);
-                SystemMessagePane.AddMessage(args.Message);
-
-                break;
-
-            case ServerMessageType.OrangeBar1
-                 or ServerMessageType.OrangeBar2
-                 or ServerMessageType.OrangeBar3
-                 or ServerMessageType.AdminMessage
-                 or ServerMessageType.OrangeBar5:
-                WorldState.Chat.AddOrangeBarMessage(args.Message);
-
-                break;
-
+        switch (type)
+        {
             case ServerMessageType.PersistentMessage:
                 UpdateHuds(HudOps.ShowPersistentMessage, args.Message);
 
@@ -339,11 +357,6 @@ public sealed partial class WorldScreen
             case ServerMessageType.ClosePopup:
                 TextPopup.Hide();
                 MarkdownNotice.Hide();
-
-                break;
-
-            default:
-                WorldState.Chat.AddOrangeBarMessage(args.Message);
 
                 break;
         }
@@ -722,14 +735,14 @@ public sealed partial class WorldScreen
                 //§5.1 / §7.1 (verified round-2). The orange-bar notice is a QoL addition retail omits.
                 if (prompt.ResponseType == GroupResponseType.RecruitAsk)
                 {
-                    WorldState.Chat.AddOrangeBarMessage($"{sourceName} wants to join your group.");
+                    WorldState.Chat.Add(ChatChannel.System, $"{sourceName} wants to join your group.", TextColors.System);
                     Game.Connection.SendGroupInvite(ClientGroupSwitch.TryInvite, sourceName);
 
                     break;
                 }
 
                 //Ask: a standard group invitation.
-                WorldState.Chat.AddOrangeBarMessage($"{sourceName} invites you to join a group.");
+                WorldState.Chat.Add(ChatChannel.System, $"{sourceName} invites you to join a group.", TextColors.System);
 
                 if (!ClientSettings.UseGroupWindow)
                 {

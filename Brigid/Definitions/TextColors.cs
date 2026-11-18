@@ -16,6 +16,9 @@ public static class TextColors
     public static Color Shout { get; private set; }
     public static Color Whisper { get; private set; }
 
+    /// <summary>A system notice: the orange bar and the System tab.</summary>
+    public static Color System { get; private set; }
+
     /// <summary>Non-chat "heads up" accent (e.g. a keybind conflict / contested-key warning). Distinct alias so
     ///     UI warnings don't borrow the <see cref="Shout" /> chat semantic.</summary>
     public static Color Warning { get; private set; }
@@ -28,5 +31,6 @@ public static class TextColors
         GroupChat = LegendColors.Olive;
         GuildChat = LegendColors.Seafoam;
         Warning = LegendColors.CanaryYellow;
+        System = Color.Orange;
     }
 }

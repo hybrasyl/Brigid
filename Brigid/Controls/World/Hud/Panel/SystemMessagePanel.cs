@@ -20,7 +20,7 @@ public sealed class SystemMessagePanel : ExpandablePanel
     private const int GLYPH_HEIGHT = 12;
     private readonly ScrollBarControl Bar;
     private readonly ScrollBarBinder Binder;
-    private readonly IReadOnlyList<Chat.OrangeBarMessage> History;
+    private readonly IReadOnlyList<ChatEntry> History;
     //Offset is lines-from-bottom (0 = newest at bottom); Inverted maps wheel/page + the bar thumb accordingly
     private readonly ScrollModel Model = new() { Inverted = true };
     private readonly Rectangle NormalDisplayBounds;
@@ -83,7 +83,7 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
         AddChild(Bar);
 
-        WorldState.Chat.OrangeBarMessageAdded += OnOrangeBarMessageAdded;
+        WorldState.Chat.EntryAdded += OnEntryAdded;
         WorldState.Chat.Cleared += OnChatCleared;
     }
 
@@ -137,7 +137,7 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
     public override void Dispose()
     {
-        WorldState.Chat.OrangeBarMessageAdded -= OnOrangeBarMessageAdded;
+        WorldState.Chat.EntryAdded -= OnEntryAdded;
         WorldState.Chat.Cleared -= OnChatCleared;
 
         base.Dispose();
@@ -145,7 +145,11 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
     private void OnChatCleared() => HistoryChanged = true;
 
-    private void OnOrangeBarMessageAdded(Chat.OrangeBarMessage _) => HistoryChanged = true;
+    private void OnEntryAdded(ChatEntry entry)
+    {
+        if (Chat.ShowsInOrangeBar(entry.Channel))
+            HistoryChanged = true;
+    }
 
     private void RefreshDisplay()
     {

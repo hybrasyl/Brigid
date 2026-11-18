@@ -4,6 +4,7 @@ using Brigid.Data;
 using Brigid.Networking;
 using Brigid.Systems;
 using Brigid.Systems.Keybinds;
+using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Chaos.Geometry;
 using Chaos.Geometry.Abstractions;
@@ -190,7 +191,7 @@ public sealed partial class WorldScreen
         MapRows = null;
 
         NoticeDebugLog.Write($"[map] map {(ushort)CurrentMapId} did not load completely: {reason}{problems}; the map loads with the rows that arrived");
-        WorldState.Chat.AddOrangeBarMessage(IncompleteMapMessage(Keybinds.Effective(CommandId.World_Refresh).Primary));
+        WorldState.Chat.Add(ChatChannel.System, IncompleteMapMessage(Keybinds.Effective(CommandId.World_Refresh).Primary), TextColors.System);
         FinalizeMapLoad();
     }
 

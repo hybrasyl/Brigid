@@ -49,14 +49,9 @@ public delegate void EquipmentSlotClearedHandler(EquipmentSlot equipmentSlot);
 public delegate void GoldChangedHandler();
 
 /// <summary>
-///     A chat message was added (public, whisper, group, guild).
+///     An entry was added to the chat log.
 /// </summary>
-public delegate void ChatMessageAddedHandler(Chat.ChatMessage message);
-
-/// <summary>
-///     An orange bar message was added (system messages, whisper/group/guild echoes).
-/// </summary>
-public delegate void OrangeBarMessageAddedHandler(Chat.OrangeBarMessage message);
+public delegate void ChatEntryAddedHandler(ChatEntry entry);
 
 /// <summary>
 ///     The current NPC dialog changed (shown, updated, or closed).
