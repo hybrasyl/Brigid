@@ -428,7 +428,7 @@ public sealed class KeybindsTests
     {
         //number-row keys are scanned by the slot/emote handlers before the movement/chat-scroll resolver, so a
         //rebind onto one is flagged (soft warning, not a hard reserve). Modifiers don't matter — the slot
-        //handler has no modifier guard.
+        //handler of the classic HUDs has no modifier guard.
         Assert.True(Keybinds.UsesContestedNumberRow(KeybindContext.WorldHud, new KeyChord(key)));
         Assert.True(Keybinds.UsesContestedNumberRow(KeybindContext.WorldHud, new KeyChord(key, ChordMods.Shift)));
 

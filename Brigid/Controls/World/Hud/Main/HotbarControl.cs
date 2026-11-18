@@ -6,6 +6,7 @@ using Brigid.Controls.World.Hud.Main.Windows;
 using Brigid.Definitions;
 using Brigid.Models;
 using Brigid.Rendering;
+using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
@@ -28,8 +29,8 @@ namespace Brigid.Controls.World.Hud.Main;
 /// </remarks>
 internal sealed class HotbarControl : UIPanel
 {
-    /// <summary>The labels of the keys of the slots, from the left.</summary>
-    public static readonly string[] KeyLabels = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="];
+    /// <summary>The labels of the keys of the slots, from the left: the names of <see cref="Keybinds.NumberRowKeys" />.</summary>
+    public static readonly string[] KeyLabels = Keybinds.NumberRowKeys.Select(KeybindCatalog.KeyName).ToArray();
 
     private readonly Hotbar Model;
     private readonly HudTooltip Tooltip;

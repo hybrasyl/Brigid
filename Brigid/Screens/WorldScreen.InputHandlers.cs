@@ -373,20 +373,8 @@ public sealed partial class WorldScreen
         (CommandId.World_TabTools, null, HudTab.Tools)
     ];
 
-    private static readonly Keys[] EmoteKeys =
-    [
-        Keys.D1,
-        Keys.D2,
-        Keys.D3,
-        Keys.D4,
-        Keys.D5,
-        Keys.D6,
-        Keys.D7,
-        Keys.D8,
-        Keys.D9,
-        Keys.D0,
-        Keys.OemMinus
-    ];
+    //the number row but =, which has no emote
+    private static readonly Keys[] EmoteKeys = Keybinds.NumberRowKeys[..^1];
 
     //ctrl+key emotes: 9-17 then 21-22 (skips 18-20 which don't exist in bodyanimation)
     private static readonly BodyAnimation[] CtrlEmotes =
@@ -447,26 +435,32 @@ public sealed partial class WorldScreen
         return true;
     }
 
+    /// <summary>
+    ///     The hotbar slot of a number key on the new HUD (BRIG-146, D4), from 0, or null. A key with a modifier is not a
+    ///     hotbar key: Ctrl and Alt are emotes, Shift+1 is Shout, Cmd is the macOS primary modifier, and Shift with the
+    ///     other keys is free for the page keys of a later card.
+    /// </summary>
+    internal static int? HotbarSlotOf(KeyDownEvent e)
+        => (e.Modifiers == KeyModifiers.None) && (Keybinds.NumberRowIndexOf(e.Key) is >= 0 and var index) ? index : null;
+
+    //the number keys: on the new HUD the hotbar, also an empty slot (BRIG-146); on the classic HUDs the slots of the
+    //panel that shows, with any modifier
     private bool HandleSlotHotkey(KeyDownEvent e)
     {
-        var slot = e.Key switch
+        if (WorldHud == MainHud)
         {
-            Keys.D1       => 1,
-            Keys.D2       => 2,
-            Keys.D3       => 3,
-            Keys.D4       => 4,
-            Keys.D5       => 5,
-            Keys.D6       => 6,
-            Keys.D7       => 7,
-            Keys.D8       => 8,
-            Keys.D9       => 9,
-            Keys.D0       => 10,
-            Keys.OemMinus => 11,
-            Keys.OemPlus  => 12,
-            _             => -1
-        };
+            if (HotbarSlotOf(e) is not { } index)
+                return false;
 
-        if (slot < 0)
+            MainHud.HotbarStrip.Use(index);
+            e.Handled = true;
+
+            return true;
+        }
+
+        var slot = Keybinds.NumberRowIndexOf(e.Key) + 1;
+
+        if (slot < 1)
             return false;
 
         var byteSlot = (byte)slot;
@@ -511,8 +505,7 @@ public sealed partial class WorldScreen
             {
                 var macroText = OptionsModal.GetMacroValue(slot - 1);
 
-                //the new hud has no place for the macros yet (BRIG-145); its tab is the hidden classic hud's
-                if ((macroText.Length > 0) && (WorldHud != MainHud))
+                if (macroText.Length > 0)
                 {
                     WorldHud.ChatInput.Focus($"{WorldHud.PlayerName}: ", Color.White);
                     WorldHud.ChatInput.SetText(macroText, macroText.Length);

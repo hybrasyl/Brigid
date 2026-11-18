@@ -8,9 +8,11 @@ using Brigid.Definitions;
 using Brigid.Models;
 using Brigid.Rendering;
 using Brigid.Screens;
+using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 using Xunit;
 #endregion
 
@@ -348,6 +350,57 @@ public class HotbarControlTests : IDisposable
         hotbar.Use(1);
         hotbar.Use(2);
         Assert.Equal([Assail, Potion, Potion], used);
+    }
+
+    //BRIG-146 phase 3: on the new HUD a number key uses the entry of its slot on the page that shows
+    [Fact]
+    public void ANumberKeyUsesItsSlotOnThePageThatShows()
+    {
+        var hotbar = NewHotbar();
+        Model.Set(0, 0, Assail);
+        Model.Set(0, 11, Potion);
+        Model.Set(3, 9, BeagIoc);
+        List<HotbarEntry> used = [];
+        hotbar.UseRequested += used.Add;
+
+        hotbar.Use(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.D1 })!.Value);
+        hotbar.Use(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.OemPlus })!.Value);
+
+        //an empty slot takes the key and does nothing
+        hotbar.Use(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.D5 })!.Value);
+
+        Model.SetPage(3);
+        hotbar.Use(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.D0 })!.Value);
+
+        Assert.Equal([Assail, Potion, BeagIoc], used);
+    }
+
+    //Ctrl and Alt are emotes, Shift+1 is Shout, Cmd is the macOS primary modifier, and Shift is free for the page keys
+    [Theory]
+    [InlineData(KeyModifiers.Shift)]
+    [InlineData(KeyModifiers.Ctrl)]
+    [InlineData(KeyModifiers.Alt)]
+    [InlineData(KeyModifiers.Meta)]
+    public void AKeyWithAModifierIsNotAHotbarKey(KeyModifiers modifiers)
+        => Assert.Null(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.D2, Modifiers = modifiers }));
+
+    [Fact]
+    public void AKeyThatIsNotInTheNumberRowIsNotAHotbarKey()
+    {
+        Assert.Null(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.Q }));
+        Assert.Null(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.NumPad1 }));
+        Assert.Equal(-1, Keybinds.NumberRowIndexOf(Keys.F1));
+    }
+
+    //one table of the number keys: the hotbar, its labels, the classic panels (slot = index + 1) and the emotes
+    [Fact]
+    public void TheNumberRowIsTheOneKeyTable()
+    {
+        Assert.Equal(Hotbar.SLOTS, Keybinds.NumberRowKeys.Length);
+        Assert.Equal(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="], HotbarControl.KeyLabels);
+        Assert.Equal(Enumerable.Range(0, Hotbar.SLOTS), Keybinds.NumberRowKeys.Select(key => WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = key })!.Value));
+        Assert.Equal(9, Keybinds.NumberRowIndexOf(Keys.D0));
+        Assert.Equal(10, Keybinds.NumberRowIndexOf(Keys.OemMinus));
     }
 
     [Fact]

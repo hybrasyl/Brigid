@@ -784,8 +784,8 @@ public sealed partial class WorldScreen
         inventory.ListRequested += OpenInventoryList;
         inventory.UnequipRequested += Game.Connection.Unequip;
 
-        //the window button also selects the hidden classic inventory, as A does, so the number keys use the items. The
-        //lists close with the window
+        //the window button also selects the hidden classic inventory, as A does, until the post-merge keybind fix of
+        //BRIG-127 (the number keys use the hotbar, BRIG-146). The lists close with the window
         windows.BindPanel(
             HudWindows.Inventory,
             inventory,

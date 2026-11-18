@@ -435,9 +435,9 @@ public static class InputBuffer
         return mods;
     }
 
-    //maps SDL_Scancode values to MonoGame Keys. Numpad digits and minus are normalized
-    //to the main number row and numpad Enter to main Enter so hotkeys don't care which
-    //one the user hits. Scancodes are physical-key positions, so hotkey behavior is
+    //maps SDL_Scancode values to MonoGame Keys. Numpad minus is normalized to the main
+    //minus and numpad Enter to main Enter so hotkeys don't care which one the user hits;
+    //the numpad digits stay NumPad0 to NumPad9. Scancodes are physical-key positions, so hotkey behavior is
     //stable across keyboard layouts.
     private static Keys TranslateScancode(int scancode) => scancode switch
     {

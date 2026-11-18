@@ -138,7 +138,7 @@ internal sealed class KeybindCaptureControl : CenteredModalPanel
 
         //soft warnings — the bind is allowed but flagged, so a green "OK" never hides a live collision:
         //  · a conflict (another command fires on the same keystroke), or
-        //  · a number-row key the slot/emote hotkeys contest while a HUD panel is open.
+        //  · a number-row key that the slot/emote hotkeys contest in some HUD states.
         var warnings = new List<string>();
 
         var conflicts = Keybinds.FindConflicts(Command, chord, context);

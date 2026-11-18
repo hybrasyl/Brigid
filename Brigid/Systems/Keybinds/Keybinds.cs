@@ -267,22 +267,31 @@ public static class Keybinds
     //switch that ran before the resolver and would shadow any rebind). They are now resolver-driven WorldHud
     //commands (World_Tab*), so the reserve and IsShadowed are gone — those keys rebind like any other.
 
-    //the number row is scanned by two literal handlers in OnRootKeyDown — the slot hotkeys (1-9/0/-/=, any
-    //modifier) and the emote hotkeys (Ctrl/Alt + number) — both of which dispatch before the movement and
-    //chat-scroll resolver checks. A command routed after them bound onto a number-row key is therefore
-    //overridden while a HUD panel is open. This is conditional (depends on HUD state and the command's dispatch
-    //position — an earlier-dispatched command like Shout=Shift+1 still works), so it warns rather than blocks.
-    private static readonly FrozenSet<Keys> WorldHudNumberRowKeys = new[]
-    {
-        Keys.D0, Keys.D1, Keys.D2, Keys.D3, Keys.D4, Keys.D5, Keys.D6, Keys.D7, Keys.D8, Keys.D9,
-        Keys.OemMinus, Keys.OemPlus
-    }.ToFrozenSet();
+    /// <summary>
+    ///     The number row, in the order of the slots: 1 to 9, 0, - and =. It is the one table of these keys: the slot keys
+    ///     of the hotbar on the new HUD and of the panel that shows on the classic HUDs, the emotes (all but =) and the
+    ///     labels of the hotbar slots read it (BRIG-146). The keys are literal, not commands, until a later keybind card.
+    /// </summary>
+    public static readonly Keys[] NumberRowKeys =
+        [Keys.D1, Keys.D2, Keys.D3, Keys.D4, Keys.D5, Keys.D6, Keys.D7, Keys.D8, Keys.D9, Keys.D0, Keys.OemMinus, Keys.OemPlus];
+
+    /// <summary>The index of <paramref name="key" /> in <see cref="NumberRowKeys" />, or -1 for a key that is not in the number row.</summary>
+    public static int NumberRowIndexOf(Keys key) => Array.IndexOf(NumberRowKeys, key);
+
+    //the number row is scanned by two literal handlers in OnRootKeyDown — the slot hotkeys and the emote hotkeys
+    //(Ctrl/Alt + number) — both of which dispatch before the movement and chat-scroll resolver checks. On the classic
+    //HUDs the slot hotkeys take a number key with any modifier while a HUD panel is open; on the new HUD they take the
+    //bare key always (the hotbar, also an empty slot) and leave a key with a modifier free. A command routed after them
+    //bound onto a number-row key is therefore overridden in some HUD states. This is conditional (it depends on the HUD
+    //and the command's dispatch position — an earlier-dispatched command like Shout=Shift+1 still works), so it warns
+    //rather than blocks.
+    private static readonly FrozenSet<Keys> WorldHudNumberRowKeys = NumberRowKeys.ToFrozenSet();
 
     /// <summary>
     ///     True if <paramref name="chord" /> uses a number-row key contested by the WorldHud slot/emote hotkeys
-    ///     (see <see cref="WorldHudNumberRowKeys" />). A soft signal: the collision only bites while a HUD panel
-    ///     is open and only for commands dispatched after those handlers, so the rebinder warns and still allows
-    ///     the bind rather than refusing it. (The slot/emote number-row handlers are the remaining literal
+    ///     (see <see cref="WorldHudNumberRowKeys" />). A soft signal: the collision bites only in some HUD states (a
+    ///     bare key on the new HUD, any key while a classic HUD panel is open) and only for commands dispatched after
+    ///     those handlers, so the rebinder warns and still allows the bind rather than refusing it. (The slot/emote number-row handlers are the remaining literal
     ///     dispatch ahead of the resolver; migrating them is a documented follow-up.)
     /// </summary>
     public static bool UsesContestedNumberRow(KeybindContext context, KeyChord chord) =>
