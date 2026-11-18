@@ -66,14 +66,42 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         ChatBox = new ChatBoxControl(chat ?? WorldState.Chat);
         AddChild(ChatBox);
 
-        //the places of the parts that later cards add
+        //the places of the parts that later cards add (BRIG-162, BRIG-147, BRIG-146)
         AddChild(Place("toast", MainHudLayout.Toast));
         AddChild(Place("effect_bar", MainHudLayout.EffectBar));
-        AddChild(Place("health_bar", MainHudLayout.HealthBar));
-        AddChild(Place("mana_bar", MainHudLayout.ManaBar));
         AddChild(Place("hotbar", MainHudLayout.Hotbar));
-        AddChild(Place("player_plate", MainHudLayout.PlayerPlate));
-        AddChild(Place("experience_bar", MainHudLayout.ExperienceBar));
+
+        //the meters (BRIG-148)
+        HealthBar = new HudMeter("health_bar", MainHudLayout.HealthBar, ThemeRoles.HudHealthTrack, ThemeRoles.HudHealthFill, DialogPalette.HealthFill)
+        {
+            Label = "HP"
+        };
+        ManaBar = new HudMeter("mana_bar", MainHudLayout.ManaBar, ThemeRoles.HudManaTrack, ThemeRoles.HudManaFill, DialogPalette.ManaFill)
+        {
+            Label = "MP"
+        };
+        ExperienceBar = new HudMeter(
+            "experience_bar",
+            MainHudLayout.ExperienceBar,
+            ThemeRoles.HudExperienceTrack,
+            ThemeRoles.HudExperienceFill,
+            DialogPalette.ExperienceFill)
+        {
+            Segments = EXPERIENCE_SEGMENTS,
+            IsHitTestVisible = true
+        };
+        ExperienceBar.Entered += meter =>
+        {
+            if (Attributes.HasData)
+                Tooltip.ShowAbove(meter, ExperienceLines);
+        };
+        ExperienceBar.Left += Tooltip.Hide;
+        AddChild(HealthBar);
+        AddChild(ManaBar);
+        AddChild(ExperienceBar);
+        Plate = new HudPlayerPlate();
+        Plate.Clicked += () => PlateClicked?.Invoke();
+        AddChild(Plate);
         Windows = new HudWindowHost(Tooltip);
         AddChild(Windows.Row);
 
@@ -105,11 +133,54 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// <summary>A click on the mail box of the top bar: the mail.</summary>
     public event Action? MailClicked;
 
+    /// <summary>A click on the player plate: the status book, until the Details window (D34).</summary>
+    public event Action? PlateClicked;
+
+    /// <summary>The player plate of the bottom area (BRIG-148).</summary>
+    internal HudPlayerPlate Plate { get; }
+
+    /// <summary>The class name of the player, from the self profile, on the player plate.</summary>
+    public void SetPlayerClass(string className) => Plate.SetClass(className);
+
+    /// <summary>Shows the head of the aisling of <paramref name="appearance" /> on the player plate.</summary>
+    public void SetPlayerAppearance(AislingRenderer renderer, in AislingAppearance appearance)
+        => Plate.SetIcon(renderer.RenderHead(in appearance, MainHudLayout.PlateIcon.Width));
+
+    /// <summary>Shows no head on the player plate, for a form that is not an aisling.</summary>
+    public void ClearPlayerAppearance() => Plate.SetIcon(null);
+
     /// <summary>The windows of the HUD: its button row, its panels and the windows that the world screen binds.</summary>
     internal HudWindowHost Windows { get; }
 
     /// <summary>The chat box over the bottom left of the world (BRIG-145).</summary>
     public ChatBoxControl ChatBox { get; }
+
+    /// <summary>The health bar of the bottom area (BRIG-148).</summary>
+    internal HudMeter HealthBar { get; }
+
+    /// <summary>The mana bar of the bottom area (BRIG-148).</summary>
+    internal HudMeter ManaBar { get; }
+
+    /// <summary>The experience bar at the bottom of the screen (BRIG-148, D27).</summary>
+    internal HudMeter ExperienceBar { get; }
+
+    //D27: 10 or 20 segments; the mockup has 20
+    private const int EXPERIENCE_SEGMENTS = 20;
+
+    /// <summary>
+    ///     True when the server converts the experience past the level cap into Crystallized Reflections (Hybrasyl), so the
+    ///     experience bar at the cap shows the experience toward the next one (<see cref="HudExperience" />).
+    /// </summary>
+    public bool ConvertsExperiencePastCap
+    {
+        get;
+        set
+        {
+            field = value;
+            OnAttributesChanged();
+        }
+    }
+
 
     /// <summary>Closes the open panels. Returns true when a panel was open, so that Escape closes the panels first.</summary>
     public bool ClosePanels() => Windows.CloseAll();
@@ -135,19 +206,43 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         base.Dispose();
     }
 
-    //weight, gold and mail come with the attributes, as on the classic HUD
+    //weight, gold, mail, health and mana come with the attributes, as on the classic HUD
     private void OnAttributesChanged()
     {
         if (Attributes.Current is { } attrs)
             ShowAttributes(attrs);
     }
 
-    /// <summary>Shows the weight, the gold and the mail state of <paramref name="attrs" /> on the top bar.</summary>
+    /// <summary>
+    ///     Shows the weight, the gold and the mail state of <paramref name="attrs" /> on the top bar, and its health and mana
+    ///     in their meters.
+    /// </summary>
     internal void ShowAttributes(PlayerAttributes attrs)
     {
         TopBar.SetWeight(attrs.CurrentWeight, attrs.MaxWeight);
         TopBar.SetGold(attrs.Gold);
         TopBar.SetMail(attrs.HasMail, attrs.HasParcel);
+        ShowMeter(HealthBar, attrs.CurrentHp, attrs.MaxHp);
+        ShowMeter(ManaBar, attrs.CurrentMp, attrs.MaxMp);
+        Plate.SetLevel(attrs.Level);
+
+        var experience = HudExperience.Fill(attrs, ConvertsExperiencePastCap);
+        ExperienceBar.SetFill(experience.Fraction);
+        ExperienceBar.FillRole = experience.UsesCapFill ? ThemeRoles.HudExperienceCapFill : ThemeRoles.HudExperienceFill;
+        ExperienceBar.FlatFill = experience.UsesCapFill ? DialogPalette.CapFill : DialogPalette.ExperienceFill;
+    }
+
+    internal IReadOnlyList<TooltipLine> ExperienceLines()
+    {
+        var experience = HudExperience.Describe(Attributes, ConvertsExperiencePastCap);
+
+        return [TooltipLine.Themed(experience.Title, ThemeRoles.TextTitle), ..experience.Lines.Select(line => TooltipLine.Themed(line, ThemeRoles.Text))];
+    }
+
+    private static void ShowMeter(HudMeter meter, uint current, uint max)
+    {
+        meter.SetFill(current, max);
+        meter.Value = HudFormat.Meter(current, max);
     }
 
     public Rectangle ViewportBounds => MainHudLayout.World;
@@ -171,7 +266,11 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     #region The shell
     public ChatInputControl ChatInput => ChatBox.Input;
 
-    public void SetPlayerName(string name) => PlayerName = name;
+    public void SetPlayerName(string name)
+    {
+        PlayerName = name;
+        Plate.SetName(name);
+    }
 
     public void ShowPersistentMessage(string text) => PersistentMessage.SetMessage(text);
 

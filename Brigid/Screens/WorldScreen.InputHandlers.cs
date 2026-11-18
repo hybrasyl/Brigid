@@ -604,6 +604,23 @@ public sealed partial class WorldScreen
         OptionsModal.SetMacros(macros);
     }
 
+    //the level starts that the client learned for the character, so the experience bar is correct at a new login (BRIG-148)
+    private void LoadPlayerExperience()
+    {
+        CharacterFolderReady = true;
+        WorldState.Attributes.RestoreStarts(DataContext.LocalPlayerSettings.LoadExperience());
+    }
+
+    //the character folder is the one of this screen's character only after its first display packet; before it, the
+    //folder can still be the one of the character before a logout
+    private bool CharacterFolderReady;
+
+    private void SavePlayerExperience()
+    {
+        if (CharacterFolderReady)
+            DataContext.LocalPlayerSettings.SaveExperience(WorldState.Attributes.SavedStarts());
+    }
+
     private void SaveSkillChants()
     {
         var entries = new List<SkillChantEntry>();
@@ -1342,11 +1359,8 @@ public sealed partial class WorldScreen
                     else if (ClientSettings.EnableProfileClick)
                     {
                         if (entity.Id == Game.Connection.AislingId)
-                        {
-                            SelfProfileRequested = true;
-                            SelfProfileRequestedTab = StatusBookTab.Equipment;
-                            Game.Connection.RequestSelfProfile();
-                        } else
+                            RequestStatusBook(StatusBookTab.Equipment);
+                        else
                             Game.Connection.ClickEntity(entity.Id);
                     }
                 } else if (MapRenderer.TryHitTestForeground(MapFile, Camera, e.ScreenX - viewport.X, e.ScreenY - viewport.Y, out var fgX, out var fgY))

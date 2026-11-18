@@ -814,6 +814,7 @@ public sealed partial class WorldScreen : IScreen
         Game.Connection.OnRefreshResponse -= HandleRefreshResponse;
         WorldState.Exchange.AmountRequested -= HandleExchangeAmountRequested;
         WorldState.Exchange.Closed -= HandleExchangeClosed;
+        WorldState.Attributes.SpanLearned -= SavePlayerExperience;
         WorldState.Board.PostListChanged -= HandleBoardPostListChanged;
         WorldState.Board.PostViewed -= HandleBoardPostViewed;
         WorldState.Board.BoardListReceived -= HandleBoardListReceived;

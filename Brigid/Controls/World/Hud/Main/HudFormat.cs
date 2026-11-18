@@ -4,7 +4,7 @@ using System.Globalization;
 
 namespace Brigid.Controls.World.Hud.Main;
 
-/// <summary>The text of the top bar of the new HUD (BRIG-127 D15). Numbers use the invariant culture; the clock uses the player's.</summary>
+/// <summary>The text of the top bar and the meters of the new HUD (BRIG-127 D15, BRIG-148). Numbers use the invariant culture; the clock uses the player's.</summary>
 internal static class HudFormat
 {
     private const uint MILLION = 1_000_000;
@@ -27,6 +27,15 @@ internal static class HudFormat
     public static string? GoldTooltip(uint gold) => gold < MILLION ? null : $"{gold.ToString("N0", CultureInfo.InvariantCulture)} gold";
 
     public static string Weight(int current, int max) => $"{current}/{max}";
+
+    /// <summary>The value of a meter: the current and the maximum, with thousands separators.</summary>
+    public static string Meter(uint current, uint max) => $"{Number(current)} / {Number(max)}";
+
+    /// <summary>A number with thousands separators.</summary>
+    public static string Number(ulong value) => value.ToString("N0", CultureInfo.InvariantCulture);
+
+    /// <summary>The level of the player, as the experience bar and the player plate show it.</summary>
+    public static string Level(byte level) => $"Level {level}";
 
     /// <summary>The zone name and the player's tile; before a zone name arrives, the tile only.</summary>
     public static string Zone(string name, int x, int y) => name.Length == 0 ? $"({x}, {y})" : $"{name} ({x}, {y})";

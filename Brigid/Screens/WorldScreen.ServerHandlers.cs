@@ -46,6 +46,8 @@ public sealed partial class WorldScreen
             LoadPlayerFamilyList();
             LoadPlayerFriendList();
             LoadPlayerMacros();
+            MainHud.ConvertsExperiencePastCap = ServerProfileKey.IsHybrasyl(GlobalSettings.LobbyHost, Game.Connection.ServerName);
+            LoadPlayerExperience();
             WorldState.ReloadChants();
             LoadOwnProfile(args.Name);
 
@@ -74,10 +76,13 @@ public sealed partial class WorldScreen
             //entity.Appearance. (Doing this on Equipment.SlotChanged would race the 0x37 that precedes the 0x33.)
             //Self and other profiles each no-op unless they are the one currently showing this id.
             if (args.Id == Game.Connection.AislingId)
+            {
                 StatusBook.SetPaperdoll(Game.AislingRenderer, in appearance);
-            else
+                MainHud.SetPlayerAppearance(Game.AislingRenderer, in appearance);
+            } else
                 OtherProfile.RefreshPaperdoll(args.Id, Game.AislingRenderer, in appearance);
-        }
+        } else if (args.Id == Game.Connection.AislingId)
+            MainHud.ClearPlayerAppearance();
     }
 
     private void HandleRemoveEntity(uint id)
@@ -871,6 +876,8 @@ public sealed partial class WorldScreen
         //social status display
         var status = SocialStatusPicker.CurrentStatus;
         StatusBook.SetEmoticonState((byte)status, UiComponentRepository.GetSocialStatusName(status));
+
+        MainHud.SetPlayerClass(args.ClassName);
 
         //populate and show the status book
         StatusBook.SetPlayerInfo(

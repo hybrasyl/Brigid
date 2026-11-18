@@ -381,8 +381,18 @@ public abstract class UIElement : IDisposable
     ///     when the element is not themed or the theme has neither part; the caller then draws its flat look. Every themed
     ///     control draws its art through here, so a later per-control layer (BRIG-54 <c>ui_panels</c>) has one place to go.
     /// </summary>
-    protected bool TryDrawThemePart(SpriteBatch spriteBatch, string role, Rectangle bounds, string? fallbackRole = null)
-        => IsThemed && ThemeArt.TryDraw(spriteBatch, role, bounds, ClipRect, fallbackRole);
+    /// <param name="shown">
+    ///     When set, the area of the part that shows, also clipped to the ClipRect. The fill of a meter uses it: the art keeps
+    ///     the size of <paramref name="bounds" />, and the value clips it, so a gradient or a texture does not stretch.
+    /// </param>
+    protected bool TryDrawThemePart(
+        SpriteBatch spriteBatch,
+        string role,
+        Rectangle bounds,
+        string? fallbackRole = null,
+        Rectangle? shown = null)
+        => IsThemed
+           && ThemeArt.TryDraw(spriteBatch, role, bounds, shown is { } area ? Rectangle.Intersect(ClipRect, area) : ClipRect, fallbackRole);
 
     /// <summary>
     ///     True when the element is themed and the theme has a usable part for <paramref name="role" /> (see

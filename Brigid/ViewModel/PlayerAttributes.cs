@@ -1,4 +1,5 @@
 #region
+using Brigid.Data.Models;
 using Chaos.DarkAges.Definitions;
 using DALib.Networking.Packets.Server;
 #endregion
@@ -77,6 +78,38 @@ public sealed class PlayerAttributes
     /// </summary>
     public event ChangedHandler? Changed;
 
+    /// <summary>The start of the current level, when the client knows it (BRIG-148).</summary>
+    public ExperienceSpan LevelSpan { get; } = ExperienceSpan.ForLevel();
+
+    /// <summary>The start of the current ability level of a retail master, when the client knows it (BRIG-148).</summary>
+    public ExperienceSpan AbilitySpan { get; } = ExperienceSpan.ForAbility();
+
+    /// <summary>
+    ///     Takes the starts that the client saved for the character (<see cref="ExperienceSpan.Restore" />), and raises
+    ///     <see cref="Changed" />, so the experience bar shows them.
+    /// </summary>
+    public void RestoreStarts(SavedExperience saved)
+    {
+        if (saved.Level is { } level)
+            LevelSpan.Restore(level.Level, level.Start);
+
+        if (saved.Ability is { } ability)
+            AbilitySpan.Restore(ability.Level, ability.Start);
+
+        Changed?.Invoke();
+    }
+
+    /// <summary>The starts that the client knows, to save for the character.</summary>
+    public SavedExperience SavedStarts() => new(StartOf(LevelSpan), StartOf(AbilitySpan));
+
+    private static SavedLevelStart? StartOf(ExperienceSpan span) => span.Start is { } start ? new SavedLevelStart(span.Level, start) : null;
+
+    /// <summary>A packet taught <see cref="LevelSpan" /> or <see cref="AbilitySpan" /> a new start, so the caller saves them.</summary>
+    public event ChangedHandler? SpanLearned;
+
+    //the spans read the level from the primary block, so they wait for the first one
+    private bool HasPrimary;
+
     /// <summary>
     ///     Clears the stored attributes. The mail and parcel state clears too, because the flag alone keeps it (see
     ///     <see cref="DecodeMail" />), and the next character must not show the state of the one before.
@@ -86,6 +119,9 @@ public sealed class PlayerAttributes
         HasData = false;
         HasMail = false;
         HasParcel = false;
+        HasPrimary = false;
+        LevelSpan.Reset();
+        AbilitySpan.Reset();
     }
 
     /// <summary>
@@ -115,6 +151,7 @@ public sealed class PlayerAttributes
 
         if (pkt.Primary is { } p)
         {
+            HasPrimary = true;
             Level = p.Level;
             Ability = p.Ability;
             MaxHp = p.MaxHp;
@@ -160,6 +197,18 @@ public sealed class PlayerAttributes
         (HasMail, HasParcel) = DecodeMail(pkt.UnreadMail, pkt.Secondary?.MailStatus, HasMail, HasParcel);
         IsGameMaster = pkt.MovementMode != 0;
 
+        //a level-up of one level teaches the start of the new level (ExperienceSpan)
+        var learned = false;
+
+        if (HasPrimary && (pkt.Primary is not null || pkt.Experience is not null))
+        {
+            learned |= LevelSpan.Observe(Level, TotalExp, ToNextLevel);
+            learned |= AbilitySpan.Observe(Ability, TotalAbility, ToNextAbility);
+        }
+
         Changed?.Invoke();
+
+        if (learned)
+            SpanLearned?.Invoke();
     }
 }

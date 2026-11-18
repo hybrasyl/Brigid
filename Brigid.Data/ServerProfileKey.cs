@@ -42,7 +42,8 @@ public static class ServerProfileKey
         return slug.Length > 0 ? slug : UnknownKey;
     }
 
-    private static bool IsHybrasyl(string? host, string? serverName) =>
+    /// <summary>True for a Hybrasyl server: a host or a server name that contains "hybrasyl".</summary>
+    public static bool IsHybrasyl(string? host, string? serverName) =>
         Contains(host, "hybrasyl") || Contains(serverName, "hybrasyl");
 
     private static bool Contains(string? value, string term) =>
