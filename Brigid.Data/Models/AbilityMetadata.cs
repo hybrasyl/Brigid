@@ -17,7 +17,7 @@ public sealed class AbilityMetadata
     public IReadOnlyList<AbilityMetadataEntry> Skills { get; }
     public IReadOnlyList<AbilityMetadataEntry> Spells { get; }
 
-    private AbilityMetadata(IReadOnlyList<AbilityMetadataEntry> skills, IReadOnlyList<AbilityMetadataEntry> spells)
+    internal AbilityMetadata(IReadOnlyList<AbilityMetadataEntry> skills, IReadOnlyList<AbilityMetadataEntry> spells)
     {
         Skills = skills;
         Spells = spells;

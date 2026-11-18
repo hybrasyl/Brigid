@@ -97,6 +97,48 @@ internal static class MainHudLayout
     /// <summary>The compact panel on the right, where one open compact panel is.</summary>
     public static readonly Rectangle CompactRight = new(LargePanel.Right - CompactWidth, LargePanel.Y, CompactWidth, LargePanel.Height);
 
+    //the Abilities window (BRIG-149, the approved wireframe), in the content of its panel: the tabs at the left of the
+    //first line and the page arrows with the page number at its right; the filters of the Abilities tab on the second
+    //line; then two columns of eight rows. The content is smaller under a themed frame with a wide border, so the window
+    //lays out from the size of its content, and the rows come closer when the height is short
+    public const int ABILITY_TAB_WIDTH = 82;
+    public const int ABILITY_TAB_HEIGHT = 18;
+    public const int ABILITY_ICON = 32;
+    private const int ABILITY_FILTER_TOP = ABILITY_TAB_HEIGHT + 2;
+    private const int ABILITY_LIST_TOP = ABILITY_FILTER_TOP + 18;
+    private const int ABILITY_ARROW = 14;
+    private const int ABILITY_PAGE_NUMBER = 34;
+    private const int ABILITY_ROWS = 8;
+
+    /// <summary>The parts of the Abilities window in a content of <paramref name="width" /> by <paramref name="height" />.</summary>
+    public static AbilitiesLayout AbilitiesIn(int width, int height)
+    {
+        var next = new Rectangle(width - ABILITY_ARROW, (ABILITY_TAB_HEIGHT - ABILITY_ARROW) / 2, ABILITY_ARROW, ABILITY_ARROW);
+        var number = new Rectangle(next.X - ABILITY_PAGE_NUMBER, 0, ABILITY_PAGE_NUMBER, ABILITY_TAB_HEIGHT);
+        var previous = next with { X = number.X - ABILITY_ARROW };
+        var unlearnedBox = new Rectangle(0, ABILITY_FILTER_TOP + 1, 14, 14);
+        var unlearnedLabel = new Rectangle(unlearnedBox.Right + 3, ABILITY_FILTER_TOP, 60, 16);
+        var learnedBox = unlearnedBox with { X = unlearnedLabel.Right + 6 };
+        var learnedLabel = unlearnedLabel with { X = learnedBox.Right + 3, Width = 52 };
+
+        //eight rows of 33 px as in the wireframe, else as close as the height needs, and never under the icon
+        var pitch = Math.Clamp((height - ABILITY_LIST_TOP) / ABILITY_ROWS, ABILITY_ICON, ABILITY_ICON + 1);
+
+        return new AbilitiesLayout(
+            new Rectangle(0, 0, 2 * ABILITY_TAB_WIDTH + 4, ABILITY_TAB_HEIGHT),
+            previous,
+            number,
+            next,
+            unlearnedBox,
+            unlearnedLabel,
+            learnedBox,
+            learnedLabel,
+            new Rectangle(0, ABILITY_FILTER_TOP, width, height - ABILITY_FILTER_TOP),
+            ABILITY_LIST_TOP,
+            pitch,
+            width / 2);
+    }
+
     //over the world: the chat box (BRIG-145) at the bottom left, the toast (BRIG-162) at the bottom right
     public static readonly Rectangle ChatBox = new(10, World.Bottom - 124, 248, 118);
     public static readonly Rectangle Toast = new(450, World.Bottom - 28, 186, 28);
@@ -203,4 +245,31 @@ internal static class MainHudLayout
 
     /// <summary>Effect slot <paramref name="index" />, in the bar.</summary>
     public static Rectangle EffectSlotAt(int index) => new(EffectPad + index * EFFECT_PITCH, EffectPad, EFFECT_SLOT, EFFECT_SLOT);
+}
+
+/// <summary>The parts of the Abilities window in its content (<see cref="MainHudLayout.AbilitiesIn" />).</summary>
+internal sealed record AbilitiesLayout(
+    Rectangle Tabs,
+    Rectangle PreviousPage,
+    Rectangle PageNumber,
+    Rectangle NextPage,
+    Rectangle UnlearnedBox,
+    Rectangle UnlearnedLabel,
+    Rectangle LearnedBox,
+    Rectangle LearnedLabel,
+    Rectangle Traits,
+    int ListTop,
+    int RowPitch,
+    int ColumnPitch)
+{
+    private const int GAP = 4;
+
+    /// <summary>The row in <paramref name="column" /> and <paramref name="row" />.</summary>
+    public Rectangle RowAt(int column, int row) => new(column * ColumnPitch, ListTop + row * RowPitch, ColumnPitch - GAP, MainHudLayout.ABILITY_ICON);
+
+    /// <summary>The name in a row of <paramref name="rowWidth" />, beside the icon.</summary>
+    public static Rectangle NameIn(int rowWidth) => new(MainHudLayout.ABILITY_ICON + GAP, 1, rowWidth - MainHudLayout.ABILITY_ICON - GAP, 15);
+
+    /// <summary>The level in a row of <paramref name="rowWidth" />, under the name.</summary>
+    public static Rectangle LevelIn(int rowWidth) => NameIn(rowWidth) with { Y = 16 };
 }
