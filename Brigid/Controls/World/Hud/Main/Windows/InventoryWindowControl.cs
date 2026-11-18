@@ -1,6 +1,8 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Definitions;
+using Brigid.Models;
 using Brigid.Rendering;
 using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
@@ -52,7 +54,7 @@ internal sealed class InventoryWindowControl : HudWindowContent
         Name = "inventory_window";
         Items = items;
         Attributes = attributes;
-        IconSource = iconSource ?? IconOf;
+        IconSource = iconSource ?? HudItemSlotControl.ItemIcon;
         Clock = clock ?? (() => Environment.TickCount64);
 
         for (var i = 0; i < Slots.Length; i++)
@@ -111,6 +113,9 @@ internal sealed class InventoryWindowControl : HudWindowContent
 
     /// <summary>Q or the coin button: the world screen opens the list over the window.</summary>
     public event Action<InventoryListKind>? ListRequested;
+
+    /// <summary>An item of the Equipment window dropped on the window (BRIG-151): the world screen takes it off.</summary>
+    public event Action<EquipmentSlot>? UnequipRequested;
 
     /// <summary>The slot under the pointer, with or without an item, or null.</summary>
     public byte? HoveredSlot { get; private set; }
@@ -173,6 +178,16 @@ internal sealed class InventoryWindowControl : HudWindowContent
 
         HoveredSlot = null;
         HoverChanged?.Invoke(null);
+    }
+
+    //a drop of an equipped item anywhere on the window takes it off; the server puts it in the first free slot
+    public override void OnDragDrop(DragDropEvent e)
+    {
+        if (e.Payload is not EquipmentDragPayload equipped)
+            return;
+
+        UnequipRequested?.Invoke(equipped.Slot);
+        e.Handled = true;
     }
 
     public override void Dispose()
@@ -261,5 +276,4 @@ internal sealed class InventoryWindowControl : HudWindowContent
         GoldText.Text = HudFormat.Gold(Attributes.Gold);
     }
 
-    private static IconTexture? IconOf(ushort sprite, DisplayColor color) => UiRenderer.Instance?.GetItemIcon(sprite, color);
 }

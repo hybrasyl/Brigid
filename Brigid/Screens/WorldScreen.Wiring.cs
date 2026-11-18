@@ -777,6 +777,7 @@ public sealed partial class WorldScreen
         inventory.SwapRequested += (from, to) => Game.Connection.SwapSlot(PanelType.Inventory, from, to);
         inventory.HoverChanged += ShowInventoryWindowTooltip;
         inventory.ListRequested += OpenInventoryList;
+        inventory.UnequipRequested += Game.Connection.Unequip;
 
         //the window button also selects the hidden classic inventory, as A does, so the number keys use the items. The
         //lists close with the window
@@ -789,6 +790,14 @@ public sealed partial class WorldScreen
                 inventory.ClearHover();
                 InventoryLists.Hide();
             });
+        var equipment = new EquipmentWindowControl(WorldState.Equipment, WorldState.Attributes);
+        EquipmentWindow = equipment;
+        equipment.UnequipRequested += Game.Connection.Unequip;
+        equipment.EquipRequested += slot => Game.Connection.UseItem(slot);
+        equipment.HoverChanged += ShowEquipmentWindowTooltip;
+        equipment.PinsChanged += SavePersonalViewPins;
+        windows.BindPanel(HudWindows.Equipment, equipment, closed: equipment.ClearHover);
+
         windows.BindWindow(HudWindows.Menu, TogglePauseMenu, () => PauseMenu.Visible);
         windows.BindWindow(HudWindows.Mail, ToggleBoards, IsAnyBoardPanelVisible);
         windows.BindWindow(HudWindows.Community, ToggleWorldList, () => WorldList.Visible);
@@ -879,6 +888,7 @@ public sealed partial class WorldScreen
         if (WorldHud == MainHud)
         {
             InventoryWindow.ClearHover();
+            EquipmentWindow.ClearHover();
             InventoryLists.Hide();
         }
 

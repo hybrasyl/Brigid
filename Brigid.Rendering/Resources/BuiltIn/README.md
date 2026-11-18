@@ -19,3 +19,5 @@ The buttons of the chat box of the new HUD (BRIG-145) are drawn at 64 by 64 for 
 The gold bag of the Inventory window of the new HUD (BRIG-150), `icon.inventory.gold_bag`, is drawn at 64 by 64 for a 16 by 16 icon: a sack tied at the neck, with a coin ring, in the gold of `icon.hud.gold`. A drag of it drops or gives gold.
 
 The swap button of a compact window panel of the new HUD (BRIG-150), `icon.panel.swap_sides`, is drawn at 56 by 56 for a 14 by 14 button, in white line art with a 2.5-unit stroke like the chat box buttons: an arrow to the right over an arrow to the left.
+
+The empty-slot outlines of the Equipment window of the new HUD (BRIG-151), `icon.equipment.*`, one for each slot, are drawn at 128 by 128 for a 32 by 32 slot, in white line art with a 1.5-unit stroke. The slot draws them at 35% alpha, so they read as a faint outline of the item that the slot takes.

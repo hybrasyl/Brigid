@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Definitions;
 using Microsoft.Xna.Framework;
 #endregion
 
@@ -96,6 +97,18 @@ internal sealed class HudPanel : FramePanel
         RemoveChild("not_built");
         content.SetBounds(ContentBounds);
         AddChild(content);
+        Content = content;
+    }
+
+    /// <summary>The window card's content, or null while the window is not built.</summary>
+    public UIElement? Content { get; private set; }
+
+    //a drop on the frame or the title goes to the content, as a drop on the content does: the window takes it, not the
+    //world under the panel. A drop on the content reaches the content first and does not come here again
+    public override void OnDragDrop(DragDropEvent e)
+    {
+        if (Content is { } content && !content.ScreenBounds.Contains(e.ScreenX, e.ScreenY))
+            content.OnDragDrop(e);
     }
 
     /// <summary>The X button: the host closes the panel.</summary>

@@ -69,6 +69,22 @@ public sealed partial class WorldScreen
         ShowItemTooltip(item.Name, item.CurrentDurability, item.MaxDurability);
     }
 
+    //the slot under the pointer in the Equipment window of the new hud: its item, or the name of an empty slot (BRIG-151)
+    private void ShowEquipmentWindowTooltip(EquipmentSlotSpec? slot)
+    {
+        if (slot is null)
+        {
+            HandleInventoryHoverExit();
+
+            return;
+        }
+
+        if (slot.Wire is { } wire && WorldState.Equipment.GetSlot(wire) is { } item)
+            ShowItemTooltip(item.Name, item.CurrentDurability, item.MaxDurability);
+        else
+            ShowItemTooltip(slot.Wire is null ? $"{slot.Name} (not in use yet)" : slot.Name, 0, 0);
+    }
+
     //the item tooltip at the pointer, for a hover on an item of either inventory; none while a blocking panel shows
     private void ShowItemTooltip(string? name, int currentDurability, int maxDurability)
     {
@@ -679,6 +695,26 @@ public sealed partial class WorldScreen
     {
         CharacterFolderReady = true;
         WorldState.Attributes.RestoreStarts(DataContext.LocalPlayerSettings.LoadExperience());
+    }
+
+    //the pins of Personal View, once for this screen's character: a display packet of the player comes at each map change,
+    //and a load there would put back the pins of a save that failed (BRIG-151)
+    private bool PersonalViewPinsLoaded;
+
+    private void LoadPersonalViewPins()
+    {
+        if (PersonalViewPinsLoaded)
+            return;
+
+        PersonalViewPinsLoaded = true;
+        EquipmentWindow.SetPins(PersonalStats.Parse(DataContext.LocalPlayerSettings.LoadPersonalViewPins()));
+    }
+
+    //the pins of Personal View, saved for the character at each change (BRIG-151)
+    private void SavePersonalViewPins(IReadOnlyList<PersonalStat> pins)
+    {
+        if (CharacterFolderReady)
+            DataContext.LocalPlayerSettings.SavePersonalViewPins(PersonalStats.Format(pins));
     }
 
     //the character folder is the one of this screen's character only after its first display packet; before it, the
@@ -1557,7 +1593,7 @@ public sealed partial class WorldScreen
         /// <summary>Nothing: the drop passes on.</summary>
         None,
 
-        /// <summary>The drag ends with no action: a skill of the Abilities window.</summary>
+        /// <summary>The drag ends with no action: a skill of the Abilities window, or an item of the Equipment window.</summary>
         Ends,
 
         /// <summary>A spell of the Abilities window, cast at the aisling or the creature under the pointer.</summary>
@@ -1580,6 +1616,7 @@ public sealed partial class WorldScreen
             AbilityDragPayload                   => RootDrop.Ends,
             ItemDragPayload                      => RootDrop.Item,
             GoldDragPayload                      => RootDrop.Gold,
+            EquipmentDragPayload                 => RootDrop.Ends,
             SlotDragPayload                      => RootDrop.ClassicSlot,
             _                                    => RootDrop.None
         };

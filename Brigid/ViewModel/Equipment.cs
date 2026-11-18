@@ -43,7 +43,7 @@ public sealed class Equipment
     /// <summary>
     ///     Returns the data for an equipment slot, or null if nothing is equipped there.
     /// </summary>
-    public EquipmentSlotData? GetSlot(EquipmentSlot slot) => Slots.GetValueOrDefault(slot);
+    public EquipmentSlotData? GetSlot(EquipmentSlot slot) => Slots.TryGetValue(slot, out var data) ? data : null;
 
     /// <summary>
     ///     Sets or updates an equipment slot. Fires <see cref="SlotChanged" />.

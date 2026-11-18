@@ -102,6 +102,7 @@ public sealed partial class WorldScreen : IScreen
     private AbilityMetadataDetailsControl AbilityMetadataDetails = null!;
     private InventoryListModal InventoryLists = null!;
     private InventoryWindowControl InventoryWindow = null!;
+    private EquipmentWindowControl EquipmentWindow = null!;
     private AislingContextMenu AislingContext = null!;
     private DoorContextMenu DoorContext = null!;
     private ChatTabMenu ChatTabMenu = null!;

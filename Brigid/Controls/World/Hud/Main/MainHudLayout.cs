@@ -180,6 +180,51 @@ internal static class MainHudLayout
         return new InventoryLayout(compact, home, end, gridLeft, INVENTORY_GRID_TOP, pitch, questItems, weight, goldBag, gold, currency);
     }
 
+    //the Equipment window (BRIG-151, the approved wireframe), in the content of its panel: slots of 32 px at a 34 px
+    //pitch around the character model (three above it, five at each side, three below it), the bottom row of five under
+    //them, and Personal View at the right, the full height. The slots have fixed places: a compact panel has one content
+    //size under any theme (D37), and the slots end at 282 px of its 311
+    public const int EQUIPMENT_SLOT = 32;
+    public const int EQUIPMENT_PITCH = EQUIPMENT_SLOT + 2;
+    private const int EQUIPMENT_ROW_GAP = 12;
+    private const int EQUIPMENT_STATS_GAP = 8;
+
+    /// <summary>The width of the slots and the model, from the left column to the right column.</summary>
+    public const int EQUIPMENT_SLOTS_WIDTH = 5 * EQUIPMENT_PITCH - (EQUIPMENT_PITCH - EQUIPMENT_SLOT);
+
+    /// <summary>The parts of the Equipment window in a content of <paramref name="width" /> by <paramref name="height" />.</summary>
+    public static EquipmentLayout EquipmentIn(int width, int height)
+    {
+        Rectangle At(int column, int row) => new(column * EQUIPMENT_PITCH, row * EQUIPMENT_PITCH, EQUIPMENT_SLOT, EQUIPMENT_SLOT);
+
+        var slots = new List<Rectangle>(Windows.EquipmentSlots.All.Length);
+
+        //above the model, then the left column, then the right column, then below the model
+        for (var column = 1; column <= 3; column++)
+            slots.Add(At(column, 0));
+
+        for (var row = 1; row <= 5; row++)
+            slots.Add(At(0, row));
+
+        for (var row = 1; row <= 5; row++)
+            slots.Add(At(4, row));
+
+        for (var column = 1; column <= 3; column++)
+            slots.Add(At(column, 6));
+
+        //the bottom row, under the rest with a wider gap
+        var bottom = 7 * EQUIPMENT_PITCH + EQUIPMENT_ROW_GAP;
+
+        for (var column = 0; column < 5; column++)
+            slots.Add(new Rectangle(column * EQUIPMENT_PITCH, bottom, EQUIPMENT_SLOT, EQUIPMENT_SLOT));
+
+        var model = new Rectangle(EQUIPMENT_PITCH, EQUIPMENT_PITCH, 3 * EQUIPMENT_PITCH - 2, 5 * EQUIPMENT_PITCH - 2);
+        var statsLeft = EQUIPMENT_SLOTS_WIDTH + EQUIPMENT_STATS_GAP;
+        var stats = new Rectangle(statsLeft, 0, Math.Max(0, width - statsLeft), height);
+
+        return new EquipmentLayout(slots, model, stats);
+    }
+
     //over the world: the chat box (BRIG-145) at the bottom left, the toast (BRIG-162) at the bottom right
     public static readonly Rectangle ChatBox = new(10, World.Bottom - 124, 248, 118);
     public static readonly Rectangle Toast = new(450, World.Bottom - 28, 186, 28);
@@ -340,3 +385,9 @@ internal sealed record InventoryLayout(
             MainHudLayout.INVENTORY_SLOT,
             MainHudLayout.INVENTORY_SLOT);
 }
+
+/// <summary>The parts of the Equipment window in its content (<see cref="MainHudLayout.EquipmentIn" />).</summary>
+/// <param name="Slots">The slot of each entry of <see cref="Windows.EquipmentSlots.All" />, in its order.</param>
+/// <param name="Model">The character model, between the columns.</param>
+/// <param name="Stats">Personal View, at the right.</param>
+internal sealed record EquipmentLayout(IReadOnlyList<Rectangle> Slots, Rectangle Model, Rectangle Stats);

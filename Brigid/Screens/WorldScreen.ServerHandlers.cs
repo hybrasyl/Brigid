@@ -48,6 +48,7 @@ public sealed partial class WorldScreen
             LoadPlayerMacros();
             MainHud.ConvertsExperiencePastCap = ServerProfileKey.IsHybrasyl(GlobalSettings.LobbyHost, Game.Connection.ServerName);
             LoadPlayerExperience();
+            LoadPersonalViewPins();
             WorldState.ReloadChants();
             LoadOwnProfile(args.Name);
 
@@ -79,10 +80,14 @@ public sealed partial class WorldScreen
             {
                 StatusBook.SetPaperdoll(Game.AislingRenderer, in appearance);
                 MainHud.SetPlayerAppearance(Game.AislingRenderer, in appearance);
+                EquipmentWindow.SetModel(Game.AislingRenderer.RenderSouthIdle(in appearance));
             } else
                 OtherProfile.RefreshPaperdoll(args.Id, Game.AislingRenderer, in appearance);
         } else if (args.Id == Game.Connection.AislingId)
+        {
             MainHud.ClearPlayerAppearance();
+            EquipmentWindow.SetModel(null);
+        }
     }
 
     private void HandleRemoveEntity(uint id)
