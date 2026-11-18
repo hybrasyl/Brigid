@@ -7,9 +7,9 @@ namespace Brigid.Controls.World.Hud.Main.Windows;
 
 /// <summary>
 ///     The content of a window of the new HUD, which a window card binds to its panel with
-///     <see cref="HudWindowHost.BindPanel" />. The panel gives the content its bounds, and a themed frame with a wide
-///     border makes them smaller than the flat ones, so the content lays out in <see cref="LayOut" /> from the size that
-///     it gets, not from fixed numbers.
+///     <see cref="HudWindowHost.BindPanel" />. The panel gives the content its bounds, and the content lays out in
+///     <see cref="LayOut" /> from the size that it gets, not from fixed numbers. The content of a panel has one size with or
+///     without a theme (<see cref="HudPanel" />).
 /// </summary>
 internal abstract class HudWindowContent : UIPanel
 {

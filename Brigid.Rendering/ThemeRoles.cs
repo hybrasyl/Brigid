@@ -69,6 +69,9 @@ public static class ThemeRoles
     public const string HudEffectBar = "hud.effect_bar";
     public const string HudEffectSlot = "hud.effect_bar.slot";
 
+    //a slot of the Inventory window of the new HUD (BRIG-150)
+    public const string HudInventorySlot = "hud.inventory.slot";
+
     //content roles: icons, drawn on every host through IconArt, not only on a themed host
     //social status icons, one image for each status
     public const string StatusAwake = "icon.status.awake";
@@ -144,6 +147,9 @@ public static class ThemeRoles
 
     /// <summary>The parts of the effect bar of the new HUD (BRIG-147), which the HUD shows, not the primitive gallery.</summary>
     public static readonly string[] HudEffects = [HudEffectBar, HudEffectSlot];
+
+    /// <summary>The parts of the Inventory window of the new HUD (BRIG-150), which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] HudInventory = [HudInventorySlot];
 
     /// <summary>
     ///     The icons of the window buttons of the new HUD (BRIG-144), in the order of the row. A button is

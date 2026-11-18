@@ -153,7 +153,8 @@ public sealed partial class WorldScreen : IScreen
     private float GroupHighlightTimer;
     private GroupTabControl GroupPanel = null!;
     private HotkeyHelpControl HotkeyHelp = null!;
-    private PanelSlot? HoveredInventorySlot;
+    //the item tooltip shows for an item of the classic inventory or of the Inventory window
+    private bool InventoryTooltipShown;
     private bool IsGameMaster => WorldState.Attributes.IsGameMaster;
     private ItemTooltipControl ItemTooltip = null!;
     //the user option of the group open state (the server's group toggle)

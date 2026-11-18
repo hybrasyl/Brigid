@@ -318,9 +318,11 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     public void ShowTab(HudTab tab) => Classic.ShowTab(tab);
 
-    //F hides and shows the chat box, and Shift+F shows its System tab (BRIG-145). The ability keys open and close the
-    //Abilities window (BRIG-149) and still select the hidden classic panel, whose slots the number keys use until the
-    //hotbar (a temporary measure of BRIG-127). The other tab keys act on the hidden classic panels until their cards
+    //F hides and shows the chat box. Shift+F shows its System tab (BRIG-145). The ability keys open and close the
+    //Abilities window (BRIG-149). A and Shift+A open and close the Inventory window (BRIG-150). These keys also select the
+    //hidden classic panel, because the number keys use its slots until the hotbar (a temporary measure of BRIG-127). For
+    //the inventory the HUD only selects the panel: on the classic HUD a second A opens the status book, and Shift+A
+    //expands the panel. The other tab keys act on the hidden classic panels until the cards of their windows.
     public void HandleTabActivation(HudTab tab, bool shift)
     {
         if (tab == HudTab.Chat)
@@ -329,6 +331,14 @@ public sealed class MainHudControl : UIPanel, IWorldHud
                 ChatBox.ShowSystem();
             else
                 ChatBox.SetCollapsed(!ChatBox.IsCollapsed);
+
+            return;
+        }
+
+        if (tab == HudTab.Inventory)
+        {
+            Classic.ShowTab(HudTab.Inventory);
+            Windows.Toggle(HudWindows.Inventory);
 
             return;
         }

@@ -16,7 +16,7 @@ namespace Brigid.Controls.World.Hud.Main.Windows;
 ///     the page arrows with the page number on the first line, the Unlearned and Learned filters on the second, and pages
 ///     of 16 rows of <see cref="AbilityList" />. The filters, the arrows and the page number belong to the Abilities tab;
 ///     the Traits tab is a placeholder (D6). The window lays out from the size of its content
-///     (<see cref="MainHudLayout.AbilitiesIn" />), which a themed frame makes smaller. The list builds again at the next
+///     (<see cref="MainHudLayout.AbilitiesIn" />). The list builds again at the next
 ///     update after a book slot changes, a filter changes, the metadata arrives, or the attributes change while the
 ///     Unlearned filter is on (the attributes decide the blue or grey icon of an ability that the player can learn); it
 ///     keeps its page.

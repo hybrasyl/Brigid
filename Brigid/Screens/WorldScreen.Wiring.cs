@@ -770,6 +770,13 @@ public sealed partial class WorldScreen
         abilities.UseRequested += UseAbility;
         abilities.DetailsRequested += ShowAbilityDetails;
         windows.BindPanel(HudWindows.Abilities, abilities);
+
+        var inventory = new InventoryWindowControl(WorldState.Inventory, WorldState.Attributes);
+        inventory.UseRequested += HandleInventorySlotClicked;
+        inventory.SwapRequested += (from, to) => Game.Connection.SwapSlot(PanelType.Inventory, from, to);
+        inventory.HoverChanged += ShowInventoryWindowTooltip;
+        //the window button also selects the hidden classic inventory, as A does, so the number keys use the items
+        windows.BindPanel(HudWindows.Inventory, inventory, () => MainHud.ShowTab(HudTab.Inventory), inventory.ClearHover);
         windows.BindWindow(HudWindows.Menu, TogglePauseMenu, () => PauseMenu.Visible);
         windows.BindWindow(HudWindows.Mail, ToggleBoards, IsAnyBoardPanelVisible);
         windows.BindWindow(HudWindows.Community, ToggleWorldList, () => WorldList.Visible);

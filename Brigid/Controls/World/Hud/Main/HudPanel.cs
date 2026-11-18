@@ -9,11 +9,13 @@ namespace Brigid.Controls.World.Hud.Main;
 /// <summary>
 ///     The panel of a window of the new HUD (BRIG-127 D30): a framed box with a title and an X button, which
 ///     <see cref="HudPanelHost" /> places. A window that a later card makes shows its title and a line that says it is not
-///     built yet; that card puts its content in the panel.
+///     built yet; that card puts its content in the panel. The panel and its content have one size with or without a
+///     theme: the theme fits the frame, and the frame does not fit the theme (Sabrael, 2026-11-18). The border of the
+///     frame art of a theme must fit in <see cref="PADDING" />; a wider border lies over the content.
 /// </summary>
 internal sealed class HudPanel : FramePanel
 {
-    private const int PADDING = 6;
+    public const int PADDING = 6;
     private const int TITLE_HEIGHT = 16;
     private const int CLOSE_SIZE = 14;
 
@@ -25,8 +27,7 @@ internal sealed class HudPanel : FramePanel
         UseTheme = true;
         SetBounds(window.Panel == HudPanelSize.Large ? MainHudLayout.LargePanel : MainHudLayout.CompactRight);
 
-        //a themed frame can have a wider border than the flat one; the content keeps clear of it
-        var inset = InsetFor(PADDING);
+        const int inset = PADDING;
 
         var title = new UILabel
         {
