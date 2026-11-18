@@ -9,6 +9,7 @@ using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Extensions;
 using Brigid.Systems;
+using Brigid.Systems.Keybinds;
 using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -589,8 +590,6 @@ public sealed partial class WorldScreen
                 hud.BulletinButton!.IsSelected = true;
                 Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
             };
-
-            WorldState.Board.SessionClosed += ResetBulletinButtonSelection;
         }
 
         hud.InventoryReactivated += () =>
@@ -641,8 +640,6 @@ public sealed partial class WorldScreen
                 hud.MailButton!.IsSelected = true;
                 OpenMail();
             };
-
-            WorldState.Board.SessionClosed += ResetMailButtonSelection;
         }
 
         //chat input events
@@ -744,13 +741,12 @@ public sealed partial class WorldScreen
             () =>
             [
                 TooltipLine.Themed(WorldState.UserOptions[GROUP_OPEN_OPTION] ? "Group: open" : "Group: closed", ThemeRoles.Text),
-                TooltipLine.Themed("Right click: the group window", ThemeRoles.TextDisabled)
+                TooltipLine.Themed(
+                    $"Right click or {KeybindCatalog.Format(Keybinds.Effective(CommandId.World_GroupPanel))}: the group window",
+                    ThemeRoles.TextDisabled)
             ]);
         windows.BindWindow(HudWindows.Screenshot, Game.RequestScreenshot);
     }
-
-    //the user option of the group open state (the server's group toggle)
-    private const int GROUP_OPEN_OPTION = 12;
 
     //group open and closed, from the indicator of each hud: through UserOptions.Toggle, so the F4 settings panel and the
     //status book indicator stay in step

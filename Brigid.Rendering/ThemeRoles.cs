@@ -52,7 +52,6 @@ public static class ThemeRoles
     public const string HudSideEdge = "hud.side_edge";
     public const string HudBox = "hud.box";
 
-
     //content roles: icons, drawn on every host through IconArt, not only on a themed host
     //social status icons, one image for each status
     public const string StatusAwake = "icon.status.awake";

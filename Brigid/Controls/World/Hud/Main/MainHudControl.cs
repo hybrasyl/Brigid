@@ -190,7 +190,6 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     public ChatPanel ChatDisplay => Classic.ChatDisplay;
     public SystemMessagePanel MessageHistory => Classic.MessageHistory;
     public ChatInputControl ChatInput => Classic.ChatInput;
-    public EffectBarControl EffectBar => Classic.EffectBar;
     public ExtendedStatsPanel ExtendedStatsPanel => Classic.ExtendedStatsPanel;
     public InventoryPanel Inventory => Classic.Inventory;
     public Rectangle InventoryBounds => Classic.InventoryBounds;

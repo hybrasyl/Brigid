@@ -23,7 +23,6 @@ public interface IWorldHud
     ChatPanel ChatDisplay { get; }
     SystemMessagePanel MessageHistory { get; }
     ChatInputControl ChatInput { get; }
-    EffectBarControl EffectBar { get; }
     UIButton? EmoteButton { get; }
     StatusIcon? EmoteStatusIcon { get; }
     UIButton? ExpandButton { get; }

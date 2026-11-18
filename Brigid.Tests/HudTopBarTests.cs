@@ -336,6 +336,19 @@ public class HudTopBarTests : IDisposable
         Assert.Equal("7", gold.Text);
     }
 
+    //a relog clears the mail state, so the next character does not show the state of the one before
+    [Fact]
+    public void ClearForgetsTheMailState()
+    {
+        var attrs = new PlayerAttributes();
+        attrs.Update(new AttributesPacket { UnreadMail = true, Secondary = new SecondaryAttributes { MailStatus = 0x01 } });
+
+        attrs.Clear();
+        attrs.Update(new AttributesPacket { UnreadMail = true });
+
+        Assert.Equal((true, false), (attrs.HasMail, attrs.HasParcel));
+    }
+
     //the flag alone after a known state keeps it (Hybrasyl sends the flag alone while something is unread)
     [Fact]
     public void TheFlagAloneKeepsTheKnownMailState()

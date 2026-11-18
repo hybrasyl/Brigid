@@ -69,6 +69,25 @@ public class HudFormatTests
         Assert.Equal((0, 0), TooltipPlacement.Above(new Microsoft.Xna.Framework.Rectangle(-5, 10, 18, 18), 100, 30, 2));
     }
 
+    [Fact]
+    public void TheMonitorKeepsOneReading()
+    {
+        try
+        {
+            LatencyMonitor.Update(48);
+            Assert.Equal(48, LatencyMonitor.LatencyMs);
+
+            LatencyMonitor.Update(null);
+            Assert.Null(LatencyMonitor.LatencyMs);
+
+            LatencyMonitor.Update(-5);
+            Assert.Null(LatencyMonitor.LatencyMs);
+        } finally
+        {
+            LatencyMonitor.Update(null);
+        }
+    }
+
     [Theory]
     [InlineData(null, LatencyQuality.None)]
     [InlineData(0L, LatencyQuality.Good)]

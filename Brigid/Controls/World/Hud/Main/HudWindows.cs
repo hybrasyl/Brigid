@@ -33,7 +33,8 @@ internal static class HudWindows
     public static readonly HudWindow Mail = new("mail", "Mail", CommandId.World_ToggleBoard);
     public static readonly HudWindow Community = new("community", "Community", CommandId.World_ToggleWorldList);
     public static readonly HudWindow Map = new("map", "Map", CommandId.World_TownMap);
-    public static readonly HudWindow Group = new("group", "Group", CommandId.World_GroupPanel);
+    //Group's key opens the group window, which is the right click, so its binding names the key
+    public static readonly HudWindow Group = new("group", "Group");
     public static readonly HudWindow Screenshot = new("screenshot", "Screenshot", FixedKey: "F12");
 
     /// <summary>The row, from the left.</summary>

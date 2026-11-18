@@ -89,13 +89,13 @@ internal static class MainHudLayout
         World.Width - 2 * PANEL_INSET,
         World.Height - 2 * PANEL_INSET);
 
-    private static readonly int COMPACT_WIDTH = (LargePanel.Width - PANEL_INSET) / 2;
+    private static readonly int CompactWidth = (LargePanel.Width - PANEL_INSET) / 2;
 
     /// <summary>The compact panel on the left, where a second compact panel opens.</summary>
-    public static readonly Rectangle CompactLeft = new(LargePanel.X, LargePanel.Y, COMPACT_WIDTH, LargePanel.Height);
+    public static readonly Rectangle CompactLeft = new(LargePanel.X, LargePanel.Y, CompactWidth, LargePanel.Height);
 
     /// <summary>The compact panel on the right, where one open compact panel is.</summary>
-    public static readonly Rectangle CompactRight = new(LargePanel.Right - COMPACT_WIDTH, LargePanel.Y, COMPACT_WIDTH, LargePanel.Height);
+    public static readonly Rectangle CompactRight = new(LargePanel.Right - CompactWidth, LargePanel.Y, CompactWidth, LargePanel.Height);
 
     //over the world: the chat box (BRIG-145) at the bottom left, the toast (BRIG-162) at the bottom right
     public static readonly Rectangle ChatBox = new(10, World.Bottom - 124, 215, 118);

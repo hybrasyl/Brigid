@@ -150,6 +150,9 @@ public sealed partial class WorldScreen : IScreen
     private PanelSlot? HoveredInventorySlot;
     private bool IsGameMaster => WorldState.Attributes.IsGameMaster;
     private ItemTooltipControl ItemTooltip = null!;
+    //the user option of the group open state (the server's group toggle)
+    private const int GROUP_OPEN_OPTION = 12;
+
     private readonly HudLayoutSwitch HudSwitch = new();
     private LargeWorldHudControl LargeHud = null!;
     private TileClickTracker LeftClickTracker;
@@ -311,7 +314,7 @@ public sealed partial class WorldScreen : IScreen
         userOptions.SetValue(9, ClientSettings.UseShiftKeyForAltPanels);
         userOptions.SetValue(10, ClientSettings.EnableProfileClick);
         userOptions.SetValue(11, ClientSettings.RecordNpcChat);
-        userOptions.SetValue(12, ClientSettings.GroupOpen);
+        userOptions.SetValue(GROUP_OPEN_OPTION, ClientSettings.GroupOpen);
 
         //route user-initiated toggles to server or local persistence (named so UnloadContent can detach it
         //from the static WorldState.UserOptions — otherwise a handler leaks per world re-entry)
@@ -701,6 +704,10 @@ public sealed partial class WorldScreen : IScreen
         WireHudPanels(SmallHud);
         WireHudPanels(LargeHud);
         WireMainHud();
+
+        //once, not for each hud: each reset clears both legacy huds, and UnloadContent removes each one once
+        WorldState.Board.SessionClosed += ResetBulletinButtonSelection;
+        WorldState.Board.SessionClosed += ResetMailButtonSelection;
 
         //with new status art, the HUDs show the status at once; with none, they keep the prefab frame until a pick
         if (StatusIcon.HasArt(SocialStatusPicker.CurrentStatus))

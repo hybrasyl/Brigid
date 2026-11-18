@@ -78,9 +78,15 @@ public sealed class PlayerAttributes
     public event ChangedHandler? Changed;
 
     /// <summary>
-    ///     Clears the stored attributes.
+    ///     Clears the stored attributes. The mail and parcel state clears too, because the flag alone keeps it (see
+    ///     <see cref="DecodeMail" />), and the next character must not show the state of the one before.
     /// </summary>
-    public void Clear() => HasData = false;
+    public void Clear()
+    {
+        HasData = false;
+        HasMail = false;
+        HasParcel = false;
+    }
 
     /// <summary>
     ///     The mail and parcel state after a packet. Retail decodes the two nibbles of the mail status only when the unread
