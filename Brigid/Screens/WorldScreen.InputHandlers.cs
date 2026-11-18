@@ -374,7 +374,7 @@ public sealed partial class WorldScreen
     ];
 
     //the number row but =, which has no emote
-    private static readonly Keys[] EmoteKeys = Keybinds.NumberRowKeys[..^1];
+    private static readonly Keys[] EmoteKeys = Keybinds.NumberRowKeys.Take(Keybinds.NumberRowKeys.Length - 1).ToArray();
 
     //ctrl+key emotes: 9-17 then 21-22 (skips 18-20 which don't exist in bodyanimation)
     private static readonly BodyAnimation[] CtrlEmotes =
@@ -436,32 +436,30 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>
-    ///     The hotbar slot of a number key on the new HUD (BRIG-146, D4), from 0, or null. A key with a modifier is not a
-    ///     hotbar key: Ctrl and Alt are emotes, Shift+1 is Shout, Cmd is the macOS primary modifier, and Shift with the
-    ///     other keys is free for the page keys of a later card.
+    ///     The slot of a number key, from 0, or null. On the new HUD it is a slot of the hotbar (BRIG-146, D4), and a key with
+    ///     a modifier is not a slot key: Ctrl and Alt are emotes, Shift+1 is Shout, Cmd is the macOS primary modifier, and
+    ///     Shift with the other keys is free for the page keys of a later card. On the classic HUDs it is a slot of the panel
+    ///     that shows, with any modifier, as before.
     /// </summary>
-    internal static int? HotbarSlotOf(KeyDownEvent e)
-        => (e.Modifiers == KeyModifiers.None) && (Keybinds.NumberRowIndexOf(e.Key) is >= 0 and var index) ? index : null;
+    internal static int? SlotHotkeyOf(KeyDownEvent e, bool onNewHud)
+        => (!onNewHud || (e.Modifiers == KeyModifiers.None)) && (Keybinds.NumberRowIndexOf(e.Key) is >= 0 and var index) ? index : null;
 
     //the number keys: on the new HUD the hotbar, also an empty slot (BRIG-146); on the classic HUDs the slots of the
-    //panel that shows, with any modifier
+    //panel that shows
     private bool HandleSlotHotkey(KeyDownEvent e)
     {
+        if (SlotHotkeyOf(e, WorldHud == MainHud) is not { } index)
+            return false;
+
         if (WorldHud == MainHud)
         {
-            if (HotbarSlotOf(e) is not { } index)
-                return false;
-
             MainHud.HotbarStrip.Use(index);
             e.Handled = true;
 
             return true;
         }
 
-        var slot = Keybinds.NumberRowIndexOf(e.Key) + 1;
-
-        if (slot < 1)
-            return false;
+        var slot = index + 1;
 
         var byteSlot = (byte)slot;
 
@@ -739,20 +737,24 @@ public sealed partial class WorldScreen
     //the hotbar, once for this screen's character, as the pins of Personal View (BRIG-146)
     private bool HotbarLoaded;
 
+    //a file that could not be read, or that a newer client wrote: this session does not write over it
+    private bool HotbarSaveBlocked;
+
     private void LoadHotbar()
     {
         if (HotbarLoaded)
             return;
 
         HotbarLoaded = true;
-        WorldState.Hotbar.Load(DataContext.LocalPlayerSettings.LoadHotbar());
+        var lines = DataContext.LocalPlayerSettings.LoadHotbar();
+        HotbarSaveBlocked = lines is null || !WorldState.Hotbar.Load(lines);
     }
 
-    //the hotbar, saved for the character at each change, after its load: a change before the load is the reset of the
-    //last character, and a save then would write over this character's file (BRIG-146)
+    //the hotbar, saved for the character at each change, after its load: a save before the load would write the empty
+    //hotbar of the screen over this character's file (BRIG-146)
     private void SaveHotbar()
     {
-        if (CharacterFolderReady && HotbarLoaded)
+        if (CharacterFolderReady && HotbarLoaded && !HotbarSaveBlocked)
             DataContext.LocalPlayerSettings.SaveHotbar(WorldState.Hotbar.Format());
     }
 

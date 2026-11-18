@@ -363,14 +363,14 @@ public class HotbarControlTests : IDisposable
         List<HotbarEntry> used = [];
         hotbar.UseRequested += used.Add;
 
-        hotbar.Use(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.D1 })!.Value);
-        hotbar.Use(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.OemPlus })!.Value);
+        hotbar.Use(WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = Keys.D1 }, true)!.Value);
+        hotbar.Use(WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = Keys.OemPlus }, true)!.Value);
 
         //an empty slot takes the key and does nothing
-        hotbar.Use(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.D5 })!.Value);
+        hotbar.Use(WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = Keys.D5 }, true)!.Value);
 
         Model.SetPage(3);
-        hotbar.Use(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.D0 })!.Value);
+        hotbar.Use(WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = Keys.D0 }, true)!.Value);
 
         Assert.Equal([Assail, Potion, BeagIoc], used);
     }
@@ -382,13 +382,19 @@ public class HotbarControlTests : IDisposable
     [InlineData(KeyModifiers.Alt)]
     [InlineData(KeyModifiers.Meta)]
     public void AKeyWithAModifierIsNotAHotbarKey(KeyModifiers modifiers)
-        => Assert.Null(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.D2, Modifiers = modifiers }));
+    {
+        Assert.Null(WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = Keys.D2, Modifiers = modifiers }, true));
+
+        //the classic HUDs keep their behaviour: a number key with any modifier uses the slot of the panel that shows
+        Assert.Equal(1, WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = Keys.D2, Modifiers = modifiers }, false));
+    }
 
     [Fact]
     public void AKeyThatIsNotInTheNumberRowIsNotAHotbarKey()
     {
-        Assert.Null(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.Q }));
-        Assert.Null(WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = Keys.NumPad1 }));
+        Assert.Null(WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = Keys.Q }, true));
+        Assert.Null(WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = Keys.NumPad1 }, true));
+        Assert.Null(WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = Keys.Q }, false));
         Assert.Equal(-1, Keybinds.NumberRowIndexOf(Keys.F1));
     }
 
@@ -398,7 +404,8 @@ public class HotbarControlTests : IDisposable
     {
         Assert.Equal(Hotbar.SLOTS, Keybinds.NumberRowKeys.Length);
         Assert.Equal(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "-", "="], HotbarControl.KeyLabels);
-        Assert.Equal(Enumerable.Range(0, Hotbar.SLOTS), Keybinds.NumberRowKeys.Select(key => WorldScreen.HotbarSlotOf(new KeyDownEvent { Key = key })!.Value));
+        Assert.Equal(Enumerable.Range(0, Hotbar.SLOTS), Keybinds.NumberRowKeys.Select(key => WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = key }, true)!.Value));
+        Assert.Equal(Enumerable.Range(0, Hotbar.SLOTS), Keybinds.NumberRowKeys.Select(key => WorldScreen.SlotHotkeyOf(new KeyDownEvent { Key = key }, false)!.Value));
         Assert.Equal(9, Keybinds.NumberRowIndexOf(Keys.D0));
         Assert.Equal(10, Keybinds.NumberRowIndexOf(Keys.OemMinus));
     }

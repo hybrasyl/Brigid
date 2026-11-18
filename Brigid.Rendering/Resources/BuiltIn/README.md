@@ -24,4 +24,4 @@ The empty-slot outlines of the Equipment window of the new HUD (BRIG-151), `icon
 
 The arrows of the stat raise of the Details window of the new HUD (BRIG-151), `icon.details.raise` and `icon.details.lower`, are drawn at 56 by 56 for a 14 by 14 button, in white line art with a 3-unit stroke: a chevron up and a chevron down.
 
-The page arrows of the hotbar of the new HUD (BRIG-146), `icon.hotbar.page_up` and `icon.hotbar.page_down`, are drawn at 56 by 56 for a 14 by 10 button (the icon area is 10 by 6), as solid white triangles that fill the width, so they read at that small size: up and down, as in the wireframe.
+The page arrows of the hotbar of the new HUD (BRIG-146), `icon.hotbar.page_up` and `icon.hotbar.page_down`, are drawn at 56 by 56 for a 14 by 10 button (the icon area is 10 by 6), as solid white triangles that fill the width of the image; the button draws the square image in its 10 by 6 icon area at 6 by 6: up and down, as in the wireframe.

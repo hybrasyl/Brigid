@@ -408,6 +408,22 @@ public class HotbarTests
         Assert.Equal(0, changes);
     }
 
+    //a file that a newer client wrote (emote entries, for example) loads nothing, and the caller does not write over it
+    [Fact]
+    public void AFileOfANewerVersionLoadsNothing()
+    {
+        var hotbar = NewHotbar();
+
+        Assert.False(hotbar.Load(["version 2", "page 3", "0 0 skill 1 0 Assail"]));
+        Assert.Null(hotbar.Get(0, 0));
+        Assert.Equal(0, hotbar.Page);
+
+        Assert.False(hotbar.Load(["version x", "0 0 skill 1 0 Assail"]));
+        Assert.True(hotbar.Load(["version 1", "0 0 skill 1 0 Assail"]));
+        Assert.True(hotbar.Load(["0 0 skill 1 0 Assail"]));
+        Assert.Equal(Assail, hotbar.Get(0, 0));
+    }
+
     [Fact]
     public void ABadLineIsSkipped()
     {

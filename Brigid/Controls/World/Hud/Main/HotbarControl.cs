@@ -30,7 +30,7 @@ namespace Brigid.Controls.World.Hud.Main;
 internal sealed class HotbarControl : UIPanel
 {
     /// <summary>The labels of the keys of the slots, from the left: the names of <see cref="Keybinds.NumberRowKeys" />.</summary>
-    public static readonly string[] KeyLabels = Keybinds.NumberRowKeys.Select(KeybindCatalog.KeyName).ToArray();
+    public static readonly IReadOnlyList<string> KeyLabels = Keybinds.NumberRowKeys.Select(KeybindCatalog.KeyName).ToArray();
 
     private readonly Hotbar Model;
     private readonly HudTooltip Tooltip;
@@ -265,7 +265,8 @@ internal sealed class HotbarSlotControl : HudItemSlotControl
     private readonly UILabel KeyText;
     private readonly UILabel CountText;
 
-    //the icon is read again only when the kind, the sprite or the colour changes: a lookup that finds no icon is not cached
+    //the slot reads the icon again only when the kind, the sprite or the colour changes; it keeps a read that found no
+    //icon too, because the renderer does not cache such a read
     private (HotbarKind Kind, ushort Sprite, DisplayColor Color)? IconKey;
     private uint ShownCount;
 

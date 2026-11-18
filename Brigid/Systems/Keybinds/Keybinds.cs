@@ -1,5 +1,6 @@
 #region
 using System.Collections.Frozen;
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Brigid.Definitions;
@@ -272,11 +273,11 @@ public static class Keybinds
     ///     of the hotbar on the new HUD and of the panel that shows on the classic HUDs, the emotes (all but =) and the
     ///     labels of the hotbar slots read it (BRIG-146). The keys are literal, not commands, until a later keybind card.
     /// </summary>
-    public static readonly Keys[] NumberRowKeys =
+    public static readonly ImmutableArray<Keys> NumberRowKeys =
         [Keys.D1, Keys.D2, Keys.D3, Keys.D4, Keys.D5, Keys.D6, Keys.D7, Keys.D8, Keys.D9, Keys.D0, Keys.OemMinus, Keys.OemPlus];
 
     /// <summary>The index of <paramref name="key" /> in <see cref="NumberRowKeys" />, or -1 for a key that is not in the number row.</summary>
-    public static int NumberRowIndexOf(Keys key) => Array.IndexOf(NumberRowKeys, key);
+    public static int NumberRowIndexOf(Keys key) => NumberRowKeys.IndexOf(key);
 
     //the number row is scanned by two literal handlers in OnRootKeyDown — the slot hotkeys and the emote hotkeys
     //(Ctrl/Alt + number) — both of which dispatch before the movement and chat-scroll resolver checks. On the classic

@@ -279,15 +279,15 @@ public sealed class LocalPlayerSettingsRepository
         => DataDiagnostics.Try(() => File.WriteAllLines(PersonalViewPath, names), "SavePersonalViewPins");
 
     /// <summary>
-    ///     Loads the lines of the hotbar from Hotbar.cfg (BRIG-146). A file that is absent gives no lines; a file that cannot
-    ///     be read gives no lines, and the failure is logged.
+    ///     Loads the lines of the hotbar from Hotbar.cfg (BRIG-146). A file that is absent gives no lines. A file that cannot
+    ///     be read gives null, and the failure is logged: the caller must not write over it.
     /// </summary>
-    public string[] LoadHotbar()
+    public string[]? LoadHotbar()
     {
         string[] lines = [];
 
-        if (File.Exists(HotbarPath))
-            DataDiagnostics.Try(() => lines = File.ReadAllLines(HotbarPath), "LoadHotbar");
+        if (File.Exists(HotbarPath) && !DataDiagnostics.Try(() => lines = File.ReadAllLines(HotbarPath), "LoadHotbar"))
+            return null;
 
         return lines;
     }

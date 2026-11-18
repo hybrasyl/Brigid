@@ -67,7 +67,7 @@ internal abstract class HudItemSlotControl : UIPanel
     /// <summary>True when the slot shows dimmed: by default a slot that takes nothing.</summary>
     protected virtual bool Dimmed => !Usable;
 
-    //a single click does nothing, and does not reach the world under the window
+    //a single click does nothing, and does not reach the world under the slot
     public override void OnClick(ClickEvent e)
     {
         if (e.Button == MouseButton.Left)
@@ -125,7 +125,7 @@ internal abstract class HudItemSlotControl : UIPanel
 
         DrawOverIcon(spriteBatch, bounds);
 
-        //the dim goes over the icon and the outline, so a slot that takes nothing reads as disabled
+        //the dim goes over the icon and the outline, so a slot that takes nothing, or a gone hotbar entry, reads as dimmed
         if (Dimmed)
             DrawRectClipped(spriteBatch, bounds, Color.Black * DIM);
 

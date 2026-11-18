@@ -263,8 +263,8 @@ public sealed class Hotbar
         }
     }
 
-    /// <summary>True when the player wears an item of this name.</summary>
-    public bool IsWorn(string itemName) => Worn.GetAll().Values.Any(item => item.Name.EqualsI(itemName));
+    //true when the player wears an item of this name
+    private bool IsWorn(string itemName) => Worn.GetAll().Values.Any(item => item.Name.EqualsI(itemName));
 
     /// <summary>Empties the entries of each ability that left its book <see cref="REMOVAL_WAIT_MS" /> ago and did not come back.</summary>
     public void Tick()
@@ -335,15 +335,23 @@ public sealed class Hotbar
 
     /// <summary>
     ///     Reads the lines of the hotbar file in place of the entries, at the world entry; a line that does not parse is
-    ///     skipped. It raises no change, so a load does not write the file again.
+    ///     skipped. It raises no change, so a load does not write the file again. A file of a version after
+    ///     <see cref="FILE_VERSION" /> (a newer client wrote it) loads no entry, and the result is false: the caller must not
+    ///     write over it.
     /// </summary>
-    public void Load(IEnumerable<string> lines)
+    public bool Load(IEnumerable<string> lines)
     {
         Array.Clear(Entries);
         Page = 0;
         LoadedAt = Clock();
 
-        foreach (var line in lines)
+        var all = lines.ToArray();
+
+        if (all.Select(line => line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries))
+               .Any(parts => (parts.Length == 2) && (parts[0] == VERSION_KEY) && (!int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var version) || (version > FILE_VERSION))))
+            return false;
+
+        foreach (var line in all)
         {
             var parts = line.Trim().Split(' ', 6, StringSplitOptions.RemoveEmptyEntries);
 
@@ -358,6 +366,8 @@ public sealed class Hotbar
                      && !string.IsNullOrWhiteSpace(parts[5]))
                 Entries[page, index] = new HotbarEntry(kind, parts[5].Trim(), (ushort)sprite, (DisplayColor)color);
         }
+
+        return true;
     }
 
     private static bool TryNumber(string text, int count, out int value)
