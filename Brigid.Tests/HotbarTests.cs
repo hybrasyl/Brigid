@@ -306,6 +306,41 @@ public class HotbarTests
         Assert.Equal(0, changes);
     }
 
+    //Sabrael, 2026-11-18: the Hybrasyl servers share the file; an entry that only the other server has stays, dimmed
+    [Fact]
+    public void TheEndOfASessionOnAnotherServerEmptiesNothing()
+    {
+        var hotbar = NewHotbar();
+        hotbar.Load(["version 1", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
+        Now += Hotbar.SETTLE_MS;
+
+        hotbar.DropGoneEntries();
+        Assert.Equal(Assail, hotbar.Get(0));
+
+        //the save names this session's server, so the next session on this server sweeps
+        Assert.Contains("server qa.example/Hybrasyl", hotbar.Format());
+
+        var next = NewHotbar();
+        next.Load(hotbar.Format(), "QA.example/Hybrasyl");
+        Now += Hotbar.SETTLE_MS;
+        next.DropGoneEntries();
+        Assert.Null(next.Get(0));
+    }
+
+    //a file that names no server (and a session whose server is not known) sweeps as before
+    [Fact]
+    public void AFileThatNamesNoServerSweeps()
+    {
+        var hotbar = NewHotbar();
+        hotbar.Load(["0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
+        Now += Hotbar.SETTLE_MS;
+
+        hotbar.DropGoneEntries();
+
+        Assert.Null(hotbar.Get(0));
+        Assert.DoesNotContain(NewHotbar().Format(), line => line.StartsWith("server", StringComparison.Ordinal));
+    }
+
     //a session that ends before the world entry settles must not empty the entries whose ability or item has not arrived
     [Fact]
     public void TheEndOfASessionBeforeTheWorldEntrySettlesEmptiesNothing()

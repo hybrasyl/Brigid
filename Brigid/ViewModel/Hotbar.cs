@@ -55,6 +55,11 @@ public readonly record struct HotbarEntryState(byte? Slot, ushort Sprite, Displa
 ///         not in the book, for an ability that left the book while the player was away. A session that ends without a
 ///         clean unload (a crash) skips the sweep, and the dimmed slot lasts one more session.
 ///     </para>
+///     <para>
+///         The Hybrasyl servers (QA, production) share one file for a character name, because the per-character files
+///         have one folder for every Hybrasyl host. So the file names the server that saved it, and the sweep runs only when
+///         this session is on that server: an entry that only the other server has stays, dimmed (Sabrael, 2026-11-18).
+///     </para>
 /// </remarks>
 public sealed class Hotbar
 {
@@ -73,6 +78,7 @@ public sealed class Hotbar
 
     private const string VERSION_KEY = "version";
     private const string PAGE_KEY = "page";
+    private const string SERVER_KEY = "server";
 
     private readonly HotbarEntry?[,] Entries = new HotbarEntry?[PAGES, SLOTS];
     private readonly SkillBook Skills;
@@ -89,6 +95,10 @@ public sealed class Hotbar
     private readonly Dictionary<(HotbarKind Kind, string Name), long> Removals = [];
 
     private long? LoadedAt;
+
+    //the server of this session, and the server that saved the file before it (null: the file names none)
+    private string? Server;
+    private string? SavedServer;
 
     /// <param name="clock">The time in milliseconds; null for <see cref="Environment.TickCount64" />.</param>
     public Hotbar(SkillBook skills, SpellBook spells, Inventory items, Equipment worn, Func<long>? clock = null)
@@ -302,6 +312,9 @@ public sealed class Hotbar
         if (LoadedAt is not { } loadedAt || (Clock() - loadedAt < SETTLE_MS))
             return;
 
+        if ((SavedServer is not null) && !SavedServer.EqualsI(Server ?? string.Empty))
+            return;
+
         if (EmptyWhere(entry => (Resolve(entry) is null) && ((entry.Kind != HotbarKind.Item) || !IsWorn(entry.Name))))
             Changed?.Invoke();
     }
@@ -315,15 +328,22 @@ public sealed class Hotbar
         Array.Clear(SkillNames);
         Array.Clear(SpellNames);
         LoadedAt = null;
+        Server = null;
+        SavedServer = null;
     }
 
     /// <summary>
-    ///     The lines of the hotbar file: <c>version N</c>, <c>page N</c>, then one line for each entry,
-    ///     <c>page index kind sprite color name</c>, with the page and the index from 0.
+    ///     The lines of the hotbar file: <c>version N</c>, <c>server S</c> (the server of this session, when it is known),
+    ///     <c>page N</c>, then one line for each entry, <c>page index kind sprite color name</c>, with the page and the index
+    ///     from 0.
     /// </summary>
     public IEnumerable<string> Format()
     {
         yield return FormattableString.Invariant($"{VERSION_KEY} {FILE_VERSION}");
+
+        if (!string.IsNullOrWhiteSpace(Server))
+            yield return $"{SERVER_KEY} {Server}";
+
         yield return FormattableString.Invariant($"{PAGE_KEY} {Page}");
 
         for (var page = 0; page < PAGES; page++)
@@ -339,11 +359,15 @@ public sealed class Hotbar
     ///     <see cref="FILE_VERSION" /> (a newer client wrote it) loads no entry, and the result is false: the caller must not
     ///     write over it.
     /// </summary>
-    public bool Load(IEnumerable<string> lines)
+    /// <param name="lines">The lines of the file.</param>
+    /// <param name="server">The server of this session (its host and name), or null when it is not known.</param>
+    public bool Load(IEnumerable<string> lines, string? server = null)
     {
         Array.Clear(Entries);
         Page = 0;
         LoadedAt = Clock();
+        Server = string.IsNullOrWhiteSpace(server) ? null : server.Trim();
+        SavedServer = null;
 
         var all = lines.ToArray();
 
@@ -353,6 +377,13 @@ public sealed class Hotbar
 
         foreach (var line in all)
         {
+            if (line.Trim().StartsWith(SERVER_KEY + " ", StringComparison.Ordinal))
+            {
+                SavedServer = line.Trim()[(SERVER_KEY.Length + 1)..].Trim();
+
+                continue;
+            }
+
             var parts = line.Trim().Split(' ', 6, StringSplitOptions.RemoveEmptyEntries);
 
             if ((parts.Length == 2) && (parts[0] == PAGE_KEY) && TryNumber(parts[1], PAGES, out var shown))

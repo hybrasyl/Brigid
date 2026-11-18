@@ -747,7 +747,10 @@ public sealed partial class WorldScreen
 
         HotbarLoaded = true;
         var lines = DataContext.LocalPlayerSettings.LoadHotbar();
-        HotbarSaveBlocked = lines is null || !WorldState.Hotbar.Load(lines);
+
+        //the host and the server name: the Hybrasyl servers share the file, and the end-of-session sweep runs only on the
+        //server that saved it
+        HotbarSaveBlocked = lines is null || !WorldState.Hotbar.Load(lines, $"{GlobalSettings.LobbyHost}/{Game.Connection.ServerName}");
     }
 
     //the hotbar, saved for the character at each change, after its load: a save before the load would write the empty
