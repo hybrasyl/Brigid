@@ -61,7 +61,6 @@ public sealed class LobbyLoginScreen : IScreen
 
     private ChaosGame Game = null!;
     private string? HomepageUrl;
-    private bool PendingWorldSwitch;
     private bool PendingConfigSwitch;
     private OkPopupMessageControl LobbyLoginPopupMessage = null!;
     private CertificateTrustPromptControl TrustPrompt = null!;
@@ -115,6 +114,7 @@ public sealed class LobbyLoginScreen : IScreen
         Game = game;
 
         Game.Connection.StateChanged += OnConnectionStateChanged;
+        Game.Connection.WorldEntering += OnWorldEntering;
         Game.Connection.OnError += OnConnectionError;
         Game.Connection.OnServerTableReceived += OnServerTableReceived;
         Game.Connection.OnRedirectReceived += OnRedirectReceived;
@@ -254,6 +254,7 @@ public sealed class LobbyLoginScreen : IScreen
     public void UnloadContent()
     {
         Game.Connection.StateChanged -= OnConnectionStateChanged;
+        Game.Connection.WorldEntering -= OnWorldEntering;
         Game.Connection.OnError -= OnConnectionError;
         Game.Connection.OnServerTableReceived -= OnServerTableReceived;
         Game.Connection.OnRedirectReceived -= OnRedirectReceived;
@@ -265,26 +266,9 @@ public sealed class LobbyLoginScreen : IScreen
     /// <inheritdoc />
     public void Update(GameTime gameTime)
     {
-        if (PendingWorldSwitch)
-        {
-            PendingWorldSwitch = false;
-
-            if (Game.Connection.State != ConnectionState.World)
-            {
-                //connection died before world screen could be created — restart login flow
-                Game.Screens.Switch(new LobbyLoginScreen());
-
-                return;
-            }
-
-            Game.Screens.Switch(new WorldScreen());
-
-            return;
-        }
-
         //deferred so the switch happens at the top of a frame, not inside ProcessInput below: OnConfigClicked fires
-        //from within input dispatch, and switching there would dispose this screen's control tree mid-walk (the same
-        //reason PendingWorldSwitch exists). Reuses the loaded assets — no FinishAssetInitialization.
+        //from within input dispatch, and switching there would dispose this screen's control tree mid-walk. Reuses the
+        //loaded assets — no FinishAssetInitialization.
         if (PendingConfigSwitch)
         {
             PendingConfigSwitch = false;
@@ -567,7 +551,7 @@ public sealed class LobbyLoginScreen : IScreen
     {
         AwaitingCharFinalize = false;
 
-        if (PendingWorldSwitch || (Game.Connection.State == ConnectionState.World))
+        if (Game.Connection.State == ConnectionState.World)
             return;
 
         Game.Connection.Disconnect();
@@ -657,6 +641,11 @@ public sealed class LobbyLoginScreen : IScreen
             DataContext.ClientVersion);
     }
 
+    //the world connection is up and its first packets are in: switch now, on the game thread, before ProcessPackets
+    //dispatches them (no UI walk runs at this point). A connection that closed before this never raises it, and the
+    //lobby handles that as a lost connection.
+    private void OnWorldEntering() => Game.Screens.Switch(new WorldScreen());
+
     private void OnConnectionStateChanged(ConnectionState oldState, ConnectionState newState)
     {
         switch (newState)
@@ -673,9 +662,9 @@ public sealed class LobbyLoginScreen : IScreen
                 //the greeting (OnLoginNotice) makes the lobby ready
                 break;
 
+            //the switch to the world screen is OnWorldEntering, on the game thread before the first world packet
             case ConnectionState.World:
                 FollowingRedirect = false;
-                PendingWorldSwitch = true;
 
                 break;
 

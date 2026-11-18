@@ -767,7 +767,6 @@ public sealed partial class WorldScreen : IScreen
     public void UnloadContent()
     {
         WorldState.UserOptions.SettingToggled -= HandleSettingToggled;
-        Game.Connection.OnUserId -= HandleUserId;
         Game.Connection.OnEchoReply -= HandleEchoReply;
         Game.Connection.OnMapInfo -= HandleMapInfo;
         Game.Connection.OnMapData -= HandleMapData;

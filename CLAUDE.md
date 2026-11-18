@@ -312,7 +312,7 @@ Per-frame processor that reads `InputBuffer` state and produces UI events. Key c
 - **Cache-on-demand:** All renderers cache textures lazily and clear on map change
 - **Data bag entities:** WorldEntity holds all state; AnimationSystem provides pure functions
 - **Separation:** Rendering layer has no dependency on Networking; coordination happens in Client project
-- **Global entity wiring:** ChaosGame wires entity tracking events at construction (before WorldScreen exists)
+- **Global entity wiring:** ChaosGame wires entity tracking events at construction (before WorldScreen exists); `WorldState.SubscribeTo` keeps the state that world entry sets (the player id among it). The lobby switches to `WorldScreen` from `ConnectionManager.WorldEntering`, which `ProcessPackets` raises on the game thread before it dispatches the first world packet, so no world-entry packet reaches the screen before it subscribes
 - **Pathfinding:** Right-click A* to a ground tile (a single right-click on a creature or aisling does not move the player); double right-click on a creature or aisling follows it with auto-assail; arrow/spacebar cancels
 - **Casting flow:** CastingSystem coordinates targeting -> UseSpellOnTarget and chant progress
 
