@@ -80,6 +80,7 @@ public static class ThemeRoles
     //the buttons of the chat box of the new HUD (BRIG-145)
     public const string IconChatHide = "icon.chat.hide";
     public const string IconChatShow = "icon.chat.show";
+    public const string IconChatAdd = "icon.chat.add";
 
     //the icons of the window buttons of the new HUD (BRIG-144)
     public const string IconWindowAbilities = "icon.window.abilities";
@@ -141,7 +142,7 @@ public static class ThemeRoles
     ];
 
     /// <summary>The icons of the chat box of the new HUD, which the HUD shows, not the primitive gallery.</summary>
-    public static readonly string[] ChatIcons = [IconChatHide, IconChatShow];
+    public static readonly string[] ChatIcons = [IconChatHide, IconChatShow, IconChatAdd];
 
     /// <summary>The social status icon parts, indexed by the wire value of the status (awake is 0).</summary>
     public static readonly string[] StatusIcons =

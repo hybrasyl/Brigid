@@ -19,6 +19,11 @@ namespace Brigid.Controls.World.Hud.Main;
 ///         collapses the box to its tab row, at the bottom of the box; the chat input then opens over the row.
 ///     </para>
 ///     <para>
+///         The player adds up to <see cref="MAX_CUSTOM_TABS" /> custom tabs with the <c>+</c> button after the tabs, and
+///         edits or removes one with a right click on it (D24, D26). The box raises the requests; the world screen opens
+///         the editor and the menu, and calls back to change the tabs. Each name is unique in the row.
+///     </para>
+///     <para>
 ///         The box is translucent: the <see cref="ThemeRoles.HudChatBox" /> part, else the flat frame fill with alpha.
 ///         While it shows, it takes the mouse, so a click on the chat does not walk; collapsed, only its tab row takes
 ///         it.
@@ -26,14 +31,19 @@ namespace Brigid.Controls.World.Hud.Main;
 /// </summary>
 public sealed class ChatBoxControl : UIPanel
 {
+    /// <summary>The most custom tabs that the box holds.</summary>
+    public const int MAX_CUSTOM_TABS = 3;
+
     //the alpha of the flat fill: the world shows through the box
     private const byte FLAT_ALPHA = 150;
 
+    private readonly IconButton AddButton;
     private readonly UIPanel Backdrop;
     private readonly IconButton HideButton;
     private readonly Chat Log;
     private readonly FontGenerationStamp TabLayout = new();
     private readonly List<(ChatTab Tab, SelectableTab Control)> Tabs = [];
+    private int NextCustomId;
 
     public ChatBoxControl(Chat log)
     {
@@ -49,6 +59,14 @@ public sealed class ChatBoxControl : UIPanel
 
         foreach (var tab in ChatTab.Fixed)
             AddTab(tab);
+
+        AddButton = new IconButton(ThemeRoles.IconChatAdd, new Rectangle(0, 0, MainHudLayout.CHAT_TAB_HEIGHT, MainHudLayout.CHAT_TAB_HEIGHT))
+        {
+            Name = "add_tab_button"
+        };
+
+        AddButton.Clicked += () => AddTabRequested?.Invoke();
+        AddChild(AddButton);
 
         HideButton = new IconButton(ThemeRoles.IconChatHide, MainHudLayout.ChatHideButton) { Name = "hide_button" };
         HideButton.Clicked += () => SetCollapsed(!IsCollapsed);
@@ -95,14 +113,113 @@ public sealed class ChatBoxControl : UIPanel
     /// <summary>The tabs, in the order of the row.</summary>
     internal IEnumerable<ChatTab> TabList => Tabs.Select(tab => tab.Tab);
 
+    /// <summary>The custom tabs, in the order of the row, which the world screen saves.</summary>
+    public IReadOnlyList<ChatTab> CustomTabs => Tabs.Skip(ChatTab.Fixed.Count).Select(tab => tab.Tab).ToList();
+
+    /// <summary>True while the row has space for another custom tab: the <c>+</c> button shows.</summary>
+    public bool CanAddTab => Tabs.Count - ChatTab.Fixed.Count < MAX_CUSTOM_TABS;
+
+    /// <summary>The <c>+</c> button after the tabs.</summary>
+    internal IconButton AddTabButton => AddButton;
+
     /// <summary>The controls of the tabs, in the order of the row.</summary>
     internal IEnumerable<SelectableTab> TabControls => Tabs.Select(tab => tab.Control);
 
     /// <summary>True when the tab named <paramref name="name" /> shows its mark.</summary>
     internal bool IsMarked(string name) => Tabs.Any(tab => (tab.Tab.Name == name) && tab.Control.IsMarked);
 
-    /// <summary>Raised when the player selects a tab, hides the box or shows it, so that the world screen saves the state.</summary>
+    /// <summary>
+    ///     Raised when the player selects a tab, hides the box or shows it, or adds, changes or removes a custom tab, so
+    ///     that the world screen saves the state.
+    /// </summary>
     public event Action? StateChanged;
+
+    /// <summary>Raised on a click on the <c>+</c> button: the world screen opens the editor for a new tab.</summary>
+    public event Action? AddTabRequested;
+
+    /// <summary>Raised on a right click on a custom tab, with the screen point: the world screen opens its menu (Edit, Remove).</summary>
+    public event Action<ChatTab, int, int>? TabMenuRequested;
+
+    /// <summary>
+    ///     True when no tab but <paramref name="except" /> has the name <paramref name="name" />, in any case, so that each
+    ///     name identifies one tab.
+    /// </summary>
+    public bool IsNameFree(string name, ChatTab? except = null)
+        => !Tabs.Any(tab => (tab.Tab != except) && string.Equals(tab.Tab.Name, name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The editor's OK: a new tab when <paramref name="edited" /> is null, else a change of <paramref name="edited" />.</summary>
+    public void Apply(ChatTab? edited, ChatTab tab)
+    {
+        if (edited is null)
+            AddCustomTab(tab);
+        else
+            ReplaceCustomTab(edited, tab);
+    }
+
+    /// <summary>Puts the saved custom tabs in the row: the valid ones with a free name, up to the limit. Raises no event.</summary>
+    public void SetCustomTabs(IEnumerable<ChatTab> tabs)
+    {
+        foreach (var tab in CustomTabs)
+            RemoveTab(tab);
+
+        foreach (var tab in tabs)
+            if (CanAddTab && tab.IsValidCustom && IsNameFree(tab.Name))
+                AddTab(tab);
+
+        Select(SelectedTab.Name);
+        LayOut();
+    }
+
+    /// <summary>Adds a custom tab at the end of the row and selects it.</summary>
+    public void AddCustomTab(ChatTab tab)
+    {
+        if (!CanAddTab || !tab.IsValidCustom || !IsNameFree(tab.Name))
+            return;
+
+        AddTab(tab);
+        Select(tab.Name);
+        LayOut();
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>Changes the name or the channels of a custom tab, in its place; a selected tab stays selected.</summary>
+    public void ReplaceCustomTab(ChatTab tab, ChatTab updated)
+    {
+        var index = CustomIndex(tab);
+
+        if ((index < 0) || !updated.IsValidCustom || !IsNameFree(updated.Name, tab))
+            return;
+
+        //the mark was for the old channels
+        var control = Tabs[index].Control;
+        Tabs[index] = (updated, control);
+        control.SetText(updated.Name);
+        control.IsMarked = false;
+
+        if (SelectedTab == tab)
+        {
+            SelectedTab = updated;
+            View.ShowTab(updated);
+        }
+
+        LayOut();
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>Removes a custom tab; when it was selected, the Chat tab is selected.</summary>
+    public void RemoveCustomTab(ChatTab tab)
+    {
+        if (CustomIndex(tab) < 0)
+            return;
+
+        RemoveTab(tab);
+
+        if (SelectedTab == tab)
+            Select(ChatTab.Chat.Name);
+
+        LayOut();
+        StateChanged?.Invoke();
+    }
 
     /// <summary>Selects the tab named <paramref name="name" />, or the Chat tab when no tab has the name.</summary>
     public void Select(string name)
@@ -216,18 +333,47 @@ public sealed class ChatBoxControl : UIPanel
         LayOutTabs();
     }
 
+    //the fixed tabs are tab_system, tab_combat and tab_chat. A custom tab is custom_tab_N. The box does not use N again,
+    //so a name stays unique after a remove. An edit keeps the control of the tab
     private void AddTab(ChatTab tab)
     {
-        var control = new SelectableTab(tab.Name, 1, MainHudLayout.CHAT_TAB_HEIGHT) { Name = $"tab_{tab.Name.ToLowerInvariant()}" };
+        var isCustom = Tabs.Count >= ChatTab.Fixed.Count;
+
+        var control = new SelectableTab(tab.Name, 1, MainHudLayout.CHAT_TAB_HEIGHT)
+        {
+            Name = isCustom ? $"custom_tab_{NextCustomId++}" : $"tab_{tab.Name.ToLowerInvariant()}"
+        };
 
         control.Clicked += () =>
         {
-            Select(tab.Name);
+            Select(TabOf(control).Name);
             StateChanged?.Invoke();
         };
 
+        if (isCustom)
+            control.RightClicked += (x, y) => TabMenuRequested?.Invoke(TabOf(control), x, y);
+
         Tabs.Add((tab, control));
         AddChild(control);
+    }
+
+    private void RemoveTab(ChatTab tab)
+    {
+        var index = Tabs.FindIndex(entry => entry.Tab == tab);
+        var control = Tabs[index].Control;
+
+        //the element names are unique among the children, and the remove disposes the control
+        Tabs.RemoveAt(index);
+        RemoveChild(control.Name);
+    }
+
+    private ChatTab TabOf(SelectableTab control) => Tabs.Single(entry => entry.Control == control).Tab;
+
+    private int CustomIndex(ChatTab tab)
+    {
+        var index = Tabs.FindIndex(entry => entry.Tab == tab);
+
+        return index >= ChatTab.Fixed.Count ? index : -1;
     }
 
     //each tab fits its name at the size the face draws it, and the row shrinks the widest tabs when the names do not fit
@@ -235,8 +381,12 @@ public sealed class ChatBoxControl : UIPanel
     {
         TabLayout.Mark();
 
+        //the + button takes its place after the tabs while the row has space for a custom tab
+        AddButton.Visible = CanAddTab;
+        var available = MainHudLayout.ChatTabRowWidth - (CanAddTab ? AddButton.Width + MainHudLayout.CHAT_TAB_GAP : 0);
+
         var preferred = Tabs.Select(tab => TextRenderer.MeasureWidth(tab.Tab.Name) + MainHudLayout.CHAT_TAB_PAD).ToList();
-        var widths = MainHudLayout.FitTabs(preferred, MainHudLayout.ChatTabRowWidth, MainHudLayout.CHAT_TAB_GAP);
+        var widths = MainHudLayout.FitTabs(preferred, available, MainHudLayout.CHAT_TAB_GAP);
         var x = MainHudLayout.CHAT_ROW_PAD;
         var y = RowRect().Y + MainHudLayout.CHAT_ROW_PAD;
 
@@ -245,6 +395,8 @@ public sealed class ChatBoxControl : UIPanel
             Tabs[i].Control.SetBounds(new Rectangle(x, y, widths[i], MainHudLayout.CHAT_TAB_HEIGHT));
             x += widths[i] + MainHudLayout.CHAT_TAB_GAP;
         }
+
+        AddButton.SetBounds(new Rectangle(x, y, AddButton.Width, AddButton.Height));
     }
 
     private void OnEntryAdded(ChatEntry entry)

@@ -346,5 +346,5 @@ public sealed class ChatBoxControlTests : IDisposable
         return Box.View.ShownText.Last();
     }
 
-    private IconButton HideButton() => Box.Children.OfType<IconButton>().Single();
+    private IconButton HideButton() => Box.Children.OfType<IconButton>().Single(button => button.Name == "hide_button");
 }

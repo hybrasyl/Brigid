@@ -101,6 +101,8 @@ public sealed partial class WorldScreen : IScreen
     private AbilityMetadataDetailsControl AbilityMetadataDetails = null!;
     private AislingContextMenu AislingContext = null!;
     private DoorContextMenu DoorContext = null!;
+    private ChatTabMenu ChatTabMenu = null!;
+    private ChatTabEditorControl ChatTabEditor = null!;
 
     private int AnimationTick;
     private float MapDataIdleMs;
@@ -649,6 +651,18 @@ public sealed partial class WorldScreen : IScreen
             ZIndex = 3
         };
 
+        ChatTabMenu = new ChatTabMenu
+        {
+            ZIndex = 3
+        };
+
+        //the layer of the other text editors, above the text popups
+        ChatTabEditor = new ChatTabEditorControl((name, except) => MainHud.ChatBox.IsNameFree(name, except))
+        {
+            ZIndex = 3
+        };
+        ChatTabEditor.SetViewportBounds(viewport);
+
         ItemTooltip = new ItemTooltipControl
         {
             ZIndex = 3
@@ -694,6 +708,8 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(SocialStatusPicker);
         Root.AddChild(AislingContext);
         Root.AddChild(DoorContext);
+        Root.AddChild(ChatTabMenu);
+        Root.AddChild(ChatTabEditor);
 
         Root.AddChild(TownMapControl);
         Root.AddChild(ServerInfo);

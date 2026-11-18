@@ -28,6 +28,12 @@ public sealed class SelectableTab : UIPanel
     private readonly UILabel Label;
 
     public event ClickedHandler? Clicked;
+
+    /// <summary>
+    ///     Raised on a right click at a screen point, so that a host can open a menu for the tab there. With no handler, the
+    ///     right click goes on to the parent, as before.
+    /// </summary>
+    public event Action<int, int>? RightClicked;
     public event Action? Hovered;
     public event Action? Unhovered;
 
@@ -126,6 +132,14 @@ public sealed class SelectableTab : UIPanel
 
     public override void OnClick(ClickEvent e)
     {
+        if ((e.Button == MouseButton.Right) && RightClicked is { } rightClicked)
+        {
+            rightClicked(e.ScreenX, e.ScreenY);
+            e.Handled = true;
+
+            return;
+        }
+
         if (e.Button != MouseButton.Left)
             return;
 

@@ -10,6 +10,7 @@ using Brigid.Controls.World.Popups.Options;
 using Brigid.Extensions;
 using Brigid.Systems;
 using Brigid.Systems.Keybinds;
+using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -714,6 +715,12 @@ public sealed partial class WorldScreen
             }
     }
 
+    private void OpenChatTabEditor(ChatTab? tab)
+    {
+        ChatTabEditor.SetViewportBounds(WorldHud.ViewportBounds);
+        ChatTabEditor.Show(tab);
+    }
+
     //the sends of a chat input; each hud has its own input
     private void WireChatInput(ChatInputControl input)
     {
@@ -734,6 +741,7 @@ public sealed partial class WorldScreen
 
         //the chat box opens as the player left it
         var chatBox = MainHud.ChatBox;
+        chatBox.SetCustomTabs(ClientSettings.ChatTabs);
         chatBox.Select(ClientSettings.SelectedChatTab);
         chatBox.SetCollapsed(ClientSettings.ChatBoxHidden);
 
@@ -741,8 +749,15 @@ public sealed partial class WorldScreen
         {
             ClientSettings.SelectedChatTab = chatBox.SelectedTabName;
             ClientSettings.ChatBoxHidden = chatBox.IsCollapsed;
+            ClientSettings.ChatTabs = chatBox.CustomTabs;
             ClientSettings.Save();
         };
+
+        //the + button and the menu of a custom tab open the editor; the box changes its tabs on the editor's OK
+        chatBox.AddTabRequested += () => OpenChatTabEditor(null);
+
+        chatBox.TabMenuRequested += (tab, x, y) => ChatTabMenu.Show(x, y, tab, () => OpenChatTabEditor(tab), () => chatBox.RemoveCustomTab(tab));
+        ChatTabEditor.Confirmed += chatBox.Apply;
 
         //each button does what its key does; group is the open and closed toggle (D18), and a right click opens its window
         var windows = MainHud.Windows;
@@ -850,6 +865,14 @@ public sealed partial class WorldScreen
 
         //the new hud shows these messages in its chat tabs (BRIG-127 D10)
         SystemMessagePane.Visible = WorldHud != MainHud;
+
+        //the chat tab menu and editor belong to the new hud's chat box
+        if (WorldHud != MainHud)
+        {
+            ChatTabMenu.Hide();
+            ChatTabEditor.Hide();
+        }
+
         PauseMenu.SetViewportBounds(viewport);
         WorldList.SetViewportBounds(viewport);
         MarkdownNotice.SetViewportBounds(viewport);

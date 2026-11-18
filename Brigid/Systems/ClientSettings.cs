@@ -1,4 +1,5 @@
 using Brigid.Data;
+using Brigid.ViewModel;
 
 namespace Brigid.Systems;
 
@@ -31,6 +32,9 @@ public static class ClientSettings
     //the new HUD's chat box (BRIG-145): the name of the selected tab and whether the box is hidden. Not legacy keys.
     public static string SelectedChatTab { get; set; } = "Chat";
     public static bool ChatBoxHidden { get; set; }
+
+    //the custom tabs of the chat box, in the order of the row: one ChatTab line each. Not a legacy key.
+    public static IReadOnlyList<ChatTab> ChatTabs { get; set; } = [];
     public static bool GroupOpen { get; set; }
     public static int MusicVolume { get; set; } = 5;
     public static int AmbienceVolume { get; set; } = 5;
@@ -125,6 +129,9 @@ public static class ClientSettings
     /// <summary>Reads the settings in the file at <paramref name="path" /> into the static properties. Internal for the tests.</summary>
     internal static void Read(string path)
     {
+        var chatTabs = new List<ChatTab>();
+        ChatTabs = chatTabs;
+
         try
         {
             foreach (var line in File.ReadLines(path))
@@ -227,6 +234,14 @@ public static class ClientSettings
                         ChatBoxHidden = value == "1";
 
                         break;
+
+                    case "ChatTab":
+                        if (ChatTab.TryParseSetting(value, out var tab))
+                            chatTabs.Add(tab);
+                        else
+                            DataDiagnostics.Log?.Invoke($"ClientSettings: skipped the chat tab line \"{value}\"");
+
+                        break;
                 }
             }
         } catch
@@ -259,6 +274,9 @@ public static class ClientSettings
             writer.WriteLine($"UiTheme: {UiTheme}");
             writer.WriteLine($"ChatTabSelected: {SelectedChatTab}");
             writer.WriteLine($"ChatBoxHidden: {(ChatBoxHidden ? 1 : 0)}");
+
+            foreach (var tab in ChatTabs)
+                writer.WriteLine($"ChatTab: {tab.ToSetting()}");
             writer.WriteLine("Tel1: \"Nexus\",\"1\"");
             writer.WriteLine("Tel2: \"Nexus\",\"2\"");
             writer.WriteLine("Tel3: \"Nexus\",\"3\"");
