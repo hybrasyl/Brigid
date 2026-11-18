@@ -13,7 +13,7 @@ using Xunit;
 namespace Brigid.Tests;
 
 /// <summary>
-///     BRIG-148 phase 1: the meters of the new HUD. A meter fills to the fraction of its value, clamped, and clips its fill
+///     BRIG-148: the meters of the new HUD. A meter fills to the fraction of its value, clamped, and clips its fill
 ///     at that fraction, with 1 px at least for a low value and 1 px short for a high value; the flat fill is inside the
 ///     border; the gaps of its segments are at even fractions of its width; the health and mana meters take their values
 ///     and their theme parts.

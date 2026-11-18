@@ -65,6 +65,10 @@ internal static class DialogPalette
     public static readonly Color MeterTrack = new(21, 28, 35);
     public static readonly Color HealthFill = new(178, 58, 51);
     public static readonly Color ManaFill = new(47, 98, 181);
+    public static readonly Color ExperienceFill = new(217, 164, 65);
+
+    //the experience meter at the level cap: the experience toward a Crystallized Reflection, or the ability experience
+    public static readonly Color CapFill = ManaFill;
 
     /// <summary>
     ///     The flat value of a <c>ui_theme</c> colour role: the one colour that every control uses for <paramref name="role" />

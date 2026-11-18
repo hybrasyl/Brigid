@@ -55,11 +55,15 @@ public static class ThemeRoles
     public const string HudChatScrollTrack = "hud.chat_scroll.track";
     public const string HudChatScrollThumb = "hud.chat_scroll.thumb";
 
-    //the health and mana meters of the new HUD (BRIG-148): a track and a fill for each meter
+    //the health, mana and experience meters of the new HUD (BRIG-148): a track and a fill for each meter, and the fill
+    //of the experience meter at the level cap
     public const string HudHealthTrack = "hud.health.track";
     public const string HudHealthFill = "hud.health.fill";
     public const string HudManaTrack = "hud.mana.track";
     public const string HudManaFill = "hud.mana.fill";
+    public const string HudExperienceTrack = "hud.experience.track";
+    public const string HudExperienceFill = "hud.experience.fill";
+    public const string HudExperienceCapFill = "hud.experience.cap_fill";
 
     //content roles: icons, drawn on every host through IconArt, not only on a themed host
     //social status icons, one image for each status
@@ -131,7 +135,8 @@ public static class ThemeRoles
         [HudTopBar, HudBottomBar, HudSideEdge, HudBox, HudChatBox, HudChatScrollTrack, HudChatScrollThumb];
 
     /// <summary>The parts of the meters of the new HUD (BRIG-148), which the HUD shows, not the primitive gallery.</summary>
-    public static readonly string[] HudMeters = [HudHealthTrack, HudHealthFill, HudManaTrack, HudManaFill];
+    public static readonly string[] HudMeters =
+        [HudHealthTrack, HudHealthFill, HudManaTrack, HudManaFill, HudExperienceTrack, HudExperienceFill, HudExperienceCapFill];
 
     /// <summary>
     ///     The icons of the window buttons of the new HUD (BRIG-144), in the order of the row. A button is

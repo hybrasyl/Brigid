@@ -77,11 +77,27 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         {
             Label = "MP"
         };
+        ExperienceBar = new HudMeter(
+            "experience_bar",
+            MainHudLayout.ExperienceBar,
+            ThemeRoles.HudExperienceTrack,
+            ThemeRoles.HudExperienceFill,
+            DialogPalette.ExperienceFill)
+        {
+            Segments = EXPERIENCE_SEGMENTS,
+            IsHitTestVisible = true
+        };
+        ExperienceBar.Entered += meter =>
+        {
+            if (Attributes.HasData)
+                Tooltip.ShowAbove(meter, ExperienceLines);
+        };
+        ExperienceBar.Left += Tooltip.Hide;
         AddChild(HealthBar);
         AddChild(ManaBar);
+        AddChild(ExperienceBar);
         AddChild(Place("hotbar", MainHudLayout.Hotbar));
         AddChild(Place("player_plate", MainHudLayout.PlayerPlate));
-        AddChild(Place("experience_bar", MainHudLayout.ExperienceBar));
         Windows = new HudWindowHost(Tooltip);
         AddChild(Windows.Row);
 
@@ -125,6 +141,29 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// <summary>The mana bar of the bottom area (BRIG-148).</summary>
     internal HudMeter ManaBar { get; }
 
+    /// <summary>The experience bar at the bottom of the screen (BRIG-148, D27).</summary>
+    internal HudMeter ExperienceBar { get; }
+
+    //D27: 10 or 20 segments; the mockup has 20
+    private const int EXPERIENCE_SEGMENTS = 20;
+
+    /// <summary>
+    ///     True when the server converts the experience past the level cap into Crystallized Reflections (Hybrasyl), so the
+    ///     experience bar at the cap shows the experience toward the next one (<see cref="HudExperience" />).
+    /// </summary>
+    public bool ConvertsExperiencePastCap
+    {
+        get;
+        set
+        {
+            field = value;
+            OnAttributesChanged();
+        }
+    }
+
+    /// <summary>Shows the attributes again, for a level start that the world screen restored from its save.</summary>
+    public void RefreshAttributes() => OnAttributesChanged();
+
     /// <summary>Closes the open panels. Returns true when a panel was open, so that Escape closes the panels first.</summary>
     public bool ClosePanels() => Windows.CloseAll();
 
@@ -167,6 +206,18 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         TopBar.SetMail(attrs.HasMail, attrs.HasParcel);
         ShowMeter(HealthBar, attrs.CurrentHp, attrs.MaxHp);
         ShowMeter(ManaBar, attrs.CurrentMp, attrs.MaxMp);
+
+        var experience = HudExperience.Describe(attrs, ConvertsExperiencePastCap);
+        ExperienceBar.SetFill(experience.Fraction);
+        ExperienceBar.FillRole = experience.UsesCapFill ? ThemeRoles.HudExperienceCapFill : ThemeRoles.HudExperienceFill;
+        ExperienceBar.FlatFill = experience.UsesCapFill ? DialogPalette.CapFill : DialogPalette.ExperienceFill;
+    }
+
+    internal IReadOnlyList<TooltipLine> ExperienceLines()
+    {
+        var experience = HudExperience.Describe(Attributes, ConvertsExperiencePastCap);
+
+        return [TooltipLine.Themed(experience.Title, ThemeRoles.TextTitle), ..experience.Lines.Select(line => TooltipLine.Themed(line, ThemeRoles.Text))];
     }
 
     private static void ShowMeter(HudMeter meter, uint current, uint max)

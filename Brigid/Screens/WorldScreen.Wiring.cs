@@ -56,6 +56,9 @@ public sealed partial class WorldScreen
         WorldState.Exchange.AmountRequested += HandleExchangeAmountRequested;
         WorldState.Exchange.Closed += HandleExchangeClosed;
 
+        //the level starts that a level-up teaches are saved for the character (BRIG-148)
+        WorldState.Attributes.SpanLearned += SavePlayerExperience;
+
         //board — subscribe to state events
         WorldState.Board.PostListChanged += HandleBoardPostListChanged;
         WorldState.Board.PostViewed += HandleBoardPostViewed;

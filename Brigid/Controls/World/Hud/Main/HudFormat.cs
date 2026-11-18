@@ -29,8 +29,13 @@ internal static class HudFormat
     public static string Weight(int current, int max) => $"{current}/{max}";
 
     /// <summary>The value of a meter: the current and the maximum, with thousands separators.</summary>
-    public static string Meter(uint current, uint max)
-        => $"{current.ToString("N0", CultureInfo.InvariantCulture)} / {max.ToString("N0", CultureInfo.InvariantCulture)}";
+    public static string Meter(uint current, uint max) => $"{Number(current)} / {Number(max)}";
+
+    /// <summary>A number with thousands separators.</summary>
+    public static string Number(ulong value) => value.ToString("N0", CultureInfo.InvariantCulture);
+
+    /// <summary>The level of the player, as the experience bar and the player plate show it.</summary>
+    public static string Level(byte level) => $"Level {level}";
 
     /// <summary>The zone name and the player's tile; before a zone name arrives, the tile only.</summary>
     public static string Zone(string name, int x, int y) => name.Length == 0 ? $"({x}, {y})" : $"{name} ({x}, {y})";

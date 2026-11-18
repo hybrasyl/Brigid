@@ -604,6 +604,33 @@ public sealed partial class WorldScreen
         OptionsModal.SetMacros(macros);
     }
 
+    //the level starts that the client learned for the character, so the experience bar is correct at a new login (BRIG-148)
+    private void LoadPlayerExperience()
+    {
+        var saved = DataContext.LocalPlayerSettings.LoadExperience();
+        var attrs = WorldState.Attributes;
+
+        if (saved.Level is { } level)
+            attrs.LevelSpan.Restore(level.Level, level.Start);
+
+        if (saved.Ability is { } ability)
+            attrs.AbilitySpan.Restore(ability.Level, ability.Start);
+
+        MainHud.RefreshAttributes();
+    }
+
+    private void SavePlayerExperience()
+    {
+        if (!DataContext.LocalPlayerSettings.IsInitialized)
+            return;
+
+        var attrs = WorldState.Attributes;
+
+        DataContext.LocalPlayerSettings.SaveExperience(new SavedExperience(StartOf(attrs.LevelSpan), StartOf(attrs.AbilitySpan)));
+    }
+
+    private static SavedLevelStart? StartOf(ExperienceSpan span) => span.Start is { } start ? new SavedLevelStart(span.Level, start) : null;
+
     private void SaveSkillChants()
     {
         var entries = new List<SkillChantEntry>();

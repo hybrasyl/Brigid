@@ -46,6 +46,8 @@ public sealed partial class WorldScreen
             LoadPlayerFamilyList();
             LoadPlayerFriendList();
             LoadPlayerMacros();
+            MainHud.ConvertsExperiencePastCap = ServerProfileKey.IsHybrasyl(GlobalSettings.LobbyHost, Game.Connection.ServerName);
+            LoadPlayerExperience();
             WorldState.ReloadChants();
             LoadOwnProfile(args.Name);
 

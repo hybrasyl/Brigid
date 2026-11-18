@@ -12,7 +12,8 @@ namespace Brigid.Controls.World.Hud.Main;
 ///     its track role at the full meter, and the part of its fill role at the full meter clipped at the fraction, so the fill
 ///     art does not stretch. With no part, the flat look: the <see cref="DialogPalette.MeterTrack" /> fill with a border in
 ///     the theme's divider colour, and the flat fill colour inside the border. A flat fill shows the gaps between its
-///     segments over the full meter; a theme that gives a fill part gives its segments in its art.
+///     segments over the full meter; a theme that gives a fill part gives its segments in its art. A meter does not take the
+///     mouse, unless its owner sets <see cref="UIElement.IsHitTestVisible" /> for a tooltip.
 /// </summary>
 internal sealed class HudMeter : UIPanel
 {
@@ -63,8 +64,18 @@ internal sealed class HudMeter : UIPanel
         set => ValueText.Text = value;
     }
 
+    /// <summary>The mouse came over the meter, while it takes the mouse.</summary>
+    public event Action<HudMeter>? Entered;
+
+    /// <summary>The mouse left the meter.</summary>
+    public event Action? Left;
+
     //the flat border is part of the look
     protected internal override Color? DrawnBorderColor => ThemeColor(ThemeRoles.Divider);
+
+    public override void OnMouseEnter() => Entered?.Invoke(this);
+
+    public override void OnMouseLeave() => Left?.Invoke();
 
     /// <summary>Sets the fill to <paramref name="current" /> of <paramref name="max" />; a maximum of 0 gives an empty meter.</summary>
     public void SetFill(uint current, uint max) => Fraction = FractionOf(current, max);

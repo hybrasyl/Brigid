@@ -1,5 +1,6 @@
 #region
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text;
 using Brigid.Data.Models;
 #endregion
@@ -14,6 +15,9 @@ namespace Brigid.Data.Repositories;
 /// </summary>
 public sealed class LocalPlayerSettingsRepository
 {
+    private const string EXPERIENCE_FILE = "Experience.cfg";
+    private const string LEVEL_KEY = "Level";
+    private const string ABILITY_KEY = "Ability";
     private const string FAMILY_LIST_FILE = "Familylist.cfg";
     private const string FRIEND_LIST_FILE = "Friendlist.cfg";
     private const string MACRO_FILE = "Macro.cfg";
@@ -21,6 +25,7 @@ public sealed class LocalPlayerSettingsRepository
     private const string SPELL_BOOK_FILE = "SpellBook.cfg";
     private string PlayerDirectory { get; set; } = null!;
 
+    public string ExperiencePath => Path.Combine(PlayerDirectory, EXPERIENCE_FILE);
     public string FamilyListPath => Path.Combine(PlayerDirectory, FAMILY_LIST_FILE);
     public string FriendListPath => Path.Combine(PlayerDirectory, FRIEND_LIST_FILE);
 
@@ -178,6 +183,77 @@ public sealed class LocalPlayerSettingsRepository
         }
 
         return entries;
+    }
+
+    /// <summary>
+    ///     Loads the level starts from Experience.cfg (BRIG-148). A file that is absent gives no starts; a file that cannot
+    ///     be read gives no starts, and the failure is logged.
+    /// </summary>
+    public SavedExperience LoadExperience()
+    {
+        string[] lines = [];
+
+        if (File.Exists(ExperiencePath))
+            DataDiagnostics.Try(() => lines = File.ReadAllLines(ExperiencePath), "LoadExperience");
+
+        return ParseExperience(lines);
+    }
+
+    /// <summary>Saves the level starts to Experience.cfg (BRIG-148).</summary>
+    public void SaveExperience(SavedExperience experience)
+        => DataDiagnostics.Try(() => File.WriteAllLines(ExperiencePath, FormatExperience(experience)), "SaveExperience");
+
+    /// <summary>
+    ///     Reads Experience.cfg lines: <c>Level: {level} {start}</c> and <c>Ability: {level} {start}</c>. A line that does not
+    ///     parse, or a key that is absent, gives null for that start.
+    /// </summary>
+    internal static SavedExperience ParseExperience(IReadOnlyList<string> lines)
+    {
+        SavedLevelStart? level = null;
+        SavedLevelStart? ability = null;
+
+        foreach (var line in lines)
+        {
+            var colon = line.IndexOf(':');
+
+            if (colon < 0)
+                continue;
+
+            var parts = line[(colon + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if ((parts.Length != 2)
+                || !byte.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var number)
+                || !ulong.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var start))
+                continue;
+
+            switch (line[..colon].Trim())
+            {
+                case LEVEL_KEY:
+                    level = new SavedLevelStart(number, start);
+
+                    break;
+                case ABILITY_KEY:
+                    ability = new SavedLevelStart(number, start);
+
+                    break;
+            }
+        }
+
+        return new SavedExperience(level, ability);
+    }
+
+    /// <summary>Formats the level starts as Experience.cfg lines; <see cref="ParseExperience" /> reads them back.</summary>
+    internal static string[] FormatExperience(SavedExperience experience)
+    {
+        var lines = new List<string>();
+
+        if (experience.Level is { } level)
+            lines.Add(FormattableString.Invariant($"{LEVEL_KEY}: {level.Level} {level.Start}"));
+
+        if (experience.Ability is { } ability)
+            lines.Add(FormattableString.Invariant($"{ABILITY_KEY}: {ability.Level} {ability.Start}"));
+
+        return lines.ToArray();
     }
 
     /// <summary>
