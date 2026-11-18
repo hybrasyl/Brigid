@@ -254,19 +254,22 @@ public sealed class UiRenderer : IDisposable
         return null;
     }
 
+    /// <summary>The side of a half-size spell icon: the effect bars draw it.</summary>
+    public const int HALF_SPELL_ICON = 15;
+
     /// <summary>
     ///     Renders and caches a half-size (15x15) spell icon for the effect bar. Tries the modern .datf pack first,
     ///     falls back to the legacy EPF sheet. The 15x15 downscale happens on whichever source is used — no 1px offset
     ///     math needed at this size since the icon is being rescaled anyway.
     /// </summary>
-    public Texture2D GetHalfSizeSpellIcon(byte iconId)
+    public Texture2D GetHalfSizeSpellIcon(ushort iconId)
     {
         var key = $"spell_half:{iconId}";
 
         if (Cache.TryGetValue(key, out var cached))
             return cached;
 
-        const int HALF_ICON_SIZE = 15;
+        const int HALF_ICON_SIZE = HALF_SPELL_ICON;
 
         SKImage? sourceImage = null;
         var ownedSource = false;
@@ -299,7 +302,8 @@ public sealed class UiRenderer : IDisposable
         {
             //2x2 box filter samples the top-left (HALF_ICON_SIZE*2)x(HALF_ICON_SIZE*2) of the source.
             //legacy 31x31 EPF drops 1px edge; modern 32x32 .datf drops 2px — imperceptible at 15x15.
-            using var sourceBitmap = SKBitmap.FromImage(sourceImage);
+            //the filter reads a block of (HALF_ICON_SIZE*2) px on each side: a smaller pack icon is first scaled up to it
+            using var sourceBitmap = ToDownsampleSource(sourceImage, HALF_ICON_SIZE * 2);
             var srcPixels = sourceBitmap.Pixels;
             var halvedPixels = ImageUtil.DownsampleIcon(srcPixels, sourceBitmap.Width, HALF_ICON_SIZE, HALF_ICON_SIZE);
 
@@ -322,6 +326,23 @@ public sealed class UiRenderer : IDisposable
             if (ownedSource)
                 sourceImage.Dispose();
         }
+    }
+
+    //the bitmap of an image, scaled up to side size when it is smaller than that on an axis
+    internal static SKBitmap ToDownsampleSource(SKImage image, int size)
+    {
+        if ((image.Width >= size) && (image.Height >= size))
+            return SKBitmap.FromImage(image);
+
+        var scaled = new SKBitmap(new SKImageInfo(size, size, SKColorType.Rgba8888, SKAlphaType.Premul));
+
+        using (var canvas = new SKCanvas(scaled))
+        {
+            canvas.Clear(SKColors.Transparent);
+            canvas.DrawImage(image, new SKRect(0, 0, size, size), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None));
+        }
+
+        return scaled;
     }
 
     /// <summary>

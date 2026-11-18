@@ -22,7 +22,7 @@ public sealed class EffectSlotControl : UIPanel
     private readonly UIProgressBar Bar;
     private readonly UIImage Icon;
 
-    public byte EffectIcon { get; private set; }
+    public ushort EffectIcon { get; private set; }
 
     /// <summary>
     ///     True if this slot currently holds an effect. Derived from <see cref="UIProgressBar.FillColor" />, which
@@ -66,7 +66,7 @@ public sealed class EffectSlotControl : UIPanel
 
     public void ClearEffect()
     {
-        Icon.Texture?.Dispose();
+        //the icon is UiRenderer's cached texture, which the next effect with this icon uses again
         Icon.Texture = null;
         Bar.Percent = 0;
         Bar.FillColor = null;
@@ -98,7 +98,7 @@ public sealed class EffectSlotControl : UIPanel
             _                  => 0f
         };
 
-    public void SetEffect(byte iconId, EffectColor color, Texture2D? iconTexture)
+    public void SetEffect(ushort iconId, EffectColor color, Texture2D? iconTexture)
     {
         EffectIcon = iconId;
         Icon.Texture = iconTexture;

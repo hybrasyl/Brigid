@@ -162,6 +162,7 @@ public sealed class PrimitiveGalleryTests : IDisposable
                     //the new HUD shows its surfaces, bars and icons (MainHudControlTests, HudTopBarTests, HudMeterTests)
                     .Except(ThemeRoles.HudSurfaces)
                     .Except(ThemeRoles.HudMeters)
+                    .Except(ThemeRoles.HudEffects)
                     .Except(ThemeRoles.HudIcons)
                     .Except(ThemeRoles.WindowIcons)
                     .Except(ThemeRoles.ChatIcons);
