@@ -57,27 +57,24 @@ public sealed class ChatTab(string name, IReadOnlySet<ChatChannel> channels)
     public string ToSetting() => $"{Name}|{string.Join(",", Channels.Order())}";
 
     /// <summary>
-    ///     Reads a <see cref="ToSetting" /> value. False for a value with a name that <see cref="IsValidName" /> refuses,
-    ///     no channel, or a channel that <see cref="ChatChannel" /> does not name.
+    ///     Reads a <see cref="ToSetting" /> value. A field after the channels, and a channel that <see cref="ChatChannel" />
+    ///     does not name, are left out, so a line from a later build keeps the tab with the channels that this build
+    ///     knows. False for a name that <see cref="IsValidName" /> refuses, or no channel that this build knows.
     /// </summary>
     public static bool TryParseSetting(string value, [NotNullWhen(true)] out ChatTab? tab)
     {
         tab = null;
         var parts = value.Split('|');
 
-        if (parts.Length != 2)
+        if (parts.Length < 2)
             return false;
 
         var channels = new HashSet<ChatChannel>();
 
+        //only a channel name: Enum.TryParse also takes a number
         foreach (var name in parts[1].Split(','))
-        {
-            //only a channel name: Enum.TryParse also takes a number
-            if (!Enum.GetNames<ChatChannel>().Contains(name))
-                return false;
-
-            channels.Add(Enum.Parse<ChatChannel>(name));
-        }
+            if (Enum.GetNames<ChatChannel>().Contains(name))
+                channels.Add(Enum.Parse<ChatChannel>(name));
 
         tab = new ChatTab(parts[0], channels);
 

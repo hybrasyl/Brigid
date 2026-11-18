@@ -154,7 +154,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     public string PlayerName { get; private set; } = string.Empty;
 
-    //an empty place that the debug overlay names; it does not take the mouse, so the world under the chat box still does
+    //an empty place that the debug overlay names; it does not take the mouse, so the world under it still does
     private static UIPanel Place(string name, Rectangle bounds)
     {
         var place = new UIPanel

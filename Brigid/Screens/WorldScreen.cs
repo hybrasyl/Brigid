@@ -273,8 +273,8 @@ public sealed partial class WorldScreen : IScreen
 
         var viewport = WorldHud.ViewportBounds;
 
-        //shared floating system-message pane — lives at Root so its fade timer keeps ticking
-        //across HUD swaps. Repositioned in SwapHudLayout when the active HUD changes.
+        //shared floating system-message pane at Root: the classic and the large hud show it, and its fade timer keeps
+        //ticking across their swaps. ActivateHud moves it to the viewport, and hides and empties it on the new hud.
         SystemMessagePane = new SystemMessagePaneControl(viewport)
         {
             ZIndex = -1

@@ -107,6 +107,15 @@ public sealed class SystemMessagePaneControl : UIPanel
                 Lines[i].Visible = false;
     }
 
+    /// <summary>Removes the messages that show, so that a pane that shows again starts empty.</summary>
+    public void Clear()
+    {
+        Count = 0;
+
+        foreach (var line in Lines)
+            line.Visible = false;
+    }
+
     public override void Update(GameTime gameTime)
     {
         if (ElapsedMs >= TOTAL_DURATION_MS)

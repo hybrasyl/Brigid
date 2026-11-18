@@ -30,7 +30,24 @@ public sealed class ChatCustomTabTests : IDisposable
         Box = new ChatBoxControl(Log);
     }
 
-    public void Dispose() => Box.Dispose();
+    private readonly List<ChatTabEditorControl> Editors = [];
+
+    //an open editor gives its name box the static text focus; a hide gives it back
+    public void Dispose()
+    {
+        foreach (var editor in Editors)
+            editor.Hide();
+
+        Box.Dispose();
+    }
+
+    private ChatTabEditorControl NewEditor(Func<string, ChatTab?, bool> isNameFree)
+    {
+        var editor = new ChatTabEditorControl(isNameFree);
+        Editors.Add(editor);
+
+        return editor;
+    }
 
     private static ChatTab Tab(string name, params ChatChannel[] channels) => new(name, channels.ToHashSet());
 
@@ -57,14 +74,24 @@ public sealed class ChatCustomTabTests : IDisposable
     [InlineData("Party|")]
     [InlineData("Party|Loot")]
     [InlineData("Party|3")]
-    [InlineData("Party|Say,")]
     [InlineData("Too long a|Say")]
     [InlineData(" Party|Say")]
     [InlineData("Par-ty|Say")]
     [InlineData("|Say")]
     [InlineData("a|b|Say")]
-    [InlineData("Party|Say|Say")]
     public void ABadSettingLineIsRefused(string value) => Assert.False(ChatTab.TryParseSetting(value, out _));
+
+    //a line of a later build: an unknown channel and a field after the channels are left out
+    [Theory]
+    [InlineData("Party|Group,Loot")]
+    [InlineData("Party|Group|later")]
+    [InlineData("Party|Group,")]
+    public void ALineFromALaterBuildKeepsTheChannelsThatThisBuildKnows(string value)
+    {
+        Assert.True(ChatTab.TryParseSetting(value, out var tab));
+        Assert.Equal("Party", tab.Name);
+        Assert.Equal(new HashSet<ChatChannel> { ChatChannel.Group }, tab.Channels);
+    }
 
     [Theory]
     [InlineData("A", true)]
@@ -328,7 +355,7 @@ public sealed class ChatCustomTabTests : IDisposable
     [Fact]
     public void OkNeedsAValidFreeNameAndAChannel()
     {
-        var editor = new ChatTabEditorControl((name, _) => !string.Equals(name, "Chat", StringComparison.OrdinalIgnoreCase));
+        var editor = NewEditor((name, _) => !string.Equals(name, "Chat", StringComparison.OrdinalIgnoreCase));
         editor.Show();
 
         Assert.False(editor.CanConfirm);
@@ -354,7 +381,7 @@ public sealed class ChatCustomTabTests : IDisposable
     public void EnterConfirmsAndGivesTheEditedTabAndTheNewOne()
     {
         var party = Tab("Party", ChatChannel.Group);
-        var editor = new ChatTabEditorControl((_, _) => true);
+        var editor = NewEditor((_, _) => true);
         (ChatTab? Edited, ChatTab Tab)? confirmed = null;
         editor.Confirmed += (edited, tab) => confirmed = (edited, tab);
 
@@ -376,7 +403,7 @@ public sealed class ChatCustomTabTests : IDisposable
     [Fact]
     public void EnterDoesNothingWhileOkIsDisabledAndEscapeCancels()
     {
-        var editor = new ChatTabEditorControl((_, _) => true);
+        var editor = NewEditor((_, _) => true);
         var confirmed = 0;
         editor.Confirmed += (_, _) => confirmed++;
         editor.Show();

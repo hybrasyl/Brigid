@@ -461,7 +461,8 @@ public sealed partial class WorldScreen
             {
                 var macroText = OptionsModal.GetMacroValue(slot - 1);
 
-                if (macroText.Length > 0)
+                //the new hud has no place for the macros yet (BRIG-145); its tab is the hidden classic hud's
+                if ((macroText.Length > 0) && (WorldHud != MainHud))
                 {
                     WorldHud.ChatInput.Focus($"{WorldHud.PlayerName}: ", Color.White);
                     WorldHud.ChatInput.SetText(macroText, macroText.Length);

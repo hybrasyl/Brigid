@@ -2,7 +2,9 @@
 using Brigid.Controls.Components;
 using Brigid.Definitions;
 using Brigid.Controls.Generic;
+using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Main;
+using Brigid.Controls.World.ViewPort;
 using Brigid.Rendering;
 using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
@@ -336,6 +338,46 @@ public sealed class ChatBoxControlTests : IDisposable
 
         tab.IsSelected = true;
         Assert.Equal(DialogPalette.ForRole(ThemeRoles.TextSelected), label.ForegroundColor);
+    }
+
+    //the ignore and drop prompts are wider than the new input; the text box keeps room to type
+    [Theory]
+    [InlineData('a')]
+    [InlineData('d')]
+    public void ALongPromptLeavesTheTextBoxRoomToType(char mode)
+    {
+        Box.Input.FocusIgnore();
+        Box.Input.OnTextInput(new TextInputEvent { Character = mode });
+        AssertRoomToType();
+
+        Box.Input.Unfocus();
+        Box.Input.ShowPrompt("Number of items to drop [ 0 - 100 ]: ", 3, _ => { });
+        AssertRoomToType();
+        Box.Input.Unfocus();
+    }
+
+    private void AssertRoomToType()
+    {
+        var prefix = Box.Input.FindChild<UILabel>("chat_prefix")!;
+        var text = Box.Input.FindChild<UITextBox>("chat_text_box")!;
+
+        Assert.True(text.Width >= ChatInputControl.MIN_TEXT_WIDTH, $"{text.Width}");
+        Assert.Equal(prefix.X + prefix.Width, text.X);
+        Assert.Equal(Box.Input.Width, text.X + text.Width);
+    }
+
+    //the new hud hides the pane; a pane that shows again starts empty
+    [Fact]
+    public void AClearedPaneShowsNoOldMessage()
+    {
+        var pane = new SystemMessagePaneControl(MainHudLayout.World);
+        pane.AddMessage("old whisper");
+
+        pane.Clear();
+        pane.Update(new GameTime(TimeSpan.Zero, TimeSpan.FromMilliseconds(10)));
+
+        Assert.All(pane.Children, line => Assert.False(line.Visible));
+        pane.Dispose();
     }
 
     //the bottom line of the scrollback

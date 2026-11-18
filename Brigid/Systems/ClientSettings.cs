@@ -30,7 +30,7 @@ public static class ClientSettings
     public static string? UiTheme { get; set; }
 
     //the new HUD's chat box (BRIG-145): the name of the selected tab and whether the box is hidden. Not legacy keys.
-    public static string SelectedChatTab { get; set; } = "Chat";
+    public static string SelectedChatTab { get; set; } = ChatTab.Chat.Name;
     public static bool ChatBoxHidden { get; set; }
 
     //the custom tabs of the chat box, in the order of the row: one ChatTab line each. Not a legacy key.
@@ -121,7 +121,7 @@ public static class ClientSettings
 
         Read(loadPath);
 
-        //first-run migration: if we just read the legacy file, persist to the new per-user location
+        //the first run reads the legacy file; the save then writes the settings to the new per-user place
         if (loadPath != FilePath)
             Save();
     }
@@ -224,7 +224,7 @@ public static class ClientSettings
 
                         break;
 
-                    case "ChatTabSelected":
+                    case "SelectedChatTab":
                         if (value.Length > 0)
                             SelectedChatTab = value;
 
@@ -272,7 +272,7 @@ public static class ClientSettings
             writer.WriteLine($"EngFont: {FontIndex}");
             writer.WriteLine($"ImportCharacterData: {LegacyCharacterImport}");
             writer.WriteLine($"UiTheme: {UiTheme}");
-            writer.WriteLine($"ChatTabSelected: {SelectedChatTab}");
+            writer.WriteLine($"SelectedChatTab: {SelectedChatTab}");
             writer.WriteLine($"ChatBoxHidden: {(ChatBoxHidden ? 1 : 0)}");
 
             foreach (var tab in ChatTabs)

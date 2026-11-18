@@ -12,7 +12,8 @@ namespace Brigid.Controls.World.Hud.Main;
 ///     (<see cref="ThemeRoles.HudChatScrollTrack" />, <see cref="ThemeRoles.HudChatScrollThumb" />), so a theme can draw it
 ///     apart from the scroll bars of the windows; with no part it has a flat look. It shows a <see cref="ScrollModel" />
 ///     whose offset counts from the bottom (<see cref="ScrollModel.Inverted" />), so the thumb is at the bottom at the
-///     newest entry. A drag of the thumb sets the offset, and a click on the track above or below it moves one page.
+///     newest entry. A drag of the thumb sets the offset, and a click on the track above or below it moves one page. The
+///     bar does not take the wheel: the view under it scrolls by lines.
 /// </summary>
 internal sealed class ChatScrollBar : UIPanel
 {
@@ -62,8 +63,6 @@ internal sealed class ChatScrollBar : UIPanel
         Model.ScrollBy(e.ScreenY < ScreenY + Thumb.Y ? Model.Viewport : -Model.Viewport);
         e.Handled = true;
     }
-
-    //the wheel goes on to the view, which scrolls by lines
 
     public override void ResetInteractionState() => Dragging = false;
 

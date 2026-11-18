@@ -863,8 +863,11 @@ public sealed partial class WorldScreen
         UpdateCameraOffset(viewport);
         SystemMessagePane.SetViewportBounds(viewport);
 
-        //the new hud shows these messages in its chat tabs (BRIG-127 D10)
+        //the new hud shows these messages in its chat tabs (BRIG-127 D10); the hidden pane does not fade, so it empties
         SystemMessagePane.Visible = WorldHud != MainHud;
+
+        if (!SystemMessagePane.Visible)
+            SystemMessagePane.Clear();
 
         //the chat tab menu and editor belong to the new hud's chat box
         if (WorldHud != MainHud)

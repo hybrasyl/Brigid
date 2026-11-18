@@ -33,6 +33,9 @@ public sealed class ChatInputControl : UIPanel
     //(host ends in kru.com).
     private const int RETAIL_MESSAGE_LENGTH = 55;
 
+    //the least width of the text box beside a prompt, so a long prompt in a narrow input leaves room to type
+    internal const int MIN_TEXT_WIDTH = 64;
+
     private static readonly Color FocusedBackground = new(0, 0, 0, 160);
 
     private readonly int FullWidth;
@@ -55,8 +58,7 @@ public sealed class ChatInputControl : UIPanel
 
     /// <summary>
     ///     The text style of the chat lines this input sits beneath. Set by the owning HUD after both exist, so the input
-    ///     matches the lines above it. Null until wired, in which case the input falls back to the ordinary UI size
-    ///     rather than guessing.
+    ///     matches the lines above it. Until it is set, the input uses the normal UI size and tracking.
     /// </summary>
     public IChatTextStyle? TextStyle { get; set; }
     private int WhisperHistoryIndex;
@@ -143,8 +145,13 @@ public sealed class ChatInputControl : UIPanel
 
         //measure at the size the label itself is set to, not at a size fetched separately — those are the same thing
         //only if the two lookups agree, and ApplyTextStyle re-runs this whenever it changes the label
-        var prefixWidth = TextRenderer.MeasureWidth(prefix, PrefixLabel.FontSize, PrefixLabel.CharacterSpacing)
-                          + PrefixLabel.PaddingLeft;
+        var measured = TextRenderer.MeasureWidth(prefix, PrefixLabel.FontSize, PrefixLabel.CharacterSpacing)
+                       + PrefixLabel.PaddingLeft;
+
+        //a prompt wider than the input keeps MIN_TEXT_WIDTH for the text box: the label tightens its letters, and its
+        //clip trims the rest
+        var prefixWidth = Math.Min(measured, Math.Max(0, FullWidth - MIN_TEXT_WIDTH));
+        PrefixLabel.ShrinkToFit = measured > prefixWidth;
         PrefixLabel.Text = prefix;
         PrefixLabel.ForegroundColor = color;
         PrefixLabel.Width = prefixWidth;
@@ -154,11 +161,11 @@ public sealed class ChatInputControl : UIPanel
         TextBox.Width = FullWidth - prefixWidth;
     }
 
-    //follow the style of the lines above so the input can't render at a different size from them. The display owns
-    //the size; ask it rather than assuming an update order.
+    //the input takes the style of the lines above it, so the two draw at one size. The display owns the size, and the
+    //input asks it at each update, so the order of the updates does not matter.
     private void ApplyTextStyle()
     {
-        var (size, spacing) = TextStyle?.EnsureTextStyle() ?? (FontEngine.Instance.UiSize, ChatTextStyle.Spacing);
+        var (size, spacing) = TextStyle?.EnsureTextStyle() ?? (FontEngine.Instance.UiSize, 0f);
         var generation = FontEngine.Instance.Generation;
 
         //the resolved size alone is not enough. Generation also bumps on a layout-scale change, and MeasureWidth is

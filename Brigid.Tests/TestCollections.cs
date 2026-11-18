@@ -10,7 +10,7 @@ namespace Brigid.Tests;
 [CollectionDefinition("AssetPackRegistry", DisableParallelization = true)]
 public sealed class AssetPackRegistryCollection;
 
-// ClientSettings is static: ClientSettings.Read sets every setting. The tests that read a settings file run alone.
+// ClientSettings is static: ClientSettings.Read sets the settings of a file. The tests that read a settings file run alone.
 [CollectionDefinition("ClientSettings", DisableParallelization = true)]
 public sealed class ClientSettingsCollection;
 
