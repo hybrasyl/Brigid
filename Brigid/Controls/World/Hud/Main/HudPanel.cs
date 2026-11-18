@@ -1,0 +1,84 @@
+#region
+using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
+using Microsoft.Xna.Framework;
+#endregion
+
+namespace Brigid.Controls.World.Hud.Main;
+
+/// <summary>
+///     The panel of a window of the new HUD (BRIG-127 D30): a framed box with a title and an X button, which
+///     <see cref="HudPanelHost" /> places. A window that a later card makes shows its title and a line that says it is not
+///     built yet; that card puts its content in the panel.
+/// </summary>
+internal sealed class HudPanel : FramePanel
+{
+    private const int PADDING = 6;
+    private const int TITLE_HEIGHT = 16;
+    private const int CLOSE_SIZE = 14;
+
+    public HudPanel(HudWindow window)
+    {
+        Name = $"{window.Id}_panel";
+        Window = window;
+        Visible = false;
+        UseTheme = true;
+        SetBounds(window.Panel == HudPanelSize.Large ? MainHudLayout.LargePanel : MainHudLayout.CompactRight);
+
+        //a themed frame can have a wider border than the flat one; the content keeps clear of it
+        var inset = InsetFor(PADDING);
+
+        var title = new UILabel
+        {
+            Name = "title",
+            Text = window.Name,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false
+        };
+
+        title.SetBounds(new Rectangle(inset, inset, Width - 2 * inset - CLOSE_SIZE, TITLE_HEIGHT));
+        title.SetForegroundRole(ThemeRoles.TextTitle);
+        AddChild(title);
+
+        var close = new TextButton("X", CLOSE_SIZE, CLOSE_SIZE)
+        {
+            Name = "close",
+            X = Width - inset - CLOSE_SIZE,
+            Y = inset + (TITLE_HEIGHT - CLOSE_SIZE) / 2
+        };
+
+        close.Clicked += () => CloseRequested?.Invoke(this);
+        AddChild(close);
+
+        ContentBounds = new Rectangle(inset, inset + TITLE_HEIGHT, Width - 2 * inset, Height - 2 * inset - TITLE_HEIGHT);
+
+        var notBuilt = new UILabel
+        {
+            Name = "not_built",
+            Text = "This window is not built yet.",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsHitTestVisible = false
+        };
+
+        notBuilt.SetBounds(ContentBounds);
+        notBuilt.SetForegroundRole(ThemeRoles.TextDisabled);
+        AddChild(notBuilt);
+    }
+
+    public HudWindow Window { get; }
+
+    /// <summary>The place of the content, in the panel: under the title, inside the frame.</summary>
+    public Rectangle ContentBounds { get; }
+
+    /// <summary>Puts a window card's content in the panel at <see cref="ContentBounds" />, in place of the not-built line.</summary>
+    public void SetContent(UIElement content)
+    {
+        RemoveChild("not_built");
+        content.SetBounds(ContentBounds);
+        AddChild(content);
+    }
+
+    /// <summary>The X button: the host closes the panel.</summary>
+    public event Action<HudPanel>? CloseRequested;
+}

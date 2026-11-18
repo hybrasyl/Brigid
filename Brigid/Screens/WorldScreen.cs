@@ -262,7 +262,7 @@ public sealed partial class WorldScreen : IScreen
         MainHud = new MainHudControl(SmallHud)
         {
             Visible = false,
-            ZIndex = -1
+            ZIndex = MainHudControl.LAYER
         };
         WorldHud = SmallHud;
 

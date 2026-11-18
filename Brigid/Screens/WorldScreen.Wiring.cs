@@ -3,6 +3,8 @@ using System.Diagnostics;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
+using Brigid.Controls.World.Hud.Main;
+using Brigid.Controls.Generic;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Extensions;
@@ -558,8 +560,7 @@ public sealed partial class WorldScreen
             };
 
         if (hud.GroupIndicator is not null)
-            //route through UserOptions.Toggle so the F4 settings panel and StatusBook indicator stay in sync
-            hud.GroupIndicator.Clicked += () => WorldState.UserOptions.Toggle(12);
+            hud.GroupIndicator.Clicked += ToggleGroupOpen;
 
         if (hud.UsersButton is not null)
         {
@@ -727,7 +728,33 @@ public sealed partial class WorldScreen
     {
         MainHud.ServerBoxClicked += ToggleServerInfo;
         MainHud.MailClicked += OpenMail;
+
+        //each button does what its key does; group is the open and closed toggle (D18), and a right click opens its window
+        var windows = MainHud.Windows;
+        windows.BindWindow(HudWindows.Menu, TogglePauseMenu, () => PauseMenu.Visible);
+        windows.BindWindow(HudWindows.Mail, ToggleBoards, IsAnyBoardPanelVisible);
+        windows.BindWindow(HudWindows.Community, ToggleWorldList, () => WorldList.Visible);
+        windows.BindWindow(HudWindows.Map, ToggleTownMap, () => TownMapControl.Visible);
+
+        windows.BindWindow(
+            HudWindows.Group,
+            ToggleGroupOpen,
+            () => WorldState.UserOptions[GROUP_OPEN_OPTION],
+            OpenGroupWindow,
+            () =>
+            [
+                TooltipLine.Themed(WorldState.UserOptions[GROUP_OPEN_OPTION] ? "Group: open" : "Group: closed", ThemeRoles.Text),
+                TooltipLine.Themed("Right click: the group window", ThemeRoles.TextDisabled)
+            ]);
+        windows.BindWindow(HudWindows.Screenshot, Game.RequestScreenshot);
     }
+
+    //the user option of the group open state (the server's group toggle)
+    private const int GROUP_OPEN_OPTION = 12;
+
+    //group open and closed, from the indicator of each hud: through UserOptions.Toggle, so the F4 settings panel and the
+    //status book indicator stay in step
+    private void ToggleGroupOpen() => WorldState.UserOptions.Toggle(GROUP_OPEN_OPTION);
 
     //the board list, where the mail is; from the mail button of each hud
     private void OpenMail() => Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);

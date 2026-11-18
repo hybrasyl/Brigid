@@ -30,6 +30,12 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     private readonly HudTopBar TopBar;
     private readonly HudTooltip Tooltip;
 
+    /// <summary>
+    ///     The layer of the HUD among the children of the world root: under the popups, also the pause menu and the Aisling
+    ///     list (-2), which open in the world area, where the panels of this HUD are. A popup floats above the panels.
+    /// </summary>
+    public const int LAYER = -3;
+
     /// <param name="classic">The classic HUD, whose panels this HUD returns for the legacy members.</param>
     /// <param name="clock">The source of the local time of the clock; null for the system clock.</param>
     /// <param name="attributes">The player's attributes; null for <see cref="WorldState.Attributes" />.</param>
@@ -63,11 +69,15 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         AddChild(Place("mana_bar", MainHudLayout.ManaBar));
         AddChild(Place("hotbar", MainHudLayout.Hotbar));
         AddChild(Place("player_plate", MainHudLayout.PlayerPlate));
-        AddChild(Place("window_buttons", MainHudLayout.WindowButtons));
         AddChild(Place("experience_bar", MainHudLayout.ExperienceBar));
+        Windows = new HudWindowHost(Tooltip);
+        AddChild(Windows.Row);
 
         PersistentMessage = new PersistentMessageControl(ViewportBounds) { Name = "persistent_message" };
         AddChild(PersistentMessage);
+        foreach (var panel in Windows.Panels)
+            AddChild(panel);
+
         AddChild(Tooltip);
 
         //a hidden HUD shows no tooltip, also when it shows again with the mouse still on the box
@@ -90,6 +100,22 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     /// <summary>A click on the mail box of the top bar: the mail.</summary>
     public event Action? MailClicked;
+
+    /// <summary>The windows of the HUD: its button row, its panels and the windows that the world screen binds.</summary>
+    internal HudWindowHost Windows { get; }
+
+    /// <summary>Closes the open panels. Returns true when a panel was open, so that Escape closes the panels first.</summary>
+    public bool ClosePanels() => Windows.CloseAll();
+
+    /// <summary>True when an open panel is at the screen point, so that a click or a drop there does not reach the world.</summary>
+    public bool IsOverPanel(int screenX, int screenY) => Windows.IsOverPanel(screenX, screenY);
+
+    public override void Update(GameTime gameTime)
+    {
+        Windows.RefreshSelection();
+
+        base.Update(gameTime);
+    }
 
     public override void Dispose()
     {
@@ -146,7 +172,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     public void SetWeight(int current, int max) => TopBar.SetWeight(current, max);
 
-    //the group button (phase 3)
+    //the group button reads the group open state through its binding at each update (D18)
     public void SetGroupOpen(bool groupOpen) { }
 
     //the effect bar (BRIG-147)

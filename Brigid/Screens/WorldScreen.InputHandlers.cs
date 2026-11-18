@@ -61,6 +61,10 @@ public sealed partial class WorldScreen
         if (Root is null)
             return false;
 
+        //the new hud is pass-through, so its open panels are not in the loop below
+        if ((WorldHud == MainHud) && MainHud.IsOverPanel(screenX, screenY))
+            return true;
+
         foreach (var child in Root.Children)
         {
             if (child is not UIPanel { Visible: true, IsPassThrough: false } panel)
@@ -74,6 +78,63 @@ public sealed partial class WorldScreen
         }
 
         return false;
+    }
+
+    //q: the menu. The key and the menu button of the new hud call it
+    private void TogglePauseMenu()
+    {
+        ForceCloseOtherTogglePanels(Keys.Q);
+
+        if (PauseMenu.Visible)
+        {
+            OptionsModal.Hide();
+            PauseMenu.Hide();
+        } else
+            PauseMenu.Show();
+    }
+
+    //w: the boards and the mail
+    private void ToggleBoards()
+    {
+        ForceCloseOtherTogglePanels(Keys.W);
+
+        if (IsAnyBoardPanelVisible())
+            WorldState.Board.CloseSession();
+        else
+        {
+            WorldHud.BulletinButton?.IsSelected = true;
+            OpenMail();
+        }
+    }
+
+    //e: the aisling list
+    private void ToggleWorldList()
+    {
+        ForceCloseOtherTogglePanels(Keys.E);
+
+        if (WorldList.Visible)
+            WorldList.Close();
+        else
+        {
+            WorldHud.UsersButton?.IsSelected = true;
+            Game.Connection.RequestWorldList();
+        }
+    }
+
+    //t: the town map
+    private void ToggleTownMap()
+    {
+        if (TownMapControl.Visible)
+            TownMapControl.Hide();
+        else if (WorldState.GetPlayerEntity() is { } player)
+            TownMapControl.Show(CurrentMapId, player.TileX, player.TileY);
+    }
+
+    //y: the group window, at its members tab
+    private void OpenGroupWindow()
+    {
+        Game.Connection.RequestSelfProfile();
+        GroupPanel.ShowMembers();
     }
 
     private void HandleInventoryDropInViewport(byte slot, int mouseX, int mouseY)
@@ -632,6 +693,14 @@ public sealed partial class WorldScreen
         //OnKeyDown while it's the top of the stack).
         if ((e.Key == Keys.Escape) && (InputDispatcher.Instance?.ControlStackCount == 0))
         {
+            //the panels of the new hud close first, and the next escape opens the menu
+            if ((WorldHud == MainHud) && MainHud.ClosePanels())
+            {
+                e.Handled = true;
+
+                return;
+            }
+
             PauseMenu.Show();
             e.Handled = true;
 
@@ -653,15 +722,7 @@ public sealed partial class WorldScreen
         //use the control stack themselves and need to toggle while open
         if (Keybinds.Matches(e, CommandId.World_TogglePauseMenu))
         {
-            ForceCloseOtherTogglePanels(Keys.Q);
-
-            if (PauseMenu.Visible)
-            {
-                OptionsModal.Hide();
-                PauseMenu.Hide();
-            } else
-                PauseMenu.Show();
-
+            TogglePauseMenu();
             e.Handled = true;
 
             return;
@@ -669,17 +730,7 @@ public sealed partial class WorldScreen
 
         if (Keybinds.Matches(e, CommandId.World_ToggleBoard))
         {
-            ForceCloseOtherTogglePanels(Keys.W);
-
-            if (IsAnyBoardPanelVisible())
-                WorldState.Board.CloseSession();
-            else
-            {
-                WorldHud.BulletinButton?.IsSelected = true;
-
-                Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
-            }
-
+            ToggleBoards();
             e.Handled = true;
 
             return;
@@ -687,17 +738,7 @@ public sealed partial class WorldScreen
 
         if (Keybinds.Matches(e, CommandId.World_ToggleWorldList))
         {
-            ForceCloseOtherTogglePanels(Keys.E);
-
-            if (WorldList.Visible)
-                WorldList.Close();
-            else
-            {
-                WorldHud.UsersButton?.IsSelected = true;
-
-                Game.Connection.RequestWorldList();
-            }
-
+            ToggleWorldList();
             e.Handled = true;
 
             return;
@@ -971,16 +1012,7 @@ public sealed partial class WorldScreen
         //t — town map toggle
         if (Keybinds.Matches(e, CommandId.World_TownMap))
         {
-            if (TownMapControl.Visible)
-                TownMapControl.Hide();
-            else
-            {
-                var player = WorldState.GetPlayerEntity();
-
-                if (player is not null)
-                    TownMapControl.Show(CurrentMapId, player.TileX, player.TileY);
-            }
-
+            ToggleTownMap();
             e.Handled = true;
 
             return;
@@ -989,8 +1021,7 @@ public sealed partial class WorldScreen
         //y — group panel (members tab)
         if (Keybinds.Matches(e, CommandId.World_GroupPanel))
         {
-            Game.Connection.RequestSelfProfile();
-            GroupPanel.ShowMembers();
+            OpenGroupWindow();
             e.Handled = true;
 
             return;

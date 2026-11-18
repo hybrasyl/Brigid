@@ -80,7 +80,6 @@ public class MainHudControlTests : IDisposable
     [InlineData("mana_bar")]
     [InlineData("hotbar")]
     [InlineData("player_plate")]
-    [InlineData("window_buttons")]
     [InlineData("experience_bar")]
     public void EachLaterPartHasAPlaceThatDoesNotTakeTheMouse(string name)
     {

@@ -51,12 +51,16 @@ internal static class MainHudLayout
     /// <summary>The place of icon <paramref name="index" /> from the left of a box, in the box.</summary>
     public static Rectangle BoxIconAt(int index) => new(BOX_PAD + index * (BOX_ICON + BOX_PAD), BOX_PAD, BOX_ICON, BOX_ICON);
 
+    //the face centres its full ink (capitals and descenders) in the 12 px text cell. Most top bar text has no descender,
+    //so the text area starts 1 px lower, to put the letters at the middle of the box
+    private const int BOX_TEXT_DROP = 1;
+
     /// <summary>The text of a box, in the box: after its icon, or the full box less the padding.</summary>
     public static Rectangle BoxTextIn(Rectangle box, bool withIcon = true)
     {
         var left = withIcon ? 2 * BOX_PAD + BOX_ICON : 2 * BOX_PAD;
 
-        return new Rectangle(left, 0, box.Width - left - 2 * BOX_PAD, box.Height);
+        return new Rectangle(left, BOX_TEXT_DROP, box.Width - left - 2 * BOX_PAD, box.Height - BOX_TEXT_DROP);
     }
 
     /// <summary>The TLS icon at the right of the server box, in the box.</summary>
@@ -107,6 +111,24 @@ internal static class MainHudLayout
 
     /// <summary>The row of window buttons, right-aligned; the space at its left is for the pet plate (BRIG-4).</summary>
     public static readonly Rectangle WindowButtons = new(260, BottomArea.Top + 70, World.Right - 260, 24);
+
+    //a window button is a small symbol (D29); the symbol size is a placeholder that the layout step can change
+    private const int WINDOW_BUTTON = 18;
+    private const int WINDOW_BUTTON_PITCH = 30;
+
+    /// <summary>The number of window buttons that the row holds.</summary>
+    public static readonly int MaxWindowButtons = WindowButtons.Width / WINDOW_BUTTON_PITCH;
+
+    /// <summary>
+    ///     Window button <paramref name="index" /> of <paramref name="count" />, in the row: the row is right-aligned, so it
+    ///     lays itself out again when a button is added or removed.
+    /// </summary>
+    public static Rectangle WindowButtonAt(int index, int count)
+        => new(
+            WindowButtons.Right - (count - index) * WINDOW_BUTTON_PITCH + (WINDOW_BUTTON_PITCH - WINDOW_BUTTON) / 2,
+            WindowButtons.Y + (WindowButtons.Height - WINDOW_BUTTON) / 2,
+            WINDOW_BUTTON,
+            WINDOW_BUTTON);
 
     public static readonly Rectangle ExperienceBar = new(EDGE, BottomArea.Top + 98, World.Width, SCREEN_HEIGHT - (BottomArea.Top + 98));
 }

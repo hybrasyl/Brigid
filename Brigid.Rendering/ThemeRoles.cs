@@ -75,6 +75,19 @@ public static class ThemeRoles
     public const string IconHudMail = "icon.hud.mail";
     public const string IconHudParcel = "icon.hud.parcel";
 
+    //the icons of the window buttons of the new HUD (BRIG-144)
+    public const string IconWindowAbilities = "icon.window.abilities";
+    public const string IconWindowInventory = "icon.window.inventory";
+    public const string IconWindowEquipment = "icon.window.equipment";
+    public const string IconWindowMastery = "icon.window.mastery";
+    public const string IconWindowQuests = "icon.window.quests";
+    public const string IconWindowMenu = "icon.window.menu";
+    public const string IconWindowMail = "icon.window.mail";
+    public const string IconWindowCommunity = "icon.window.community";
+    public const string IconWindowMap = "icon.window.map";
+    public const string IconWindowGroup = "icon.window.group";
+    public const string IconWindowScreenshot = "icon.window.screenshot";
+
     //colours
     public const string Text = "text";
     public const string TextDisabled = "text.disabled";
@@ -102,6 +115,16 @@ public static class ThemeRoles
     ///     HUD shows them, not the primitive gallery, which has no space for the parts of one screen.
     /// </summary>
     public static readonly string[] HudSurfaces = [HudTopBar, HudBottomBar, HudSideEdge, HudBox];
+
+    /// <summary>
+    ///     The icons of the window buttons of the new HUD (BRIG-144), in the order of the row. A button is
+    ///     <c>icon.window.</c> and the id of its window.
+    /// </summary>
+    public static readonly string[] WindowIcons =
+    [
+        IconWindowAbilities, IconWindowInventory, IconWindowEquipment, IconWindowMastery, IconWindowQuests, IconWindowMenu,
+        IconWindowMail, IconWindowCommunity, IconWindowMap, IconWindowGroup, IconWindowScreenshot
+    ];
 
     /// <summary>The icons of the top bar of the new HUD, which the HUD shows, not the primitive gallery.</summary>
     public static readonly string[] HudIcons =

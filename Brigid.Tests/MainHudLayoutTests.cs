@@ -97,6 +97,25 @@ public class MainHudLayoutTests
     }
 
     [Fact]
+    public void TheRowOfWindowButtonsIsRightAlignedAndHoldsTheList()
+    {
+        const int count = 11;
+        var buttons = Enumerable.Range(0, count).Select(i => MainHudLayout.WindowButtonAt(i, count)).ToList();
+
+        Assert.All(buttons, button => Assert.True(MainHudLayout.WindowButtons.Contains(button), button.ToString()));
+        Assert.All(buttons, button => Assert.Equal(18, button.Width));
+        Assert.Equal(MainHudLayout.WindowButtons.Right - 6, buttons[^1].Right);
+
+        for (var i = 1; i < count; i++)
+            Assert.Equal(30, buttons[i].X - buttons[i - 1].X);
+
+        //the row lays itself out again for another count, and the list fits it
+        Assert.Equal(buttons[^1], MainHudLayout.WindowButtonAt(9, 10));
+        Assert.True(HudWindows.All.Length <= MainHudLayout.MaxWindowButtons);
+        Assert.True(MainHudLayout.WindowButtons.Contains(MainHudLayout.WindowButtonAt(0, MainHudLayout.MaxWindowButtons)));
+    }
+
+    [Fact]
     public void TheChatBoxAndTheToastAreOverTheWorld()
     {
         Assert.True(MainHudLayout.World.Contains(MainHudLayout.ChatBox));

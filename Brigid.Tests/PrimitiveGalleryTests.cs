@@ -161,7 +161,8 @@ public sealed class PrimitiveGalleryTests : IDisposable
                     .Except(ThemeRoles.StatusIcons)
                     //the new HUD shows its surfaces and icons (MainHudControlTests, HudTopBarTests)
                     .Except(ThemeRoles.HudSurfaces)
-                    .Except(ThemeRoles.HudIcons);
+                    .Except(ThemeRoles.HudIcons)
+                    .Except(ThemeRoles.WindowIcons);
 
         Assert.All(roles, role => Assert.Contains(role, texts));
 
