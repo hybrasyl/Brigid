@@ -1494,7 +1494,7 @@ public sealed partial class WorldScreen
 
     //--- helpers ---
 
-    private static Color MapMarkColor(MarkColor color)
+    internal static Color MapMarkColor(MarkColor color)
     {
         if (color == MarkColor.Invisible)
             return Color.Transparent;

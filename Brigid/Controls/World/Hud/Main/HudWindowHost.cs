@@ -63,6 +63,10 @@ internal sealed class HudWindowHost
 
             AddPanel(window);
         }
+
+        foreach (var window in HudWindows.All.Concat(HudWindows.Unlisted))
+            if ((window.TitleLink is { } link) && ((window.Panel is null) || !PanelOf.ContainsKey(link)))
+                throw new InvalidOperationException($"{window.Id}: a title link must be on a panel window and open a panel window of the HUD");
     }
 
     private void AddPanel(HudWindow window)
@@ -71,6 +75,20 @@ internal sealed class HudWindowHost
         panel.CloseRequested += closed => Close(closed.Window);
         panel.SwapSidesRequested += SwapSides;
         PanelOf[window] = panel;
+
+        //the link opens its window, which can close this panel under a cursor that does not move, so the click hides the
+        //tooltip; the title row is at the top of the world, so the tooltip shows under the button
+        if (panel.LinkButton is { } button)
+        {
+            var link = window.TitleLink!;
+            button.Clicked += () =>
+            {
+                Tooltip.Hide();
+                Open(link);
+            };
+            button.Entered += hovered => Tooltip.ShowBelow(hovered, () => Lines(link));
+            button.Left += Tooltip.Hide;
+        }
     }
 
     /// <summary>The row of window buttons.</summary>

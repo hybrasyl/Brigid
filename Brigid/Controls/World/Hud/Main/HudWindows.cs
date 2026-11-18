@@ -13,9 +13,19 @@ namespace Brigid.Controls.World.Hud.Main;
 /// <param name="Key">The keybind of the window, which the tooltip shows as it resolves now.</param>
 /// <param name="FixedKey">A key that is not a keybind (F12 for the screenshot), or null.</param>
 /// <param name="Panel">The panel size of a window of the HUD, or null for a window that the world screen binds.</param>
-internal sealed record HudWindow(string Id, string Name, CommandId? Key = null, string? FixedKey = null, HudPanelSize? Panel = null)
+/// <param name="TitleLink">A panel window that a button at the left end of the title row of this panel opens, or null.</param>
+internal sealed record HudWindow(
+    string Id,
+    string Name,
+    CommandId? Key = null,
+    string? FixedKey = null,
+    HudPanelSize? Panel = null,
+    HudWindow? TitleLink = null)
 {
     public string IconRole => $"icon.window.{Id}";
+
+    /// <summary>The icon of the title row button that opens this window from another panel.</summary>
+    public string LinkRole => $"icon.panel.{Id}";
 }
 
 /// <summary>
@@ -40,9 +50,11 @@ internal static class HudWindows
     /// <summary>The row, from the left.</summary>
     public static readonly HudWindow[] All = [Abilities, Inventory, Equipment, Mastery, Quests, Menu, Mail, Community, Map, Group, Screenshot];
 
-    //the panel windows with no button (BRIG-151): the player plate and G open Details
-    public static readonly HudWindow Details = new("details", "Details", Panel: HudPanelSize.Compact);
+    //the panel windows with no button (BRIG-151): the book in the title row of Details opens Legend, and the player plate
+    //and G open Details. A window is declared after the window of its title link, so the link is not null
+    public static readonly HudWindow Legend = new("legend", "Legend", Panel: HudPanelSize.Large);
+    public static readonly HudWindow Details = new("details", "Details", Panel: HudPanelSize.Compact, TitleLink: Legend);
 
     /// <summary>The panel windows that have no button in the row; a key, the plate or another window opens them.</summary>
-    public static readonly HudWindow[] Unlisted = [Details];
+    public static readonly HudWindow[] Unlisted = [Details, Legend];
 }

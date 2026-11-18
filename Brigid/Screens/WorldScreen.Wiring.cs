@@ -805,6 +805,9 @@ public sealed partial class WorldScreen
         details.ProfileTextRequested += () => SelfProfileTextEditor.Show(WorldState.SelfProfile.ProfileText);
         windows.BindPanel(HudWindows.Details, details, Game.Connection.RequestSelfProfile, details.ClearPending);
 
+        //the book in the title row of Details opens Legend, which asks for the self profile too, so its marks are fresh
+        windows.BindPanel(HudWindows.Legend, new LegendWindowControl(WorldState.SelfProfile), Game.Connection.RequestSelfProfile);
+
         windows.BindWindow(HudWindows.Menu, TogglePauseMenu, () => PauseMenu.Visible);
         windows.BindWindow(HudWindows.Mail, ToggleBoards, IsAnyBoardPanelVisible);
         windows.BindWindow(HudWindows.Community, ToggleWorldList, () => WorldList.Visible);

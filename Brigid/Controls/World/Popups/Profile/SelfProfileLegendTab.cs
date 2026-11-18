@@ -11,14 +11,14 @@ namespace Brigid.Controls.World.Popups.Profile;
 
 /// <summary>
 ///     Legend tab page (_nui_dr). Displays legend mark entries with icons and colored text.
-///     Exactly 12 rows visible, with scroll support.
+///     Exactly 12 rows visible, with scroll support. A row gets its icon when it shows, so a pack icon of any id shows
+///     (BRIG-151).
 /// </summary>
 public sealed class SelfProfileLegendTab : PrefabPanel
 {
     private const int MAX_VISIBLE_ROWS = 12;
 
     private readonly ScrollBarBinder Binder;
-    private readonly Texture2D[] IconFrames;
     private readonly Rectangle LegendListRect;
     private readonly ScrollModel Model = new();
     private readonly int RowHeight;
@@ -76,22 +76,6 @@ public sealed class SelfProfileLegendTab : PrefabPanel
         Model.Changed += _ => DataVersion++;
 
         AddChild(ScrollBar);
-
-        //legend mark icons — pack-first with legacy legends.epf fallback. Clamp to byte range since mark.Icon is byte.
-        var cache = UiRenderer.Instance!;
-        var frameCount = Math.Min(cache.GetEpfFrameCount("legends.epf"), 256);
-        IconFrames = new Texture2D[frameCount];
-
-        for (var i = 0; i < frameCount; i++)
-            IconFrames[i] = cache.GetLegendMarkIcon((byte)i);
-    }
-
-    public override void Dispose()
-    {
-        foreach (var t in IconFrames)
-            t.Dispose();
-
-        base.Dispose();
     }
 
     public override void Draw(SpriteBatch spriteBatch)
@@ -117,7 +101,7 @@ public sealed class SelfProfileLegendTab : PrefabPanel
             if (markIndex < Marks.Count)
             {
                 var mark = Marks[markIndex];
-                var icon = mark.Icon < IconFrames.Length ? IconFrames[mark.Icon] : null;
+                var icon = UiRenderer.Instance?.GetLegendMarkIcon(mark.Icon);
                 var iconWidth = icon?.Width ?? 21;
                 var iconHeight = icon?.Height ?? 20;
 

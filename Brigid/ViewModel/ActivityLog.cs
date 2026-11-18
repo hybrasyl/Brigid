@@ -1,6 +1,5 @@
 #region
 using Brigid.Models;
-using Microsoft.Xna.Framework;
 #endregion
 
 namespace Brigid.ViewModel;
@@ -69,13 +68,13 @@ public sealed class ActivityLog
     /// <summary>
     ///     Reads the legend marks of a self profile. The first profile of the character only sets the start; a mark that a
     ///     later profile adds is an entry. A mark is its key and its text, so a second mark with the same text is an entry
-    ///     too. An invisible mark is not read.
+    ///     too. An invisible mark is read too, because the player sees their own invisible marks.
     /// </summary>
     internal void ObserveLegendMarks(IEnumerable<LegendMarkEntry> marks)
     {
         var current = new Dictionary<(string Key, string Text), int>();
 
-        foreach (var mark in marks.Where(mark => mark.Color != Color.Transparent))
+        foreach (var mark in marks)
             current[(mark.Key, mark.Text)] = current.GetValueOrDefault((mark.Key, mark.Text)) + 1;
 
         if (LastMarks is not null)

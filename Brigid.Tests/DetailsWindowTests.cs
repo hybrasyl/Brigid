@@ -358,14 +358,14 @@ public class DetailsWindowTests : IDisposable
     }
 
     [Fact]
-    public void AnInvisibleMarkIsNoEntryAndASecondMarkWithTheSameTextIs()
+    public void AnInvisibleMarkAndASecondMarkWithTheSameTextAreEntries()
     {
         var activity = new ActivityLog(new PlayerAttributes(), new SelfProfile());
 
         activity.ObserveLegendMarks([Mark("Fought")]);
         activity.ObserveLegendMarks([Mark("Fought"), Mark("Fought"), new LegendMarkEntry("Hidden", Color.Transparent)]);
 
-        Assert.Equal(["Legend: Fought"], activity.Entries.Select(entry => entry.Text));
+        Assert.Equal(["Legend: Hidden", "Legend: Fought"], activity.Entries.Select(entry => entry.Text));
     }
 
     //the profile changes for its name and text too; only a new list of marks is read again
