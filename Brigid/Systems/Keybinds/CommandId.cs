@@ -107,6 +107,9 @@ public enum CommandId
     /// <summary>/ — swap between the compact and expanded HUD layouts.</summary>
     World_SwapHudLayout,
 
+    /// <summary>Shift+/ — change to the new HUD and back, while it is built (BRIG-144).</summary>
+    World_ToggleMainHud,
+
     /// <summary>` — unequip weapon and shield.</summary>
     World_UnequipWeaponShield,
 

@@ -1,4 +1,5 @@
 using Brigid.Data;
+using Brigid.ViewModel;
 
 namespace Brigid.Systems;
 
@@ -27,6 +28,13 @@ public static class ClientSettings
 
     //the pack_id of the selected ui_theme pack; null selects the first installed theme. Not a legacy key.
     public static string? UiTheme { get; set; }
+
+    //the new HUD's chat box (BRIG-145): the name of the selected tab and whether the box is hidden. Not legacy keys.
+    public static string SelectedChatTab { get; set; } = ChatTab.Chat.Name;
+    public static bool ChatBoxHidden { get; set; }
+
+    //the custom tabs of the chat box, in the order of the row: one ChatTab line each. Not a legacy key.
+    public static IReadOnlyList<ChatTab> ChatTabs { get; set; } = [];
     public static bool GroupOpen { get; set; }
     public static int MusicVolume { get; set; } = 5;
     public static int AmbienceVolume { get; set; } = 5;
@@ -111,9 +119,22 @@ public static class ClientSettings
         if (loadPath is null)
             return;
 
+        Read(loadPath);
+
+        //the first run reads the legacy file; the save then writes the settings to the new per-user place
+        if (loadPath != FilePath)
+            Save();
+    }
+
+    /// <summary>Reads the settings in the file at <paramref name="path" /> into the static properties. Internal for the tests.</summary>
+    internal static void Read(string path)
+    {
+        var chatTabs = new List<ChatTab>();
+        ChatTabs = chatTabs;
+
         try
         {
-            foreach (var line in File.ReadLines(loadPath))
+            foreach (var line in File.ReadLines(path))
             {
                 if (!TrySplit(line, out var key, out var value))
                     continue;
@@ -202,16 +223,31 @@ public static class ClientSettings
                         UiTheme = value.Length > 0 ? value : null;
 
                         break;
+
+                    case "SelectedChatTab":
+                        if (value.Length > 0)
+                            SelectedChatTab = value;
+
+                        break;
+
+                    case "ChatBoxHidden":
+                        ChatBoxHidden = value == "1";
+
+                        break;
+
+                    case "ChatTab":
+                        if (ChatTab.TryParseSetting(value, out var tab))
+                            chatTabs.Add(tab);
+                        else
+                            DataDiagnostics.Log?.Invoke($"ClientSettings: skipped the chat tab line \"{value}\"");
+
+                        break;
                 }
             }
         } catch
         {
             //corrupted file — use whatever defaults/partial state was already set
         }
-
-        //first-run migration: if we just read the legacy file, persist to the new per-user location
-        if (loadPath != FilePath)
-            Save();
     }
 
     /// <summary>
@@ -236,6 +272,11 @@ public static class ClientSettings
             writer.WriteLine($"EngFont: {FontIndex}");
             writer.WriteLine($"ImportCharacterData: {LegacyCharacterImport}");
             writer.WriteLine($"UiTheme: {UiTheme}");
+            writer.WriteLine($"SelectedChatTab: {SelectedChatTab}");
+            writer.WriteLine($"ChatBoxHidden: {(ChatBoxHidden ? 1 : 0)}");
+
+            foreach (var tab in ChatTabs)
+                writer.WriteLine($"ChatTab: {tab.ToSetting()}");
             writer.WriteLine("Tel1: \"Nexus\",\"1\"");
             writer.WriteLine("Tel2: \"Nexus\",\"2\"");
             writer.WriteLine("Tel3: \"Nexus\",\"3\"");

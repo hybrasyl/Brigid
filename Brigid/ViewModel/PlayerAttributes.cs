@@ -60,6 +60,12 @@ public sealed class PlayerAttributes
 
     public bool HasUnreadMail { get; private set; }
 
+    /// <summary>A letter is unread (the high nibble of the mail status). The new HUD shows its mail icon from it.</summary>
+    public bool HasMail { get; private set; }
+
+    /// <summary>A parcel waits (the low nibble of the mail status). The new HUD shows its parcel icon from it.</summary>
+    public bool HasParcel { get; private set; }
+
     /// <summary>
     ///     True when the 0x08 flag byte's movement-mode bits (high pair) are set. Hybrasyl sets these via
     ///     <c>GameMasterA</c> when collisions are disabled; gates GM wall-clip and pathfinding bypass.
@@ -72,9 +78,32 @@ public sealed class PlayerAttributes
     public event ChangedHandler? Changed;
 
     /// <summary>
-    ///     Clears the stored attributes.
+    ///     Clears the stored attributes. The mail and parcel state clears too, because the flag alone keeps it (see
+    ///     <see cref="DecodeMail" />), and the next character must not show the state of the one before.
     /// </summary>
-    public void Clear() => HasData = false;
+    public void Clear()
+    {
+        HasData = false;
+        HasMail = false;
+        HasParcel = false;
+    }
+
+    /// <summary>
+    ///     The mail and parcel state after a packet. Retail decodes the two nibbles of the mail status only when the unread
+    ///     flag (0x01) and the secondary section (0x04) are both present. With no flag, nothing is unread. Hybrasyl sends the
+    ///     flag alone when a letter arrives (with no secondary section), so the flag alone keeps what is known, and shows
+    ///     mail when nothing is known.
+    /// </summary>
+    internal static (bool Mail, bool Parcel) DecodeMail(bool unreadMail, byte? mailStatus, bool mail, bool parcel)
+    {
+        if (!unreadMail)
+            return (false, false);
+
+        if (mailStatus is { } status)
+            return ((status & 0xF0) != 0, (status & 0x0F) != 0);
+
+        return mail || parcel ? (mail, parcel) : (true, false);
+    }
 
     /// <summary>
     ///     Overlays the populated sub-records of a server attributes packet onto the accumulated flat
@@ -128,6 +157,7 @@ public sealed class PlayerAttributes
         }
 
         HasUnreadMail = pkt.UnreadMail;
+        (HasMail, HasParcel) = DecodeMail(pkt.UnreadMail, pkt.Secondary?.MailStatus, HasMail, HasParcel);
         IsGameMaster = pkt.MovementMode != 0;
 
         Changed?.Invoke();

@@ -2,6 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.World.Hud.Panel;
+using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
 #endregion
 
@@ -22,7 +23,6 @@ public interface IWorldHud
     ChatPanel ChatDisplay { get; }
     SystemMessagePanel MessageHistory { get; }
     ChatInputControl ChatInput { get; }
-    EffectBarControl EffectBar { get; }
     UIButton? EmoteButton { get; }
     StatusIcon? EmoteStatusIcon { get; }
     UIButton? ExpandButton { get; }
@@ -54,6 +54,9 @@ public interface IWorldHud
     Rectangle ViewportBounds { get; }
     void SetCoords(int x, int y);
     void SetDescription(string? text);
+
+    /// <summary>Shows, changes or removes one effect on the effect bar (<see cref="EffectColor.None" /> removes it).</summary>
+    void SetEffect(byte icon, EffectColor color);
 
     void SetGroupOpen(bool groupOpen);
     void SetPlayerName(string name);

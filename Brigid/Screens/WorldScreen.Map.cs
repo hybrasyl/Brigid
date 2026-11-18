@@ -4,6 +4,7 @@ using Brigid.Data;
 using Brigid.Networking;
 using Brigid.Systems;
 using Brigid.Systems.Keybinds;
+using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Chaos.Geometry;
 using Chaos.Geometry.Abstractions;
@@ -14,7 +15,6 @@ using DALib.Extensions;
 using Pathfinder = Chaos.Pathfinding.Pathfinder;
 using TileFlags = DALib.Definitions.TileFlags;
 using XnaRectangle = Microsoft.Xna.Framework.Rectangle;
-using XnaVector2 = Microsoft.Xna.Framework.Vector2;
 #endregion
 
 namespace Brigid.Screens;
@@ -191,7 +191,7 @@ public sealed partial class WorldScreen
         MapRows = null;
 
         NoticeDebugLog.Write($"[map] map {(ushort)CurrentMapId} did not load completely: {reason}{problems}; the map loads with the rows that arrived");
-        WorldState.Chat.AddOrangeBarMessage(IncompleteMapMessage(Keybinds.Effective(CommandId.World_Refresh).Primary));
+        WorldState.Chat.Add(ChatChannel.System, IncompleteMapMessage(Keybinds.Effective(CommandId.World_Refresh).Primary), TextColors.System);
         FinalizeMapLoad();
     }
 
@@ -382,17 +382,8 @@ public sealed partial class WorldScreen
         FollowPlayerCamera();
     }
 
-    /// <summary>
-    ///     Sets Camera.Offset for the current HUD. Both HUD MAP rects share the same X origin and width; only the height
-    ///     differs (large is ~116px taller, extending downward). The small HUD is calibrated to (-28, 24). The large HUD uses
-    ///     (-28, -4) so the player appears ~30px lower than the small HUD on screen — not the naive ~58px that a fixed
-    ///     viewport-relative offset would produce.
-    /// </summary>
-    private void UpdateCameraOffset(XnaRectangle viewport)
-    {
-        _ = viewport;
-        Camera.Offset = WorldHud == SmallHud ? new XnaVector2(-28, 24) : new XnaVector2(-28, -4);
-    }
+    /// <summary>Sets Camera.Offset for the world area of the current HUD (<see cref="CameraPlacement" />).</summary>
+    private void UpdateCameraOffset(XnaRectangle viewport) => Camera.Offset = CameraPlacement.OffsetFor(viewport);
 
     /// <summary>
     ///     Updates camera position to follow the player entity's visual position, including walk interpolation offset. In

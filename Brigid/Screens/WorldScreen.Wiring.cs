@@ -1,11 +1,16 @@
 #region
+using System.Diagnostics;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
+using Brigid.Controls.World.Hud.Main;
+using Brigid.Controls.Generic;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Extensions;
 using Brigid.Systems;
+using Brigid.Systems.Keybinds;
+using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -557,8 +562,7 @@ public sealed partial class WorldScreen
             };
 
         if (hud.GroupIndicator is not null)
-            //route through UserOptions.Toggle so the F4 settings panel and StatusBook indicator stay in sync
-            hud.GroupIndicator.Clicked += () => WorldState.UserOptions.Toggle(12);
+            hud.GroupIndicator.Clicked += ToggleGroupOpen;
 
         if (hud.UsersButton is not null)
         {
@@ -587,8 +591,6 @@ public sealed partial class WorldScreen
                 hud.BulletinButton!.IsSelected = true;
                 Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
             };
-
-            WorldState.Board.SessionClosed += ResetBulletinButtonSelection;
         }
 
         hud.InventoryReactivated += () =>
@@ -607,19 +609,7 @@ public sealed partial class WorldScreen
             };
 
         if (hud.ServerBoxButton is not null)
-            hud.ServerBoxButton.Clicked += () =>
-            {
-                if (ServerInfo.Visible)
-                {
-                    ServerInfo.Hide();
-
-                    return;
-                }
-
-                RefreshServerInfo();
-                ServerInfo.Show();
-                SendEchoProbe();
-            };
+            hud.ServerBoxButton.Clicked += ToggleServerInfo;
 
         if (hud.TownMapButton is not null)
             hud.TownMapButton.Clicked += () =>
@@ -649,19 +639,11 @@ public sealed partial class WorldScreen
             hud.MailButton.Clicked += () =>
             {
                 hud.MailButton!.IsSelected = true;
-                Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
+                OpenMail();
             };
-
-            WorldState.Board.SessionClosed += ResetMailButtonSelection;
         }
 
-        //chat input events
-        hud.ChatInput.MessageSent += msg => Game.Connection.SendPublicMessage(msg);
-        hud.ChatInput.ShoutSent += msg => Game.Connection.SendShout(msg);
-        hud.ChatInput.WhisperSent += (target, msg) => Game.Connection.SendWhisper(target, msg);
-        hud.ChatInput.IgnoreAdded += name => Game.Connection.SendAddIgnore(name);
-        hud.ChatInput.IgnoreRemoved += name => Game.Connection.SendRemoveIgnore(name);
-        hud.ChatInput.IgnoreListRequested += () => Game.Connection.SendIgnoreRequest();
+        WireChatInput(hud.ChatInput);
 
         //slot events
         hud.Inventory.OnSlotClicked += HandleInventorySlotClicked;
@@ -733,18 +715,146 @@ public sealed partial class WorldScreen
             }
     }
 
-    private void ResetBulletinButtonSelection() => WorldHud.BulletinButton?.IsSelected = false;
+    private void OpenChatTabEditor(ChatTab? tab)
+    {
+        ChatTabEditor.SetViewportBounds(WorldHud.ViewportBounds);
+        ChatTabEditor.Show(tab);
+    }
 
-    private void ResetMailButtonSelection() => WorldHud.MailButton?.IsSelected = false;
+    //the sends of a chat input; each hud has its own input
+    private void WireChatInput(ChatInputControl input)
+    {
+        input.MessageSent += msg => Game.Connection.SendPublicMessage(msg);
+        input.ShoutSent += msg => Game.Connection.SendShout(msg);
+        input.WhisperSent += (target, msg) => Game.Connection.SendWhisper(target, msg);
+        input.IgnoreAdded += name => Game.Connection.SendAddIgnore(name);
+        input.IgnoreRemoved += name => Game.Connection.SendRemoveIgnore(name);
+        input.IgnoreListRequested += () => Game.Connection.SendIgnoreRequest();
+    }
 
+    /// <summary>The new HUD's own controls; its legacy panels are the classic HUD's, which WireHudPanels wired.</summary>
+    private void WireMainHud()
+    {
+        MainHud.ServerBoxClicked += ToggleServerInfo;
+        MainHud.MailClicked += OpenMail;
+        WireChatInput(MainHud.ChatInput);
+
+        //the chat box opens as the player left it
+        var chatBox = MainHud.ChatBox;
+        chatBox.SetCustomTabs(ClientSettings.ChatTabs);
+        chatBox.Select(ClientSettings.SelectedChatTab);
+        chatBox.SetCollapsed(ClientSettings.ChatBoxHidden);
+
+        chatBox.StateChanged += () =>
+        {
+            ClientSettings.SelectedChatTab = chatBox.SelectedTabName;
+            ClientSettings.ChatBoxHidden = chatBox.IsCollapsed;
+            ClientSettings.ChatTabs = chatBox.CustomTabs;
+            ClientSettings.Save();
+        };
+
+        //the + button and the menu of a custom tab open the editor; the box changes its tabs on the editor's OK
+        chatBox.AddTabRequested += () => OpenChatTabEditor(null);
+
+        chatBox.TabMenuRequested += (tab, x, y) => ChatTabMenu.Show(x, y, tab, () => OpenChatTabEditor(tab), () => chatBox.RemoveCustomTab(tab));
+        ChatTabEditor.Confirmed += chatBox.Apply;
+
+        //each button does what its key does; group is the open and closed toggle (D18), and a right click opens its window
+        var windows = MainHud.Windows;
+        windows.BindWindow(HudWindows.Menu, TogglePauseMenu, () => PauseMenu.Visible);
+        windows.BindWindow(HudWindows.Mail, ToggleBoards, IsAnyBoardPanelVisible);
+        windows.BindWindow(HudWindows.Community, ToggleWorldList, () => WorldList.Visible);
+        windows.BindWindow(HudWindows.Map, ToggleTownMap, () => TownMapControl.Visible);
+
+        windows.BindWindow(
+            HudWindows.Group,
+            ToggleGroupOpen,
+            () => WorldState.UserOptions[GROUP_OPEN_OPTION],
+            OpenGroupWindow,
+            () =>
+            [
+                TooltipLine.Themed(WorldState.UserOptions[GROUP_OPEN_OPTION] ? "Group: open" : "Group: closed", ThemeRoles.Text),
+                TooltipLine.Themed(
+                    $"Right click or {KeybindCatalog.Format(Keybinds.Effective(CommandId.World_GroupPanel))}: the group window",
+                    ThemeRoles.TextDisabled)
+            ]);
+        windows.BindWindow(HudWindows.Screenshot, Game.RequestScreenshot);
+    }
+
+    //group open and closed, from the indicator of each hud: through UserOptions.Toggle, so the F4 settings panel and the
+    //status book indicator stay in step
+    private void ToggleGroupOpen() => WorldState.UserOptions.Toggle(GROUP_OPEN_OPTION);
+
+    //the board list, where the mail is; from the mail button of each hud
+    private void OpenMail() => Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
+
+    //the connection details, from the server box of each hud
+    private void ToggleServerInfo()
+    {
+        if (ServerInfo.Visible)
+        {
+            ServerInfo.Hide();
+
+            return;
+        }
+
+        RefreshServerInfo();
+        ServerInfo.Show();
+        SendEchoProbe();
+    }
+
+    //both legacy huds: a board can close while the hud that opened it is hidden
+    private void ResetBulletinButtonSelection()
+    {
+        SmallHud.BulletinButton?.IsSelected = false;
+        LargeHud.BulletinButton?.IsSelected = false;
+    }
+
+    private void ResetMailButtonSelection()
+    {
+        SmallHud.MailButton?.IsSelected = false;
+        LargeHud.MailButton?.IsSelected = false;
+    }
+
+    //'/': the classic and the large hud; nothing while the new hud shows
     private void SwapHudLayout()
     {
+        if (HudSwitch.Swap())
+            ActivateHud(HudFor(HudSwitch.Active));
+    }
+
+    //shift+/: the new hud, and back to the hud that showed before it
+    private void ToggleMainHud()
+    {
+        HudSwitch.ToggleMain();
+        ActivateHud(HudFor(HudSwitch.Active));
+    }
+
+    private IWorldHud HudFor(HudLayout layout)
+        => layout switch
+        {
+            HudLayout.Classic => SmallHud,
+            HudLayout.Large   => LargeHud,
+            HudLayout.Main    => MainHud,
+            _                 => throw new UnreachableException()
+        };
+
+    /// <summary>
+    ///     Shows <paramref name="hud" /> in place of the current HUD, and moves the camera and each popup that is placed in
+    ///     the world area to its viewport.
+    /// </summary>
+    private void ActivateHud(IWorldHud hud)
+    {
         WorldHud.Inventory.ForceHoverExit();
+
+        //a chat box that has the focus would keep its chat mode while its hud is hidden
+        if (WorldHud.ChatInput.Mode != ChatMode.None)
+            WorldHud.ChatInput.Unfocus();
 
         var activeTab = WorldHud.ActiveTab;
 
         ((UIPanel)WorldHud).Visible = false;
-        WorldHud = WorldHud == SmallHud ? LargeHud : SmallHud;
+        WorldHud = hud;
         ((UIPanel)WorldHud).Visible = true;
         WorldHud.ShowTab(activeTab);
 
@@ -752,6 +862,20 @@ public sealed partial class WorldScreen
         Camera.Resize(viewport.Width, viewport.Height);
         UpdateCameraOffset(viewport);
         SystemMessagePane.SetViewportBounds(viewport);
+
+        //the new hud shows these messages in its chat tabs (BRIG-127 D10); the hidden pane does not fade, so it empties
+        SystemMessagePane.Visible = WorldHud != MainHud;
+
+        if (!SystemMessagePane.Visible)
+            SystemMessagePane.Clear();
+
+        //the chat tab menu and editor belong to the new hud's chat box
+        if (WorldHud != MainHud)
+        {
+            ChatTabMenu.Hide();
+            ChatTabEditor.Hide();
+        }
+
         PauseMenu.SetViewportBounds(viewport);
         WorldList.SetViewportBounds(viewport);
         MarkdownNotice.SetViewportBounds(viewport);
@@ -782,18 +906,20 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>
-    ///     Calls an action on all HUD instances so both stay in sync regardless of which is visible.
+    ///     Calls an action on all HUD instances so they stay in sync regardless of which is visible.
     /// </summary>
     private void UpdateHuds<T>(Action<IWorldHud, T> op, T arg)
     {
         op(SmallHud, arg);
         op(LargeHud, arg);
+        op(MainHud, arg);
     }
 
     private void UpdateHuds<T1, T2>(Action<IWorldHud, T1, T2> op, T1 arg1, T2 arg2)
     {
         op(SmallHud, arg1, arg2);
         op(LargeHud, arg1, arg2);
+        op(MainHud, arg1, arg2);
     }
 
     /// <summary>
@@ -850,6 +976,9 @@ public sealed partial class WorldScreen
         public static readonly Action<IWorldHud, bool> SetTransportSecure =
             static (h, secure) => h.SetTransportSecure(secure);
 
+        public static readonly Action<IWorldHud, bool> SetGroupOpen =
+            static (h, groupOpen) => h.SetGroupOpen(groupOpen);
+
         public static readonly Action<IWorldHud, string> ShowPersistentMessage =
             static (h, msg) => h.ShowPersistentMessage(msg);
 
@@ -863,7 +992,7 @@ public sealed partial class WorldScreen
         };
 
         public static readonly Action<IWorldHud, byte, EffectColor> SetEffect =
-            static (h, icon, color) => h.EffectBar.SetEffect(icon, color);
+            static (h, icon, color) => h.SetEffect(icon, color);
     }
     #endregion
 

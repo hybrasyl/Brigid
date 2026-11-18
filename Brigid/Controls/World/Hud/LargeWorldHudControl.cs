@@ -8,6 +8,7 @@ using Brigid.Controls.World.ViewPort;
 using Brigid.Data;
 using Brigid.Systems;
 using Brigid.ViewModel;
+using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 #endregion
@@ -27,6 +28,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
     private const int EXPANDED_VISIBLE_SLOTS_PER_HALF = 18;
 
     private readonly PlayerAttributes AttributesState;
+    private LatencyQuality? ShownLatency;
     private readonly UILabel CoordsLabel; 
     private readonly UILabel? DescriptionLabel;
     private readonly Rectangle ExpandedChatBounds;
@@ -172,8 +174,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
             for (var i = 0; i < PingFrames.Length; i++)
                 PingFrames[i] = pingCache.GetSpfTexture("_nping.spf", i);
 
-            LatencyMonitor.LatencyChanged += OnLatencyChanged;
-            OnLatencyChanged();
+            ShowLatency();
 
             PingIcon.Hovered += _ => ShowPingTooltip();
             PingIcon.Unhovered += _ => HideTooltip();
@@ -309,22 +310,29 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
     public override void Dispose()
     {
         AttributesState.Changed -= OnAttributesChanged;
-        LatencyMonitor.LatencyChanged -= OnLatencyChanged;
 
         base.Dispose();
     }
 
-    private void OnLatencyChanged()
+    //the monitor can change on another thread, so the hud reads it at its update, on the game thread
+    private void ShowLatency()
     {
         if (PingIcon is null)
             return;
 
-        var frameIndex = LatencyMonitor.LatencyMs switch
+        var quality = LatencyMonitor.QualityOf(LatencyMonitor.LatencyMs);
+
+        if (quality == ShownLatency)
+            return;
+
+        ShownLatency = quality;
+
+        var frameIndex = quality switch
         {
-            null   => 3, // blue — no data / error
-            < 100  => 2, // green — good
-            < 1000 => 1, // orange — mid
-            _      => 0  // red — 1000ms+
+            LatencyQuality.None => 3, // blue — no data / error
+            LatencyQuality.Good => 2, // green
+            LatencyQuality.Fair => 1, // orange
+            _                   => 0  // red — 1000ms+
         };
 
         PingIcon.Texture = PingFrames[frameIndex];
@@ -519,6 +527,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
     public override void Update(GameTime gameTime)
     {
         base.Update(gameTime);
+        ShowLatency();
 
         if (TooltipSlot is not null)
             RefreshSlotTooltip();
@@ -573,7 +582,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         ChatDisplay = new ChatPanel(NormalChatBounds, tabRect);
 
         //the input renders at the size the display computed, so the two can never disagree
-        ChatInput.Display = ChatDisplay;
+        ChatInput.TextStyle = ChatDisplay;
         ChatDisplay.ConfigureExpand(chatExpandedTexture, ExpandedChatBounds, tabRect);
         RegisterTab(HudTab.Chat, ChatDisplay, tabRect);
 
@@ -698,6 +707,8 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
     }
 
     public void SetZoneName(string zone) => ZoneNameLabel.Text = zone;
+
+    public void SetEffect(byte icon, EffectColor color) => EffectBar.SetEffect(icon, color);
     public void SetWeight(int current, int max)
     {
         if ((current == WeightCurrent) && (max == WeightMax))

@@ -3,6 +3,7 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.World.Hud;
+using Brigid.Controls.World.Hud.Main;
 using Brigid.Controls.World.Hud.Panel.Slots;
 using Brigid.Controls.World.Popups;
 using Brigid.Controls.World.Popups.Boards;
@@ -100,6 +101,8 @@ public sealed partial class WorldScreen : IScreen
     private AbilityMetadataDetailsControl AbilityMetadataDetails = null!;
     private AislingContextMenu AislingContext = null!;
     private DoorContextMenu DoorContext = null!;
+    private ChatTabMenu ChatTabMenu = null!;
+    private ChatTabEditorControl ChatTabEditor = null!;
 
     private int AnimationTick;
     private float MapDataIdleMs;
@@ -149,6 +152,10 @@ public sealed partial class WorldScreen : IScreen
     private PanelSlot? HoveredInventorySlot;
     private bool IsGameMaster => WorldState.Attributes.IsGameMaster;
     private ItemTooltipControl ItemTooltip = null!;
+    //the user option of the group open state (the server's group toggle)
+    private const int GROUP_OPEN_OPTION = 12;
+
+    private readonly HudLayoutSwitch HudSwitch = new();
     private LargeWorldHudControl LargeHud = null!;
     private TileClickTracker LeftClickTracker;
     private readonly LightingSystem Lighting = new();
@@ -203,6 +210,7 @@ public sealed partial class WorldScreen : IScreen
     private bool SelfProfileRequested;
     private StatusBookTab SelfProfileRequestedTab = StatusBookTab.Equipment;
     private SilhouetteRenderer SilhouetteRenderer = null!;
+    private MainHudControl MainHud = null!;
     private WorldHudControl SmallHud = null!;
     private SystemMessagePaneControl SystemMessagePane = null!;
     private SocialStatusControl SocialStatusPicker = null!;
@@ -243,7 +251,7 @@ public sealed partial class WorldScreen : IScreen
     {
         Device = graphicsDevice;
 
-        //create both hud layouts — '/' key swaps between them
+        //create the hud layouts — '/' swaps the classic and the large hud, and shift+/ changes to the new hud and back
         //zindex=-1 so hud frames render behind all popup panels
         SmallHud = new WorldHudControl
         {
@@ -255,12 +263,18 @@ public sealed partial class WorldScreen : IScreen
             Visible = false,
             ZIndex = -1
         };
+        //the new hud shows the classic hud's panels while its own parts are built (BRIG-127 D41)
+        MainHud = new MainHudControl(SmallHud)
+        {
+            Visible = false,
+            ZIndex = MainHudControl.LAYER
+        };
         WorldHud = SmallHud;
 
         var viewport = WorldHud.ViewportBounds;
 
-        //shared floating system-message pane — lives at Root so its fade timer keeps ticking
-        //across HUD swaps. Repositioned in SwapHudLayout when the active HUD changes.
+        //shared floating system-message pane at Root: the classic and the large hud show it, and its fade timer keeps
+        //ticking across their swaps. ActivateHud moves it to the viewport, and hides and empties it on the new hud.
         SystemMessagePane = new SystemMessagePaneControl(viewport)
         {
             ZIndex = -1
@@ -268,7 +282,7 @@ public sealed partial class WorldScreen : IScreen
 
         Camera = new Camera(viewport.Width, viewport.Height)
         {
-            Offset = new Vector2(-28, 24)
+            Offset = CameraPlacement.OffsetFor(viewport)
         };
         MapRenderer = new MapRenderer();
         TabMapRenderer = new TabMapRenderer();
@@ -302,7 +316,7 @@ public sealed partial class WorldScreen : IScreen
         userOptions.SetValue(9, ClientSettings.UseShiftKeyForAltPanels);
         userOptions.SetValue(10, ClientSettings.EnableProfileClick);
         userOptions.SetValue(11, ClientSettings.RecordNpcChat);
-        userOptions.SetValue(12, ClientSettings.GroupOpen);
+        userOptions.SetValue(GROUP_OPEN_OPTION, ClientSettings.GroupOpen);
 
         //route user-initiated toggles to server or local persistence (named so UnloadContent can detach it
         //from the static WorldState.UserOptions — otherwise a handler leaks per world re-entry)
@@ -637,6 +651,18 @@ public sealed partial class WorldScreen : IScreen
             ZIndex = 3
         };
 
+        ChatTabMenu = new ChatTabMenu
+        {
+            ZIndex = 3
+        };
+
+        //the layer of the other text editors, above the text popups
+        ChatTabEditor = new ChatTabEditorControl((name, except) => MainHud.ChatBox.IsNameFree(name, except))
+        {
+            ZIndex = 3
+        };
+        ChatTabEditor.SetViewportBounds(viewport);
+
         ItemTooltip = new ItemTooltipControl
         {
             ZIndex = 3
@@ -650,6 +676,7 @@ public sealed partial class WorldScreen : IScreen
         };
         Root.AddChild(SmallHud);
         Root.AddChild(LargeHud);
+        Root.AddChild(MainHud);
         Root.AddChild(SystemMessagePane);
         Root.AddChild(NpcSession);
         Root.AddChild(ItemTooltip);
@@ -681,6 +708,8 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(SocialStatusPicker);
         Root.AddChild(AislingContext);
         Root.AddChild(DoorContext);
+        Root.AddChild(ChatTabMenu);
+        Root.AddChild(ChatTabEditor);
 
         Root.AddChild(TownMapControl);
         Root.AddChild(ServerInfo);
@@ -690,6 +719,11 @@ public sealed partial class WorldScreen : IScreen
 
         WireHudPanels(SmallHud);
         WireHudPanels(LargeHud);
+        WireMainHud();
+
+        //once, not for each hud: each reset clears both legacy huds, and UnloadContent removes each one once
+        WorldState.Board.SessionClosed += ResetBulletinButtonSelection;
+        WorldState.Board.SessionClosed += ResetMailButtonSelection;
 
         //with new status art, the HUDs show the status at once; with none, they keep the prefab frame until a pick
         if (StatusIcon.HasArt(SocialStatusPicker.CurrentStatus))
@@ -751,7 +785,7 @@ public sealed partial class WorldScreen : IScreen
                 //toggle actually leaves a group, and retail's response shape is unverified. Legacy clients flip
                 //the indicator on click; we match that. Subsequent SelfProfile updates (e.g., on next /stats)
                 //will reconcile if server state diverges.
-                WorldHud.SetGroupOpen(value);
+                UpdateHuds(HudOps.SetGroupOpen, value);
                 StatusBook.SetGroupOpen(value);
                 Game.Connection.ToggleGroup();
 
@@ -809,14 +843,17 @@ public sealed partial class WorldScreen : IScreen
         Game.Connection.OnWorldMap -= HandleWorldMap;
         Game.Connection.OnDoor -= HandleDoor;
 
-        //unwire panel click-to-use events
-        WorldHud.Inventory.OnSlotClicked -= HandleInventorySlotClicked;
-        WorldHud.SkillBook.OnSlotClicked -= HandleSkillSlotClicked;
-        WorldHud.SkillBookAlt.OnSlotClicked -= HandleSkillSlotClicked;
-        WorldHud.SpellBook.OnSlotClicked -= HandleSpellSlotClicked;
-        WorldHud.SpellBookAlt.OnSlotClicked -= HandleSpellSlotClicked;
-        WorldHud.Tools.WorldSkills.OnSlotClicked -= HandleSkillSlotClicked;
-        WorldHud.Tools.WorldSpells.OnSlotClicked -= HandleSpellSlotClicked;
+        //unwire panel click-to-use events, on both legacy huds: WireHudPanels wired both
+        foreach (var hud in new IWorldHud[] { SmallHud, LargeHud })
+        {
+            hud.Inventory.OnSlotClicked -= HandleInventorySlotClicked;
+            hud.SkillBook.OnSlotClicked -= HandleSkillSlotClicked;
+            hud.SkillBookAlt.OnSlotClicked -= HandleSkillSlotClicked;
+            hud.SpellBook.OnSlotClicked -= HandleSpellSlotClicked;
+            hud.SpellBookAlt.OnSlotClicked -= HandleSpellSlotClicked;
+            hud.Tools.WorldSkills.OnSlotClicked -= HandleSkillSlotClicked;
+            hud.Tools.WorldSpells.OnSlotClicked -= HandleSpellSlotClicked;
+        }
 
         //stop the bed before the disposals below. a stop that does not occur is audible (the bed plays on over
         //the lobby), and StopAmbient cannot throw

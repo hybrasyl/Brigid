@@ -6,77 +6,68 @@ using Microsoft.Xna.Framework;
 namespace Brigid.ViewModel;
 
 /// <summary>
-///     Authoritative chat and message state. Owns the chat message log and orange bar message history. Fires events when
-///     new messages are added for UI reconciliation.
+///     Authoritative chat and message state: the one chat log, in which each message is one entry with its channel. The
+///     chat tabs of the new HUD are filtered views of the log (BRIG-145, BRIG-1). The classic and large HUDs keep the
+///     orange bar history, which holds the entries that <see cref="ShowsInOrangeBar" /> selects, until BRIG-156.
 /// </summary>
 public sealed class Chat
 {
-    private const int MAX_MESSAGES = 1000;
+    private const int MAX_ENTRIES = 1000;
     private const int MAX_HISTORY = 1000;
 
-    private readonly CircularBuffer<ChatMessage> Messages = new(MAX_MESSAGES);
-    private readonly CircularBuffer<OrangeBarMessage> OrangeBarHistory = new(MAX_HISTORY);
+    private readonly CircularBuffer<ChatEntry> Log = new(MAX_ENTRIES);
+    private readonly CircularBuffer<ChatEntry> OrangeBarHistory = new(MAX_HISTORY);
+    private long AddedCount;
+
+    /// <summary>The chat log, oldest first. It holds the last 1000 entries.</summary>
+    public IReadOnlyList<ChatEntry> Entries => Log;
 
     /// <summary>
-    ///     Adds a chat message (public, whisper, group, guild) with the specified color.
+    ///     The sequence number of <c>Entries[0]</c>: the entry at index i has the number <c>FirstSequence + i</c>. The
+    ///     number of an entry does not change while the cap removes older entries, and a clear does not reset it.
     /// </summary>
-    public void AddMessage(string text, Color color)
+    public long FirstSequence => AddedCount - Log.Count;
+
+    /// <summary>Adds one message to the log, and to the orange bar history when its channel shows there.</summary>
+    public void Add(ChatChannel channel, string text, Color color)
     {
-        var msg = new ChatMessage(text, color);
-        Messages.Add(msg);
-        MessageAdded?.Invoke(msg);
+        var entry = new ChatEntry(text, color, channel);
+        Log.Add(entry);
+        AddedCount++;
+
+        if (ShowsInOrangeBar(channel))
+            OrangeBarHistory.Add(entry);
+
+        EntryAdded?.Invoke(entry);
     }
 
-    /// <summary>
-    ///     Adds an orange bar message. Defaults to orange for system/server notifications; callers may pass a custom color
-    ///     for whisper/group/guild messages so the Shift+F history and orange bar expand view preserve their chat color.
-    /// </summary>
-    public void AddOrangeBarMessage(string text, Color? color = null)
-    {
-        var msg = new OrangeBarMessage(text, color ?? Color.Orange);
-        OrangeBarHistory.Add(msg);
-        OrangeBarMessageAdded?.Invoke(msg);
-    }
-
-    /// <summary>
-    ///     Clears all chat messages and orange bar history.
-    /// </summary>
+    /// <summary>Clears the log and the orange bar history.</summary>
     public void Clear()
     {
-        Messages.Clear();
+        Log.Clear();
         OrangeBarHistory.Clear();
         Cleared?.Invoke();
     }
 
-    /// <summary>
-    ///     Fired when all messages are cleared.
-    /// </summary>
+    /// <summary>Fired when the log and the history are cleared.</summary>
     public event ClearedHandler? Cleared;
 
-    /// <summary>
-    ///     Returns the orange bar message history as a read-only list. Used by MessageHistoryPanel and OrangeBarControl for
-    ///     display.
-    /// </summary>
-    public IReadOnlyList<OrangeBarMessage> GetOrangeBarHistory() => OrangeBarHistory;
+    /// <summary>Fired after an entry is added to the log.</summary>
+    public event ChatEntryAddedHandler? EntryAdded;
+
+    /// <summary>The orange bar history of the classic and large HUDs, oldest first.</summary>
+    public IReadOnlyList<ChatEntry> GetOrangeBarHistory() => OrangeBarHistory;
+
+    /// <summary>True when the legacy chat panel shows the channel: every channel but the system notices.</summary>
+    public static bool ShowsInChatPanel(ChatChannel channel) => channel != ChatChannel.System;
 
     /// <summary>
-    ///     Fired when a chat message is added (public, whisper, group, guild). Carries the message data.
+    ///     True when the legacy orange bar and its history show the channel: the system notices, and the whispers,
+    ///     the group and the guild messages and the combat log lines (group messages), which the orange bar repeats.
     /// </summary>
-    public event ChatMessageAddedHandler? MessageAdded;
-
-    /// <summary>
-    ///     Fired when an orange bar message is added (system messages). Carries the message text.
-    /// </summary>
-    public event OrangeBarMessageAddedHandler? OrangeBarMessageAdded;
-
-    /// <summary>
-    ///     A single chat message with text and display color.
-    /// </summary>
-    public readonly record struct ChatMessage(string Text, Color Color);
-
-    /// <summary>
-    ///     A single orange bar entry with text and display color. System/server notifications default to orange; whisper,
-    ///     group, and guild messages carry their own chat color.
-    /// </summary>
-    public readonly record struct OrangeBarMessage(string Text, Color Color);
+    public static bool ShowsInOrangeBar(ChatChannel channel)
+        => channel is ChatChannel.System or ChatChannel.Whisper or ChatChannel.Group or ChatChannel.Guild or ChatChannel.Combat;
 }
+
+/// <summary>One message of the chat log: its text, its display colour and its channel.</summary>
+public readonly record struct ChatEntry(string Text, Color Color, ChatChannel Channel);

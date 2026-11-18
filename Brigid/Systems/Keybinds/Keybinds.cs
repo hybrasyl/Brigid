@@ -93,6 +93,7 @@ public static class Keybinds
         [CommandId.World_IgnoreList]          = new(new KeyChord(Keys.F9), KeybindContext.WorldHud),
         [CommandId.World_FriendsList]         = new(new KeyChord(Keys.F10), KeybindContext.WorldHud),
         [CommandId.World_SwapHudLayout]       = new(new KeyChord(Keys.OemQuestion), KeybindContext.WorldHud),
+        [CommandId.World_ToggleMainHud]       = new(new KeyChord(Keys.OemQuestion, ChordMods.Shift), KeybindContext.WorldHud),
         [CommandId.World_UnequipWeaponShield] = new(new KeyChord(Keys.OemTilde), KeybindContext.WorldHud),
         [CommandId.World_GroupHighlight]      = new(new KeyChord(Keys.J), KeybindContext.WorldHud),
         [CommandId.World_PickupItem]          = new(new KeyChord(Keys.B), KeybindContext.WorldHud),

@@ -342,6 +342,7 @@ public sealed partial class WorldScreen
             {
                 HideOnPressOutside(AislingContext, evt.X, evt.Y);
                 HideOnPressOutside(DoorContext, evt.X, evt.Y);
+                HideOnPressOutside(ChatTabMenu, evt.X, evt.Y);
 
                 continue;
             }
@@ -349,6 +350,7 @@ public sealed partial class WorldScreen
             if ((evt.Button == MouseButton.Left)
                 && (HideOnPressOutside(AislingContext, evt.X, evt.Y)
                     || HideOnPressOutside(DoorContext, evt.X, evt.Y)
+                    || HideOnPressOutside(ChatTabMenu, evt.X, evt.Y)
                     || HideOnPressOutside(AbilityMetadataDetails, evt.X, evt.Y)
                     || HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y)))
                 Game.Dispatcher.SwallowPress(i);

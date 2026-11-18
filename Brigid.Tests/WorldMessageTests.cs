@@ -19,10 +19,10 @@ public sealed class WorldMessageTests
     {
         var chat = new Chat();
         var added = 0;
-        chat.OrangeBarMessageAdded += _ => added++;
+        chat.EntryAdded += _ => added++;
 
         for (var i = 0; i < 1005; i++)
-            chat.AddOrangeBarMessage($"message {i}");
+            chat.Add(ChatChannel.System, $"message {i}", Microsoft.Xna.Framework.Color.Orange);
 
         var history = chat.GetOrangeBarHistory();
 
