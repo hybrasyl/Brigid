@@ -15,6 +15,9 @@ public sealed record ControlInfo(string Path, string Type, bool Shown, bool Enab
 /// </summary>
 public sealed record ClientState(string? Screen, string Connection, int? MapId, bool? MapLoaded, int? PlayerX, int? PlayerY);
 
+/// <summary>The virtual point at the centre of a world tile, and whether that point is in the map viewport.</summary>
+public sealed record TilePoint(int X, int Y, bool InViewport);
+
 /// <summary>
 ///     One running client, driven through the test driver (BRIG-184). <see cref="RunAsync" /> starts a client in a new
 ///     temporary app folder (<c>BRIGID_APP_ROOT</c>), with the driver in its dev module folder, runs the test body, and
@@ -180,6 +183,34 @@ public sealed class BrigidApp : IAsyncDisposable
 
     /// <summary>The client's own app folder, as the client resolves it.</summary>
     public async Task<string> AppRootAsync() => (await SendAsync("paths"))["appRoot"]!.GetValue<string>();
+
+    /// <summary>The path of the character's <c>Macro.cfg</c>, as the client resolves it; null before the first world entry.</summary>
+    public async Task<string?> MacroFileAsync() => (await SendAsync("paths"))["macroFile"]?.GetValue<string>();
+
+    /// <summary>The point at the centre of the world tile (<paramref name="x" />, <paramref name="y" />).</summary>
+    public async Task<TilePoint> TileAsync(int x, int y)
+    {
+        var tile = await SendAsync("tile", new JsonObject { ["x"] = x, ["y"] = y });
+
+        return new TilePoint(tile["x"]!.GetValue<int>(), tile["y"]!.GetValue<int>(), tile["inViewport"]!.GetValue<bool>());
+    }
+
+    /// <summary>Clicks the centre of the world tile (<paramref name="x" />, <paramref name="y" />), which must be in the map viewport.</summary>
+    public async Task<TilePoint> ClickTileAsync(int x, int y, string button = "left")
+    {
+        var tile = await TileAsync(x, y);
+
+        if (!tile.InViewport)
+            throw new InvalidOperationException($"the tile {x}, {y} is at {tile.X}, {tile.Y}, outside the map viewport");
+
+        await ClickAtAsync(tile.X, tile.Y, button);
+
+        return tile;
+    }
+
+    /// <summary>The text of the orange bar messages in this session, oldest first.</summary>
+    public async Task<IReadOnlyList<string>> OrangeBarAsync()
+        => (await SendAsync("orangebar"))["lines"]!.AsArray().Select(line => line!.GetValue<string>()).ToList();
 
     /// <summary>The control at <paramref name="path" /> (see the driver's locator), or null.</summary>
     public async Task<ControlInfo?> FindAsync(string path)

@@ -34,6 +34,8 @@ internal static class DriverCommands
             "ping"       => Result(new JsonObject()),
             "state"      => Result(State(context)),
             "paths"      => Result(Paths()),
+            "tile"       => Result(Tile(context, RequiredInt(request, "x"), RequiredInt(request, "y"))),
+            "orangebar"  => Result(OrangeBar()),
             "find"       => Result(Find(context, RequiredString(request, "path"))),
             "alerts"     => Result(Alerts(context)),
             "click"      => Click(request, context),
@@ -77,8 +79,34 @@ internal static class DriverCommands
         return state;
     }
 
-    //the folders of this client, so that a test does not copy the client's path rules
-    private static JsonObject Paths() => new() { ["appRoot"] = AppPaths.AppRoot };
+    //the folders and files of this client, so that a test does not copy the client's path rules. The character's
+    //macro file is known from world entry
+    private static JsonObject Paths()
+    {
+        var macroFile = DataContext.LocalPlayerSettings.TryGetFilePath("Macro.cfg", out var path) ? path : null;
+
+        return new JsonObject { ["appRoot"] = AppPaths.AppRoot, ["macroFile"] = macroFile };
+    }
+
+    //the virtual point at the centre of a world tile, and whether it is in the map viewport
+    private static JsonObject Tile(DriverContext context, int x, int y)
+    {
+        if (context.Host.Screens.ActiveScreen is not WorldScreen world || world.TileToScreen(x, y) is not { } tile)
+            throw new DriverException("no map is shown");
+
+        var (point, inViewport) = tile;
+
+        return new JsonObject
+        {
+            ["x"] = point.X,
+            ["y"] = point.Y,
+            ["inViewport"] = inViewport
+        };
+    }
+
+    //the text of the orange bar messages in this session, oldest first
+    private static JsonObject OrangeBar()
+        => new() { ["lines"] = new JsonArray(WorldState.Chat.GetOrangeBarHistory().Select(line => (JsonNode?)JsonValue.Create(line.Text)).ToArray()) };
 
     private static JsonObject Find(DriverContext context, string path)
     {
@@ -289,6 +317,9 @@ internal static class DriverCommands
 
     private static int Scancode(Keys key)
         => SdlInput.TryGetScancode(key, out var scancode) ? scancode : throw new DriverException($"no scancode for {key}");
+
+    private static int RequiredInt(JsonObject request, string name)
+        => request[name]?.GetValue<int>() ?? throw new DriverException($"the request has no \"{name}\"");
 
     private static string RequiredString(JsonObject request, string name)
         => request[name]?.GetValue<string>() ?? throw new DriverException($"the request has no \"{name}\"");

@@ -1422,6 +1422,20 @@ public sealed partial class WorldScreen
         return (tile.X, tile.Y);
     }
 
+    //the virtual point at the centre of a tile, which ScreenToTile gives back as the same tile, and whether the point is
+    //in the map viewport; null with no map. The test driver clicks a tile through it
+    internal (Point Point, bool InViewport)? TileToScreen(int tileX, int tileY)
+    {
+        if (MapFile is null)
+            return null;
+
+        var viewport = WorldHud.ViewportBounds;
+        var centre = Camera.TileCentreToScreen(tileX, tileY, MapFile.Height);
+        var point = new Point(viewport.X + (int)MathF.Floor(centre.X), viewport.Y + (int)MathF.Floor(centre.Y));
+
+        return (point, viewport.Contains(point));
+    }
+
     private void TryPickupItem()
     {
         var player = WorldState.GetPlayerEntity();

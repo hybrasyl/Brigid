@@ -143,6 +143,30 @@ public static class SmokeFlows
         throw new TimeoutException($"three presses of {key} did not give {what}; the last value was {await app.StateAsync()}");
     }
 
+    /// <summary>Opens Options at the Macros tab (F3) and waits for the first macro box.</summary>
+    public static async Task OpenMacrosAsync(this BrigidApp app)
+    {
+        await app.PressAsync("F3");
+        await app.WaitForShownAsync("Macro0");
+    }
+
+    /// <summary>Closes Options with its Close button. The macros commit when Options closes.</summary>
+    public static async Task CloseOptionsAsync(this BrigidApp app)
+    {
+        await app.ClickAsync("OptionsModalControl/close");
+        await app.WaitForAsync(() => app.FindAsync("OptionsModalControl"), options => options is { Shown: false }, "Options to close");
+    }
+
+    /// <summary>Clicks Exit to Menu in the pause menu and OK, and waits for the login form.</summary>
+    public static async Task ExitToMenuAsync(this BrigidApp app)
+    {
+        await app.PressAsync("Q");
+        await app.ClickAsync("pausemenu/exit_menu");
+        await app.ClickAsync("ExitConfirmPopup/ok");
+        await app.WaitForScreenAsync("LobbyLoginScreen", ServerWait);
+        await app.WaitForShownAsync("login/account/name");
+    }
+
     /// <summary>Clicks a text box and types <paramref name="text" /> into it.</summary>
     public static async Task FillAsync(this BrigidApp app, string path, string text)
     {

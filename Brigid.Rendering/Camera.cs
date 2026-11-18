@@ -163,6 +163,13 @@ public sealed class Camera
     }
 
     /// <summary>
+    ///     Converts tile coordinates to the screen pixel position of the tile's visual centre. <see cref="ScreenToWorld" />
+    ///     and <see cref="WorldToTile" /> give this point back as the same tile.
+    /// </summary>
+    public Vector2 TileCentreToScreen(int tileX, int tileY, int mapHeight)
+        => WorldToScreen(TileToWorld(tileX, tileY, mapHeight) + new Vector2(HALF_TILE_WIDTH, HALF_TILE_HEIGHT));
+
+    /// <summary>
     ///     Syncs the camera's viewport dimensions from the current MonoGame Viewport.
     /// </summary>
     public void Update(Viewport viewport)
