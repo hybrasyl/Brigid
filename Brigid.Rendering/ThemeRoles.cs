@@ -115,6 +115,9 @@ public static class ThemeRoles
     //the gold bag of the Inventory window of the new HUD (BRIG-150), which a drag drops or gives gold from
     public const string IconInventoryGoldBag = "icon.inventory.gold_bag";
 
+    //the button of a compact window panel of the new HUD that changes the sides of the compact panels (BRIG-150)
+    public const string IconPanelSwapSides = "icon.panel.swap_sides";
+
     //colours
     public const string Text = "text";
     public const string TextDisabled = "text.disabled";
@@ -177,6 +180,9 @@ public static class ThemeRoles
 
     /// <summary>The icons of the Inventory window of the new HUD (BRIG-150), which the HUD shows, not the primitive gallery.</summary>
     public static readonly string[] InventoryIcons = [IconInventoryGoldBag];
+
+    /// <summary>The icons of the window panels of the new HUD (BRIG-150), which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] PanelIcons = [IconPanelSwapSides];
 
     /// <summary>The social status icon parts, indexed by the wire value of the status (awake is 0).</summary>
     public static readonly string[] StatusIcons =

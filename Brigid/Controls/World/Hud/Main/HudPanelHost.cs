@@ -18,6 +18,8 @@ internal enum HudPanelSize
 ///     Which window panels of the new HUD are open, and where (BRIG-127 D30). One open compact panel is on the right; a
 ///     second opens on the left; a third takes the place of the left one. A large panel closes the compact panels, and a
 ///     compact panel closes the large panel. When the right panel closes, the left panel moves to the right.
+///     <see cref="SwapSides" /> changes the sides of the compact panels (BRIG-150); after a swap of one panel to the left,
+///     the next compact panel opens on the right.
 /// </summary>
 internal sealed class HudPanelHost
 {
@@ -55,6 +57,20 @@ internal sealed class HudPanelHost
             Right = id;
         else
             Left = id;
+    }
+
+    /// <summary>
+    ///     Puts the left compact panel on the right and the right one on the left, or moves one open compact panel to the
+    ///     other side. Returns true when a panel moved; a large panel has no sides.
+    /// </summary>
+    public bool SwapSides()
+    {
+        if ((Left ?? Right) is null)
+            return false;
+
+        (Left, Right) = (Right, Left);
+
+        return true;
     }
 
     public void Close(string id)

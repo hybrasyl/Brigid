@@ -167,7 +167,8 @@ public sealed class PrimitiveGalleryTests : IDisposable
                     .Except(ThemeRoles.HudIcons)
                     .Except(ThemeRoles.WindowIcons)
                     .Except(ThemeRoles.ChatIcons)
-                    .Except(ThemeRoles.InventoryIcons);
+                    .Except(ThemeRoles.InventoryIcons)
+                    .Except(ThemeRoles.PanelIcons);
 
         Assert.All(roles, role => Assert.Contains(role, texts));
 

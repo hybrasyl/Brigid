@@ -18,6 +18,10 @@ internal sealed class HudPanel : FramePanel
     public const int PADDING = 6;
     private const int TITLE_HEIGHT = 16;
     private const int CLOSE_SIZE = 14;
+    private const int BUTTON_GAP = 2;
+
+    //the title keeps the place of the two buttons clear on both sides, so it stays centred on every panel
+    private const int TITLE_CLEAR = 2 * CLOSE_SIZE + BUTTON_GAP;
 
     public HudPanel(HudWindow window)
     {
@@ -38,8 +42,8 @@ internal sealed class HudPanel : FramePanel
             IsHitTestVisible = false
         };
 
-        //the title is centred on the panel, as in the wireframe: it keeps the width of the X clear on both sides
-        title.SetBounds(new Rectangle(inset + CLOSE_SIZE, inset, Width - 2 * (inset + CLOSE_SIZE), TITLE_HEIGHT));
+        //the title is centred on the panel, as in the wireframe
+        title.SetBounds(new Rectangle(inset + TITLE_CLEAR, inset, Width - 2 * (inset + TITLE_CLEAR), TITLE_HEIGHT));
         title.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(title);
 
@@ -52,6 +56,18 @@ internal sealed class HudPanel : FramePanel
 
         close.Clicked += () => CloseRequested?.Invoke(this);
         AddChild(close);
+
+        //a compact panel changes sides with the other compact panel (BRIG-150); a large panel has no sides
+        if (window.Panel == HudPanelSize.Compact)
+        {
+            var swap = new IconButton(ThemeRoles.IconPanelSwapSides, new Rectangle(close.X - BUTTON_GAP - CLOSE_SIZE, close.Y, CLOSE_SIZE, CLOSE_SIZE))
+            {
+                Name = "swap_sides"
+            };
+
+            swap.Clicked += () => SwapSidesRequested?.Invoke();
+            AddChild(swap);
+        }
 
         ContentBounds = new Rectangle(inset, inset + TITLE_HEIGHT, Width - 2 * inset, Height - 2 * inset - TITLE_HEIGHT);
 
@@ -84,4 +100,7 @@ internal sealed class HudPanel : FramePanel
 
     /// <summary>The X button: the host closes the panel.</summary>
     public event Action<HudPanel>? CloseRequested;
+
+    /// <summary>The swap button of a compact panel: the host changes the sides of the compact panels.</summary>
+    public event Action? SwapSidesRequested;
 }

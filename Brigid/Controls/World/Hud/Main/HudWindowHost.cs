@@ -55,6 +55,7 @@ internal sealed class HudWindowHost
             {
                 var panel = new HudPanel(window);
                 panel.CloseRequested += closed => Close(closed.Window);
+                panel.SwapSidesRequested += SwapSides;
                 PanelOf[window] = panel;
             }
         }
@@ -124,6 +125,13 @@ internal sealed class HudWindowHost
         Require(window, panel: true);
         Host.Close(window.Id);
         PlacePanels();
+    }
+
+    /// <summary>The swap button of a compact panel: the compact panels change sides.</summary>
+    public void SwapSides()
+    {
+        if (Host.SwapSides())
+            PlacePanels();
     }
 
     /// <summary>Closes every panel. Returns true when a panel was open, so that Escape closes the panels first.</summary>

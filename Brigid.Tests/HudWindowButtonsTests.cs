@@ -313,6 +313,38 @@ public class HudWindowButtonsTests : IDisposable
 
         Assert.Equal(HorizontalAlignment.Center, title.HorizontalAlignment);
         Assert.Equal(panel.Width, title.X + title.Width + title.X);
+        Assert.True(title.X + title.Width <= panel.FindChild<IconButton>("swap_sides")!.X);
         Assert.True(title.X + title.Width <= close.X);
+    }
+
+    //BRIG-150: a compact panel has the swap button beside its X; a large panel has no sides
+    [Fact]
+    public void ACompactPanelHasASwapButtonAndALargePanelHasNone()
+    {
+        var hud = NewHud();
+        var inventory = hud.FindChild<HudPanel>("inventory_panel")!;
+        var swap = inventory.FindChild<IconButton>("swap_sides")!;
+        var close = inventory.FindChild<TextButton>("close")!;
+
+        Assert.Equal(ThemeRoles.IconPanelSwapSides, swap.Role);
+        Assert.Equal(close.Y, swap.Y);
+        Assert.True(swap.X + swap.Width < close.X);
+        Assert.Null(hud.FindChild<HudPanel>("mastery_panel")!.FindChild<IconButton>("swap_sides"));
+    }
+
+    [Fact]
+    public void TheSwapButtonMovesTheCompactPanels()
+    {
+        var hud = NewHud();
+        hud.Windows.Toggle(HudWindows.Inventory);
+        hud.Windows.Toggle(HudWindows.Abilities);
+        var inventory = hud.FindChild<HudPanel>("inventory_panel")!;
+        var abilities = hud.FindChild<HudPanel>("abilities_panel")!;
+        Assert.Equal((MainHudLayout.CompactRight.X, MainHudLayout.CompactLeft.X), (inventory.X, abilities.X));
+
+        inventory.FindChild<IconButton>("swap_sides")!.OnClick(new ClickEvent { Button = MouseButton.Left });
+
+        Assert.Equal((MainHudLayout.CompactLeft.X, MainHudLayout.CompactRight.X), (inventory.X, abilities.X));
+        Assert.True(inventory.Visible && abilities.Visible);
     }
 }
