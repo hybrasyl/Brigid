@@ -74,7 +74,6 @@ public class MainHudControlTests : IDisposable
 
     [Theory]
     [InlineData("toast")]
-    [InlineData("effect_bar")]
     [InlineData("hotbar")]
     public void EachLaterPartHasAPlaceThatDoesNotTakeTheMouse(string name)
     {

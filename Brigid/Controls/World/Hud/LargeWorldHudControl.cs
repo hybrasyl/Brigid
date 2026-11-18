@@ -708,7 +708,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
 
     public void SetZoneName(string zone) => ZoneNameLabel.Text = zone;
 
-    public void SetEffect(byte icon, EffectColor color) => EffectBar.SetEffect(icon, color);
+    public void SetEffect(ushort icon, EffectColor color) => EffectBar.SetEffect(icon, color);
     public void SetWeight(int current, int max)
     {
         if ((current == WeightCurrent) && (max == WeightMax))

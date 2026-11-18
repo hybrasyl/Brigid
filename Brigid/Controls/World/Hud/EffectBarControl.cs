@@ -56,7 +56,7 @@ public sealed class EffectBarControl : UIPanel
         UpdateVisibility();
     }
 
-    private void RemoveEffect(byte effectIcon)
+    private void RemoveEffect(ushort effectIcon)
     {
         for (var i = 0; i < MAX_EFFECTS; i++)
             if (Slots[i].HasEffect && (Slots[i].EffectIcon == effectIcon))
@@ -70,13 +70,13 @@ public sealed class EffectBarControl : UIPanel
             }
     }
 
-    private static Texture2D RenderHalfSizeIcon(byte iconId) => UiRenderer.Instance!.GetHalfSizeSpellIcon(iconId);
+    private static Texture2D RenderHalfSizeIcon(ushort iconId) => UiRenderer.Instance!.GetHalfSizeSpellIcon(iconId);
 
     /// <summary>
     ///     Updates or adds an effect. EffectIcon acts as a key — only one effect per icon value. EffectColor None removes the
     ///     effect.
     /// </summary>
-    public void SetEffect(byte effectIcon, EffectColor effectColor)
+    public void SetEffect(ushort effectIcon, EffectColor effectColor)
     {
         if (effectColor == EffectColor.None)
         {

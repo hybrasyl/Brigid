@@ -995,7 +995,7 @@ public sealed partial class WorldScreen
             h.EmoteStatusIcon.ShowOn(h.EmoteButton, status, () => UiRenderer.Instance?.GetEpfTexture("emot000.epf", (byte)status * 3));
         };
 
-        public static readonly Action<IWorldHud, byte, EffectColor> SetEffect =
+        public static readonly Action<IWorldHud, ushort, EffectColor> SetEffect =
             static (h, icon, color) => h.SetEffect(icon, color);
     }
     #endregion

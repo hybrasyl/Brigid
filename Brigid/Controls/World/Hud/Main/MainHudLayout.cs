@@ -145,6 +145,9 @@ internal static class MainHudLayout
 
     //the bottom area, from the top
     public static readonly Rectangle EffectBar = new(EDGE, BottomArea.Top + 3, World.Width, 20);
+
+    /// <summary>The line under the effect bar, in the theme's divider colour (BRIG-147).</summary>
+    public static readonly Rectangle EffectDivider = new(EDGE, EffectBar.Bottom + 1, World.Width, 1);
     public static readonly Rectangle HealthBar = new(EDGE, BottomArea.Top + 27, 203, 16);
     public static readonly Rectangle ManaBar = new(EDGE, BottomArea.Top + 45, 203, 16);
     public static readonly Rectangle Hotbar = new(210, BottomArea.Top + 26, World.Right - 210, 36);
@@ -183,4 +186,21 @@ internal static class MainHudLayout
             WINDOW_BUTTON);
 
     public static readonly Rectangle ExperienceBar = new(EDGE, BottomArea.Top + 98, World.Width, SCREEN_HEIGHT - (BottomArea.Top + 98));
+
+    //the parts of the effect bar (BRIG-147), in the bar: a slot around a half-size spell icon for each effect, from the left
+    private const int EFFECT_SLOT = 18;
+    private const int EFFECT_PITCH = EFFECT_SLOT + 2;
+    private static readonly int EffectPad = (EffectBar.Height - EFFECT_SLOT) / 2;
+
+    /// <summary>The side of the icon of an effect: the half-size spell icon of <see cref="Rendering.UiRenderer" />.</summary>
+    public const int EFFECT_ICON = Rendering.UiRenderer.HALF_SPELL_ICON;
+
+    /// <summary>The number of effects that the bar shows; the effects after them wait for a free slot.</summary>
+    public static readonly int MaxEffectSlots = (EffectBar.Width - EffectPad) / EFFECT_PITCH;
+
+    /// <summary>The icon of an effect, in its slot.</summary>
+    public static readonly Rectangle EffectIconInSlot = new((EFFECT_SLOT - EFFECT_ICON) / 2, (EFFECT_SLOT - EFFECT_ICON) / 2, EFFECT_ICON, EFFECT_ICON);
+
+    /// <summary>Effect slot <paramref name="index" />, in the bar.</summary>
+    public static Rectangle EffectSlotAt(int index) => new(EffectPad + index * EFFECT_PITCH, EffectPad, EFFECT_SLOT, EFFECT_SLOT);
 }

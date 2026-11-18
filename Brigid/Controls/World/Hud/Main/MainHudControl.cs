@@ -62,13 +62,15 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         AddChild(new HudBarPanel(ThemeRoles.HudSideEdge, MainHudLayout.LeftEdge) { Name = "left_edge" });
         AddChild(new HudBarPanel(ThemeRoles.HudSideEdge, MainHudLayout.RightEdge) { Name = "right_edge" });
         AddChild(new DividerLine(MainHudLayout.Divider) { Name = "divider" });
+        AddChild(new DividerLine(MainHudLayout.EffectDivider) { Name = "effect_divider" });
 
         ChatBox = new ChatBoxControl(chat ?? WorldState.Chat);
         AddChild(ChatBox);
 
-        //the places of the parts that later cards add (BRIG-162, BRIG-147, BRIG-146)
+        //the places of the parts that later cards add (BRIG-162, BRIG-146)
         AddChild(Place("toast", MainHudLayout.Toast));
-        AddChild(Place("effect_bar", MainHudLayout.EffectBar));
+        EffectBar = new HudEffectBar();
+        AddChild(EffectBar);
         AddChild(Place("hotbar", MainHudLayout.Hotbar));
 
         //the meters (BRIG-148)
@@ -154,6 +156,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     /// <summary>The chat box over the bottom left of the world (BRIG-145).</summary>
     public ChatBoxControl ChatBox { get; }
+
+    /// <summary>The effect bar at the top of the bottom area (BRIG-147).</summary>
+    internal HudEffectBar EffectBar { get; }
 
     /// <summary>The health bar of the bottom area (BRIG-148).</summary>
     internal HudMeter HealthBar { get; }
@@ -287,8 +292,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     //the group button reads the group open state through its binding at each update (D18)
     public void SetGroupOpen(bool groupOpen) { }
 
-    //the effect bar (BRIG-147)
-    public void SetEffect(byte icon, EffectColor color) { }
+    public void SetEffect(ushort icon, EffectColor color) => EffectBar.SetEffect(icon, color);
 
     //this HUD has no description line; the slot names that the classic HUD shows there go with the hidden panels
     public void SetDescription(string? text) { }
@@ -364,7 +368,8 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     public UIButton? UsersButton => null;
     #endregion
 
-    //the line between the hotbar row and the button row, in the theme's divider colour
+    //a line of the bottom area in the theme's divider colour: under the effect bar, and between the hotbar row and the
+    //button row
     private sealed class DividerLine : UIPanel
     {
         public DividerLine(Rectangle bounds)

@@ -56,7 +56,7 @@ public interface IWorldHud
     void SetDescription(string? text);
 
     /// <summary>Shows, changes or removes one effect on the effect bar (<see cref="EffectColor.None" /> removes it).</summary>
-    void SetEffect(byte icon, EffectColor color);
+    void SetEffect(ushort icon, EffectColor color);
 
     void SetGroupOpen(bool groupOpen);
     void SetPlayerName(string name);
