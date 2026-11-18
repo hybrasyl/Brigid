@@ -546,6 +546,39 @@ public sealed partial class WorldScreen
             HandleSkillSlotClicked(slot);
     }
 
+    //a click or a number key on a hotbar entry: the entry as a click on its book or inventory slot (BRIG-146); a gone
+    //entry does nothing
+    private void UseHotbarEntry(HotbarEntry entry)
+    {
+        if (WorldState.Hotbar.Resolve(entry) is not { } slot)
+            return;
+
+        switch (entry.Kind)
+        {
+            case HotbarKind.Skill:
+                HandleSkillSlotClicked(slot);
+
+                break;
+
+            case HotbarKind.Spell:
+                HandleSpellSlotClicked(slot);
+
+                break;
+
+            default:
+                HandleInventorySlotClicked(slot);
+
+                break;
+        }
+    }
+
+    //a right click on a hotbar ability: its castable popup, as from the Abilities window (BRIG-146)
+    private void ShowHotbarDetails(HotbarEntry entry)
+    {
+        if ((WorldState.Hotbar.Resolve(entry) is { } slot) && (AbilityPanelOf(entry.Kind == HotbarKind.Spell, slot) is { } panel))
+            OpenCastablePopup(panel, slot);
+    }
+
     //a right click: the castable popup of a learned ability, else the details of the status book
     private void ShowAbilityDetails(AbilityRow row)
     {
@@ -1637,6 +1670,7 @@ public sealed partial class WorldScreen
             ItemDragPayload                      => RootDrop.Item,
             GoldDragPayload                      => RootDrop.Gold,
             EquipmentDragPayload                 => RootDrop.Ends,
+            HotbarDragPayload                    => RootDrop.Ends,
             SlotDragPayload                      => RootDrop.ClassicSlot,
             _                                    => RootDrop.None
         };

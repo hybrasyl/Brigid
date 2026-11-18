@@ -332,8 +332,25 @@ internal static class MainHudLayout
     public static readonly Rectangle HealthBar = new(EDGE, BottomArea.Top + 27, 203, 16);
     public static readonly Rectangle ManaBar = new(EDGE, BottomArea.Top + 45, 203, 16);
     public static readonly Rectangle Hotbar = new(210, BottomArea.Top + 26, World.Right - 210, 36);
+
     public static readonly Rectangle Divider = new(EDGE, BottomArea.Top + 65, World.Width, 1);
     public static readonly Rectangle PlayerPlate = new(EDGE, BottomArea.Top + 70, 125, 24);
+
+    //the parts of the hotbar, in the hotbar (BRIG-146): the page column at the left (an arrow up, the page number, an
+    //arrow down), then the slots, 32 by 32 (D28) at a 34 px pitch
+    private const int HOTBAR_PAD = 2;
+    private const int HOTBAR_PAGE_WIDTH = 14;
+    private const int HOTBAR_ARROW_HEIGHT = 10;
+    private const int HOTBAR_PAGE_NUMBER_HEIGHT = TextRenderer.CHAR_HEIGHT;
+    public const int HOTBAR_SLOT = ABILITY_ICON;
+    private const int HOTBAR_PITCH = HOTBAR_SLOT + 2;
+    private const int HOTBAR_SLOTS_LEFT = HOTBAR_PAD + HOTBAR_PAGE_WIDTH + 2;
+    public static readonly Rectangle HotbarPageUp = new(HOTBAR_PAD, HOTBAR_PAD, HOTBAR_PAGE_WIDTH, HOTBAR_ARROW_HEIGHT);
+    public static readonly Rectangle HotbarPageNumber = new(HOTBAR_PAD, HotbarPageUp.Bottom, HOTBAR_PAGE_WIDTH, HOTBAR_PAGE_NUMBER_HEIGHT);
+    public static readonly Rectangle HotbarPageDown = new(HOTBAR_PAD, HotbarPageNumber.Bottom, HOTBAR_PAGE_WIDTH, HOTBAR_ARROW_HEIGHT);
+
+    /// <summary>Hotbar slot <paramref name="index" />, from 0, in the hotbar.</summary>
+    public static Rectangle HotbarSlot(int index) => new(HOTBAR_SLOTS_LEFT + index * HOTBAR_PITCH, HOTBAR_PAD, HOTBAR_SLOT, HOTBAR_SLOT);
 
     //the side of the player's icon on the plate: the head of the aisling, at its own pixel size
     private const int PLATE_ICON = 17;

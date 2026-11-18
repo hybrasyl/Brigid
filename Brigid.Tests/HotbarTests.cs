@@ -106,6 +106,22 @@ public class HotbarTests
         Assert.Equal("Sword", Items.GetSlot(3).NameWithCount);
     }
 
+    //the slot shows the icon of the book or inventory slot that holds the entry now, else the icon that the entry keeps
+    [Fact]
+    public void TheStateGivesTheSlotTheIconTheCountAndTheCooldown()
+    {
+        var hotbar = NewHotbar();
+        Skills.SetSlot(3, 7, "Assail");
+        Skills.SetCooldown(3, 10);
+        Items.SetSlot(4, 12, DisplayColor.Navy, "Hemloch Potion", true, 2, 0, 0);
+        AddPotions(5, 3);
+
+        Assert.Equal(new HotbarEntryState(3, 7, DisplayColor.Default, 0, 1f), hotbar.StateOf(Assail));
+        Assert.Equal(new HotbarEntryState(4, 12, DisplayColor.Navy, 5, 0), hotbar.StateOf(Potion));
+        Assert.Equal(new HotbarEntryState(null, 2, DisplayColor.Default, 0, 0), hotbar.StateOf(BeagIoc));
+        Assert.True(hotbar.StateOf(BeagIoc).IsGone);
+    }
+
     [Fact]
     public void TheCountIsTheSumOfTheStacks()
     {

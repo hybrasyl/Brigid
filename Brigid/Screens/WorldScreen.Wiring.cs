@@ -764,8 +764,13 @@ public sealed partial class WorldScreen
         chatBox.TabMenuRequested += (tab, x, y) => ChatTabMenu.Show(x, y, tab, () => OpenChatTabEditor(tab), () => chatBox.RemoveCustomTab(tab));
         ChatTabEditor.Confirmed += chatBox.Apply;
 
+        //the hotbar uses an entry as a click on its book or inventory slot (BRIG-146)
+        MainHud.HotbarStrip.UseRequested += UseHotbarEntry;
+        MainHud.HotbarStrip.DetailsRequested += ShowHotbarDetails;
+
         //each button does what its key does; group is the open and closed toggle (D18), and a right click opens its window
         var windows = MainHud.Windows;
+
         var abilities = new AbilitiesWindowControl(WorldState.SkillBook, WorldState.SpellBook, WorldState.Attributes, () => WorldState.AbilityMetadata);
         abilities.UseRequested += UseAbility;
         abilities.DetailsRequested += ShowAbilityDetails;

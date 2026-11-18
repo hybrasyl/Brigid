@@ -25,6 +25,18 @@ public sealed record HotbarEntry(HotbarKind Kind, string Name, ushort Sprite = 0
     public bool SameKey(HotbarEntry other) => (Kind == other.Kind) && Name.EqualsI(other.Name);
 }
 
+/// <summary>What the slot of an entry shows now (<see cref="Hotbar.StateOf" />).</summary>
+/// <param name="Slot">The book or inventory slot that holds the entry, or null while it is gone.</param>
+/// <param name="Sprite">The icon sprite.</param>
+/// <param name="Color">The colour of an item icon.</param>
+/// <param name="Count">The number of an item; 0 for an ability.</param>
+/// <param name="Cooldown">The cooldown of an ability, 0 = ready and 1 = just started; 0 for an item.</param>
+public readonly record struct HotbarEntryState(byte? Slot, ushort Sprite, DisplayColor Color, uint Count, float Cooldown)
+{
+    /// <summary>True while the book or the inventory does not have the entry: its slot shows dimmed.</summary>
+    public bool IsGone => Slot is null;
+}
+
 /// <summary>
 ///     The hotbar of the new HUD (BRIG-146, D4, D14): <see cref="PAGES" /> pages of <see cref="SLOTS" /> entries, and the
 ///     page that shows. An entry keeps a kind and a name, not a slot, because the server moves an ability or an item to
@@ -224,6 +236,31 @@ public sealed class Hotbar
         }
 
         return count;
+    }
+
+    /// <summary>
+    ///     What the slot of <paramref name="entry" /> shows now: the slot that holds it (null while it is gone), the icon
+    ///     (the icon of that slot, else the icon that the entry keeps), the count of an item, and the cooldown of an ability
+    ///     (0 = ready, 1 = just started).
+    /// </summary>
+    public HotbarEntryState StateOf(HotbarEntry entry)
+    {
+        if (Resolve(entry) is not { } slot)
+            return new HotbarEntryState(null, entry.Sprite, entry.Color, 0, 0);
+
+        switch (entry.Kind)
+        {
+            case HotbarKind.Skill:
+                return new HotbarEntryState(slot, Skills.GetSlot(slot).Sprite, DisplayColor.Default, 0, Skills.GetCooldownPercent(slot));
+
+            case HotbarKind.Spell:
+                return new HotbarEntryState(slot, Spells.GetSlot(slot).Sprite, DisplayColor.Default, 0, Spells.GetCooldownPercent(slot));
+
+            default:
+                ref readonly var item = ref Items.GetSlot(slot);
+
+                return new HotbarEntryState(slot, item.Sprite, item.Color, CountOf(entry.Name), 0);
+        }
     }
 
     /// <summary>True when the player wears an item of this name.</summary>

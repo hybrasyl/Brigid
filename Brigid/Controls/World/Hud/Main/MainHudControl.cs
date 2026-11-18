@@ -41,7 +41,8 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// <param name="clock">The source of the local time of the clock; null for the system clock.</param>
     /// <param name="attributes">The player's attributes; null for <see cref="WorldState.Attributes" />.</param>
     /// <param name="chat">The chat log of the chat box; null for <see cref="WorldState.Chat" />.</param>
-    public MainHudControl(IWorldHud classic, TimeProvider? clock = null, PlayerAttributes? attributes = null, Chat? chat = null)
+    /// <param name="hotbar">The hotbar (BRIG-146); null for <see cref="WorldState.Hotbar" />.</param>
+    public MainHudControl(IWorldHud classic, TimeProvider? clock = null, PlayerAttributes? attributes = null, Chat? chat = null, Hotbar? hotbar = null)
     {
         Classic = classic;
         Attributes = attributes ?? WorldState.Attributes;
@@ -67,11 +68,14 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         ChatBox = new ChatBoxControl(chat ?? WorldState.Chat);
         AddChild(ChatBox);
 
-        //the places of the parts that later cards add (BRIG-162, BRIG-146)
+        //the place of the part that a later card adds (BRIG-162)
         AddChild(Place("toast", MainHudLayout.Toast));
         EffectBar = new HudEffectBar();
         AddChild(EffectBar);
-        AddChild(Place("hotbar", MainHudLayout.Hotbar));
+
+        //the hotbar (BRIG-146)
+        HotbarStrip = new HotbarControl(hotbar ?? WorldState.Hotbar, Tooltip);
+        AddChild(HotbarStrip);
 
         //the meters (BRIG-148)
         HealthBar = new HudMeter("health_bar", MainHudLayout.HealthBar, ThemeRoles.HudHealthTrack, ThemeRoles.HudHealthFill, DialogPalette.HealthFill)
@@ -159,6 +163,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     /// <summary>The effect bar at the top of the bottom area (BRIG-147).</summary>
     internal HudEffectBar EffectBar { get; }
+
+    /// <summary>The hotbar (BRIG-146).</summary>
+    internal HotbarControl HotbarStrip { get; }
 
     /// <summary>The health bar of the bottom area (BRIG-148).</summary>
     internal HudMeter HealthBar { get; }

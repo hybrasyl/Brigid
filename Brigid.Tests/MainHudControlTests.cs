@@ -72,13 +72,12 @@ public class MainHudControlTests : IDisposable
         Assert.True(hud.IsThemed);
     }
 
-    [Theory]
-    [InlineData("toast")]
-    [InlineData("hotbar")]
-    public void EachLaterPartHasAPlaceThatDoesNotTakeTheMouse(string name)
+    //the toast is the place of a later card (BRIG-162); the hotbar of BRIG-146 takes the mouse
+    [Fact]
+    public void TheToastHasAPlaceThatDoesNotTakeTheMouse()
     {
         var (hud, _) = NewHud();
-        var place = hud.Children.Single(child => child.Name == name);
+        var place = hud.Children.Single(child => child.Name == "toast");
 
         Assert.False(place.IsHitTestVisible);
     }
