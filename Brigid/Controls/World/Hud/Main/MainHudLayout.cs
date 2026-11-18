@@ -22,6 +22,55 @@ internal static class MainHudLayout
 
     public static readonly Rectangle TopBar = new(0, 0, SCREEN_WIDTH, TOP_BAR_HEIGHT);
 
+    //the boxes of the top bar, from the left (D15, D17, D8)
+    private const int BOX_TOP = 4;
+    private const int BOX_HEIGHT = 17;
+    private const int BOX_PAD = 2;
+    private const int BOX_ICON = 13;
+    private const int SECURE_ICON = 11;
+
+    private const int BOX_GAP = 3;
+
+    //each box starts after the one before it; the zone box takes the width that the others leave
+    public static readonly Rectangle ServerBox = new(EDGE, BOX_TOP, 100, BOX_HEIGHT);
+    public static readonly Rectangle GoldBox = After(ServerBox, 62);
+    public static readonly Rectangle ClockBox = new(SCREEN_WIDTH - EDGE - 65, BOX_TOP, 65, BOX_HEIGHT);
+    public static readonly Rectangle WeightBox = Before(ClockBox, 62);
+    public static readonly Rectangle MailBox = Before(WeightBox, 34);
+    public static readonly Rectangle ZoneBox = new(GoldBox.Right + BOX_GAP, BOX_TOP, MailBox.Left - BOX_GAP - (GoldBox.Right + BOX_GAP), BOX_HEIGHT);
+
+    /// <summary>The width of a line of a HUD tooltip, and the space between a tooltip and its control.</summary>
+    public const int TOOLTIP_TEXT_WIDTH = 220;
+
+    public const int TOOLTIP_GAP = 3;
+
+    private static Rectangle After(Rectangle box, int width) => new(box.Right + BOX_GAP, BOX_TOP, width, BOX_HEIGHT);
+
+    private static Rectangle Before(Rectangle box, int width) => new(box.Left - BOX_GAP - width, BOX_TOP, width, BOX_HEIGHT);
+
+    /// <summary>The place of icon <paramref name="index" /> from the left of a box, in the box.</summary>
+    public static Rectangle BoxIconAt(int index) => new(BOX_PAD + index * (BOX_ICON + BOX_PAD), BOX_PAD, BOX_ICON, BOX_ICON);
+
+    /// <summary>The text of a box, in the box: after its icon, or the full box less the padding.</summary>
+    public static Rectangle BoxTextIn(Rectangle box, bool withIcon = true)
+    {
+        var left = withIcon ? 2 * BOX_PAD + BOX_ICON : 2 * BOX_PAD;
+
+        return new Rectangle(left, 0, box.Width - left - 2 * BOX_PAD, box.Height);
+    }
+
+    /// <summary>The TLS icon at the right of the server box, in the box.</summary>
+    public static Rectangle SecureIconIn(Rectangle box)
+        => new(box.Width - BOX_PAD - SECURE_ICON, (box.Height - SECURE_ICON) / 2, SECURE_ICON, SECURE_ICON);
+
+    /// <summary>The server name, between the latency icon and the TLS icon, in the box.</summary>
+    public static Rectangle ServerNameIn(Rectangle box)
+    {
+        var text = BoxTextIn(box);
+
+        return text with { Width = text.Width - SECURE_ICON };
+    }
+
     /// <summary>The game world: the viewport of the camera. The HUD draws nothing over it but the panels and the chat box.</summary>
     public static readonly Rectangle World = new(EDGE, TOP_BAR_HEIGHT, SCREEN_WIDTH - 2 * EDGE, WORLD_HEIGHT);
 

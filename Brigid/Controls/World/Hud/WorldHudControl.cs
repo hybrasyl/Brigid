@@ -22,6 +22,7 @@ namespace Brigid.Controls.World.Hud;
 public sealed class WorldHudControl : PrefabPanel, IWorldHud
 {
     private readonly PlayerAttributes AttributesState;
+    private LatencyQuality? ShownLatency;
     private readonly UILabel CoordsLabel;
     private readonly UILabel? DescriptionLabel;
 
@@ -186,8 +187,7 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
             for (var i = 0; i < PingFrames.Length; i++)
                 PingFrames[i] = uiCache.GetSpfTexture("_nping.spf", i);
 
-            LatencyMonitor.LatencyChanged += OnLatencyChanged;
-            OnLatencyChanged();
+            ShowLatency();
 
             PingIcon.Hovered += _ => ShowPingTooltip();
             PingIcon.Unhovered += _ => HideTooltip();
@@ -315,25 +315,38 @@ public sealed class WorldHudControl : PrefabPanel, IWorldHud
             OnAttributesChanged();
     }
 
+    public override void Update(GameTime gameTime)
+    {
+        base.Update(gameTime);
+        ShowLatency();
+    }
+
     public override void Dispose()
     {
         AttributesState.Changed -= OnAttributesChanged;
-        LatencyMonitor.LatencyChanged -= OnLatencyChanged;
 
         base.Dispose();
     }
 
-    private void OnLatencyChanged()
+    //the monitor can change on another thread, so the hud reads it at its update, on the game thread
+    private void ShowLatency()
     {
         if (PingIcon is null)
             return;
 
-        var frameIndex = LatencyMonitor.LatencyMs switch
+        var quality = LatencyMonitor.QualityOf(LatencyMonitor.LatencyMs);
+
+        if (quality == ShownLatency)
+            return;
+
+        ShownLatency = quality;
+
+        var frameIndex = quality switch
         {
-            null   => 3, // blue — no data / error
-            < 100  => 2, // green — good
-            < 1000 => 1, // orange — mid
-            _      => 0  // red — 1000ms+
+            LatencyQuality.None => 3, // blue — no data / error
+            LatencyQuality.Good => 2, // green
+            LatencyQuality.Fair => 1, // orange
+            _                   => 0  // red — 1000ms+
         };
 
         PingIcon.Texture = PingFrames[frameIndex];

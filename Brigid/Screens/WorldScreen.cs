@@ -700,6 +700,7 @@ public sealed partial class WorldScreen : IScreen
 
         WireHudPanels(SmallHud);
         WireHudPanels(LargeHud);
+        WireMainHud();
 
         //with new status art, the HUDs show the status at once; with none, they keep the prefab frame until a pick
         if (StatusIcon.HasArt(SocialStatusPicker.CurrentStatus))

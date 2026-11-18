@@ -46,10 +46,12 @@ public static class ThemeRoles
     public const string FrameSign = "frame.sign";
     public const string FramePopup = "frame.popup";
 
-    //the new HUD (BRIG-144): the bar over the world, the area under it, and the strips beside it
+    //the new HUD (BRIG-144): the bar over the world, the area under it, the strips beside it, and a box of the top bar
     public const string HudTopBar = "hud.top_bar";
     public const string HudBottomBar = "hud.bottom_bar";
     public const string HudSideEdge = "hud.side_edge";
+    public const string HudBox = "hud.box";
+
 
     //content roles: icons, drawn on every host through IconArt, not only on a themed host
     //social status icons, one image for each status
@@ -61,6 +63,17 @@ public static class ThemeRoles
     public const string StatusLoneHunter = "icon.status.lone_hunter";
     public const string StatusGroupHunting = "icon.status.group_hunting";
     public const string StatusNeedHelp = "icon.status.need_help";
+
+    //the icons of the top bar of the new HUD (BRIG-144)
+    public const string IconHudLatencyNone = "icon.hud.latency.none";
+    public const string IconHudLatencyGood = "icon.hud.latency.good";
+    public const string IconHudLatencyFair = "icon.hud.latency.fair";
+    public const string IconHudLatencyPoor = "icon.hud.latency.poor";
+    public const string IconHudSecure = "icon.hud.secure";
+    public const string IconHudGold = "icon.hud.gold";
+    public const string IconHudWeight = "icon.hud.weight";
+    public const string IconHudMail = "icon.hud.mail";
+    public const string IconHudParcel = "icon.hud.parcel";
 
     //colours
     public const string Text = "text";
@@ -85,10 +98,17 @@ public static class ThemeRoles
     ];
 
     /// <summary>
-    ///     The surfaces of the new HUD (BRIG-144). The HUD shows them, not the primitive gallery, because a small sample
-    ///     cannot show a bar the width of the screen.
+    ///     The surfaces of the new HUD (BRIG-144): its bars, the strips beside the world, and the box of the top bar. The
+    ///     HUD shows them, not the primitive gallery, which has no space for the parts of one screen.
     /// </summary>
-    public static readonly string[] HudSurfaces = [HudTopBar, HudBottomBar, HudSideEdge];
+    public static readonly string[] HudSurfaces = [HudTopBar, HudBottomBar, HudSideEdge, HudBox];
+
+    /// <summary>The icons of the top bar of the new HUD, which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] HudIcons =
+    [
+        IconHudLatencyNone, IconHudLatencyGood, IconHudLatencyFair, IconHudLatencyPoor, IconHudSecure, IconHudGold, IconHudWeight,
+        IconHudMail, IconHudParcel
+    ];
 
     /// <summary>The social status icon parts, indexed by the wire value of the status (awake is 0).</summary>
     public static readonly string[] StatusIcons =

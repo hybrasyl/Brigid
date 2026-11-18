@@ -1,3 +1,7 @@
+#region
+using Microsoft.Xna.Framework;
+#endregion
+
 namespace Brigid.Controls.Generic;
 
 /// <summary>
@@ -15,4 +19,14 @@ internal static class TooltipPlacement
 
         return (x, y);
     }
+
+    /// <summary>Under <paramref name="anchor" /> at its left edge, moved left as far as the right edge needs.</summary>
+    public static (int X, int Y) Below(Rectangle anchor, int width, int height, int gap)
+        => (ClampX(anchor.X, width), Math.Min(anchor.Bottom + gap, ChaosGame.VIRTUAL_HEIGHT - height));
+
+    /// <summary>Over <paramref name="anchor" /> at its left edge, moved left as far as the right edge needs.</summary>
+    public static (int X, int Y) Above(Rectangle anchor, int width, int height, int gap)
+        => (ClampX(anchor.X, width), Math.Max(anchor.Top - gap - height, 0));
+
+    private static int ClampX(int x, int width) => Math.Clamp(x, 0, Math.Max(0, ChaosGame.VIRTUAL_WIDTH - width));
 }

@@ -608,19 +608,7 @@ public sealed partial class WorldScreen
             };
 
         if (hud.ServerBoxButton is not null)
-            hud.ServerBoxButton.Clicked += () =>
-            {
-                if (ServerInfo.Visible)
-                {
-                    ServerInfo.Hide();
-
-                    return;
-                }
-
-                RefreshServerInfo();
-                ServerInfo.Show();
-                SendEchoProbe();
-            };
+            hud.ServerBoxButton.Clicked += ToggleServerInfo;
 
         if (hud.TownMapButton is not null)
             hud.TownMapButton.Clicked += () =>
@@ -650,7 +638,7 @@ public sealed partial class WorldScreen
             hud.MailButton.Clicked += () =>
             {
                 hud.MailButton!.IsSelected = true;
-                Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
+                OpenMail();
             };
 
             WorldState.Board.SessionClosed += ResetMailButtonSelection;
@@ -732,6 +720,31 @@ public sealed partial class WorldScreen
                 panel.OnSlotHoverEnter += largeHud.ShowSlotTooltip;
                 panel.OnSlotHoverExit += largeHud.HideSlotTooltip;
             }
+    }
+
+    /// <summary>The new HUD's own controls; its legacy panels are the classic HUD's, which WireHudPanels wired.</summary>
+    private void WireMainHud()
+    {
+        MainHud.ServerBoxClicked += ToggleServerInfo;
+        MainHud.MailClicked += OpenMail;
+    }
+
+    //the board list, where the mail is; from the mail button of each hud
+    private void OpenMail() => Game.Connection.SendBoardInteraction(BoardRequestType.BoardList);
+
+    //the connection details, from the server box of each hud
+    private void ToggleServerInfo()
+    {
+        if (ServerInfo.Visible)
+        {
+            ServerInfo.Hide();
+
+            return;
+        }
+
+        RefreshServerInfo();
+        ServerInfo.Show();
+        SendEchoProbe();
     }
 
     //both legacy huds: a board can close while the hud that opened it is hidden

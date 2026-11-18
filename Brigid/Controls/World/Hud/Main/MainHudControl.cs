@@ -1,8 +1,10 @@
 #region
+using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.ViewPort;
+using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Microsoft.Xna.Framework;
 #endregion
@@ -22,12 +24,19 @@ namespace Brigid.Controls.World.Hud.Main;
 /// </remarks>
 public sealed class MainHudControl : UIPanel, IWorldHud
 {
+    private readonly PlayerAttributes Attributes;
     private readonly IWorldHud Classic;
     private readonly PersistentMessageControl PersistentMessage;
+    private readonly HudTopBar TopBar;
+    private readonly HudTooltip Tooltip;
 
-    public MainHudControl(IWorldHud classic)
+    /// <param name="classic">The classic HUD, whose panels this HUD returns for the legacy members.</param>
+    /// <param name="clock">The source of the local time of the clock; null for the system clock.</param>
+    /// <param name="attributes">The player's attributes; null for <see cref="WorldState.Attributes" />.</param>
+    public MainHudControl(IWorldHud classic, TimeProvider? clock = null, PlayerAttributes? attributes = null)
     {
         Classic = classic;
+        Attributes = attributes ?? WorldState.Attributes;
         Name = "main_hud";
         Width = ChaosGame.VIRTUAL_WIDTH;
         Height = ChaosGame.VIRTUAL_HEIGHT;
@@ -36,7 +45,11 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         //the world area passes the mouse to the world; each bar takes it
         IsPassThrough = true;
 
-        AddChild(new HudBarPanel(ThemeRoles.HudTopBar, MainHudLayout.TopBar) { Name = "top_bar" });
+        Tooltip = new HudTooltip();
+        TopBar = new HudTopBar(clock ?? TimeProvider.System, Tooltip);
+        TopBar.ServerClicked += () => ServerBoxClicked?.Invoke();
+        TopBar.MailClicked += () => MailClicked?.Invoke();
+        AddChild(TopBar);
         AddChild(new HudBarPanel(ThemeRoles.HudBottomBar, MainHudLayout.BottomArea) { Name = "bottom_bar" });
         AddChild(new HudBarPanel(ThemeRoles.HudSideEdge, MainHudLayout.LeftEdge) { Name = "left_edge" });
         AddChild(new HudBarPanel(ThemeRoles.HudSideEdge, MainHudLayout.RightEdge) { Name = "right_edge" });
@@ -55,6 +68,49 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
         PersistentMessage = new PersistentMessageControl(ViewportBounds) { Name = "persistent_message" };
         AddChild(PersistentMessage);
+        AddChild(Tooltip);
+
+        //a hidden HUD shows no tooltip, also when it shows again with the mouse still on the box
+        VisibilityChanged += _ => Tooltip.Hide();
+
+        //the attributes can arrive before the world screen makes its HUDs
+        Attributes.Changed += OnAttributesChanged;
+        OnAttributesChanged();
+    }
+
+    /// <summary>The game time that a click on the clock shows, or null while no source gives one (D39).</summary>
+    public Func<string?> GameTimeSource
+    {
+        get => TopBar.GameTimeSource;
+        set => TopBar.GameTimeSource = value;
+    }
+
+    /// <summary>A click on the server box of the top bar: the connection details.</summary>
+    public event Action? ServerBoxClicked;
+
+    /// <summary>A click on the mail box of the top bar: the mail.</summary>
+    public event Action? MailClicked;
+
+    public override void Dispose()
+    {
+        Attributes.Changed -= OnAttributesChanged;
+
+        base.Dispose();
+    }
+
+    //weight, gold and mail come with the attributes, as on the classic HUD
+    private void OnAttributesChanged()
+    {
+        if (Attributes.Current is { } attrs)
+            ShowAttributes(attrs);
+    }
+
+    /// <summary>Shows the weight, the gold and the mail state of <paramref name="attrs" /> on the top bar.</summary>
+    internal void ShowAttributes(PlayerAttributes attrs)
+    {
+        TopBar.SetWeight(attrs.CurrentWeight, attrs.MaxWeight);
+        TopBar.SetGold(attrs.Gold);
+        TopBar.SetMail(attrs.HasMail, attrs.HasParcel);
     }
 
     public Rectangle ViewportBounds => MainHudLayout.World;
@@ -80,16 +136,15 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     public void ShowPersistentMessage(string text) => PersistentMessage.SetMessage(text);
 
-    //the top bar (phase 2)
-    public void SetCoords(int x, int y) { }
+    public void SetCoords(int x, int y) => TopBar.SetCoords(x, y);
 
-    public void SetZoneName(string zone) { }
+    public void SetZoneName(string zone) => TopBar.SetZoneName(zone);
 
-    public void SetServerName(string name) { }
+    public void SetServerName(string name) => TopBar.SetServerName(name);
 
-    public void SetTransportSecure(bool secure) { }
+    public void SetTransportSecure(bool secure) => TopBar.SetTransportSecure(secure);
 
-    public void SetWeight(int current, int max) { }
+    public void SetWeight(int current, int max) => TopBar.SetWeight(current, max);
 
     //the group button (phase 3)
     public void SetGroupOpen(bool groupOpen) { }
@@ -100,6 +155,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     //this HUD has no description line; the slot names that the classic HUD shows there go with the hidden panels
     public void SetDescription(string? text) { }
 
+    //the server box raises ServerBoxClicked; it is not a prefab button
     public UIButton? ServerBoxButton => null;
     #endregion
 

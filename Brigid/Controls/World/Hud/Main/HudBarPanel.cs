@@ -11,7 +11,7 @@ namespace Brigid.Controls.World.Hud.Main;
 ///     role, else the flat frame fill and border, so the flat borders of the four surfaces make one frame around the world.
 ///     It takes the mouse, so a click on a surface does not reach the world under it.
 /// </summary>
-internal sealed class HudBarPanel : UIPanel
+internal class HudBarPanel : UIPanel
 {
     /// <summary>The theme part that the surface draws.</summary>
     internal string Role { get; }

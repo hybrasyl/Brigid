@@ -4,6 +4,7 @@ using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Main;
 using Brigid.Definitions;
 using Brigid.Rendering;
+using Brigid.ViewModel;
 using Chaos.DarkAges.Definitions;
 using Xunit;
 #endregion
@@ -16,7 +17,7 @@ namespace Brigid.Tests;
 ///     classic HUD (BRIG-127 D41), so the code that uses them keeps working while nothing of them shows.
 /// </summary>
 [Collection("FontEngine")]
-public class MainHudControlTests
+public class MainHudControlTests : IDisposable
 {
     public MainHudControlTests() => FontEngine.Initialize(0);
 
@@ -35,11 +36,21 @@ public class MainHudControlTests
         }
     }
 
-    private static (MainHudControl Hud, RecordingHud Classic) NewHud()
+    private readonly List<MainHudControl> Huds = [];
+
+    public void Dispose()
+    {
+        foreach (var hud in Huds)
+            hud.Dispose();
+    }
+
+    private (MainHudControl Hud, RecordingHud Classic) NewHud()
     {
         var classic = DispatchProxy.Create<IWorldHud, RecordingHud>();
+        var hud = new MainHudControl(classic, attributes: new PlayerAttributes());
+        Huds.Add(hud);
 
-        return (new MainHudControl(classic), (RecordingHud)(object)classic);
+        return (hud, (RecordingHud)(object)classic);
     }
 
     [Fact]
@@ -94,13 +105,13 @@ public class MainHudControlTests
     {
         var (hud, _) = NewHud();
 
-        string RoleOf(string name) => Assert.IsType<HudBarPanel>(hud.Children.Single(child => child.Name == name)).Role;
+        string RoleOf(string name) => Assert.IsAssignableFrom<HudBarPanel>(hud.Children.Single(child => child.Name == name)).Role;
 
         Assert.Equal(ThemeRoles.HudTopBar, RoleOf("top_bar"));
         Assert.Equal(ThemeRoles.HudBottomBar, RoleOf("bottom_bar"));
         Assert.Equal(ThemeRoles.HudSideEdge, RoleOf("left_edge"));
         Assert.Equal(ThemeRoles.HudSideEdge, RoleOf("right_edge"));
-        Assert.Equal([ThemeRoles.HudTopBar, ThemeRoles.HudBottomBar, ThemeRoles.HudSideEdge], ThemeRoles.HudSurfaces);
+        Assert.Equal([ThemeRoles.HudTopBar, ThemeRoles.HudBottomBar, ThemeRoles.HudSideEdge, ThemeRoles.HudBox], ThemeRoles.HudSurfaces);
     }
 
     [Fact]
