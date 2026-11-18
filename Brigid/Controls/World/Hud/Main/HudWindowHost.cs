@@ -66,6 +66,9 @@ internal sealed class HudWindowHost
     /// <summary>The panels of the windows that open in the HUD, hidden until they open.</summary>
     public IEnumerable<HudPanel> Panels => PanelOf.Values;
 
+    /// <summary>The panel of a panel window.</summary>
+    public HudPanel PanelFor(HudWindow window) => PanelOf[window];
+
     /// <summary>The button of <paramref name="window" />.</summary>
     public IconButton ButtonOf(HudWindow window) => Buttons[window];
 

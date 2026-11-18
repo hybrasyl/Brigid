@@ -21,4 +21,11 @@ internal abstract class HudWindowContent : UIPanel
 
     /// <summary>Places the children in a content of <paramref name="width" /> by <paramref name="height" />.</summary>
     protected abstract void LayOut(int width, int height);
+
+    /// <summary>Moves a primitive to the place of <paramref name="bounds" />; the primitives size themselves.</summary>
+    protected static void Place(UIElement element, Rectangle bounds)
+    {
+        element.X = bounds.X;
+        element.Y = bounds.Y;
+    }
 }

@@ -4,6 +4,7 @@ using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Main;
+using Brigid.Controls.World.Hud.Main.Windows;
 using Brigid.Controls.World.Hud.Panel.Slots;
 using Brigid.Controls.World.Popups;
 using Brigid.Controls.World.Popups.Boards;
@@ -99,6 +100,7 @@ public sealed partial class WorldScreen : IScreen
     private int InFlightWalkAcks;
 
     private AbilityMetadataDetailsControl AbilityMetadataDetails = null!;
+    private InventoryListModal InventoryLists = null!;
     private AislingContextMenu AislingContext = null!;
     private DoorContextMenu DoorContext = null!;
     private ChatTabMenu ChatTabMenu = null!;
@@ -589,6 +591,12 @@ public sealed partial class WorldScreen : IScreen
             ZIndex = 3
         };
 
+        //the Currency and Quest Items lists of the Inventory window of the new hud (BRIG-150)
+        InventoryLists = new InventoryListModal
+        {
+            ZIndex = 3
+        };
+
         SocialStatusPicker = new SocialStatusControl();
 
         SocialStatusPicker.OnStatusSelected += status =>
@@ -704,6 +712,7 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(SelfProfileTextEditor);
         Root.AddChild(AbilityMetadataDetails);
         Root.AddChild(EventMetadataDetails);
+        Root.AddChild(InventoryLists);
         Root.AddChild(OtherProfile);
         Root.AddChild(TextPopup);
         Root.AddChild(MarkdownNotice);

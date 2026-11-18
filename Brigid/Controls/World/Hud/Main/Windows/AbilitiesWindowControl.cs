@@ -223,13 +223,6 @@ internal sealed class AbilitiesWindowControl : HudWindowContent
             Dirty = true;
     }
 
-    //a box of the given size keeps its size; the primitives size themselves
-    private static void Place(UIElement element, Rectangle bounds)
-    {
-        element.X = bounds.X;
-        element.Y = bounds.Y;
-    }
-
     private (CheckBox Box, UILabel Label) AddFilter(string name, string text, bool on)
     {
         var check = new CheckBox

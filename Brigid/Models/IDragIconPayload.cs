@@ -12,4 +12,10 @@ public interface IDragIconPayload
 {
     /// <summary>The icon at the pointer, or null for no icon.</summary>
     Texture2D? Icon { get; }
+
+    /// <summary>
+    ///     An <c>icon.*</c> role that the world screen draws at the pointer when <see cref="Icon" /> is null (the gold bag of
+    ///     the Inventory window), or null for none.
+    /// </summary>
+    string? IconRole => null;
 }

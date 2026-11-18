@@ -112,6 +112,9 @@ public static class ThemeRoles
     public const string IconWindowGroup = "icon.window.group";
     public const string IconWindowScreenshot = "icon.window.screenshot";
 
+    //the gold bag of the Inventory window of the new HUD (BRIG-150), which a drag drops or gives gold from
+    public const string IconInventoryGoldBag = "icon.inventory.gold_bag";
+
     //colours
     public const string Text = "text";
     public const string TextDisabled = "text.disabled";
@@ -122,6 +125,7 @@ public static class ThemeRoles
     public const string Border = "border";
     public const string RowHover = "row.hover";
     public const string RowSelected = "row.selected";
+    public const string RowAlternate = "row.alternate";
     public const string InputText = "input.text";
     public const string InputFocus = "input.focus";
 
@@ -131,7 +135,7 @@ public static class ThemeRoles
     /// <summary>The colour roles, in the order that the primitive gallery shows them.</summary>
     public static readonly string[] Colours =
     [
-        Text, TextDisabled, TextSelected, TextTitle, TextError, Divider, Border, RowHover, RowSelected, InputText, InputFocus
+        Text, TextDisabled, TextSelected, TextTitle, TextError, Divider, Border, RowHover, RowSelected, RowAlternate, InputText, InputFocus
     ];
 
     /// <summary>
@@ -170,6 +174,9 @@ public static class ThemeRoles
 
     /// <summary>The icons of the chat box of the new HUD, which the HUD shows, not the primitive gallery.</summary>
     public static readonly string[] ChatIcons = [IconChatHide, IconChatShow, IconChatAdd];
+
+    /// <summary>The icons of the Inventory window of the new HUD (BRIG-150), which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] InventoryIcons = [IconInventoryGoldBag];
 
     /// <summary>The social status icon parts, indexed by the wire value of the status (awake is 0).</summary>
     public static readonly string[] StatusIcons =

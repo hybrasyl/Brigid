@@ -15,3 +15,5 @@ The top bar icons of the new HUD (BRIG-144) are drawn at 64 by 64 for a 13 by 13
 The window button icons of the new HUD (BRIG-144) are drawn at 72 by 72 for an 18 by 18 button, in white line art like the status icons: `icon.window.abilities` (a spark), `icon.window.inventory` (a chest), `icon.window.equipment` (a shield), `icon.window.mastery` (a star), `icon.window.quests` (a scroll), `icon.window.menu` (three lines), `icon.window.mail` (an envelope), `icon.window.community` (two people), `icon.window.map` (a folded map), `icon.window.group` (a flag) and `icon.window.screenshot` (a camera).
 
 The buttons of the chat box of the new HUD (BRIG-145) are drawn at 64 by 64 for a 13 by 13 button (15 by 13 for hide), in white line art with a 2.5-unit stroke, so they stay clear at that size: `icon.chat.hide` (a chevron down), `icon.chat.show` (a chevron up) and `icon.chat.add` (a plus).
+
+The gold bag of the Inventory window of the new HUD (BRIG-150), `icon.inventory.gold_bag`, is drawn at 64 by 64 for a 16 by 16 icon: a sack tied at the neck, with a coin ring, in the gold of `icon.hud.gold`. A drag of it drops or gives gold.

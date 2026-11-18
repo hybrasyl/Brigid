@@ -94,9 +94,9 @@ public class InventoryWindowTests : IDisposable
         Assert.True(layout.Compact.Right < layout.Home.X);
         Assert.True(layout.Home.Right < layout.End.X);
         Assert.Equal(0, layout.QuestItems.X);
-        Assert.True(layout.Weight.Right <= layout.GoldBag.X);
-        Assert.Equal(layout.GoldBag.Right, layout.Gold.X);
-        Assert.True(layout.Gold.Right < layout.Currency.X);
+        Assert.True(layout.Weight.Right <= layout.Gold.X);
+        Assert.True(layout.Gold.Right < layout.GoldBag.X);
+        Assert.True(layout.GoldBag.Right < layout.Currency.X);
         Assert.Equal(FLAT_WIDTH, layout.Currency.Right);
     }
 

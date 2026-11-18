@@ -26,6 +26,9 @@ internal static class DialogPalette
     //list rows + selection
     public static readonly Color RowHoverFill = new(38, 40, 48);
     public static readonly Color RowSelectedFill = new(74, 58, 22);
+
+    //the shade of every second row of a read-only list (the Currency and Quest Items lists of the new HUD)
+    public static readonly Color RowAlternateFill = new(24, 26, 34);
     public static readonly Color SelectedText = new(255, 208, 96);
 
     //vertical text tabs
@@ -85,6 +88,7 @@ internal static class DialogPalette
         ThemeRoles.Border       => FrameBorder,
         ThemeRoles.RowHover     => RowHoverFill,
         ThemeRoles.RowSelected  => RowSelectedFill,
+        ThemeRoles.RowAlternate => RowAlternateFill,
         ThemeRoles.InputText    => Text,
         ThemeRoles.InputFocus   => InputFocus,
         _                       => throw new ArgumentOutOfRangeException(nameof(role), role, "not a ui_theme colour role")

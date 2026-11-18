@@ -307,9 +307,9 @@ public sealed partial class WorldScreen
         //── track which entity the mouse is hovering over ──
         var hoverEntity = GetEntityAtScreen(InputBuffer.MouseX, InputBuffer.MouseY);
 
-        //an item drag of the classic inventory or of the Inventory window: a drop on the player goes to the ground
+        //an item or gold drag of the classic inventory or of the Inventory window: a drop on the player goes to the ground
         var isItemDrag = (GetDraggingPanel() is { } dragPanel && (dragPanel == WorldHud.Inventory))
-                         || InputDispatcher.Instance?.ActiveDragPayload is ItemDragPayload;
+                         || InputDispatcher.Instance?.ActiveDragPayload is ItemDragPayload or GoldDragPayload;
 
         var newHoveredId = hoverEntity?.Type is ClientEntityType.Aisling or ClientEntityType.Creature
                            && !hoverEntity.IsHidden
@@ -353,7 +353,8 @@ public sealed partial class WorldScreen
                     || HideOnPressOutside(DoorContext, evt.X, evt.Y)
                     || HideOnPressOutside(ChatTabMenu, evt.X, evt.Y)
                     || HideOnPressOutside(AbilityMetadataDetails, evt.X, evt.Y)
-                    || HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y)))
+                    || HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y)
+                    || HideOnPressOutside(InventoryLists, evt.X, evt.Y)))
                 Game.Dispatcher.SwallowPress(i);
         }
 

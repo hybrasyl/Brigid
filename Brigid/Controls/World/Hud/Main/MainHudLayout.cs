@@ -139,7 +139,7 @@ internal static class MainHudLayout
     }
 
     //the Inventory window (BRIG-150, the approved wireframe), in the content of its panel: the C, H and E buttons at the
-    //right of the first line, a grid of 9 by 8 slots, and a last line with Q, the weight, the gold bag and the gold, and
+    //right of the first line, a grid of 9 by 8 slots, and a last line with Q, the weight, the gold and the gold bag, and
     //the coin button. The slots are 32 px with a 1 px gap, as in the wireframe, and touch when the content is smaller
     public const int INVENTORY_COLUMNS = 9;
     public const int INVENTORY_ROWS = 8;
@@ -151,6 +151,7 @@ internal static class MainHudLayout
     private const int INVENTORY_LINE_GAP = 2;
     private const int INVENTORY_GRID_TOP = INVENTORY_LINE + INVENTORY_LINE_GAP;
     private const int INVENTORY_GAP = 4;
+    private const int INVENTORY_BAG_GAP = 2;
     private const int INVENTORY_WEIGHT_WIDTH = 110;
     private const int INVENTORY_GOLD_WIDTH = 80;
 
@@ -173,8 +174,8 @@ internal static class MainHudLayout
         var questItems = new Rectangle(0, lineY + buttonY, INVENTORY_BUTTON_WIDTH, INVENTORY_BUTTON_HEIGHT);
         var currency = questItems with { X = width - INVENTORY_BUTTON_WIDTH };
         var weight = new Rectangle(questItems.Right + INVENTORY_GAP, lineY, INVENTORY_WEIGHT_WIDTH, INVENTORY_LINE);
-        var gold = new Rectangle(currency.X - INVENTORY_GAP - INVENTORY_GOLD_WIDTH, lineY, INVENTORY_GOLD_WIDTH, INVENTORY_LINE);
-        var goldBag = new Rectangle(gold.X - INVENTORY_GOLD_BAG, lineY, INVENTORY_GOLD_BAG, INVENTORY_GOLD_BAG);
+        var goldBag = new Rectangle(currency.X - INVENTORY_GAP - INVENTORY_GOLD_BAG, lineY, INVENTORY_GOLD_BAG, INVENTORY_GOLD_BAG);
+        var gold = new Rectangle(goldBag.X - INVENTORY_BAG_GAP - INVENTORY_GOLD_WIDTH, lineY, INVENTORY_GOLD_WIDTH, INVENTORY_LINE);
 
         return new InventoryLayout(compact, home, end, gridLeft, INVENTORY_GRID_TOP, pitch, questItems, weight, goldBag, gold, currency);
     }

@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
+using Brigid.Controls.World.Hud.Main;
 using Brigid.Controls.World.Hud.Main.Windows;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Hud.Panel.Slots;
@@ -42,6 +43,16 @@ public sealed partial class WorldScreen
     {
         InventoryTooltipShown = false;
         ItemTooltip.Hide();
+    }
+
+    //Q or the coin button of the Inventory window: the list at the centre of the Inventory panel. The server sends no
+    //currencies and no item tags today, so each list is empty (BRIG-150)
+    private void OpenInventoryList(InventoryListKind kind)
+    {
+        var panel = MainHud.Windows.PanelFor(HudWindows.Inventory);
+
+        if (panel.Visible)
+            InventoryLists.Open(kind, [], panel.ScreenBounds);
     }
 
     //the item under the pointer in the Inventory window of the new hud, or none
@@ -1519,6 +1530,12 @@ public sealed partial class WorldScreen
 
                 break;
 
+            //the gold bag of the Inventory window is the gold bag of the classic inventory, slot 0
+            case RootDrop.Gold:
+                HandleInventoryDropInViewport(0, e.ScreenX, e.ScreenY);
+
+                break;
+
             case RootDrop.ClassicSlot when ((SlotDragPayload)e.Payload!).Source.Parent is PanelBase { IsDragging: true } panel:
                 panel.CompleteDragOutside(e.ScreenX, e.ScreenY);
 
@@ -1549,6 +1566,9 @@ public sealed partial class WorldScreen
         /// <summary>An item of the Inventory window, dropped as from the classic inventory.</summary>
         Item,
 
+        /// <summary>The gold bag of the Inventory window: the gold prompt, as from the classic gold bag.</summary>
+        Gold,
+
         /// <summary>A slot of a classic panel, dropped outside its panel.</summary>
         ClassicSlot
     }
@@ -1559,6 +1579,7 @@ public sealed partial class WorldScreen
             AbilityDragPayload { IsSpell: true } => RootDrop.Spell,
             AbilityDragPayload                   => RootDrop.Ends,
             ItemDragPayload                      => RootDrop.Item,
+            GoldDragPayload                      => RootDrop.Gold,
             SlotDragPayload                      => RootDrop.ClassicSlot,
             _                                    => RootDrop.None
         };
