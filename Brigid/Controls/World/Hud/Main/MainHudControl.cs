@@ -174,7 +174,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     /// <summary>
     ///     True when the server converts the experience past the level cap into Crystallized Reflections (Hybrasyl), so the
-    ///     experience bar at the cap shows the experience toward the next one (<see cref="HudExperience" />).
+    ///     experience bar at the cap is full and blue, with no ability experience (<see cref="HudExperience" />).
     /// </summary>
     public bool ConvertsExperiencePastCap
     {

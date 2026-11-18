@@ -69,7 +69,7 @@ internal static class DialogPalette
     public static readonly Color ManaFill = new(47, 98, 181);
     public static readonly Color ExperienceFill = new(217, 164, 65);
 
-    //the experience meter at the level cap: the experience toward a Crystallized Reflection, or the ability experience
+    //the experience meter at the level cap: the full bar on Hybrasyl, or the ability experience on retail
     public static readonly Color CapFill = ManaFill;
 
     /// <summary>

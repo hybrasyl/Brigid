@@ -17,8 +17,10 @@ internal readonly record struct ExperienceView(float Fraction, bool UsesCapFill,
 ///     cap the server sends 0 experience to the next level:
 ///     <list type="bullet">
 ///         <item>
-///             On a server that converts the experience past the cap (Hybrasyl), the bar is blue and shows the experience
-///             toward the next Crystallized Reflection, one for each <see cref="REFLECTION_EXPERIENCE" />.
+///             On a server that converts the experience past the cap into Crystallized Reflections (Hybrasyl), the bar is
+///             full and blue, and the tooltip shows the total experience. The server owns the conversion rate, which can
+///             change for each character, and the total does not show the progress toward the next Reflection; the bar
+///             shows that progress when the server sends it in the <c>0x0008</c> Experience block (HS-1722).
 ///         </item>
 ///         <item>
 ///             On retail, the bar is full and yellow while the ability level is 0. With an ability level, it is blue and
@@ -29,9 +31,6 @@ internal readonly record struct ExperienceView(float Fraction, bool UsesCapFill,
 /// </summary>
 internal static class HudExperience
 {
-    /// <summary>The experience past the level cap that converts into one Crystallized Reflection (The Ascent).</summary>
-    public const uint REFLECTION_EXPERIENCE = 250_000;
-
     /// <summary>
     ///     The fill of the bar and its colour, with no tooltip lines: an attributes packet comes at each change of the
     ///     vitals, and the HUD reads the lines only while the tooltip shows.
@@ -65,12 +64,7 @@ internal static class HudExperience
         lines?.Add($"Total: {HudFormat.Number(attrs.TotalExp)}");
 
         if (convertsPastCap)
-        {
-            var toward = attrs.TotalExp % REFLECTION_EXPERIENCE;
-            lines?.Add($"{HudFormat.Number(toward)} / {HudFormat.Number(REFLECTION_EXPERIENCE)} to the next Crystallized Reflection");
-
-            return new ExperienceView((float)toward / REFLECTION_EXPERIENCE, true, title, shown);
-        }
+            return new ExperienceView(1, true, title, shown);
 
         lines?.Add($"Ability level {attrs.Ability}");
         lines?.Add($"Ability experience: {HudFormat.Number(attrs.TotalAbility)}");

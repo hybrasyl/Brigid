@@ -15,8 +15,8 @@ namespace Brigid.Tests;
 
 /// <summary>
 ///     BRIG-148: the experience bar (BRIG-127 D27). Below the level cap it shows the experience of the level while
-///     the start is known. At the cap, Hybrasyl's bar is blue and shows the experience toward the next Crystallized
-///     Reflection; retail's bar is full and yellow with ability level 0, and blue with the ability experience after it.
+///     the start is known. At the cap, Hybrasyl's bar is full and blue, with the total in the tooltip; retail's bar is
+///     full and yellow with ability level 0, and blue with the ability experience after it.
 /// </summary>
 [Collection("FontEngine")]
 public class HudExperienceTests : IDisposable
@@ -81,14 +81,14 @@ public class HudExperienceTests : IDisposable
     }
 
     [Fact]
-    public void AtTheCapOnHybrasylTheBarShowsTheNextReflection()
+    public void AtTheCapOnHybrasylTheBarIsFullAndBlueWithTheTotal()
     {
-        var view = HudExperience.Describe(Reading(75, 1_300_000, 0), true);
+        var view = HudExperience.Describe(Reading(75, 101_306_000, 0), true);
 
         Assert.True(view.UsesCapFill);
-        Assert.Equal(50_000f / 250_000, view.Fraction, 4);
+        Assert.Equal(1f, view.Fraction);
         Assert.Equal("Level 75", view.Title);
-        Assert.Equal(["Total: 1,300,000", "50,000 / 250,000 to the next Crystallized Reflection"], view.Lines);
+        Assert.Equal(["Total: 101,306,000"], view.Lines);
     }
 
     [Fact]
@@ -189,7 +189,7 @@ public class HudExperienceTests : IDisposable
 
         Assert.Equal(ThemeRoles.HudExperienceCapFill, hud.ExperienceBar.FillRole);
         Assert.Equal(DialogPalette.CapFill, hud.ExperienceBar.FlatFill);
-        Assert.Equal(0.2f, hud.ExperienceBar.Fraction, 4);
+        Assert.Equal(1f, hud.ExperienceBar.Fraction);
     }
 
     [Fact]
