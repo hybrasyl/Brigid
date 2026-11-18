@@ -111,13 +111,14 @@ internal abstract class HudItemSlotControl : UIPanel
             DrawBorderClipped(spriteBatch, bounds, ThemeColor(ThemeRoles.Divider));
         }
 
-        if (!Usable)
-            DrawRectClipped(spriteBatch, bounds, Color.Black * DIM);
-
         if (Icon is { } icon)
             DrawTexture(spriteBatch, icon.Texture, new Vector2(bounds.X + icon.OffsetX, bounds.Y + icon.OffsetY), Color.White);
         else
             DrawEmpty(spriteBatch, bounds);
+
+        //the dim goes over the icon and the outline, so a slot that takes nothing reads as disabled
+        if (!Usable)
+            DrawRectClipped(spriteBatch, bounds, Color.Black * DIM);
 
         if (IsDropTarget)
             DrawBorderClipped(spriteBatch, bounds, ThemeColor(ThemeRoles.TextSelected));

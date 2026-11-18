@@ -5,9 +5,9 @@ using Microsoft.Xna.Framework;
 namespace Brigid.Controls.World.Hud.Main;
 
 /// <summary>
-///     Every rectangle of the new HUD, in virtual px on the 640 × 480 screen (BRIG-127 D28, D36, D37; the HUD layer of
-///     the HUD mockup in <c>loures</c>). The HUD, its panel host and the tests read the positions here, and no other file
-///     holds one.
+///     The layout rectangles of the new HUD and its windows, in virtual px on the 640 × 480 screen (BRIG-127 D28, D36,
+///     D37; the HUD layer of the HUD mockup in <c>loures</c>). The HUD, its panel host, the windows and the tests read the
+///     positions here; a primitive or a row places its own parts.
 /// </summary>
 internal static class MainHudLayout
 {

@@ -14,7 +14,7 @@ public sealed class SelfProfile
     /// <summary>The species until the server sends it (HS-1724, Sabrael 2026-11-18).</summary>
     public const string DEFAULT_SPECIES = "Human";
 
-    /// <summary>The player's name, from the display packet of the player. The new HUD reads the name here.</summary>
+    /// <summary>The player's name, from the display packet of the player. The Details window reads the name here.</summary>
     public string Name { get; private set; } = string.Empty;
 
     /// <summary>The name of the player's class.</summary>
@@ -77,7 +77,7 @@ public sealed class SelfProfile
         GuildRank = guildRank.Trim();
         Title = title.Trim();
         NationName = nationName;
-        LegendMarks = legendMarks;
+        LegendMarks = [.. legendMarks];
         HasProfile = true;
         Changed?.Invoke();
     }

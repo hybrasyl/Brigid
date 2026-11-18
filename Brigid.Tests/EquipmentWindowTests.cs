@@ -143,6 +143,7 @@ public class EquipmentWindowTests : IDisposable
     {
         Assert.Equal(EquipmentSlots.All.Select(spec => spec.IconRole), ThemeRoles.EquipmentIcons);
         Assert.All(EquipmentSlots.All, spec => Assert.True(BuiltInArt.Has(spec.IconRole), spec.IconRole));
+        UiAssert.NamedTree(NewWindow().Window);
     }
 
     //a struct value: an empty slot is null, not an empty slot data, so the unequip key sends only for an item

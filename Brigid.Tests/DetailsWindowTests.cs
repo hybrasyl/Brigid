@@ -2,6 +2,7 @@
 using System.Reflection;
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.Generic;
 using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Main;
 using Brigid.Controls.World.Hud.Main.Windows;
@@ -69,6 +70,32 @@ public class DetailsWindowTests : IDisposable
         Owned.Add(window);
 
         return (window, profile, attributes, activity);
+    }
+
+    //the window builds the arrows before it lays out, so an arrow's icon must follow the bounds that the layout gives it
+    [Fact]
+    public void EachArrowShowsItsIconAtTheSizeOfTheLayout()
+    {
+        var (window, _, _, _) = NewWindow();
+        var layout = MainHudLayout.DetailsIn(FLAT_WIDTH, FLAT_HEIGHT);
+
+        foreach (var (prefix, role, place) in new (string, string, Func<int, Rectangle>)[]
+                 {
+                     ("raise", ThemeRoles.IconDetailsRaise, layout.Raise),
+                     ("lower", ThemeRoles.IconDetailsLower, layout.Lower)
+                 })
+            for (var i = 0; i < StatRaise.Stats.Length; i++)
+            {
+                var arrow = window.FindChild<IconButton>($"{prefix}_{StatRaise.Stats[i].ToString().ToLowerInvariant()}")!;
+                var icon = arrow.FindChild<RoleIcon>("icon")!;
+
+                Assert.Equal(role, arrow.Role);
+                Assert.Equal(place(i).Size, new Point(arrow.Width, arrow.Height));
+                Assert.Equal(new Rectangle(2, 2, arrow.Width - 4, arrow.Height - 4), new Rectangle(icon.X, icon.Y, icon.Width, icon.Height));
+            }
+
+        Assert.All(ThemeRoles.DetailsIcons, role => Assert.True(BuiltInArt.Has(role), role));
+        UiAssert.NamedTree(window);
     }
 
     [Fact]

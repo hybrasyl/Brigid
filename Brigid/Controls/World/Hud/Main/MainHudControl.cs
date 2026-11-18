@@ -135,7 +135,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// <summary>A click on the mail box of the top bar: the mail.</summary>
     public event Action? MailClicked;
 
-    /// <summary>A click on the player plate: the status book, until the Details window (D34).</summary>
+    /// <summary>A click on the player plate: the world screen opens and closes the Details window (D34, BRIG-151).</summary>
     public event Action? PlateClicked;
 
     /// <summary>The player plate of the bottom area (BRIG-148).</summary>

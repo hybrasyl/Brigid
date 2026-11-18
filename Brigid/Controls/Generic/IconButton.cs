@@ -23,12 +23,18 @@ public sealed class IconButton : UIPanel
 
     public IconButton(string role, Rectangle bounds)
     {
-        SetBounds(bounds);
         BorderColor = DialogPalette.FrameBorder;
 
         Icon = new RoleIcon { Name = "icon", Role = role };
-        Icon.SetBounds(new Rectangle(ICON_INSET, ICON_INSET, bounds.Width - 2 * ICON_INSET, bounds.Height - 2 * ICON_INSET));
         AddChild(Icon);
+        SetBounds(bounds);
+    }
+
+    //the icon follows the bounds, so a button that a layout places after its construction shows its icon
+    public override void SetBounds(Rectangle bounds)
+    {
+        base.SetBounds(bounds);
+        Icon.SetBounds(new Rectangle(ICON_INSET, ICON_INSET, Math.Max(0, bounds.Width - 2 * ICON_INSET), Math.Max(0, bounds.Height - 2 * ICON_INSET)));
     }
 
     /// <summary>The icon role that the button shows.</summary>

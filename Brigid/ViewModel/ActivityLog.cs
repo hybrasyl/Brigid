@@ -10,8 +10,8 @@ public readonly record struct ActivityEntry(DateTime Time, string Text);
 /// <summary>
 ///     The activity log of the session (BRIG-151, D34). It reads its own sources: the level and the ability level of each
 ///     attributes packet that has a primary block, and the legend marks of each self profile. A gain of a level or of an
-///     ability level is an entry, and so is a legend mark that a self profile adds after the first one. An invisible mark
-///     is not an entry. The server sends no dated history, so the log holds the events of this session only; a Hybrasyl
+///     ability level is an entry, and so is a legend mark that a self profile adds after the first one, an invisible mark
+///     too (the player sees their own). The server sends no dated history, so the log holds the events of this session only; a Hybrasyl
 ///     history replaces it later. It keeps the newest <see cref="MAX_ENTRIES" />, newest first.
 /// </summary>
 public sealed class ActivityLog

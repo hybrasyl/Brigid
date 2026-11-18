@@ -251,7 +251,8 @@ internal sealed class DetailsWindowControl : HudWindowContent
     //the server sends no list of titles yet (HS-1724): the drop-down is disabled, with the current title selected
     private DropDown NewTitleBox()
     {
-        var box = new DropDown(Profile.Titles, MainHudLayout.DETAILS_PORTRAIT, MainHudLayout.DETAILS_ROW)
+        //PlaceTitleBox gives the box the width of the value column
+        var box = new DropDown(Profile.Titles, 0, MainHudLayout.DETAILS_ROW)
         {
             Name = "title",
             Enabled = false
@@ -328,7 +329,9 @@ internal sealed class DetailsWindowControl : HudWindowContent
         {
             var shown = i < Activity.Entries.Count;
             ActivityLines[i].Visible = shown;
-            ActivityLines[i].Text = shown ? $"{Activity.Entries[i].Time:HH:mm} {Activity.Entries[i].Text}" : string.Empty;
+            ActivityLines[i].Text = shown
+                ? string.Create(CultureInfo.InvariantCulture, $"{Activity.Entries[i].Time:HH:mm} {Activity.Entries[i].Text}")
+                : string.Empty;
         }
     }
 }
