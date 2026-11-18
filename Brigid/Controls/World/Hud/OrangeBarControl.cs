@@ -10,7 +10,8 @@ namespace Brigid.Controls.World.Hud;
 
 /// <summary>
 ///     Orange bar message display above inventory. Shows the latest server message; supports drag-expand to reveal
-///     history. Background from SystemMessagePane (_nsmbk.spf).
+///     history. A message that is wider than the bar shows the part that fits, and the message history (Shift+F) shows
+///     all of it. Background from SystemMessagePane (_nsmbk.spf).
 /// </summary>
 public sealed class OrangeBarControl : UIPanel
 {
@@ -49,21 +50,26 @@ public sealed class OrangeBarControl : UIPanel
 
         for (var i = 0; i < MAX_EXPAND_LINES; i++)
         {
-            Lines[i] = new UILabel
-            {
-                Name = $"OrangeLine{i}",
-                X = TextBounds.X - WrapBounds.X + LINE_X_NUDGE,
-                Width = TextBounds.Width,
-                Height = GLYPH_HEIGHT,
-                PaddingLeft = 0,
-                PaddingTop = 0,
-                Visible = false,
-                IsHitTestVisible = false
-            };
-
+            Lines[i] = CreateLine(i, TextBounds.X - WrapBounds.X + LINE_X_NUDGE, TextBounds.Width);
             AddChild(Lines[i]);
         }
     }
+
+    //a message line draws at the normal letter spacing, and the bar clips the part that does not fit; the message
+    //history (Shift+F) wraps the whole message. ShrinkToFit would squeeze a long message into the bar
+    internal static UILabel CreateLine(int index, int x, int width)
+        => new()
+        {
+            Name = $"OrangeLine{index}",
+            X = x,
+            Width = width,
+            Height = GLYPH_HEIGHT,
+            PaddingLeft = 0,
+            PaddingTop = 0,
+            ShrinkToFit = false,
+            Visible = false,
+            IsHitTestVisible = false
+        };
 
     public override void Dispose()
     {
