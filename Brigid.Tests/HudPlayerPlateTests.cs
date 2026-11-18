@@ -190,7 +190,7 @@ public class HudPlayerPlateTests : IDisposable
         Assert.Equal("player_plate", plate.Name);
         Assert.Equal(MainHudLayout.PlayerPlate, new Rectangle(plate.X, plate.Y, plate.Width, plate.Height));
         Assert.True(plate.IsHitTestVisible);
-        Assert.Null(plate.IconTexture);
+        Assert.Null(plate.HeadTexture);
     }
 
     //the world screen opens the status book on PlateClicked

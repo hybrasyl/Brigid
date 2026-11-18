@@ -8,9 +8,9 @@ namespace Brigid.Controls.World.Hud.Main;
 
 /// <summary>
 ///     The player plate of the new HUD (BRIG-148): a box in the <see cref="ThemeRoles.HudBox" /> part with the head of the
-///     player's aisling at the left (<see cref="Rendering.AislingRenderer.RenderHead" />), and two lines: the name in the title colour, and the level and the class. Before the
-///     class arrives (the self profile), the second line shows the level only. A left click raises
-///     <see cref="HudBox.Clicked" />.
+///     player's aisling at the left (<see cref="Rendering.AislingRenderer.RenderHead" />), and two lines: the name in the
+///     title colour, and the level and the class. Before the class arrives (the self profile), the second line shows the
+///     level only. A left click raises <see cref="HudBox.Clicked" />.
 /// </summary>
 internal sealed class HudPlayerPlate : HudBox
 {
@@ -42,7 +42,7 @@ internal sealed class HudPlayerPlate : HudBox
     public string Detail => DetailText.Text;
 
     /// <summary>The head of the aisling, or null while no appearance gave one.</summary>
-    public Texture2D? IconTexture => Icon.Texture;
+    public Texture2D? HeadTexture => Icon.Texture;
 
     public void SetName(string name) => NameText.Text = name;
 

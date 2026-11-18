@@ -18,7 +18,6 @@ namespace Brigid.Controls.World.Popups.Profile;
 /// </summary>
 public sealed class OtherProfileEquipmentTab : PrefabPanel
 {
-
     private readonly UILabel? ClanLabel;
     private readonly UILabel? ClanTitleLabel;
     private readonly UILabel? ClassLabel;

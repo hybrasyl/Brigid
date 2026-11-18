@@ -261,6 +261,31 @@ public class ExperienceStartTests
     }
 
     [Fact]
+    public void TheAttributesRestoreTheSavedStartsAndShowThem()
+    {
+        var attrs = new PlayerAttributes();
+        attrs.Update(Full(41, 1500, 1500));
+        var changes = 0;
+        attrs.Changed += () => changes++;
+
+        attrs.RestoreStarts(new SavedExperience(new SavedLevelStart(41, 1000), new SavedLevelStart(3, 50)));
+
+        Assert.Equal(1, changes);
+        Assert.Equal(1000ul, attrs.LevelSpan.Start);
+        Assert.Equal(new SavedExperience(new SavedLevelStart(41, 1000), null), attrs.SavedStarts());
+    }
+
+    [Fact]
+    public void TheSavedStartsAreTheKnownStarts()
+    {
+        var attrs = new PlayerAttributes();
+        attrs.Update(Full(99, 5000, 0, 3, 700, 300));
+        attrs.Update(Full(99, 5000, 0, 4, 1100, 1900));
+
+        Assert.Equal(new SavedExperience(null, new SavedLevelStart(4, 1000)), attrs.SavedStarts());
+    }
+
+    [Fact]
     public void TheSaveReadsBackWhatItWrote()
     {
         var saved = new SavedExperience(new SavedLevelStart(41, 1000), new SavedLevelStart(3, 5_000_000_000));

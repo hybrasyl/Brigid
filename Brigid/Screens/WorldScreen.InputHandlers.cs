@@ -607,29 +607,19 @@ public sealed partial class WorldScreen
     //the level starts that the client learned for the character, so the experience bar is correct at a new login (BRIG-148)
     private void LoadPlayerExperience()
     {
-        var saved = DataContext.LocalPlayerSettings.LoadExperience();
-        var attrs = WorldState.Attributes;
-
-        if (saved.Level is { } level)
-            attrs.LevelSpan.Restore(level.Level, level.Start);
-
-        if (saved.Ability is { } ability)
-            attrs.AbilitySpan.Restore(ability.Level, ability.Start);
-
-        MainHud.RefreshAttributes();
+        CharacterFolderReady = true;
+        WorldState.Attributes.RestoreStarts(DataContext.LocalPlayerSettings.LoadExperience());
     }
+
+    //the character folder is the one of this screen's character only after its first display packet; before it, the
+    //folder can still be the one of the character before a logout
+    private bool CharacterFolderReady;
 
     private void SavePlayerExperience()
     {
-        if (!DataContext.LocalPlayerSettings.IsInitialized)
-            return;
-
-        var attrs = WorldState.Attributes;
-
-        DataContext.LocalPlayerSettings.SaveExperience(new SavedExperience(StartOf(attrs.LevelSpan), StartOf(attrs.AbilitySpan)));
+        if (CharacterFolderReady)
+            DataContext.LocalPlayerSettings.SaveExperience(WorldState.Attributes.SavedStarts());
     }
-
-    private static SavedLevelStart? StartOf(ExperienceSpan span) => span.Start is { } start ? new SavedLevelStart(span.Level, start) : null;
 
     private void SaveSkillChants()
     {

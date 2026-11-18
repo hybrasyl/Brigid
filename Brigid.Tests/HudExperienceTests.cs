@@ -2,6 +2,7 @@
 using System.Reflection;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Data.Models;
 using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Main;
 using Brigid.Rendering;
@@ -135,6 +136,21 @@ public class HudExperienceTests : IDisposable
         Assert.Equal(["Total: 4,000,000", "Ability level 99", "Ability experience: 9,000"], view.Lines);
     }
 
+    //the bar reads the fill at each packet, and the tooltip the full view: the two agree in each state
+    [Theory]
+    [InlineData((byte)41, 12_345u, 1500u, (byte)0, 0u, 0u, false)]
+    [InlineData((byte)75, 1_300_000u, 0u, (byte)0, 0u, 0u, true)]
+    [InlineData((byte)99, 4_000_000u, 0u, (byte)0, 1200u, 0u, false)]
+    [InlineData((byte)99, 4_000_000u, 0u, (byte)4, 1500u, 1500u, false)]
+    [InlineData((byte)99, 4_000_000u, 0u, (byte)99, 9000u, 0u, false)]
+    public void TheFillAgreesWithTheView(byte level, uint total, uint toNext, byte ability, uint abilityTotal, uint abilityToNext, bool convertsPastCap)
+    {
+        var attrs = Reading(level, total, toNext, ability, abilityTotal, abilityToNext);
+        var view = HudExperience.Describe(attrs, convertsPastCap);
+
+        Assert.Equal((view.Fraction, view.UsesCapFill), HudExperience.Fill(attrs, convertsPastCap));
+    }
+
     private MainHudControl NewHud(PlayerAttributes attrs)
     {
         var classic = DispatchProxy.Create<IWorldHud, MainHudControlTests.RecordingHud>();
@@ -177,14 +193,13 @@ public class HudExperienceTests : IDisposable
     }
 
     [Fact]
-    public void ARestoredStartShowsAfterARefresh()
+    public void ARestoredStartShowsAtOnce()
     {
         var attrs = Reading(41, 1500, 1500);
         var hud = NewHud(attrs);
         Assert.Equal(0f, hud.ExperienceBar.Fraction);
 
-        attrs.LevelSpan.Restore(41, 1000);
-        hud.RefreshAttributes();
+        attrs.RestoreStarts(new SavedExperience(new SavedLevelStart(41, 1000), null));
 
         Assert.Equal(0.25f, hud.ExperienceBar.Fraction, 4);
     }

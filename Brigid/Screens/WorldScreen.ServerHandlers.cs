@@ -82,7 +82,7 @@ public sealed partial class WorldScreen
             } else
                 OtherProfile.RefreshPaperdoll(args.Id, Game.AislingRenderer, in appearance);
         } else if (args.Id == Game.Connection.AislingId)
-            MainHud.ClearPlayerIcon();
+            MainHud.ClearPlayerAppearance();
     }
 
     private void HandleRemoveEntity(uint id)

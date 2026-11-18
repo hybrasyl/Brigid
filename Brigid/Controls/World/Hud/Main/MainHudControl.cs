@@ -66,9 +66,10 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         ChatBox = new ChatBoxControl(chat ?? WorldState.Chat);
         AddChild(ChatBox);
 
-        //the places of the parts that later cards add (BRIG-162, BRIG-147)
+        //the places of the parts that later cards add (BRIG-162, BRIG-147, BRIG-146)
         AddChild(Place("toast", MainHudLayout.Toast));
         AddChild(Place("effect_bar", MainHudLayout.EffectBar));
+        AddChild(Place("hotbar", MainHudLayout.Hotbar));
 
         //the meters (BRIG-148)
         HealthBar = new HudMeter("health_bar", MainHudLayout.HealthBar, ThemeRoles.HudHealthTrack, ThemeRoles.HudHealthFill, DialogPalette.HealthFill)
@@ -98,7 +99,6 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         AddChild(HealthBar);
         AddChild(ManaBar);
         AddChild(ExperienceBar);
-        AddChild(Place("hotbar", MainHudLayout.Hotbar));
         Plate = new HudPlayerPlate();
         Plate.Clicked += () => PlateClicked?.Invoke();
         AddChild(Plate);
@@ -146,8 +146,8 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     public void SetPlayerAppearance(AislingRenderer renderer, in AislingAppearance appearance)
         => Plate.SetIcon(renderer.RenderHead(in appearance, MainHudLayout.PlateIcon.Width));
 
-    /// <summary>Shows no icon on the player plate, for a form that is not an aisling.</summary>
-    public void ClearPlayerIcon() => Plate.SetIcon(null);
+    /// <summary>Shows no head on the player plate, for a form that is not an aisling.</summary>
+    public void ClearPlayerAppearance() => Plate.SetIcon(null);
 
     /// <summary>The windows of the HUD: its button row, its panels and the windows that the world screen binds.</summary>
     internal HudWindowHost Windows { get; }
@@ -181,8 +181,6 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         }
     }
 
-    /// <summary>Shows the attributes again, for a level start that the world screen restored from its save.</summary>
-    public void RefreshAttributes() => OnAttributesChanged();
 
     /// <summary>Closes the open panels. Returns true when a panel was open, so that Escape closes the panels first.</summary>
     public bool ClosePanels() => Windows.CloseAll();
@@ -228,7 +226,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         ShowMeter(ManaBar, attrs.CurrentMp, attrs.MaxMp);
         Plate.SetLevel(attrs.Level);
 
-        var experience = HudExperience.Describe(attrs, ConvertsExperiencePastCap);
+        var experience = HudExperience.Fill(attrs, ConvertsExperiencePastCap);
         ExperienceBar.SetFill(experience.Fraction);
         ExperienceBar.FillRole = experience.UsesCapFill ? ThemeRoles.HudExperienceCapFill : ThemeRoles.HudExperienceFill;
         ExperienceBar.FlatFill = experience.UsesCapFill ? DialogPalette.CapFill : DialogPalette.ExperienceFill;

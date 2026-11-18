@@ -725,7 +725,6 @@ public sealed partial class WorldScreen
         input.IgnoreListRequested += () => Game.Connection.SendIgnoreRequest();
     }
 
-    /// <summary>The new HUD's own controls; its legacy panels are the classic HUD's, which WireHudPanels wired.</summary>
     //the status book opens on the self profile that the server sends back
     private void RequestStatusBook(StatusBookTab tab)
     {
@@ -734,6 +733,7 @@ public sealed partial class WorldScreen
         Game.Connection.RequestSelfProfile();
     }
 
+    /// <summary>The new HUD's own controls; its legacy panels are the classic HUD's, which WireHudPanels wired.</summary>
     private void WireMainHud()
     {
         MainHud.ServerBoxClicked += ToggleServerInfo;
