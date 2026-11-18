@@ -7,8 +7,11 @@ namespace Brigid.SmokeTests;
 ///     <list type="bullet">
 ///         <item><c>BRIGID_SMOKE=1</c> turns the smoke tests on.</item>
 ///         <item><c>BRIGID_SMOKE_DATA</c> is the Dark Ages data folder (the <c>*.dat</c> files). Required.</item>
-///         <item><c>BRIGID_SMOKE_HOST</c> and <c>BRIGID_SMOKE_PORT</c> give the server: 127.0.0.1 and 2610 by default.</item>
 ///         <item><c>BRIGID_SMOKE_PACKS</c> is an optional folder of <c>*.datf</c> packs, copied into each client's assets.</item>
+///         <item>
+///             <c>BRIGID_SMOKE_SERVER</c> is the <c>server</c> checkout, whose <c>docker-compose.yml</c> the run starts
+///             (<see cref="SmokeServer" />). The specs that need a server skip without it.
+///         </item>
 ///     </list>
 ///     A smoke run is for a developer machine and a local server. It never connects to retail or production.
 /// </summary>
@@ -16,11 +19,24 @@ internal static class SmokeEnvironment
 {
     internal static string? DataPath => Environment.GetEnvironmentVariable("BRIGID_SMOKE_DATA");
 
-    internal static string Host => Value("BRIGID_SMOKE_HOST") ?? "127.0.0.1";
-
-    internal static int Port => int.TryParse(Value("BRIGID_SMOKE_PORT"), out var port) ? port : 2610;
-
     internal static string? PacksPath => Value("BRIGID_SMOKE_PACKS");
+
+    internal static string? ServerPath => Value("BRIGID_SMOKE_SERVER");
+
+    /// <summary>Null when the specs that need a server can run, else why they skip.</summary>
+    internal static string? ServerSkipReason
+    {
+        get
+        {
+            if (SkipReason is { } reason)
+                return reason;
+
+            if (ServerPath is not { } server || !File.Exists(Path.Combine(server, "docker-compose.yml")))
+                return "set BRIGID_SMOKE_SERVER to the server checkout (the folder with docker-compose.yml) to run the specs that need a server";
+
+            return null;
+        }
+    }
 
     /// <summary>Null when the smoke tests can run, else why they skip.</summary>
     internal static string? SkipReason
@@ -59,6 +75,17 @@ public sealed class SmokeFactAttribute : FactAttribute
     }
 }
 
-// The smoke tests start one client at a time, against one server.
+/// <summary>A smoke test that needs the server: it skips unless <see cref="SmokeEnvironment.ServerSkipReason" /> is null.</summary>
+public sealed class ServerSmokeFactAttribute : FactAttribute
+{
+    public ServerSmokeFactAttribute()
+    {
+        if (SmokeEnvironment.ServerSkipReason is { } reason)
+            Skip = reason;
+    }
+}
+
+// The smoke tests start one client at a time, against one server. The server starts when the first test that needs it
+// asks, and stops after the last test of the run.
 [CollectionDefinition("Smoke", DisableParallelization = true)]
-public sealed class SmokeCollection;
+public sealed class SmokeCollection : ICollectionFixture<SmokeServer>;

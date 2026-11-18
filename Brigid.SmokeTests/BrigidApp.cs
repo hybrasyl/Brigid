@@ -56,8 +56,17 @@ public sealed class BrigidApp : IAsyncDisposable
     ///     Starts a client, runs <paramref name="body" />, and stops the client. On a failure, the exception names the
     ///     folder with the frame captures and the client log.
     /// </summary>
-    public static async Task RunAsync(Func<BrigidApp, Task> body, [CallerMemberName] string testName = "")
+    public static Task RunAsync(Func<BrigidApp, Task> body, [CallerMemberName] string testName = "") => RunAsync(null, body, testName);
+
+    /// <summary>
+    ///     Starts the server when it is not running, then a client, and runs <paramref name="body" />. On a failure, the
+    ///     artifacts also have the server's log.
+    /// </summary>
+    public static async Task RunAsync(SmokeServer? server, Func<BrigidApp, Task> body, [CallerMemberName] string testName = "")
     {
+        if (server is not null)
+            await server.EnsureStartedAsync();
+
         var app = await StartAsync(testName);
 
         try
@@ -66,6 +75,9 @@ public sealed class BrigidApp : IAsyncDisposable
         } catch (Exception ex)
         {
             var folder = await app.SaveArtifactsAsync(testName);
+
+            if (server is not null)
+                await File.WriteAllTextAsync(Path.Combine(folder, "server.log"), await server.LogsAsync());
 
             throw new SmokeFailure($"{ex.Message}{Environment.NewLine}Artifacts: {folder}", ex);
         } finally
@@ -141,8 +153,8 @@ public sealed class BrigidApp : IAsyncDisposable
         start.Environment["BRIGID_APP_ROOT"] = root;
         start.Environment["BRIGID_DEV_MODULES"] = "1";
         start.Environment["BRIGID_TEST_PIPE"] = pipe;
-        start.Environment["DA_HOST"] = SmokeEnvironment.Host;
-        start.Environment["DA_HOST_PORT"] = SmokeEnvironment.Port.ToString();
+        start.Environment["DA_HOST"] = SmokeServer.HOST;
+        start.Environment["DA_HOST_PORT"] = SmokeServer.PORT.ToString();
         start.Environment["DA_ASSET_PATH"] = SmokeEnvironment.DataPath;
         start.Environment["DA_NO_LAUNCHER"] = "1";
 
@@ -250,6 +262,28 @@ public sealed class BrigidApp : IAsyncDisposable
 
             if (DateTime.UtcNow >= deadline)
                 throw new TimeoutException($"waited {wait.TotalSeconds} s for {what}; the last value was {last?.ToString() ?? "null"}");
+
+            await Task.Delay(PollInterval);
+        }
+    }
+
+    /// <summary>
+    ///     Reads <paramref name="probe" /> until <paramref name="condition" /> is true, and returns the value; or returns
+    ///     null when <paramref name="timeout" /> ends first. For a wait whose end is not a failure.
+    /// </summary>
+    public async Task<T?> TryWaitForAsync<T>(Func<Task<T>> probe, Func<T, bool> condition, TimeSpan timeout) where T: class
+    {
+        var deadline = DateTime.UtcNow + timeout;
+
+        while (true)
+        {
+            var last = await probe();
+
+            if (condition(last))
+                return last;
+
+            if (DateTime.UtcNow >= deadline)
+                return null;
 
             await Task.Delay(PollInterval);
         }

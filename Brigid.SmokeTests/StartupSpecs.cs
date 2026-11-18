@@ -12,8 +12,9 @@ public sealed class StartupSpecs
             async app =>
             {
                 await app.WaitForScreenAsync("LobbyLoginScreen");
+                //the title, not the buttons: with a server, the buttons stay hidden while its greeting shows
                 await app.WaitForShownAsync("mainmenu");
-                await app.WaitForShownAsync("mainmenu/buttons/continue");
+                await app.WaitForShownAsync("mainmenu/title");
 
                 //the client uses the test's temporary app folder, not the developer's
                 Assert.Equal(Path.GetFullPath(app.Root), await app.AppRootAsync());
