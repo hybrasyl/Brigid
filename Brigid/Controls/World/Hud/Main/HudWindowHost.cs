@@ -8,7 +8,8 @@ namespace Brigid.Controls.World.Hud.Main;
 
 /// <summary>
 ///     The windows of the new HUD (BRIG-127 D3, D29, D30): the row of window buttons from <see cref="HudWindows" />, the
-///     panels of the windows that open in the HUD, and the actions that the world screen binds to the other windows. A
+///     panels of the windows that open in the HUD (with the panels of <see cref="HudWindows.Unlisted" />, which have no
+///     button), and the actions that the world screen binds to the other windows. A
 ///     button and a key reach a window through one call (<see cref="Toggle" />). Each button shows selected while its window
 ///     is open, by one rule (<see cref="RefreshSelection" />).
 /// </summary>
@@ -52,13 +53,24 @@ internal sealed class HudWindowHost
             Row.AddChild(button);
 
             if (window.Panel is not null)
-            {
-                var panel = new HudPanel(window);
-                panel.CloseRequested += closed => Close(closed.Window);
-                panel.SwapSidesRequested += SwapSides;
-                PanelOf[window] = panel;
-            }
+                AddPanel(window);
         }
+
+        foreach (var window in HudWindows.Unlisted)
+        {
+            if ((window.Panel is null) || Buttons.ContainsKey(window))
+                throw new InvalidOperationException($"{window.Id}: a window with no button must be a panel window, and not in the row");
+
+            AddPanel(window);
+        }
+    }
+
+    private void AddPanel(HudWindow window)
+    {
+        var panel = new HudPanel(window);
+        panel.CloseRequested += closed => Close(closed.Window);
+        panel.SwapSidesRequested += SwapSides;
+        PanelOf[window] = panel;
     }
 
     /// <summary>The row of window buttons.</summary>
@@ -203,10 +215,10 @@ internal sealed class HudWindowHost
         return lines;
     }
 
-    //a window must be in the list, and of the kind that the call is for
+    //a window must be in the row or in the unlisted panel windows, and of the kind that the call is for
     private void Require(HudWindow window, bool panel)
     {
-        if (!Buttons.ContainsKey(window))
+        if (!Buttons.ContainsKey(window) && !PanelOf.ContainsKey(window))
             throw new ArgumentException($"{window.Id} is not a window of the HUD", nameof(window));
 
         if ((window.Panel is not null) != panel)

@@ -121,6 +121,10 @@ public static class ThemeRoles
     //the button of a compact window panel of the new HUD that changes the sides of the compact panels (BRIG-150)
     public const string IconPanelSwapSides = "icon.panel.swap_sides";
 
+    //the arrows of the stat raise of the Details window of the new HUD (BRIG-151)
+    public const string IconDetailsRaise = "icon.details.raise";
+    public const string IconDetailsLower = "icon.details.lower";
+
     //the empty-slot outlines of the Equipment window of the new HUD (BRIG-151), one for each slot
     public const string IconEquipmentEarrings = "icon.equipment.earrings";
     public const string IconEquipmentHelm = "icon.equipment.helm";
@@ -212,6 +216,9 @@ public static class ThemeRoles
 
     /// <summary>The icons of the window panels of the new HUD (BRIG-150), which the HUD shows, not the primitive gallery.</summary>
     public static readonly string[] PanelIcons = [IconPanelSwapSides];
+
+    /// <summary>The arrows of the stat raise of the Details window of the new HUD (BRIG-151), which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] DetailsIcons = [IconDetailsRaise, IconDetailsLower];
 
     /// <summary>
     ///     The empty-slot outlines of the Equipment window of the new HUD (BRIG-151), in the order of its slots, which the HUD

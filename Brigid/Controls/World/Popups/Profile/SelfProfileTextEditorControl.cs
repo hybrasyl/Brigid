@@ -2,6 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Definitions;
+using Brigid.Controls.World.Hud.Main;
 using Brigid.Rendering;
 #endregion
 
@@ -11,20 +12,21 @@ namespace Brigid.Controls.World.Popups.Profile;
 ///     The editor for the player's profile text (BRIG-122). A primitive <see cref="CenteredModalPanel" /> that takes the
 ///     theme: a multiline text box on an <see cref="InputSlotPane" />, and Save and Cancel on the bottom bar.
 ///     <para>
-///         The text box has the size of the box in the editor before BRIG-122 (174 by 152), and it refuses text that does
-///         not fit in it, so the editor takes the same text as before. The text that fits also depends on the font face.
+///         The text box has the size of the profile text box of the Details window of the new HUD (BRIG-151), and it
+///         refuses text that does not fit in it, so the editor takes exactly the text that the Details window shows. The
+///         text that fits also depends on the font face.
 ///         Save hides the editor and raises <see cref="OnSave" />. Cancel and Escape hide it with no change. Enter starts a
 ///         new line.
 ///     </para>
 /// </summary>
 public sealed class SelfProfileTextEditorControl : CenteredModalPanel
 {
-    private const int PANEL_W = 200;
     private const int ACTION_W = 64;
 
-    //the text box of the editor before BRIG-122: 174 by 152, 256 characters
-    private const int TEXT_W = 174;
-    private const int TEXT_H = 152;
+    //the text box of the Details window; 256 characters at most, as before
+    private const int TEXT_W = MainHudLayout.DETAILS_PROFILE_WIDTH;
+    private const int TEXT_H = MainHudLayout.DETAILS_PROFILE_HEIGHT;
+    private const int PANEL_W = TEXT_W + 2 * PADDING + 2;
     private const int MAX_LENGTH = 256;
 
     private readonly InputSlotPane EditorPane;

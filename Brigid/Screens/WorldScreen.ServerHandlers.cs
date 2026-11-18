@@ -38,6 +38,7 @@ public sealed partial class WorldScreen
         if (args.Id == Game.Connection.AislingId && !string.IsNullOrEmpty(args.Name))
         {
             WorldState.PlayerName = args.Name;
+            WorldState.SelfProfile.SetName(args.Name);
             UpdateHuds(HudOps.SetPlayerName, args.Name);
             UpdateHuds(HudOps.SetServerName, Game.Connection.ServerName);
             var serverKey = ServerProfileKey.Resolve(GlobalSettings.LobbyHost, Game.Connection.ServerName);
@@ -824,21 +825,26 @@ public sealed partial class WorldScreen
 
     //--- profiles ---
 
-    private void HandleEditableProfileRequest() => Game.Connection.SendEditableProfile(PlayerPortrait, StatusBook.GetProfileText());
+    private void HandleEditableProfileRequest() => Game.Connection.SendEditableProfile(WorldState.SelfProfile.Portrait, WorldState.SelfProfile.ProfileText);
 
-    //the player's own portrait and profile text from the character folder, into the status book. This runs on each map
-    //change, so a changed portrait file shows after the next one; an unchanged portrait is not decoded again
+    //the player's own portrait and profile text from the character folder. SelfProfile holds them, and the status book
+    //shows a copy until BRIG-156 removes it. This runs on each map change, so a changed portrait file shows after the next
+    //one; an unchanged portrait is not decoded again
     private void LoadOwnProfile(string name)
     {
         var portrait = LoadPortraitFile(name);
 
-        if (!portrait.AsSpan().SequenceEqual(PlayerPortrait))
-        {
-            PlayerPortrait = portrait;
+        if (WorldState.SelfProfile.SetPortrait(portrait))
             StatusBook.SetPortrait(portrait);
-        }
 
-        StatusBook.SetProfileText(LoadProfileText());
+        SetOwnProfileText(LoadProfileText());
+    }
+
+    //the one writer of the profile text: SelfProfile, and the copy in the status book
+    private void SetOwnProfileText(string text)
+    {
+        WorldState.SelfProfile.SetProfileText(text);
+        StatusBook.SetProfileText(text);
     }
 
     //the name comes from the server, and the portrait goes back to it in the editable profile, so TryGetFilePath must
@@ -902,6 +908,11 @@ public sealed partial class WorldScreen
                         .ToList();
 
         StatusBook.SetLegendMarks(marks);
+
+        //the Details window of the new hud reads the profile from state, and the activity log reads its marks (BRIG-151)
+        var nations = DataContext.MetaFiles.GetNationMetadata();
+        var nationName = nations?.Nations.TryGetValue(args.NationFlag, out var nation) == true ? nation : string.Empty;
+        WorldState.SelfProfile.Update(args.ClassName, args.GuildName, args.GuildRank, args.CurrentTitle, nationName, marks);
 
         //ability metadata (skills/spells from sclass file)
         var abilityMetadata = DataContext.MetaFiles.GetAbilityMetadata(args.Class);

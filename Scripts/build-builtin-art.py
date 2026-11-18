@@ -19,7 +19,7 @@ BUILT_IN = os.path.join(ROOT, "Brigid.Rendering", "Resources", "BuiltIn")
 SOURCES = os.path.join(BUILT_IN, "src")
 
 # the size of each image in art px, by the start of its role name
-SIZES = {"icon.status.": 72, "icon.hud.": 64, "icon.window.": 72, "icon.chat.": 64, "icon.inventory.": 64, "icon.panel.": 56, "icon.equipment.": 128}
+SIZES = {"icon.status.": 72, "icon.hud.": 64, "icon.window.": 72, "icon.chat.": 64, "icon.inventory.": 64, "icon.panel.": 56, "icon.equipment.": 128, "icon.details.": 56}
 
 
 def size_for(role):

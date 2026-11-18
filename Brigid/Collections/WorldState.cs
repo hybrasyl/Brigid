@@ -63,6 +63,12 @@ public static class WorldState
     /// </summary>
     public static PlayerAttributes Attributes { get; } = new();
 
+    /// <summary>The player's own profile: the facts of the self profile, the portrait and the profile text (BRIG-151).</summary>
+    public static SelfProfile SelfProfile { get; } = new();
+
+    /// <summary>The activity log of the session, which the Details window shows (BRIG-151). It reads its own sources.</summary>
+    public static ActivityLog Activity { get; } = new(Attributes, SelfProfile);
+
     /// <summary>
     ///     Authoritative bulletin board / mail state.
     /// </summary>
@@ -329,6 +335,8 @@ public static class WorldState
         SpellBook.Clear();
         Equipment.Clear();
         Attributes.Clear();
+        SelfProfile.Clear();
+        Activity.Clear();
         Chat.Clear();
         Board.CloseSession();
         Group.ResetAll();

@@ -19,7 +19,7 @@ internal sealed record HudWindow(string Id, string Name, CommandId? Key = null, 
 }
 
 /// <summary>
-///     The one list of the window buttons, from the left (D29). A button is added or removed here, and the row lays itself
+///     The one list of the window buttons, from the left (D29), and the panel windows that have no button (BRIG-151). A button is added or removed here, and the row lays itself
 ///     out again. A window that a later card makes is an empty panel until that card is done (D38, D40).
 /// </summary>
 internal static class HudWindows
@@ -39,4 +39,10 @@ internal static class HudWindows
 
     /// <summary>The row, from the left.</summary>
     public static readonly HudWindow[] All = [Abilities, Inventory, Equipment, Mastery, Quests, Menu, Mail, Community, Map, Group, Screenshot];
+
+    //the panel windows with no button (BRIG-151): the player plate and G open Details
+    public static readonly HudWindow Details = new("details", "Details", Panel: HudPanelSize.Compact);
+
+    /// <summary>The panel windows that have no button in the row; a key, the plate or another window opens them.</summary>
+    public static readonly HudWindow[] Unlisted = [Details];
 }

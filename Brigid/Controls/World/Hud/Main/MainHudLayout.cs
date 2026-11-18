@@ -225,6 +225,59 @@ internal static class MainHudLayout
         return new EquipmentLayout(slots, model, stats);
     }
 
+    //the Details window (BRIG-151, the approved wireframe), in the content of its panel: seven rows of a label and a
+    //value at the top left, the portrait at the top right, the profile text the full width under them, and at the bottom
+    //the stat raise at the left and the Activity Log at the right. The parts have fixed places: a compact panel has one
+    //content size under any theme (D37)
+    public const int DETAILS_FIELDS = 7;
+    public const int DETAILS_ROW = 16;
+    public const int DETAILS_PORTRAIT = 96;
+
+    /// <summary>The profile text box, the full width of a compact content; the profile text editor takes this size.</summary>
+    public const int DETAILS_PROFILE_WIDTH = 298;
+    public const int DETAILS_PROFILE_HEIGHT = 66;
+    public const int DETAILS_ARROW = 14;
+    public const int DETAILS_ARROW_GAP = 2;
+    public const int DETAILS_STAT_PITCH = 17;
+    public const int DETAILS_BOX_PAD = 3;
+    public const int DETAILS_STAT_LABEL = 30;
+    public const int DETAILS_STAT_VALUE = 38;
+    public const int DETAILS_ACTIVITY_LINE = 14;
+    public const int DETAILS_CONFIRM_WIDTH = 50;
+    public const int DETAILS_CONFIRM_HEIGHT = 18;
+    private const int DETAILS_LABEL = 58;
+    private const int DETAILS_GAP = 4;
+    private const int DETAILS_STATS_WIDTH = 104;
+
+    /// <summary>The parts of the Details window in a content of <paramref name="width" /> by <paramref name="height" />.</summary>
+    public static DetailsLayout DetailsIn(int width, int height)
+    {
+        var portrait = new Rectangle(width - DETAILS_PORTRAIT, 0, DETAILS_PORTRAIT, DETAILS_PORTRAIT);
+        var valueLeft = DETAILS_LABEL + DETAILS_GAP;
+        var valueWidth = portrait.X - DETAILS_GAP - valueLeft;
+        var labels = new Rectangle[DETAILS_FIELDS];
+        var values = new Rectangle[DETAILS_FIELDS];
+
+        for (var i = 0; i < DETAILS_FIELDS; i++)
+        {
+            labels[i] = new Rectangle(0, i * DETAILS_ROW, DETAILS_LABEL, DETAILS_ROW);
+            values[i] = new Rectangle(valueLeft, i * DETAILS_ROW, valueWidth, DETAILS_ROW);
+        }
+
+        var profile = new Rectangle(0, DETAILS_FIELDS * DETAILS_ROW + DETAILS_GAP, DETAILS_PROFILE_WIDTH, DETAILS_PROFILE_HEIGHT);
+        var lowerTop = profile.Bottom + 2 * DETAILS_GAP;
+        var stats = new Rectangle(0, lowerTop, DETAILS_STATS_WIDTH, height - lowerTop);
+        var activity = new Rectangle(stats.Right + 2 * DETAILS_GAP, lowerTop, width - stats.Right - 2 * DETAILS_GAP, height - lowerTop);
+        var confirm = new Rectangle(
+            stats.Right - DETAILS_BOX_PAD - DETAILS_CONFIRM_WIDTH,
+            stats.Bottom - DETAILS_BOX_PAD - DETAILS_CONFIRM_HEIGHT,
+            DETAILS_CONFIRM_WIDTH,
+            DETAILS_CONFIRM_HEIGHT);
+        var remaining = new Rectangle(stats.X + DETAILS_BOX_PAD, confirm.Y, confirm.X - stats.X - 2 * DETAILS_BOX_PAD, DETAILS_CONFIRM_HEIGHT);
+
+        return new DetailsLayout(labels, values, portrait, profile, stats, activity, remaining, confirm);
+    }
+
     //over the world: the chat box (BRIG-145) at the bottom left, the toast (BRIG-162) at the bottom right
     public static readonly Rectangle ChatBox = new(10, World.Bottom - 124, 248, 118);
     public static readonly Rectangle Toast = new(450, World.Bottom - 28, 186, 28);
@@ -391,3 +444,47 @@ internal sealed record InventoryLayout(
 /// <param name="Model">The character model, between the columns.</param>
 /// <param name="Stats">Personal View, at the right.</param>
 internal sealed record EquipmentLayout(IReadOnlyList<Rectangle> Slots, Rectangle Model, Rectangle Stats);
+
+/// <summary>The parts of the Details window in its content (<see cref="MainHudLayout.DetailsIn" />).</summary>
+/// <param name="Labels">The label of each field row: Name, Class, Species, Guild, Rank, Nation, Title.</param>
+/// <param name="Values">The value of each field row.</param>
+/// <param name="Portrait">The portrait, at the top right.</param>
+/// <param name="ProfileText">The profile text; the profile text editor takes the same size.</param>
+/// <param name="Stats">The box of the stat raise.</param>
+/// <param name="Activity">The box of the Activity Log.</param>
+/// <param name="Remaining">The points that remain, left of Confirm.</param>
+/// <param name="Confirm">The Confirm button.</param>
+internal sealed record DetailsLayout(
+    IReadOnlyList<Rectangle> Labels,
+    IReadOnlyList<Rectangle> Values,
+    Rectangle Portrait,
+    Rectangle ProfileText,
+    Rectangle Stats,
+    Rectangle Activity,
+    Rectangle Remaining,
+    Rectangle Confirm)
+{
+    private const int PAD = MainHudLayout.DETAILS_BOX_PAD;
+    private const int ARROW = MainHudLayout.DETAILS_ARROW;
+
+    /// <summary>The label of stat row <paramref name="index" /> (STR to DEX).</summary>
+    public Rectangle StatLabel(int index) => new(Stats.X + PAD, RowY(index), MainHudLayout.DETAILS_STAT_LABEL, ARROW);
+
+    /// <summary>The value and the pending points of stat row <paramref name="index" />.</summary>
+    public Rectangle StatValue(int index) => new(Stats.X + PAD + MainHudLayout.DETAILS_STAT_LABEL, RowY(index), MainHudLayout.DETAILS_STAT_VALUE, ARROW);
+
+    /// <summary>The up arrow of stat row <paramref name="index" />, a gap left of the down arrow.</summary>
+    public Rectangle Raise(int index) => Lower(index) with { X = Lower(index).X - MainHudLayout.DETAILS_ARROW_GAP - ARROW };
+
+    /// <summary>The down arrow of stat row <paramref name="index" />, at the right of the box.</summary>
+    public Rectangle Lower(int index) => new(Stats.Right - PAD - ARROW, RowY(index), ARROW, ARROW);
+
+    /// <summary>The lines of the Activity Log that the box holds.</summary>
+    public int ActivityLineCount => Math.Max(0, (Activity.Height - 2 * PAD) / MainHudLayout.DETAILS_ACTIVITY_LINE);
+
+    /// <summary>Line <paramref name="index" /> of the Activity Log, from the top.</summary>
+    public Rectangle ActivityLine(int index)
+        => new(Activity.X + PAD, Activity.Y + PAD + index * MainHudLayout.DETAILS_ACTIVITY_LINE, Activity.Width - 2 * PAD, MainHudLayout.DETAILS_ACTIVITY_LINE);
+
+    private int RowY(int index) => Stats.Y + PAD + index * MainHudLayout.DETAILS_STAT_PITCH;
+}

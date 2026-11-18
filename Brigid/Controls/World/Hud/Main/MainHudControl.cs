@@ -322,8 +322,8 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     //Abilities window (BRIG-149). A and Shift+A open and close the Inventory window (BRIG-150). These keys also select the
     //hidden classic panel, because the number keys use its slots until the hotbar (a temporary measure of BRIG-127). For
     //the inventory the HUD only selects the panel: on the classic HUD a second A opens the status book, and Shift+A
-    //expands the panel. Shift+G opens and closes the Equipment window (BRIG-151), whose Personal View has the extended
-    //stats. The other tab keys act on the hidden classic panels until the cards of their windows.
+    //expands the panel. G opens and closes the Details window and Shift+G the Equipment window (BRIG-151), in place of
+    //the hidden classic stats panels. The other tab keys act on the hidden classic panels until the cards of their windows.
     public void HandleTabActivation(HudTab tab, bool shift)
     {
         if (tab == HudTab.Chat)
@@ -336,9 +336,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
             return;
         }
 
-        if ((tab == HudTab.Stats) && shift)
+        if (tab == HudTab.Stats)
         {
-            Windows.Toggle(HudWindows.Equipment);
+            Windows.Toggle(shift ? HudWindows.Equipment : HudWindows.Details);
 
             return;
         }
