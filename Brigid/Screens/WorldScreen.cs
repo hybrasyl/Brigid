@@ -116,6 +116,10 @@ public sealed partial class WorldScreen : IScreen
     private OkPopupMessageControl BoardResponsePopup = null!;
     private Camera Camera = null!;
     private CastablePopupControl CastablePopup = null!;
+
+    //the pointer during a drag with its own icon (IDragIconPayload). The frame that starts a drag also moves it, so a new
+    //drag never draws at the place of the drag before
+    private Point? DragIconPosition;
     private ushort CurrentMapCheckSum;
     private MapFlags CurrentMapFlags;
     private short CurrentMapId;

@@ -38,6 +38,7 @@ internal sealed class AbilitiesWindowControl : UIPanel
     private readonly UILabel PageNumber;
     private readonly UILabel TraitsText;
     private readonly AbilityRowControl[] Rows = new AbilityRowControl[AbilityList.PAGE];
+    private readonly ClockWedgeCache Wedges = new(MainHudLayout.ABILITY_ICON);
     private AbilityMetadata? Metadata;
     private bool Dirty = true;
 
@@ -77,7 +78,9 @@ internal sealed class AbilitiesWindowControl : UIPanel
 
         for (var i = 0; i < Rows.Length; i++)
         {
-            Rows[i] = new AbilityRowControl(iconSource) { Name = $"row_{i}" };
+            Rows[i] = new AbilityRowControl(iconSource, CooldownOf, Wedges) { Name = $"row_{i}" };
+            Rows[i].UseRequested += row => UseRequested?.Invoke(row);
+            Rows[i].DetailsRequested += row => DetailsRequested?.Invoke(row);
             AddChild(Rows[i]);
         }
 
@@ -93,6 +96,15 @@ internal sealed class AbilitiesWindowControl : UIPanel
         Spells.Cleared += OnChanged;
         Attributes.Changed += OnAttributesChanged;
     }
+
+    /// <summary>A left click on a learned ability: the world screen uses it as a click on its book slot.</summary>
+    public event Action<AbilityRow>? UseRequested;
+
+    /// <summary>
+    ///     A right click on an ability: the world screen opens the castable popup of a learned ability, or the details of the
+    ///     status book for one that the player can learn.
+    /// </summary>
+    public event Action<AbilityRow>? DetailsRequested;
 
     /// <summary>The rows of the list for the filters that are on.</summary>
     public IReadOnlyList<AbilityRow> Entries { get; private set; } = [];
@@ -161,6 +173,7 @@ internal sealed class AbilitiesWindowControl : UIPanel
         Spells.SlotChanged -= OnBookChanged;
         Spells.Cleared -= OnChanged;
         Attributes.Changed -= OnAttributesChanged;
+        Wedges.Dispose();
 
         base.Dispose();
     }
@@ -201,6 +214,10 @@ internal sealed class AbilitiesWindowControl : UIPanel
             Rows[i].Show(!traits && (index < Entries.Count) ? Entries[index] : null);
         }
     }
+
+    //the part of the cooldown that is left: 1 just after a use, 0 when the ability is ready
+    internal float CooldownOf(AbilityRow row)
+        => row.Slot is not { } slot ? 0 : row.IsSpell ? Spells.GetCooldownPercent(slot) : Skills.GetCooldownPercent(slot);
 
     private void OnBookChanged(byte slot) => Dirty = true;
 

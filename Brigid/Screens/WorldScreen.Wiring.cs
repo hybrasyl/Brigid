@@ -766,7 +766,10 @@ public sealed partial class WorldScreen
 
         //each button does what its key does; group is the open and closed toggle (D18), and a right click opens its window
         var windows = MainHud.Windows;
-        windows.BindPanel(HudWindows.Abilities, new AbilitiesWindowControl(WorldState.SkillBook, WorldState.SpellBook, WorldState.Attributes, () => WorldState.AbilityMetadata));
+        var abilities = new AbilitiesWindowControl(WorldState.SkillBook, WorldState.SpellBook, WorldState.Attributes, () => WorldState.AbilityMetadata);
+        abilities.UseRequested += UseAbility;
+        abilities.DetailsRequested += ShowAbilityDetails;
+        windows.BindPanel(HudWindows.Abilities, abilities);
         windows.BindWindow(HudWindows.Menu, TogglePauseMenu, () => PauseMenu.Visible);
         windows.BindWindow(HudWindows.Mail, ToggleBoards, IsAnyBoardPanelVisible);
         windows.BindWindow(HudWindows.Community, ToggleWorldList, () => WorldList.Visible);

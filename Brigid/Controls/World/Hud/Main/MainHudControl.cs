@@ -318,8 +318,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     public void ShowTab(HudTab tab) => Classic.ShowTab(tab);
 
-    //F hides and shows the chat box, and Shift+F shows its System tab (BRIG-145); the other tab keys act on the hidden
-    //classic panels until their cards
+    //F hides and shows the chat box, and Shift+F shows its System tab (BRIG-145). The ability keys open and close the
+    //Abilities window (BRIG-149) and still select the hidden classic panel, whose slots the number keys use until the
+    //hotbar (a temporary measure of BRIG-127). The other tab keys act on the hidden classic panels until their cards
     public void HandleTabActivation(HudTab tab, bool shift)
     {
         if (tab == HudTab.Chat)
@@ -333,6 +334,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         }
 
         Classic.HandleTabActivation(tab, shift);
+
+        if (tab is HudTab.Skills or HudTab.Spells or HudTab.Tools)
+            Windows.Toggle(HudWindows.Abilities);
     }
 
     public void ToggleExpand() => Classic.ToggleExpand();
