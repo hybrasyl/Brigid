@@ -334,34 +334,39 @@ public static class ImageUtil
     ///     <paramref name="gone" /> (0 to 1) of a turn, measured at the centre of the pixel. The effect bar of the new HUD
     ///     draws the wedge over the part of the time that has gone (BRIG-147).
     /// </summary>
-    public static bool InClockWedge(int x, int y, int size, float gone)
+    public static bool InClockWedge(int x, int y, int size, float gone) => InClockArc(x, y, size, 0, gone);
+
+    /// <summary>
+    ///     True when pixel (<paramref name="x" />, <paramref name="y" />) of a square of side <paramref name="size" /> is in
+    ///     the arc of a turn clockwise from 12 o'clock, from <paramref name="start" /> to <paramref name="end" /> (0 to 1 of a
+    ///     turn), measured at the centre of the pixel. An arc that ends at the full turn is the rest of the turn: the
+    ///     cooldown swipe covers the part of the cooldown that is left, so its edge also moves clockwise (BRIG-149).
+    /// </summary>
+    public static bool InClockArc(int x, int y, int size, float start, float end)
     {
-        if (gone <= 0)
-            return false;
-
-        if (gone >= 1)
-            return true;
-
         var centre = size / 2f;
         var angle = MathF.Atan2(x + 0.5f - centre, centre - (y + 0.5f));
 
         if (angle < 0)
             angle += MathF.Tau;
 
-        return angle < gone * MathF.Tau;
+        //the part of the turn is under 1, so an arc that ends at 1 reaches 12 o'clock
+        var turn = angle / MathF.Tau;
+
+        return (turn >= start) && (turn < end);
     }
 
     /// <summary>
-    ///     A new texture of side <paramref name="size" />: white in the clock wedge of <paramref name="gone" />
-    ///     (<see cref="InClockWedge" />), clear elsewhere. The caller tints it and owns it.
+    ///     A new texture of side <paramref name="size" />: white in the clock arc from <paramref name="start" /> to
+    ///     <paramref name="end" /> (<see cref="InClockArc" />), clear elsewhere. The caller tints it and owns it.
     /// </summary>
-    public static Texture2D BuildClockWedge(GraphicsDevice device, int size, float gone)
+    public static Texture2D BuildClockWedge(GraphicsDevice device, int size, float start, float end)
     {
         using var scope = new PixelBufferScope(size, size);
 
         for (var y = 0; y < size; y++)
             for (var x = 0; x < size; x++)
-                scope.Pixels[y * size + x] = InClockWedge(x, y, size, gone) ? Color.White : Color.Transparent;
+                scope.Pixels[y * size + x] = InClockArc(x, y, size, start, end) ? Color.White : Color.Transparent;
 
         var texture = new Texture2D(device, size, size);
         scope.CommitTo(texture);

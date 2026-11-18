@@ -56,18 +56,8 @@ internal class HudBox : UIPanel
     /// <summary>Adds a label in <paramref name="bounds" /> of the box, in the colour of <paramref name="role" />.</summary>
     internal UILabel AddLabel(string name, Rectangle bounds, HorizontalAlignment alignment, string role = ThemeRoles.Text)
     {
-        var label = new UILabel
-        {
-            Name = name,
-            HorizontalAlignment = alignment,
-            VerticalAlignment = VerticalAlignment.Center,
-            PaddingLeft = 0,
-            PaddingRight = 0,
-            IsHitTestVisible = false
-        };
-
+        var label = HudText.Label(name, role, alignment);
         label.SetBounds(bounds);
-        label.SetForegroundRole(role);
         AddChild(label);
 
         return label;

@@ -14,9 +14,6 @@ namespace Brigid.Controls.World.Hud.Main;
 /// </summary>
 internal sealed class HudEffectSlot : UIElement
 {
-    //the swipe darkens the time that has gone; it carries meaning, so it is not a theme colour
-    private static readonly Color SwipeColor = Color.Black * 0.6f;
-
     private readonly Func<ushort, Texture2D?> IconSource;
     private readonly ClockWedgeCache Wedges;
 
@@ -79,6 +76,6 @@ internal sealed class HudEffectSlot : UIElement
         var icon = new Vector2(ScreenX + MainHudLayout.EffectIconInSlot.X, ScreenY + MainHudLayout.EffectIconInSlot.Y);
 
         DrawTexture(spriteBatch, IconTexture, icon, Color.White);
-        DrawTexture(spriteBatch, Wedges.For(spriteBatch.GraphicsDevice, Gone), icon, SwipeColor);
+        DrawTexture(spriteBatch, Wedges.ForGone(spriteBatch.GraphicsDevice, Gone), icon, ClockWedgeCache.SwipeColor);
     }
 }

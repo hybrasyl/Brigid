@@ -860,6 +860,14 @@ public sealed partial class WorldScreen
 
     private void DrawDragIcon(SpriteBatch spriteBatch)
     {
+        //a drag with its own icon (a window of the new hud); the drag ends with its payload, so the icon goes with it
+        if (InputDispatcher.Instance?.ActiveDragPayload is IDragIconPayload { Icon: { } payloadIcon } && DragIconPosition is { } at)
+        {
+            spriteBatch.Draw(payloadIcon, new Vector2(at.X - payloadIcon.Width / 2, at.Y - payloadIcon.Height / 2), Color.White * 0.7f);
+
+            return;
+        }
+
         var dragging = GetDraggingPanel();
 
         if (dragging?.DragTexture is not { } icon)

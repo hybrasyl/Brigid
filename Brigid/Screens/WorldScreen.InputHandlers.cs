@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
+using Brigid.Controls.World.Hud.Main.Windows;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Hud.Panel.Slots;
 using Brigid.Controls.World.Popups;
@@ -230,7 +231,8 @@ public sealed partial class WorldScreen
                         ?? WorldHud.SkillBookAlt.GetSkillSlot(slot)
                         ?? WorldHud.Tools.WorldSkills.GetSkillSlot(slot);
 
-        if (skillSlot is not null && (skillSlot.CooldownPercent > 0))
+        //the book holds the cooldown: the slot controls of a hidden classic panel do not update theirs
+        if (WorldState.SkillBook.IsOnCooldown(slot))
             return;
 
         //send chant line if one is set for this skill
@@ -242,21 +244,24 @@ public sealed partial class WorldScreen
 
     private void HandleSpellSlotClicked(byte slot)
     {
-        //determine which panel the slot came from
+        //the panel that the slot came from: the selected one, else the panel that holds the slot (a click in the Abilities
+        //window of the new hud can be on a page that is not selected)
         var spellSlot = WorldHud.ActiveTab switch
-        {
-            HudTab.Spells    => WorldHud.SpellBook.GetSpellSlot(slot),
-            HudTab.SpellsAlt => WorldHud.SpellBookAlt.GetSpellSlot(slot),
-            HudTab.Tools     => WorldHud.Tools.WorldSpells.GetSpellSlot(slot),
-            _                => WorldHud.SpellBook.GetSpellSlot(slot)
-                                ?? WorldHud.SpellBookAlt.GetSpellSlot(slot)
-                                ?? WorldHud.Tools.WorldSpells.GetSpellSlot(slot)
-        };
+                        {
+                            HudTab.Spells    => WorldHud.SpellBook.GetSpellSlot(slot),
+                            HudTab.SpellsAlt => WorldHud.SpellBookAlt.GetSpellSlot(slot),
+                            HudTab.Tools     => WorldHud.Tools.WorldSpells.GetSpellSlot(slot),
+                            _                => null
+                        }
+                        ?? WorldHud.SpellBook.GetSpellSlot(slot)
+                        ?? WorldHud.SpellBookAlt.GetSpellSlot(slot)
+                        ?? WorldHud.Tools.WorldSpells.GetSpellSlot(slot);
 
         if (spellSlot is null || string.IsNullOrEmpty(spellSlot.AbilityName))
             return;
 
-        if (spellSlot.CooldownPercent > 0)
+        //the book holds the cooldown: the slot controls of a hidden classic panel do not update theirs
+        if (WorldState.SpellBook.IsOnCooldown(slot))
             return;
 
         //notarget spells cast immediately (no cast mode)
@@ -297,7 +302,8 @@ public sealed partial class WorldScreen
 
         HandleSpellSlotClicked(slot);
 
-        if (CastingSystem.IsTargeting)
+        //only the dropped spell takes the target; a spell that was in the target mode before keeps waiting
+        if (CastingSystem.TargetingSlot?.Slot == slot)
             CastingSystem.SelectTarget(
                 entity.Id,
                 entity.TileX,
@@ -478,6 +484,42 @@ public sealed partial class WorldScreen
         e.Handled = true;
 
         return true;
+    }
+
+    //--- the Abilities window of the new hud (BRIG-149) ---
+    //a use and the castable popup go through the hidden classic panels, which hold the spell types, the cast lines and
+    //the chants (D41); BRIG-156 replaces this bridge with code that reads the books
+
+    //a click on a learned ability: as a click on its book slot
+    private void UseAbility(AbilityRow row)
+    {
+        if (row.Slot is not { } slot)
+            return;
+
+        if (row.IsSpell)
+            HandleSpellSlotClicked(slot);
+        else
+            HandleSkillSlotClicked(slot);
+    }
+
+    //a right click: the castable popup of a learned ability, else the details of the status book
+    private void ShowAbilityDetails(AbilityRow row)
+    {
+        if (row.Slot is { } slot)
+        {
+            if (AbilityPanelOf(row.IsSpell, slot) is { } panel)
+                OpenCastablePopup(panel, slot);
+        } else if (row.Entry is { } entry)
+            AbilityMetadataDetails.ShowEntry(entry, WorldHud.ViewportBounds);
+    }
+
+    //the hidden classic panel that holds a book slot: the castable popup reads its chants
+    private PanelBase? AbilityPanelOf(bool isSpell, byte slot)
+    {
+        if (isSpell)
+            return new SpellBookPanel[] { WorldHud.SpellBook, WorldHud.SpellBookAlt, WorldHud.Tools.WorldSpells }.FirstOrDefault(panel => panel.GetSpellSlot(slot) is not null);
+
+        return new SkillBookPanel[] { WorldHud.SkillBook, WorldHud.SkillBookAlt, WorldHud.Tools.WorldSkills }.FirstOrDefault(panel => panel.GetSkillSlot(slot) is not null);
     }
 
     //--- chant editing ---
@@ -1430,10 +1472,14 @@ public sealed partial class WorldScreen
     /// </summary>
     private void OnRootDragMove(DragMoveEvent e)
     {
+        if (e.Payload is IDragIconPayload)
+            DragIconPosition = new Point(e.ScreenX, e.ScreenY);
+
         var dragging = GetDraggingPanel();
 
         dragging?.UpdateDragPosition(e.ScreenX, e.ScreenY);
     }
+
 
     /// <summary>
     ///     Handles drag-drop events that bubble up to the root panel.
@@ -1442,6 +1488,17 @@ public sealed partial class WorldScreen
     /// </summary>
     private void OnRootDragDrop(DragDropEvent e)
     {
+        //a spell from the Abilities window, dropped on an aisling or a creature, is cast at it, as retail does
+        if (e.Payload is AbilityDragPayload ability)
+        {
+            if (ability.IsSpell)
+                HandleSpellSlotDropped(ability.Slot, e.ScreenX, e.ScreenY);
+
+            e.Handled = true;
+
+            return;
+        }
+
         if (e.Payload is not SlotDragPayload payload)
             return;
 

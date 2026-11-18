@@ -214,6 +214,21 @@ public class HudEffectBarTests : IDisposable
         Assert.Equal(nine, ImageUtil.InClockWedge(0, 7, 15, gone));
     }
 
+    //the cooldown swipe covers the rest of the turn after the time gone, so its edge also moves clockwise: with a quarter
+    //left, it covers from 9 o'clock to 12, not from 12 to 3
+    [Theory]
+    [InlineData(0.75f, 1f, false, false, false, true)]
+    [InlineData(0.5f, 1f, false, false, true, true)]
+    [InlineData(0f, 1f, true, true, true, true)]
+    [InlineData(1f, 1f, false, false, false, false)]
+    public void TheRestOfTheTurnIsAnArcToTwelve(float start, float end, bool twelve, bool three, bool six, bool nine)
+    {
+        Assert.Equal(twelve, ImageUtil.InClockArc(7, 0, 15, start, end));
+        Assert.Equal(three, ImageUtil.InClockArc(14, 7, 15, start, end));
+        Assert.Equal(six, ImageUtil.InClockArc(7, 14, 15, start, end));
+        Assert.Equal(nine, ImageUtil.InClockArc(0, 7, 15, start, end));
+    }
+
     [Fact]
     public void TheSlotsFitTheBar()
     {
