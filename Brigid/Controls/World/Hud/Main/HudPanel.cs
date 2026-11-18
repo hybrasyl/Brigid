@@ -33,11 +33,13 @@ internal sealed class HudPanel : FramePanel
         {
             Name = "title",
             Text = window.Name,
+            HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
             IsHitTestVisible = false
         };
 
-        title.SetBounds(new Rectangle(inset, inset, Width - 2 * inset - CLOSE_SIZE, TITLE_HEIGHT));
+        //the title is centred on the panel, as in the wireframe: it keeps the width of the X clear on both sides
+        title.SetBounds(new Rectangle(inset + CLOSE_SIZE, inset, Width - 2 * (inset + CLOSE_SIZE), TITLE_HEIGHT));
         title.SetForegroundRole(ThemeRoles.TextTitle);
         AddChild(title);
 

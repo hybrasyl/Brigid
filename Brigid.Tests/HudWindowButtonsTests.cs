@@ -301,4 +301,18 @@ public class HudWindowButtonsTests : IDisposable
         Assert.NotNull(panel.FindChild<UILabel>("not_built"));
         UiAssert.NamedTree(panel);
     }
+
+    //the title is centred on the panel, as in the wireframe, and does not go under the X
+    [Fact]
+    public void ThePanelTitleIsCentredOnThePanel()
+    {
+        var hud = NewHud();
+        var panel = hud.FindChild<HudPanel>("inventory_panel")!;
+        var title = panel.FindChild<UILabel>("title")!;
+        var close = panel.FindChild<TextButton>("close")!;
+
+        Assert.Equal(HorizontalAlignment.Center, title.HorizontalAlignment);
+        Assert.Equal(panel.Width, title.X + title.Width + title.X);
+        Assert.True(title.X + title.Width <= close.X);
+    }
 }
