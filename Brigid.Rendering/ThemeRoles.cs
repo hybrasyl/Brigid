@@ -72,6 +72,9 @@ public static class ThemeRoles
     //a slot of the Inventory window of the new HUD (BRIG-150)
     public const string HudInventorySlot = "hud.inventory.slot";
 
+    //a slot of the Equipment window of the new HUD (BRIG-151); a theme with no part for it draws its inventory slot
+    public const string HudEquipmentSlot = "hud.equipment.slot";
+
     //content roles: icons, drawn on every host through IconArt, not only on a themed host
     //social status icons, one image for each status
     public const string StatusAwake = "icon.status.awake";
@@ -118,6 +121,36 @@ public static class ThemeRoles
     //the button of a compact window panel of the new HUD that changes the sides of the compact panels (BRIG-150)
     public const string IconPanelSwapSides = "icon.panel.swap_sides";
 
+    //the button in the title row of a window panel of the new HUD that opens the Legend window (BRIG-151): a book
+    public const string IconPanelLegend = "icon.panel.legend";
+
+    //the arrows of the stat raise of the Details window of the new HUD (BRIG-151)
+    public const string IconDetailsRaise = "icon.details.raise";
+    public const string IconDetailsLower = "icon.details.lower";
+
+    //the empty-slot outlines of the Equipment window of the new HUD (BRIG-151), one for each slot
+    public const string IconEquipmentEarrings = "icon.equipment.earrings";
+    public const string IconEquipmentHelm = "icon.equipment.helm";
+    public const string IconEquipmentNecklace = "icon.equipment.necklace";
+    public const string IconEquipmentArmor = "icon.equipment.armor";
+    public const string IconEquipmentLeftRing = "icon.equipment.left_ring";
+    public const string IconEquipmentLeftGlove = "icon.equipment.left_glove";
+    public const string IconEquipmentBelt = "icon.equipment.belt";
+    public const string IconEquipmentBoots = "icon.equipment.boots";
+    public const string IconEquipmentCape = "icon.equipment.cape";
+    public const string IconEquipmentRightRing = "icon.equipment.right_ring";
+    public const string IconEquipmentRightGlove = "icon.equipment.right_glove";
+    public const string IconEquipmentGreaves = "icon.equipment.greaves";
+    public const string IconEquipmentMount = "icon.equipment.mount";
+    public const string IconEquipmentWeapon = "icon.equipment.weapon";
+    public const string IconEquipmentOffhand = "icon.equipment.offhand";
+    public const string IconEquipmentTrinket = "icon.equipment.trinket";
+    public const string IconEquipmentVanityHelm = "icon.equipment.vanity_helm";
+    public const string IconEquipmentVanityArmor = "icon.equipment.vanity_armor";
+    public const string IconEquipmentAccessory1 = "icon.equipment.accessory_1";
+    public const string IconEquipmentAccessory2 = "icon.equipment.accessory_2";
+    public const string IconEquipmentAccessory3 = "icon.equipment.accessory_3";
+
     //colours
     public const string Text = "text";
     public const string TextDisabled = "text.disabled";
@@ -158,6 +191,9 @@ public static class ThemeRoles
     /// <summary>The parts of the Inventory window of the new HUD (BRIG-150), which the HUD shows, not the primitive gallery.</summary>
     public static readonly string[] HudInventory = [HudInventorySlot];
 
+    /// <summary>The parts of the Equipment window of the new HUD (BRIG-151), which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] HudEquipment = [HudEquipmentSlot];
+
     /// <summary>
     ///     The icons of the window buttons of the new HUD (BRIG-144), in the order of the row. A button is
     ///     <c>icon.window.</c> and the id of its window.
@@ -182,7 +218,21 @@ public static class ThemeRoles
     public static readonly string[] InventoryIcons = [IconInventoryGoldBag];
 
     /// <summary>The icons of the window panels of the new HUD (BRIG-150), which the HUD shows, not the primitive gallery.</summary>
-    public static readonly string[] PanelIcons = [IconPanelSwapSides];
+    public static readonly string[] PanelIcons = [IconPanelSwapSides, IconPanelLegend];
+
+    /// <summary>The arrows of the stat raise of the Details window of the new HUD (BRIG-151), which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] DetailsIcons = [IconDetailsRaise, IconDetailsLower];
+
+    /// <summary>
+    ///     The empty-slot outlines of the Equipment window of the new HUD (BRIG-151), in the order of its slots, which the HUD
+    ///     shows, not the primitive gallery.
+    /// </summary>
+    public static readonly string[] EquipmentIcons =
+    [
+        IconEquipmentEarrings, IconEquipmentHelm, IconEquipmentNecklace, IconEquipmentArmor, IconEquipmentLeftRing, IconEquipmentLeftGlove, IconEquipmentBelt,
+        IconEquipmentBoots, IconEquipmentCape, IconEquipmentRightRing, IconEquipmentRightGlove, IconEquipmentGreaves, IconEquipmentMount, IconEquipmentWeapon,
+        IconEquipmentOffhand, IconEquipmentTrinket, IconEquipmentVanityHelm, IconEquipmentVanityArmor, IconEquipmentAccessory1, IconEquipmentAccessory2, IconEquipmentAccessory3
+    ];
 
     /// <summary>The social status icon parts, indexed by the wire value of the status (awake is 0).</summary>
     public static readonly string[] StatusIcons =

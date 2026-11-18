@@ -41,6 +41,7 @@ public sealed class InputDispatcher : IDisposable
 
     //click synthesis
     private UIElement? LastClickTarget;
+    private MouseButton LastClickButton;
     private float LastClickTime;
 
     //drag state
@@ -657,8 +658,8 @@ public sealed class InputDispatcher : IDisposable
                 Click.Modifiers = modifiers;
                 DispatchBubble(CapturedElement, Click);
 
-                //doubleclick synthesis
-                if ((CapturedElement == LastClickTarget) && ((totalMs - LastClickTime) < DOUBLE_CLICK_MS))
+                //doubleclick synthesis: two clicks of the same button on the same element
+                if ((CapturedElement == LastClickTarget) && (button == LastClickButton) && ((totalMs - LastClickTime) < DOUBLE_CLICK_MS))
                 {
                     DoubleClick.Reset();
                     DoubleClick.ScreenX = mouseX;
@@ -671,6 +672,7 @@ public sealed class InputDispatcher : IDisposable
                 } else
                 {
                     LastClickTarget = CapturedElement;
+                    LastClickButton = button;
                     LastClickTime = totalMs;
                 }
             }

@@ -490,9 +490,10 @@ public sealed class UiRenderer : IDisposable
     ///     legend-mark-icon pack first, falls back to frame <paramref name="iconId" /> of the legacy
     ///     <c>legends.epf</c> sheet (palette 3 of <c>national.dat</c>). Unlike nation badges and ability icons, legend
     ///     mark IDs are <b>0-based</b> — the wire byte is used directly as the EPF frame index, so
-    ///     <c>legend0000.png</c> replaces server icon ID 0.
+    ///     <c>legend0000.png</c> replaces server icon ID 0. A pack can give an id past the last frame of the sheet. Null
+    ///     when no pack and no frame has the id (BRIG-151).
     /// </summary>
-    public Texture2D GetLegendMarkIcon(byte iconId)
+    public Texture2D? GetLegendMarkIcon(byte iconId)
     {
         var key = $"legend:{iconId}";
 
@@ -516,8 +517,9 @@ public sealed class UiRenderer : IDisposable
         //legacy path: frame iconId of legends.epf — GetEpfTexture caches under its own "epf:legends.epf:{i}" key,
         //so we don't re-cache under "legend:{iconId}". The legend: key is reserved for modern-pack results, which
         //means a pack registering mid-session (hypothetical; no hot-reload today) would still be picked up on the
-        //first uncached lookup after registration.
-        return GetEpfTexture("legends.epf", iconId);
+        //first uncached lookup after registration. An id past the last frame is not looked up, because a frame that is not
+        //in the cache loads the whole sheet again.
+        return iconId < GetEpfFrameCount("legends.epf") ? GetEpfTexture("legends.epf", iconId) : null;
     }
 
     /// <summary>

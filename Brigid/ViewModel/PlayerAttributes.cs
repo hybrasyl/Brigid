@@ -107,8 +107,11 @@ public sealed class PlayerAttributes
     /// <summary>A packet taught <see cref="LevelSpan" /> or <see cref="AbilitySpan" /> a new start, so the caller saves them.</summary>
     public event ChangedHandler? SpanLearned;
 
-    //the spans read the level from the primary block, so they wait for the first one
-    private bool HasPrimary;
+    /// <summary>
+    ///     True after the first primary block of the character. The spans and the activity log read the level from the
+    ///     primary block, so they wait for it: a clear keeps the level of the character before.
+    /// </summary>
+    public bool HasPrimary { get; private set; }
 
     /// <summary>
     ///     Clears the stored attributes. The mail and parcel state clears too, because the flag alone keeps it (see

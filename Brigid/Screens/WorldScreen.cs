@@ -102,6 +102,7 @@ public sealed partial class WorldScreen : IScreen
     private AbilityMetadataDetailsControl AbilityMetadataDetails = null!;
     private InventoryListModal InventoryLists = null!;
     private InventoryWindowControl InventoryWindow = null!;
+    private EquipmentWindowControl EquipmentWindow = null!;
     private AislingContextMenu AislingContext = null!;
     private DoorContextMenu DoorContext = null!;
     private ChatTabMenu ChatTabMenu = null!;
@@ -203,7 +204,6 @@ public sealed partial class WorldScreen : IScreen
 
     //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.
     private bool TransportSecure;
-    private byte[] PlayerPortrait = [];
     private SelfProfileTextEditorControl SelfProfileTextEditor = null!;
     private Direction? QueuedWalkDirection;
     //set on the game thread when a redirect arrives; HandleStateChanged, which can run on the network thread, reads and
@@ -561,7 +561,7 @@ public sealed partial class WorldScreen : IScreen
 
         StatusBook.OnProfileTextClicked += () =>
         {
-            SelfProfileTextEditor.Show(StatusBook.GetProfileText());
+            SelfProfileTextEditor.Show(WorldState.SelfProfile.ProfileText);
         };
 
         StatusBook.OnAbilityDetailRequested += entry =>
@@ -578,7 +578,7 @@ public sealed partial class WorldScreen : IScreen
 
         SelfProfileTextEditor.OnSave += text =>
         {
-            StatusBook.SetProfileText(text);
+            SetOwnProfileText(text);
             SaveProfileText(text);
         };
 

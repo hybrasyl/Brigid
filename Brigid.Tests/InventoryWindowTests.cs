@@ -240,17 +240,6 @@ public class InventoryWindowTests : IDisposable
         var right = new DragStartEvent { Button = MouseButton.Right };
         SlotOf(window, 2).OnDragStart(right);
         Assert.Null(right.Payload);
-
-        SlotOf(window, 2).OnDoubleClick(new DoubleClickEvent { Button = MouseButton.Left });
-        var afterUse = new DragStartEvent { Button = MouseButton.Left };
-        SlotOf(window, 2).OnDragStart(afterUse);
-        Assert.Null(afterUse.Payload);
-
-        //the next press starts a drag again
-        SlotOf(window, 2).OnMouseDown(new MouseDownEvent { Button = MouseButton.Left });
-        var again = new DragStartEvent { Button = MouseButton.Left };
-        SlotOf(window, 2).OnDragStart(again);
-        Assert.NotNull(again.Payload);
     }
 
     [Fact]

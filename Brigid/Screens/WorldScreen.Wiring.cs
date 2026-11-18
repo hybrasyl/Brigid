@@ -740,8 +740,8 @@ public sealed partial class WorldScreen
         MainHud.ServerBoxClicked += ToggleServerInfo;
         MainHud.MailClicked += OpenMail;
 
-        //the player plate opens the status book, as a second press of the inventory key does on the classic HUD
-        MainHud.PlateClicked += () => RequestStatusBook(StatusBookTab.Equipment);
+        //the player plate opens and closes the Details window (BRIG-151)
+        MainHud.PlateClicked += () => MainHud.Windows.Toggle(HudWindows.Details);
         WireChatInput(MainHud.ChatInput);
 
         //the chat box opens as the player left it
@@ -777,6 +777,7 @@ public sealed partial class WorldScreen
         inventory.SwapRequested += (from, to) => Game.Connection.SwapSlot(PanelType.Inventory, from, to);
         inventory.HoverChanged += ShowInventoryWindowTooltip;
         inventory.ListRequested += OpenInventoryList;
+        inventory.UnequipRequested += Game.Connection.Unequip;
 
         //the window button also selects the hidden classic inventory, as A does, so the number keys use the items. The
         //lists close with the window
@@ -789,6 +790,24 @@ public sealed partial class WorldScreen
                 inventory.ClearHover();
                 InventoryLists.Hide();
             });
+        var equipment = new EquipmentWindowControl(WorldState.Equipment, WorldState.Attributes);
+        EquipmentWindow = equipment;
+        equipment.UnequipRequested += Game.Connection.Unequip;
+        equipment.EquipRequested += slot => Game.Connection.UseItem(slot);
+        equipment.HoverChanged += ShowEquipmentWindowTooltip;
+        equipment.PinsChanged += SavePersonalViewPins;
+        windows.BindPanel(HudWindows.Equipment, equipment, closed: equipment.ClearHover);
+
+        //the Details window asks for the self profile when it opens, so its facts and the legend are fresh; the reply
+        //does not open the status book
+        var details = new DetailsWindowControl(WorldState.SelfProfile, WorldState.Attributes, WorldState.Activity);
+        details.RaiseRequested += Game.Connection.RaiseStat;
+        details.ProfileTextRequested += () => SelfProfileTextEditor.Show(WorldState.SelfProfile.ProfileText);
+        windows.BindPanel(HudWindows.Details, details, Game.Connection.RequestSelfProfile, details.ClearPending);
+
+        //the book in the title row of Details opens Legend, which asks for the self profile too, so its marks are fresh
+        windows.BindPanel(HudWindows.Legend, new LegendWindowControl(WorldState.SelfProfile), Game.Connection.RequestSelfProfile);
+
         windows.BindWindow(HudWindows.Menu, TogglePauseMenu, () => PauseMenu.Visible);
         windows.BindWindow(HudWindows.Mail, ToggleBoards, IsAnyBoardPanelVisible);
         windows.BindWindow(HudWindows.Community, ToggleWorldList, () => WorldList.Visible);
@@ -879,6 +898,7 @@ public sealed partial class WorldScreen
         if (WorldHud == MainHud)
         {
             InventoryWindow.ClearHover();
+            EquipmentWindow.ClearHover();
             InventoryLists.Hide();
         }
 

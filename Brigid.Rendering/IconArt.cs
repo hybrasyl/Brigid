@@ -25,8 +25,10 @@ public static class IconArt
 
     /// <summary>
     ///     Draws the new art for <paramref name="role" /> into a logical rectangle, clipped to <paramref name="clip" />. Call
-    ///     from the native UI pass. Returns false, and draws nothing, when there is no new art.
+    ///     from the native UI pass. Returns false, and draws nothing, when there is no new art. <paramref name="builtInTint" />
+    ///     tints Brigid's own image in place of <paramref name="tint" />, so a host can dim its default art and show a theme's
+    ///     art as the theme draws it.
     /// </summary>
-    public static bool TryDraw(SpriteBatch spriteBatch, string role, Rectangle bounds, Rectangle clip, Color? tint = null)
-        => ThemeArt.TryDraw(spriteBatch, role, bounds, clip, tint: tint) || BuiltInArt.TryDraw(spriteBatch, role, bounds, clip, tint);
+    public static bool TryDraw(SpriteBatch spriteBatch, string role, Rectangle bounds, Rectangle clip, Color? tint = null, Color? builtInTint = null)
+        => ThemeArt.TryDraw(spriteBatch, role, bounds, clip, tint: tint) || BuiltInArt.TryDraw(spriteBatch, role, bounds, clip, builtInTint ?? tint);
 }

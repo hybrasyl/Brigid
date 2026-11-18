@@ -1,6 +1,7 @@
 #region
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
+using Brigid.Controls.World.Hud.Main;
 using Brigid.Controls.World.Popups.Profile;
 using Brigid.Definitions;
 using Brigid.Rendering;
@@ -11,7 +12,8 @@ using Xunit;
 namespace Brigid.Tests;
 
 /// <summary>
-///     The BRIG-122 profile text editor: every child has a lowercase name, the text box keeps the legacy size and limits,
+///     The BRIG-122 profile text editor: every child has a lowercase name, the text box has the size of the profile text of
+///     the Details window (BRIG-151) and the legacy limits,
 ///     Save raises the text and hides the editor, and Cancel and Escape hide it with no save.
 /// </summary>
 [Collection("FontEngine")]
@@ -23,13 +25,13 @@ public class ProfileTextEditorTests
     public void EveryChildHasAUniqueName() => UiAssert.NamedTree(new SelfProfileTextEditorControl());
 
     [Fact]
-    public void TheTextBoxKeepsTheLegacySizeAndLimits()
+    public void TheTextBoxHasTheSizeOfTheDetailsBoxAndTheLegacyLimits()
     {
         var editor = new SelfProfileTextEditorControl();
         var box = editor.FindChild<UITextBox>("text")!;
 
-        Assert.Equal(174, box.Width);
-        Assert.Equal(152, box.Height);
+        Assert.Equal(MainHudLayout.DETAILS_PROFILE_WIDTH, box.Width);
+        Assert.Equal(MainHudLayout.DETAILS_PROFILE_HEIGHT, box.Height);
         Assert.Equal(256, box.MaxLength);
         Assert.True(box.IsMultiLine);
         Assert.True(box.ClampToVisibleArea);
@@ -52,7 +54,7 @@ public class ProfileTextEditorTests
     }
 
     [Fact]
-    public void EnterStartsANewLineAndTheBoxRefusesAThirteenthLine()
+    public void EnterStartsANewLineAndTheBoxRefusesALinePastWhatItShows()
     {
         var editor = new SelfProfileTextEditorControl();
         var saves = 0;
@@ -60,14 +62,15 @@ public class ProfileTextEditorTests
         editor.Show(string.Empty);
         var box = editor.FindChild<UITextBox>("text")!;
 
-        //the box shows 12 lines; a newline that would start a 13th is refused
+        //the box shows 5 lines of 12 px in its 66; a newline that would start a 6th is refused
         for (var i = 0; i < 13; i++)
         {
             box.OnTextInput(new TextInputEvent { Character = 'a' });
             box.OnTextInput(new TextInputEvent { Character = '\r' });
         }
 
-        Assert.Equal(11, box.Text.Count(c => c == '\n'));
+        Assert.Equal(5, box.VisibleLineCount);
+        Assert.Equal(box.VisibleLineCount - 1, box.Text.Count(c => c == '\n'));
         Assert.True(editor.Visible);
         Assert.Equal(0, saves);
         editor.Hide();

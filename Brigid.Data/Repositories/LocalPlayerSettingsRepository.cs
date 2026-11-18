@@ -21,6 +21,7 @@ public sealed class LocalPlayerSettingsRepository
     private const string FAMILY_LIST_FILE = "Familylist.cfg";
     private const string FRIEND_LIST_FILE = "Friendlist.cfg";
     private const string MACRO_FILE = "Macro.cfg";
+    private const string PERSONAL_VIEW_FILE = "PersonalView.cfg";
     private const string SKILL_BOOK_FILE = "SkillBook.cfg";
     private const string SPELL_BOOK_FILE = "SpellBook.cfg";
     private string PlayerDirectory { get; set; } = null!;
@@ -32,6 +33,7 @@ public sealed class LocalPlayerSettingsRepository
     // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
     public bool IsInitialized => PlayerDirectory is not null;
     public string MacroPath => Path.Combine(PlayerDirectory, MACRO_FILE);
+    public string PersonalViewPath => Path.Combine(PlayerDirectory, PERSONAL_VIEW_FILE);
 
     /// <summary>
     ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a
@@ -255,6 +257,24 @@ public sealed class LocalPlayerSettingsRepository
 
         return lines.ToArray();
     }
+
+    /// <summary>
+    ///     Loads the pinned stats of Personal View from PersonalView.cfg (BRIG-151), one name for each line. A file that is
+    ///     absent gives no pins; a file that cannot be read gives no pins, and the failure is logged.
+    /// </summary>
+    public string[] LoadPersonalViewPins()
+    {
+        string[] lines = [];
+
+        if (File.Exists(PersonalViewPath))
+            DataDiagnostics.Try(() => lines = File.ReadAllLines(PersonalViewPath), "LoadPersonalViewPins");
+
+        return lines;
+    }
+
+    /// <summary>Saves the pinned stats of Personal View to PersonalView.cfg (BRIG-151).</summary>
+    public void SavePersonalViewPins(IEnumerable<string> names)
+        => DataDiagnostics.Try(() => File.WriteAllLines(PersonalViewPath, names), "SavePersonalViewPins");
 
     /// <summary>
     ///     Loads the family list from Familylist.cfg.
