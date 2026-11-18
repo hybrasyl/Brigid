@@ -113,7 +113,7 @@ public class AbilitiesWindowTests : IDisposable
 
     //the content of a compact panel, and a smaller content
     private static readonly Rectangle FlatContent = new(6, 22, 298, 311);
-    private static readonly Rectangle ThemedContent = new(14, 30, 282, 295);
+    private static readonly Rectangle SmallContent = new(14, 30, 282, 295);
 
     private AbilitiesWindowControl NewWindow(
         SkillBook skills,
@@ -340,9 +340,9 @@ public class AbilitiesWindowTests : IDisposable
     public void TheWindowLaysOutInTheBoundsThatItGets()
     {
         var window = NewWindow(Skills(16), new SpellBook());
-        window.SetBounds(ThemedContent);
+        window.SetBounds(SmallContent);
 
-        var layout = MainHudLayout.AbilitiesIn(ThemedContent.Width, ThemedContent.Height);
+        var layout = MainHudLayout.AbilitiesIn(SmallContent.Width, SmallContent.Height);
         var last = window.RowControls[^1];
 
         Assert.Equal(layout.RowAt(1, 7), new Rectangle(last.X, last.Y, last.Width, last.Height));

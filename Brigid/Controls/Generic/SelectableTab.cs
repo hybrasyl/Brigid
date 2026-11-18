@@ -30,8 +30,8 @@ public sealed class SelectableTab : UIPanel
     public event ClickedHandler? Clicked;
 
     /// <summary>
-    ///     Raised on a right click at a screen point, so that a host can open a menu for the tab there. With no handler, the
-    ///     right click goes on to the parent, as before.
+    ///     Raised on a right click at a screen point, so that a host can open a menu for the tab there. With no handler, a
+    ///     right click does nothing.
     /// </summary>
     public event Action<int, int>? RightClicked;
     public event Action? Hovered;

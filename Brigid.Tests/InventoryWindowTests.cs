@@ -4,6 +4,7 @@ using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Main;
 using Brigid.Controls.World.Hud.Main.Windows;
+using Brigid.Controls.World.Hud.Panel.Slots;
 using Brigid.Definitions;
 using Brigid.Models;
 using Brigid.Rendering;
@@ -225,7 +226,6 @@ public class InventoryWindowTests : IDisposable
 
         var payload = Assert.IsType<ItemDragPayload>(drag.Payload);
         Assert.Equal(2, payload.Slot);
-        Assert.IsAssignableFrom<IDragIconPayload>(payload);
     }
 
     [Fact]
@@ -337,6 +337,10 @@ public class InventoryWindowTests : IDisposable
     [Fact]
     public void ARootDropOfAWindowItemGoesToTheInventoryDrop()
         => Assert.Equal(WorldScreen.RootDrop.Item, WorldScreen.RootDropOf(new ItemDragPayload(4, null)));
+
+    [Fact]
+    public void ARootDropOfAClassicSlotGoesToItsPanel()
+        => Assert.Equal(WorldScreen.RootDrop.ClassicSlot, WorldScreen.RootDropOf(new SlotDragPayload { Source = new PanelSlot(), SlotIndex = 1, SourcePanel = HudTab.Inventory }));
 
     [Fact]
     public void ARootDropOfAnythingElsePassesOn()

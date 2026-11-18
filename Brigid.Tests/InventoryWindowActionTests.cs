@@ -278,8 +278,9 @@ public class InventoryWindowActionTests : IDisposable
         Assert.False(drop.Handled);
     }
 
+    //a payload that gives no icon role draws its texture, or nothing
     [Fact]
-    public void ADragIconWithATextureHasNoRole()
+    public void AnItemDragHasNoIconRole()
     {
         IDragIconPayload item = new ItemDragPayload(1, null);
 

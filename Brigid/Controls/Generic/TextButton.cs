@@ -36,8 +36,8 @@ public sealed class TextButton : UIPanel
     public event ClickedHandler? Clicked;
 
     /// <summary>
-    ///     A right click, for a host that gives the button a second action. With no handler, the button does not take a
-    ///     right click, and it goes on to the parent (an <see cref="IconButton" /> always takes it).
+    ///     A right click, for a host that gives the button a second action. With no handler, a right click does nothing. A
+    ///     disabled button takes the right click with no action.
     /// </summary>
     public event ClickedHandler? RightClicked;
 

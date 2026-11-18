@@ -27,7 +27,8 @@ internal sealed record InventoryListEntry(string Name, uint Amount);
 ///     <see cref="CenteredModalPanel" /> at the centre of the Inventory panel, with ten rows of 20 px that alternate in
 ///     shade, a scroll bar, and the Close button of the modals. A row shows the name and the amount; a large amount
 ///     shows in short form (1.2M), and its tooltip shows the full amount. A player cannot trade or move a currency, and
-///     a script takes a quest item, so the lists are read-only. Escape, Close or a press outside the modal closes it.
+///     a script takes a quest item, so the lists are read-only. It is modal, as the details popups are, so the item
+///     tooltip of the window under it does not show. Escape, Close or a press outside the modal closes it.
 ///     The server sends no currencies (the wallet is HS-1588) and no item tags today, so both lists are empty and the
 ///     modal says so.
 /// </summary>
@@ -47,6 +48,7 @@ internal sealed class InventoryListModal : CenteredModalPanel
         : base(TitleOf(InventoryListKind.Currency), WIDTH, 0, true)
     {
         Name = "inventory_list";
+        IsModal = true;
         SetContentHeight(ROWS * ROW_HEIGHT);
 
         List = new VirtualizedListView<InventoryListEntry, InventoryListRow>(
@@ -70,8 +72,6 @@ internal sealed class InventoryListModal : CenteredModalPanel
 
     /// <summary>The rows of the list that shows.</summary>
     public IReadOnlyList<InventoryListEntry> Entries { get; private set; } = [];
-
-    internal string Title => TitleOf(Kind);
 
     internal string EmptyShown => EmptyText.Visible ? EmptyText.Text : string.Empty;
 

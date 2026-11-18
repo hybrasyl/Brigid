@@ -26,15 +26,15 @@ internal sealed class InventoryWindowControl : HudWindowContent
     /// <summary>The slots of the grid.</summary>
     public const int SLOTS = MainHudLayout.INVENTORY_COLUMNS * MainHudLayout.INVENTORY_ROWS;
 
+    //the longest wait for the slots of a compact: the server can refuse a move and send nothing for it
+    private const long COMPACT_WAIT_MS = 2000;
+
     private readonly Inventory Items;
     private readonly PlayerAttributes Attributes;
     private readonly Func<ushort, DisplayColor, IconTexture?> IconSource;
     private readonly InventorySlotControl[] Slots = new InventorySlotControl[SLOTS];
     private readonly UILabel WeightText;
     private readonly UILabel GoldText;
-    //the longest wait for the slots of a compact: the server can refuse a move and send nothing for it
-    private const long COMPACT_WAIT_MS = 2000;
-
     private readonly Func<long> Clock;
     private readonly HashSet<byte> CompactSlots = [];
     private long CompactSentAt;
