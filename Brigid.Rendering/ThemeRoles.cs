@@ -51,6 +51,9 @@ public static class ThemeRoles
     public const string HudBottomBar = "hud.bottom_bar";
     public const string HudSideEdge = "hud.side_edge";
     public const string HudBox = "hud.box";
+    public const string HudChatBox = "hud.chat_box";
+    public const string HudChatScrollTrack = "hud.chat_scroll.track";
+    public const string HudChatScrollThumb = "hud.chat_scroll.thumb";
 
     //content roles: icons, drawn on every host through IconArt, not only on a themed host
     //social status icons, one image for each status
@@ -73,6 +76,10 @@ public static class ThemeRoles
     public const string IconHudWeight = "icon.hud.weight";
     public const string IconHudMail = "icon.hud.mail";
     public const string IconHudParcel = "icon.hud.parcel";
+
+    //the buttons of the chat box of the new HUD (BRIG-145)
+    public const string IconChatHide = "icon.chat.hide";
+    public const string IconChatShow = "icon.chat.show";
 
     //the icons of the window buttons of the new HUD (BRIG-144)
     public const string IconWindowAbilities = "icon.window.abilities";
@@ -110,10 +117,11 @@ public static class ThemeRoles
     ];
 
     /// <summary>
-    ///     The surfaces of the new HUD (BRIG-144): its bars, the strips beside the world, and the box of the top bar. The
-    ///     HUD shows them, not the primitive gallery, which has no space for the parts of one screen.
+    ///     The surfaces of the new HUD (BRIG-144): its bars, the strips beside the world, the box of the top bar, and the
+    ///     chat box with its scroll bar. The HUD shows them, not the primitive gallery, which has no space for the parts of one screen.
     /// </summary>
-    public static readonly string[] HudSurfaces = [HudTopBar, HudBottomBar, HudSideEdge, HudBox];
+    public static readonly string[] HudSurfaces =
+        [HudTopBar, HudBottomBar, HudSideEdge, HudBox, HudChatBox, HudChatScrollTrack, HudChatScrollThumb];
 
     /// <summary>
     ///     The icons of the window buttons of the new HUD (BRIG-144), in the order of the row. A button is
@@ -131,6 +139,9 @@ public static class ThemeRoles
         IconHudLatencyNone, IconHudLatencyGood, IconHudLatencyFair, IconHudLatencyPoor, IconHudSecure, IconHudGold, IconHudWeight,
         IconHudMail, IconHudParcel
     ];
+
+    /// <summary>The icons of the chat box of the new HUD, which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] ChatIcons = [IconChatHide, IconChatShow];
 
     /// <summary>The social status icon parts, indexed by the wire value of the status (awake is 0).</summary>
     public static readonly string[] StatusIcons =

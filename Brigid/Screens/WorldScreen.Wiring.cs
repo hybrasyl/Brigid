@@ -581,7 +581,7 @@ public sealed partial class WorldScreen
             WorldList.OnClose += () => hud.UsersButton.IsSelected = false;
         }
 
-        WorldList.OnWhisperRequested += name => ShownChatInput?.Focus($"-> {name}: ", TextColors.Whisper);
+        WorldList.OnWhisperRequested += name => WorldHud.ChatInput.Focus($"-> {name}: ", TextColors.Whisper);
 
         if (hud.BulletinButton is not null)
         {
@@ -642,13 +642,7 @@ public sealed partial class WorldScreen
             };
         }
 
-        //chat input events
-        hud.ChatInput.MessageSent += msg => Game.Connection.SendPublicMessage(msg);
-        hud.ChatInput.ShoutSent += msg => Game.Connection.SendShout(msg);
-        hud.ChatInput.WhisperSent += (target, msg) => Game.Connection.SendWhisper(target, msg);
-        hud.ChatInput.IgnoreAdded += name => Game.Connection.SendAddIgnore(name);
-        hud.ChatInput.IgnoreRemoved += name => Game.Connection.SendRemoveIgnore(name);
-        hud.ChatInput.IgnoreListRequested += () => Game.Connection.SendIgnoreRequest();
+        WireChatInput(hud.ChatInput);
 
         //slot events
         hud.Inventory.OnSlotClicked += HandleInventorySlotClicked;
@@ -720,11 +714,35 @@ public sealed partial class WorldScreen
             }
     }
 
+    //the sends of a chat input; each hud has its own input
+    private void WireChatInput(ChatInputControl input)
+    {
+        input.MessageSent += msg => Game.Connection.SendPublicMessage(msg);
+        input.ShoutSent += msg => Game.Connection.SendShout(msg);
+        input.WhisperSent += (target, msg) => Game.Connection.SendWhisper(target, msg);
+        input.IgnoreAdded += name => Game.Connection.SendAddIgnore(name);
+        input.IgnoreRemoved += name => Game.Connection.SendRemoveIgnore(name);
+        input.IgnoreListRequested += () => Game.Connection.SendIgnoreRequest();
+    }
+
     /// <summary>The new HUD's own controls; its legacy panels are the classic HUD's, which WireHudPanels wired.</summary>
     private void WireMainHud()
     {
         MainHud.ServerBoxClicked += ToggleServerInfo;
         MainHud.MailClicked += OpenMail;
+        WireChatInput(MainHud.ChatInput);
+
+        //the chat box opens as the player left it
+        var chatBox = MainHud.ChatBox;
+        chatBox.Select(ClientSettings.SelectedChatTab);
+        chatBox.SetCollapsed(ClientSettings.ChatBoxHidden);
+
+        chatBox.StateChanged += () =>
+        {
+            ClientSettings.SelectedChatTab = chatBox.SelectedTabName;
+            ClientSettings.ChatBoxHidden = chatBox.IsCollapsed;
+            ClientSettings.Save();
+        };
 
         //each button does what its key does; group is the open and closed toggle (D18), and a right click opens its window
         var windows = MainHud.Windows;
@@ -783,12 +801,6 @@ public sealed partial class WorldScreen
         LargeHud.MailButton?.IsSelected = false;
     }
 
-    /// <summary>
-    ///     The chat input that shows, or null on the new HUD: its chat input is the hidden classic box until BRIG-145, and a
-    ///     hidden box that takes the focus loses it to the dispatcher but stays in its chat mode (BRIG-127 D41).
-    /// </summary>
-    private ChatInputControl? ShownChatInput => WorldHud == MainHud ? null : WorldHud.ChatInput;
-
     //'/': the classic and the large hud; nothing while the new hud shows
     private void SwapHudLayout()
     {
@@ -835,6 +847,9 @@ public sealed partial class WorldScreen
         Camera.Resize(viewport.Width, viewport.Height);
         UpdateCameraOffset(viewport);
         SystemMessagePane.SetViewportBounds(viewport);
+
+        //the new hud shows these messages in its chat tabs (BRIG-127 D10)
+        SystemMessagePane.Visible = WorldHud != MainHud;
         PauseMenu.SetViewportBounds(viewport);
         WorldList.SetViewportBounds(viewport);
         MarkdownNotice.SetViewportBounds(viewport);

@@ -47,7 +47,7 @@ public class MainHudControlTests : IDisposable
     private (MainHudControl Hud, RecordingHud Classic) NewHud()
     {
         var classic = DispatchProxy.Create<IWorldHud, RecordingHud>();
-        var hud = new MainHudControl(classic, attributes: new PlayerAttributes());
+        var hud = new MainHudControl(classic, attributes: new PlayerAttributes(), chat: new Chat());
         Huds.Add(hud);
 
         return (hud, (RecordingHud)(object)classic);
@@ -73,7 +73,6 @@ public class MainHudControlTests : IDisposable
     }
 
     [Theory]
-    [InlineData("chat_box")]
     [InlineData("toast")]
     [InlineData("effect_bar")]
     [InlineData("health_bar")]
@@ -110,7 +109,12 @@ public class MainHudControlTests : IDisposable
         Assert.Equal(ThemeRoles.HudBottomBar, RoleOf("bottom_bar"));
         Assert.Equal(ThemeRoles.HudSideEdge, RoleOf("left_edge"));
         Assert.Equal(ThemeRoles.HudSideEdge, RoleOf("right_edge"));
-        Assert.Equal([ThemeRoles.HudTopBar, ThemeRoles.HudBottomBar, ThemeRoles.HudSideEdge, ThemeRoles.HudBox], ThemeRoles.HudSurfaces);
+        Assert.Equal(
+            [
+                ThemeRoles.HudTopBar, ThemeRoles.HudBottomBar, ThemeRoles.HudSideEdge, ThemeRoles.HudBox, ThemeRoles.HudChatBox,
+                ThemeRoles.HudChatScrollTrack, ThemeRoles.HudChatScrollThumb
+            ],
+            ThemeRoles.HudSurfaces);
     }
 
     [Fact]
@@ -121,13 +125,48 @@ public class MainHudControlTests : IDisposable
         _ = hud.Inventory;
         _ = hud.ChatInput;
         _ = hud.ActiveTab;
+        hud.HandleTabActivation(HudTab.Chat, false);
         hud.ShowTab(HudTab.Chat);
         hud.HandleTabActivation(HudTab.Spells, true);
         _ = hud.CollapseExpanded();
 
         Assert.Equal(
-            ["get_Inventory", "get_ChatInput", "get_ActiveTab", "ShowTab", "HandleTabActivation", "CollapseExpanded"],
+            ["get_Inventory", "get_ActiveTab", "ShowTab", "HandleTabActivation", "CollapseExpanded"],
             classic.Calls);
+    }
+
+    //BRIG-145: a drop or a click on the chat box does not reach the world; while hidden, only its tab row takes the mouse
+    [Fact]
+    public void TheChatBoxCoversTheWorldWhereItTakesTheMouse()
+    {
+        var (hud, _) = NewHud();
+        var box = MainHudLayout.ChatBox;
+        var row = MainHudLayout.ChatCollapsedRow;
+
+        Assert.True(hud.IsOverPanel(box.X + 40, box.Y + 30));
+        Assert.False(hud.IsOverPanel(box.Right + 5, box.Y + 30));
+
+        hud.ChatBox.SetCollapsed(true);
+
+        Assert.False(hud.IsOverPanel(box.X + 40, box.Y + 30));
+        Assert.True(hud.IsOverPanel(box.X + 40, box.Y + row.Y + 2));
+    }
+
+    //BRIG-145: the chat input is the new HUD's own, in its chat box, and F and Shift+F act on the box
+    [Fact]
+    public void TheChatInputAndTheChatKeysAreThisHudsOwn()
+    {
+        var (hud, classic) = NewHud();
+
+        Assert.Same(hud.ChatBox.Input, hud.ChatInput);
+
+        hud.HandleTabActivation(HudTab.Chat, false);
+        Assert.True(hud.ChatBox.IsCollapsed);
+
+        hud.HandleTabActivation(HudTab.Chat, true);
+        Assert.False(hud.ChatBox.IsCollapsed);
+        Assert.Equal("System", hud.ChatBox.SelectedTabName);
+        Assert.Empty(classic.Calls);
     }
 
     [Fact]

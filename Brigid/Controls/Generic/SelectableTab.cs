@@ -31,6 +31,21 @@ public sealed class SelectableTab : UIPanel
     public event Action? Hovered;
     public event Action? Unhovered;
 
+    /// <summary>
+    ///     True when the tab has news that its host wants the player to see, for example a chat tab with a message that
+    ///     came while another tab was selected: the label of a tab that is not selected shows in
+    ///     <see cref="ThemeRoles.TextTitle" />.
+    /// </summary>
+    public bool IsMarked
+    {
+        get;
+        set
+        {
+            field = value;
+            RefreshVisual();
+        }
+    }
+
     public bool IsSelected
     {
         get;
@@ -67,6 +82,15 @@ public sealed class SelectableTab : UIPanel
 
     public void SetText(string text) => Label.Text = text;
 
+    //the label fills the tab, also when a host sizes the tab to its text after it is made
+    public override void SetBounds(Rectangle bounds)
+    {
+        base.SetBounds(bounds);
+
+        Label.Width = bounds.Width - 2 * LABEL_INSET;
+        Label.Height = bounds.Height;
+    }
+
     //the flat border is part of the look: the outline when idle, the selection accent when selected
     protected internal override Color? DrawnBorderColor
         => BorderColor is null ? null
@@ -90,6 +114,8 @@ public sealed class SelectableTab : UIPanel
         //the label takes the theme colour at draw time, because the tab takes the theme from its parent
         if (IsSelected)
             Label.SetForegroundRole(ThemeRoles.TextSelected);
+        else if (IsMarked)
+            Label.SetForegroundRole(ThemeRoles.TextTitle);
         else
             Label.SetForegroundRole(ThemeRoles.Text);
     }

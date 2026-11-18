@@ -98,8 +98,50 @@ internal static class MainHudLayout
     public static readonly Rectangle CompactRight = new(LargePanel.Right - CompactWidth, LargePanel.Y, CompactWidth, LargePanel.Height);
 
     //over the world: the chat box (BRIG-145) at the bottom left, the toast (BRIG-162) at the bottom right
-    public static readonly Rectangle ChatBox = new(10, World.Bottom - 124, 215, 118);
+    public static readonly Rectangle ChatBox = new(10, World.Bottom - 124, 248, 118);
     public static readonly Rectangle Toast = new(450, World.Bottom - 28, 186, 28);
+
+    //the parts of the chat box, in the coordinates of the box. While it shows: the tab row at the top, with the hide
+    //button at its right, the lines down to the bottom, and the chat input at the bottom while it has the focus. While
+    //it is hidden: the tab row at the bottom.
+    public const int CHAT_TAB_HEIGHT = 13;
+    public const int CHAT_TAB_GAP = 2;
+    public const int CHAT_TAB_PAD = 8;
+    public const int CHAT_TAB_MIN = 18;
+    public const int CHAT_ROW_PAD = 3;
+    public const int CHAT_SCROLL_WIDTH = 10;
+    public const int CHAT_ROW_HEIGHT = CHAT_TAB_HEIGHT + 2 * CHAT_ROW_PAD;
+    public static readonly Rectangle ChatShownRow = new(0, 0, ChatBox.Width, CHAT_ROW_HEIGHT);
+    public static readonly Rectangle ChatCollapsedRow = new(0, ChatBox.Height - CHAT_ROW_HEIGHT, ChatBox.Width, CHAT_ROW_HEIGHT);
+    public static readonly Rectangle ChatHideButton = new(ChatBox.Width - CHAT_ROW_PAD - 15, CHAT_ROW_PAD, 15, CHAT_TAB_HEIGHT);
+    public static readonly Rectangle ChatLog = new(CHAT_ROW_PAD, CHAT_ROW_HEIGHT, ChatBox.Width - 2 * CHAT_ROW_PAD, ChatBox.Height - CHAT_ROW_HEIGHT - CHAT_ROW_PAD);
+    public static readonly Rectangle ChatInput = new(CHAT_ROW_PAD, ChatBox.Height - CHAT_ROW_PAD - 15, ChatBox.Width - 2 * CHAT_ROW_PAD, 15);
+
+    /// <summary>The width of the tabs of the chat box: from the left of the row to the hide button.</summary>
+    public static int ChatTabRowWidth => ChatHideButton.Left - CHAT_TAB_GAP - CHAT_ROW_PAD;
+
+    /// <summary>
+    ///     The widths of a row of tabs: each tab's preferred width while the row fits <paramref name="available" />; else
+    ///     the widest tabs shrink, one pixel at a time, down to <see cref="CHAT_TAB_MIN" />. A row that does not fit at the
+    ///     minimum keeps the minimum and runs past the end.
+    /// </summary>
+    public static int[] FitTabs(IReadOnlyList<int> preferred, int available, int gap)
+    {
+        var widths = preferred.Select(width => Math.Max(width, CHAT_TAB_MIN)).ToArray();
+        var budget = available - gap * Math.Max(0, widths.Length - 1);
+
+        while (widths.Sum() > budget)
+        {
+            var widest = Array.IndexOf(widths, widths.Max());
+
+            if (widths[widest] <= CHAT_TAB_MIN)
+                break;
+
+            widths[widest]--;
+        }
+
+        return widths;
+    }
 
     //the bottom area, from the top
     public static readonly Rectangle EffectBar = new(EDGE, BottomArea.Top + 3, World.Width, 20);

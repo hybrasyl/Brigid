@@ -321,7 +321,8 @@ public sealed partial class WorldScreen
             WorldState.Chat.Add(channel, args.Message, color);
 
             //the pane draws an active message in its own default colour
-            if (ShowsInSystemPane(type))
+            //the new hud hides the pane; its tabs hold these messages
+            if (ShowsInSystemPane(type) && SystemMessagePane.Visible)
                 SystemMessagePane.AddMessage(args.Message, channel == ChatChannel.System ? null : color);
 
             return;

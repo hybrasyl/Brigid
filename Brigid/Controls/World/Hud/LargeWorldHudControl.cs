@@ -582,7 +582,7 @@ public sealed class LargeWorldHudControl : PrefabPanel, IWorldHud
         ChatDisplay = new ChatPanel(NormalChatBounds, tabRect);
 
         //the input renders at the size the display computed, so the two can never disagree
-        ChatInput.Display = ChatDisplay;
+        ChatInput.TextStyle = ChatDisplay;
         ChatDisplay.ConfigureExpand(chatExpandedTexture, ExpandedChatBounds, tabRect);
         RegisterTab(HudTab.Chat, ChatDisplay, tabRect);
 

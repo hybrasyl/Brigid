@@ -17,10 +17,11 @@ namespace Brigid.Controls.World.Hud.Main;
 ///     for their parts. The positions are in <see cref="MainHudLayout" />.
 /// </summary>
 /// <remarks>
-///     The legacy members of <see cref="IWorldHud" /> (the inventory, the ability panels, the chat, the stats and the
-///     effect bar) are the classic HUD's own panels, which stay hidden with it (D41). So the code that reaches
-///     <c>WorldHud.Inventory</c> and the others keeps working on this HUD, nothing of them shows, and nothing is wired
-///     twice. Each card replaces its member, and BRIG-156 removes the rest. The legacy buttons are absent.
+///     The legacy members of <see cref="IWorldHud" /> (the inventory, the ability panels, the chat display, the message
+///     history, the stats and the effect bar) are the classic HUD's own panels, which stay hidden with it (D41). So the
+///     code that reaches <c>WorldHud.Inventory</c> and the others keeps working on this HUD, nothing of them shows, and
+///     nothing is wired twice. Each card replaces its member, and BRIG-156 removes the rest. The chat input is this HUD's
+///     own, in its chat box (BRIG-145). The legacy buttons are absent.
 /// </remarks>
 public sealed class MainHudControl : UIPanel, IWorldHud
 {
@@ -39,7 +40,8 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// <param name="classic">The classic HUD, whose panels this HUD returns for the legacy members.</param>
     /// <param name="clock">The source of the local time of the clock; null for the system clock.</param>
     /// <param name="attributes">The player's attributes; null for <see cref="WorldState.Attributes" />.</param>
-    public MainHudControl(IWorldHud classic, TimeProvider? clock = null, PlayerAttributes? attributes = null)
+    /// <param name="chat">The chat log of the chat box; null for <see cref="WorldState.Chat" />.</param>
+    public MainHudControl(IWorldHud classic, TimeProvider? clock = null, PlayerAttributes? attributes = null, Chat? chat = null)
     {
         Classic = classic;
         Attributes = attributes ?? WorldState.Attributes;
@@ -61,8 +63,10 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         AddChild(new HudBarPanel(ThemeRoles.HudSideEdge, MainHudLayout.RightEdge) { Name = "right_edge" });
         AddChild(new DividerLine(MainHudLayout.Divider) { Name = "divider" });
 
+        ChatBox = new ChatBoxControl(chat ?? WorldState.Chat);
+        AddChild(ChatBox);
+
         //the places of the parts that later cards add
-        AddChild(Place("chat_box", MainHudLayout.ChatBox));
         AddChild(Place("toast", MainHudLayout.Toast));
         AddChild(Place("effect_bar", MainHudLayout.EffectBar));
         AddChild(Place("health_bar", MainHudLayout.HealthBar));
@@ -104,11 +108,18 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// <summary>The windows of the HUD: its button row, its panels and the windows that the world screen binds.</summary>
     internal HudWindowHost Windows { get; }
 
+    /// <summary>The chat box over the bottom left of the world (BRIG-145).</summary>
+    public ChatBoxControl ChatBox { get; }
+
     /// <summary>Closes the open panels. Returns true when a panel was open, so that Escape closes the panels first.</summary>
     public bool ClosePanels() => Windows.CloseAll();
 
-    /// <summary>True when an open panel is at the screen point, so that a click or a drop there does not reach the world.</summary>
-    public bool IsOverPanel(int screenX, int screenY) => Windows.IsOverPanel(screenX, screenY);
+    /// <summary>
+    ///     True when an open panel or the chat box takes the mouse at the screen point, so that a click or a drop there does
+    ///     not reach the world.
+    /// </summary>
+    public bool IsOverPanel(int screenX, int screenY)
+        => Windows.IsOverPanel(screenX, screenY) || ChatBox.TakesMouseAt(screenX, screenY);
 
     public override void Update(GameTime gameTime)
     {
@@ -158,6 +169,8 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     }
 
     #region The shell
+    public ChatInputControl ChatInput => ChatBox.Input;
+
     public void SetPlayerName(string name) => PlayerName = name;
 
     public void ShowPersistentMessage(string text) => PersistentMessage.SetMessage(text);
@@ -189,7 +202,6 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     public HudTab ActiveTab => Classic.ActiveTab;
     public ChatPanel ChatDisplay => Classic.ChatDisplay;
     public SystemMessagePanel MessageHistory => Classic.MessageHistory;
-    public ChatInputControl ChatInput => Classic.ChatInput;
     public ExtendedStatsPanel ExtendedStatsPanel => Classic.ExtendedStatsPanel;
     public InventoryPanel Inventory => Classic.Inventory;
     public Rectangle InventoryBounds => Classic.InventoryBounds;
@@ -203,7 +215,22 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     public void ShowTab(HudTab tab) => Classic.ShowTab(tab);
 
-    public void HandleTabActivation(HudTab tab, bool shift) => Classic.HandleTabActivation(tab, shift);
+    //F hides and shows the chat box, and Shift+F shows its System tab (BRIG-145); the other tab keys act on the hidden
+    //classic panels until their cards
+    public void HandleTabActivation(HudTab tab, bool shift)
+    {
+        if (tab == HudTab.Chat)
+        {
+            if (shift)
+                ChatBox.ShowSystem();
+            else
+                ChatBox.SetCollapsed(!ChatBox.IsCollapsed);
+
+            return;
+        }
+
+        Classic.HandleTabActivation(tab, shift);
+    }
 
     public void ToggleExpand() => Classic.ToggleExpand();
 

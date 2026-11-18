@@ -28,7 +28,7 @@ public class ChatPromptRestoreTests
         for (var i = 0; i < prompts; i++)
             chat.ShowPrompt(string.Empty, PROMPT_MAX_LENGTH, _ => { });
 
-        return (chat, chat.FindChild<UITextBox>("ChatTextBox")!);
+        return (chat, chat.FindChild<UITextBox>("chat_text_box")!);
     }
 
     private static void AssertChatValues(ChatInputControl chat, UITextBox box)
@@ -89,7 +89,7 @@ public class ChatPromptRestoreTests
         var chat = new ChatInputControl(new ControlPrefabSet("_test"));
         string? sent = null;
         chat.ShowPrompt(string.Empty, PROMPT_MAX_LENGTH, text => sent = text);
-        var box = chat.FindChild<UITextBox>("ChatTextBox")!;
+        var box = chat.FindChild<UITextBox>("chat_text_box")!;
 
         box.OnTextInput(new TextInputEvent { Character = '7' });
         chat.OnKeyDown(new KeyDownEvent { Key = Keys.Enter });

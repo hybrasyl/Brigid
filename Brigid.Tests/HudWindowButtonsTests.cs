@@ -34,7 +34,7 @@ public class HudWindowButtonsTests : IDisposable
 
     private MainHudControl NewHud()
     {
-        var hud = new MainHudControl(DispatchProxy.Create<IWorldHud, MainHudControlTests.RecordingHud>(), attributes: new PlayerAttributes());
+        var hud = new MainHudControl(DispatchProxy.Create<IWorldHud, MainHudControlTests.RecordingHud>(), attributes: new PlayerAttributes(), chat: new Chat());
         Huds.Add(hud);
 
         return hud;

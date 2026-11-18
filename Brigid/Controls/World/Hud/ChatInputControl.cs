@@ -54,11 +54,11 @@ public sealed class ChatInputControl : UIPanel
     private int AppliedGeneration = -1;
 
     /// <summary>
-    ///     The chat display this input sits beneath. Set by the owning HUD after both exist, so the input matches the
-    ///     size of the lines above it. Null until wired (and for any HUD without a display), in which case the input
-    ///     falls back to the ordinary UI size rather than guessing.
+    ///     The text style of the chat lines this input sits beneath. Set by the owning HUD after both exist, so the input
+    ///     matches the lines above it. Null until wired, in which case the input falls back to the ordinary UI size
+    ///     rather than guessing.
     /// </summary>
-    public Panel.ChatPanel? Display { get; set; }
+    public IChatTextStyle? TextStyle { get; set; }
     private int WhisperHistoryIndex;
     private string? WhisperTarget;
 
@@ -66,10 +66,13 @@ public sealed class ChatInputControl : UIPanel
     public bool IsFocused => TextBox.IsFocused;
 
     public ChatInputControl(ControlPrefabSet prefabSet)
-    {
-        Name = "ChatInput";
+        : this(PrefabPanel.GetRect(prefabSet, "SAY")) { }
 
-        var rect = PrefabPanel.GetRect(prefabSet, "SAY");
+    /// <summary>A chat input at <paramref name="rect" />, in the coordinates of its parent.</summary>
+    public ChatInputControl(Rectangle rect)
+    {
+        Name = "chat_input";
+
         X = rect.X;
         Y = rect.Y;
         Width = rect.Width;
@@ -79,7 +82,7 @@ public sealed class ChatInputControl : UIPanel
 
         PrefixLabel = new UILabel
         {
-            Name = "ChatPrefix",
+            Name = "chat_prefix",
             X = 0,
             Y = 0,
             Width = 0,
@@ -95,7 +98,7 @@ public sealed class ChatInputControl : UIPanel
 
         TextBox = new UITextBox
         {
-            Name = "ChatTextBox",
+            Name = "chat_text_box",
             X = 0,
             Y = 0,
             Width = rect.Width,
@@ -151,11 +154,11 @@ public sealed class ChatInputControl : UIPanel
         TextBox.Width = FullWidth - prefixWidth;
     }
 
-    //follow the chat display's autofit so the input can't render at a different size from the lines above it. The
-    //display owns the width and therefore the size; ask it rather than assuming an update order.
+    //follow the style of the lines above so the input can't render at a different size from them. The display owns
+    //the size; ask it rather than assuming an update order.
     private void ApplyTextStyle()
     {
-        var size = Display?.EnsureTextSize() ?? FontEngine.Instance.UiSize;
+        var (size, spacing) = TextStyle?.EnsureTextStyle() ?? (FontEngine.Instance.UiSize, ChatTextStyle.Spacing);
         var generation = FontEngine.Instance.Generation;
 
         //the resolved size alone is not enough. Generation also bumps on a layout-scale change, and MeasureWidth is
@@ -169,9 +172,9 @@ public sealed class ChatInputControl : UIPanel
         AppliedGeneration = generation;
 
         TextBox.FontSize = size;
-        TextBox.CharacterSpacing = ChatTextStyle.Spacing;
+        TextBox.CharacterSpacing = spacing;
         PrefixLabel.FontSize = size;
-        PrefixLabel.CharacterSpacing = ChatTextStyle.Spacing;
+        PrefixLabel.CharacterSpacing = spacing;
 
         //the prefix width was measured at the previous size; re-lay it out at the new one
         if (Mode != ChatMode.None)
@@ -180,13 +183,18 @@ public sealed class ChatInputControl : UIPanel
 
     //--- focus methods ---
 
-    private void FocusInternal(ChatMode mode, string prefix, Color color)
+    //claim the sticky-chat registration for this HUD's box: each HUD constructs a ChatInputControl, and construction
+    //order must not decide which box popups treat as the protected chat input — the one actually being focused is the
+    //real one
+    private void ClaimRegistration()
     {
-        //claim the sticky-chat registration for this HUD's box: both HUD implementations construct
-        //a ChatInputControl, and construction order must not decide which box popups treat as the
-        //protected chat input — the one actually being focused is the real one
         if (InputDispatcher.Instance is { } dispatcher)
             dispatcher.ChatInputTextBox = TextBox;
+    }
+
+    private void FocusInternal(ChatMode mode, string prefix, Color color)
+    {
+        ClaimRegistration();
 
         //a switch from a prompt to a chat mode (a whisper from the aisling menu while a prompt is open) is also an exit
         //from the prompt, and the prompt's text is not chat
@@ -237,6 +245,7 @@ public sealed class ChatInputControl : UIPanel
 
     public void ShowPrompt(string prefix, int maxLength, Action<string> onConfirm)
     {
+        ClaimRegistration();
         PromptCallback = onConfirm;
 
         TextBox.MaxLength = maxLength;

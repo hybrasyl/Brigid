@@ -32,7 +32,11 @@ public sealed class IconButton : UIPanel
     }
 
     /// <summary>The icon role that the button shows.</summary>
-    public string? Role => Icon.Role;
+    public string? Role
+    {
+        get => Icon.Role;
+        set => Icon.Role = value;
+    }
 
     /// <summary>True while the window of the button is open: the button shows the pressed look.</summary>
     public bool IsSelected { get; set; }

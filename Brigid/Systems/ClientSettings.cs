@@ -27,6 +27,10 @@ public static class ClientSettings
 
     //the pack_id of the selected ui_theme pack; null selects the first installed theme. Not a legacy key.
     public static string? UiTheme { get; set; }
+
+    //the new HUD's chat box (BRIG-145): the name of the selected tab and whether the box is hidden. Not legacy keys.
+    public static string SelectedChatTab { get; set; } = "Chat";
+    public static bool ChatBoxHidden { get; set; }
     public static bool GroupOpen { get; set; }
     public static int MusicVolume { get; set; } = 5;
     public static int AmbienceVolume { get; set; } = 5;
@@ -111,9 +115,19 @@ public static class ClientSettings
         if (loadPath is null)
             return;
 
+        Read(loadPath);
+
+        //first-run migration: if we just read the legacy file, persist to the new per-user location
+        if (loadPath != FilePath)
+            Save();
+    }
+
+    /// <summary>Reads the settings in the file at <paramref name="path" /> into the static properties. Internal for the tests.</summary>
+    internal static void Read(string path)
+    {
         try
         {
-            foreach (var line in File.ReadLines(loadPath))
+            foreach (var line in File.ReadLines(path))
             {
                 if (!TrySplit(line, out var key, out var value))
                     continue;
@@ -202,16 +216,23 @@ public static class ClientSettings
                         UiTheme = value.Length > 0 ? value : null;
 
                         break;
+
+                    case "ChatTabSelected":
+                        if (value.Length > 0)
+                            SelectedChatTab = value;
+
+                        break;
+
+                    case "ChatBoxHidden":
+                        ChatBoxHidden = value == "1";
+
+                        break;
                 }
             }
         } catch
         {
             //corrupted file — use whatever defaults/partial state was already set
         }
-
-        //first-run migration: if we just read the legacy file, persist to the new per-user location
-        if (loadPath != FilePath)
-            Save();
     }
 
     /// <summary>
@@ -236,6 +257,8 @@ public static class ClientSettings
             writer.WriteLine($"EngFont: {FontIndex}");
             writer.WriteLine($"ImportCharacterData: {LegacyCharacterImport}");
             writer.WriteLine($"UiTheme: {UiTheme}");
+            writer.WriteLine($"ChatTabSelected: {SelectedChatTab}");
+            writer.WriteLine($"ChatBoxHidden: {(ChatBoxHidden ? 1 : 0)}");
             writer.WriteLine("Tel1: \"Nexus\",\"1\"");
             writer.WriteLine("Tel2: \"Nexus\",\"2\"");
             writer.WriteLine("Tel3: \"Nexus\",\"3\"");

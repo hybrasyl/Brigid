@@ -14,7 +14,7 @@ namespace Brigid.Controls.World.Hud.Panel;
 ///     Chat display panel (F key). Shows chat message history with word-wrap. Background loaded from _nchatbk.spf (shown
 ///     in tab area). Text rendered at ChatDisplayBounds (separate area of the HUD).
 /// </summary>
-public sealed class ChatPanel : ExpandablePanel
+public sealed class ChatPanel : ExpandablePanel, IChatTextStyle
 {
     //caps retained messages, not rendered lines — a wrapped message contributes several of the latter
     private const int MAX_CHAT_MESSAGES = 200;
@@ -48,17 +48,20 @@ public sealed class ChatPanel : ExpandablePanel
     private int TextWidth => DisplayBounds.Width - ScrollBarControl.DEFAULT_WIDTH;
 
     /// <summary>
-    ///     Glyph pixel size chat draws at, bringing the layout up to date first. The chat input calls this so it cannot
-    ///     render at a different size from the lines above it: the display owns the width, so it owns the derived size.
+    ///     Glyph pixel size chat draws at, bringing the layout up to date first. The chat input asks for it through
+    ///     <see cref="EnsureTextStyle" />, so it cannot render at a different size from the lines above it: the display
+    ///     owns the width, so it owns the derived size.
     ///     Refreshing here rather than only in <see cref="Update" /> matters because this panel is a HUD tab and stops
     ///     updating when another tab is shown, while the input bar stays visible and still needs the right size.
     /// </summary>
-    public int EnsureTextSize()
+    private int EnsureTextSize()
     {
         EnsureLayoutCurrent();
 
         return FontSize;
     }
+
+    public (int Size, float Spacing) EnsureTextStyle() => (EnsureTextSize(), ChatTextStyle.Spacing);
 
     public ChatPanel(Rectangle displayBounds, Rectangle panelBounds)
     {

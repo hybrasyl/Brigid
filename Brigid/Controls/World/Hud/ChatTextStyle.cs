@@ -5,12 +5,14 @@ using Brigid.Rendering;
 namespace Brigid.Controls.World.Hud;
 
 /// <summary>
-///     The one source of truth for how chat text is sized and spaced, shared by the chat display and the chat input so
-///     they cannot drift apart — the input sits directly under the display, and a size difference between them reads as
-///     a bug even when each is individually reasonable.
+///     The one source of truth for how the legacy chat text is sized and spaced, shared by the legacy chat display and
+///     its chat input so they cannot drift apart — the input sits directly under the display, and a size difference
+///     between them reads as a bug even when each is individually reasonable. The chat box of the new HUD does not use
+///     it: its text has the normal UI size and tracking (BRIG-127 D22).
 ///     <para>
 ///         Deliberately stateless. The width chat sizes against belongs to the display, which owns the rect, so the
-///         display holds the derived size (<see cref="Panel.ChatPanel.EnsureTextSize" />) and the input asks it. An
+///         display holds the derived size (<see cref="Panel.ChatPanel" />, through <see cref="IChatTextStyle" />) and
+///         the input asks it. An
 ///         earlier version cached the width and size in statics here; that made two simultaneously-live HUDs write the
 ///         same globals with last-writer-wins, correct only because <c>ChattingRect</c>, <c>ChattingRect</c> (large)
 ///         and <c>ChattingRectExpanded</c> all happen to be 432px wide in <c>setoa.dat</c>.

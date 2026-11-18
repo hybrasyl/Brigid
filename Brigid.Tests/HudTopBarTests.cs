@@ -48,7 +48,7 @@ public class HudTopBarTests : IDisposable
     private (MainHudControl Hud, HudTopBar Bar, FixedClock Clock) NewHud(PlayerAttributes? attributes = null)
     {
         var clock = new FixedClock(Evening);
-        var hud = new MainHudControl(DispatchProxy.Create<IWorldHud, MainHudControlTests.RecordingHud>(), clock, attributes ?? new PlayerAttributes());
+        var hud = new MainHudControl(DispatchProxy.Create<IWorldHud, MainHudControlTests.RecordingHud>(), clock, attributes ?? new PlayerAttributes(), new Chat());
         Huds.Add(hud);
 
         return (hud, hud.FindChild<HudTopBar>("top_bar")!, clock);
