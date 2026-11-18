@@ -1,0 +1,383 @@
+#region
+using System.Globalization;
+using Chaos.DarkAges.Definitions;
+using Chaos.Extensions.Common;
+#endregion
+
+namespace Brigid.ViewModel;
+
+/// <summary>What a hotbar entry uses: a skill, a spell or an item.</summary>
+public enum HotbarKind
+{
+    Skill,
+    Spell,
+    Item
+}
+
+/// <summary>
+///     An entry of the hotbar (BRIG-146): a kind and a name, which are its key, and the icon that the slot shows also while
+///     the ability or the item is gone. The name of an ability is its name without the level text, so a level gain keeps
+///     the entry; the name of an item is its name without the stack count, so two stacks of one item are one entry.
+/// </summary>
+public sealed record HotbarEntry(HotbarKind Kind, string Name, ushort Sprite = 0, DisplayColor Color = DisplayColor.Default)
+{
+    /// <summary>True when <paramref name="other" /> has the same key: the same kind, and the same name in any case.</summary>
+    public bool SameKey(HotbarEntry other) => (Kind == other.Kind) && Name.EqualsI(other.Name);
+}
+
+/// <summary>
+///     The hotbar of the new HUD (BRIG-146, D4, D14): <see cref="PAGES" /> pages of <see cref="SLOTS" /> entries, and the
+///     page that shows. An entry keeps a kind and a name, not a slot, because the server moves an ability or an item to
+///     another slot on a swap; <see cref="Resolve" /> gives the slot that holds it now.
+/// </summary>
+/// <remarks>
+///     <para>
+///         An ability that leaves its book empties its entries. The server sends a swap as a removal and an add, so the
+///         hotbar waits <see cref="REMOVAL_WAIT_MS" /> after a removal, and empties the entries only when the ability is
+///         still gone (<see cref="Tick" />). A clear of the book (a logout) empties nothing.
+///     </para>
+///     <para>
+///         An item entry stays while the inventory has none of the item, and its slot shows dimmed (Sabrael, 2026-11-18).
+///         At the end of the session, <see cref="DropGoneEntries" /> empties such entries, so a dimmed slot lasts until the
+///         next login; an item that the player wears is not gone. The same sweep empties an ability entry whose ability is
+///         not in the book, for an ability that left the book while the player was away. A session that ends without a
+///         clean unload (a crash) skips the sweep, and the dimmed slot lasts one more session.
+///     </para>
+/// </remarks>
+public sealed class Hotbar
+{
+    public const int PAGES = 10;
+    public const int SLOTS = 12;
+    public const int REMOVAL_WAIT_MS = 1000;
+
+    /// <summary>
+    ///     The time after the load of the hotbar, at the world entry, after which the books and the inventory are settled:
+    ///     the server sends them slot by slot at the world entry, and sends no slot for an empty inventory.
+    /// </summary>
+    public const int SETTLE_MS = 5000;
+
+    /// <summary>The version of the hotbar file.</summary>
+    public const int FILE_VERSION = 1;
+
+    private const string VERSION_KEY = "version";
+    private const string PAGE_KEY = "page";
+
+    private readonly HotbarEntry?[,] Entries = new HotbarEntry?[PAGES, SLOTS];
+    private readonly SkillBook Skills;
+    private readonly SpellBook Spells;
+    private readonly Inventory Items;
+    private readonly Equipment Worn;
+    private readonly Func<long> Clock;
+
+    //the ability name of each book slot as the hotbar last saw it, so a cleared slot gives the name that left
+    private readonly string?[] SkillNames = new string?[SkillBook.MAX_SLOTS];
+    private readonly string?[] SpellNames = new string?[SpellBook.MAX_SLOTS];
+
+    //the abilities that left a slot, and when; the entries empty when the ability is still gone after the wait
+    private readonly Dictionary<(HotbarKind Kind, string Name), long> Removals = [];
+
+    private long? LoadedAt;
+
+    /// <param name="clock">The time in milliseconds; null for <see cref="Environment.TickCount64" />.</param>
+    public Hotbar(SkillBook skills, SpellBook spells, Inventory items, Equipment worn, Func<long>? clock = null)
+    {
+        Skills = skills;
+        Spells = spells;
+        Items = items;
+        Worn = worn;
+        Clock = clock ?? (() => Environment.TickCount64);
+
+        Skills.SlotChanged += slot => ObserveAbility(HotbarKind.Skill, SkillNames, slot, Skills.GetSlot(slot).AbilityName);
+        Spells.SlotChanged += slot => ObserveAbility(HotbarKind.Spell, SpellNames, slot, Spells.GetSlot(slot).AbilityName);
+        Skills.Cleared += () => ForgetAbilities(HotbarKind.Skill, SkillNames);
+        Spells.Cleared += () => ForgetAbilities(HotbarKind.Spell, SpellNames);
+    }
+
+    /// <summary>The page that shows, from 0.</summary>
+    public int Page { get; private set; }
+
+    /// <summary>Raised after the player changes an entry or the page, or an entry empties; not after a load or a reset.</summary>
+    public event Action? Changed;
+
+    /// <summary>The entry at <paramref name="index" /> of <paramref name="page" />, or null.</summary>
+    public HotbarEntry? Get(int page, int index) => InRange(page, index) ? Entries[page, index] : null;
+
+    /// <summary>The entry at <paramref name="index" /> of the page that shows, or null.</summary>
+    public HotbarEntry? Get(int index) => Get(Page, index);
+
+    /// <summary>Puts <paramref name="entry" /> at <paramref name="index" /> of <paramref name="page" />, in place of the entry there.</summary>
+    public void Set(int page, int index, HotbarEntry entry)
+    {
+        if (!InRange(page, index) || string.IsNullOrWhiteSpace(entry.Name) || (Entries[page, index] == entry))
+            return;
+
+        Entries[page, index] = entry;
+        Changed?.Invoke();
+    }
+
+    /// <summary>Empties <paramref name="index" /> of <paramref name="page" />.</summary>
+    public void Clear(int page, int index)
+    {
+        if (!InRange(page, index) || (Entries[page, index] is null))
+            return;
+
+        Entries[page, index] = null;
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    ///     Swaps two entries. The positions are absolute, so a drag keeps its source when the page changes during the drag.
+    /// </summary>
+    public void Move(int fromPage, int from, int toPage, int to)
+    {
+        if (!InRange(fromPage, from) || !InRange(toPage, to) || ((fromPage == toPage) && (from == to)))
+            return;
+
+        (Entries[fromPage, from], Entries[toPage, to]) = (Entries[toPage, to], Entries[fromPage, from]);
+        Changed?.Invoke();
+    }
+
+    /// <summary>Shows <paramref name="page" />; a page past the last wraps to the first, and before the first to the last.</summary>
+    public void SetPage(int page)
+    {
+        var wrapped = ((page % PAGES) + PAGES) % PAGES;
+
+        if (wrapped == Page)
+            return;
+
+        Page = wrapped;
+        Changed?.Invoke();
+    }
+
+    /// <summary>The entry for the skill in book slot <paramref name="slot" />, or null for an empty slot.</summary>
+    public HotbarEntry? EntryForSkill(byte slot)
+    {
+        ref readonly var skill = ref Skills.GetSlot(slot);
+
+        return string.IsNullOrWhiteSpace(skill.AbilityName) ? null : new HotbarEntry(HotbarKind.Skill, skill.AbilityName, skill.Sprite);
+    }
+
+    /// <summary>The entry for the spell in book slot <paramref name="slot" />, or null for an empty slot.</summary>
+    public HotbarEntry? EntryForSpell(byte slot)
+    {
+        ref readonly var spell = ref Spells.GetSlot(slot);
+
+        return string.IsNullOrWhiteSpace(spell.AbilityName) ? null : new HotbarEntry(HotbarKind.Spell, spell.AbilityName, spell.Sprite);
+    }
+
+    /// <summary>The entry for the item in inventory slot <paramref name="slot" />, or null for an empty slot.</summary>
+    public HotbarEntry? EntryForItem(byte slot)
+    {
+        ref readonly var item = ref Items.GetSlot(slot);
+
+        return !item.IsOccupied || string.IsNullOrWhiteSpace(item.Name)
+            ? null
+            : new HotbarEntry(HotbarKind.Item, item.Name, item.Sprite, item.Color);
+    }
+
+    /// <summary>
+    ///     The book or inventory slot that holds <paramref name="entry" /> now, or null when the book or the inventory does
+    ///     not have it. For an item it is the first slot of the item.
+    /// </summary>
+    public byte? Resolve(HotbarEntry entry)
+    {
+        switch (entry.Kind)
+        {
+            case HotbarKind.Skill:
+                for (byte slot = 1; slot <= SkillBook.MAX_SLOTS; slot++)
+                    if (Skills.GetSlot(slot).AbilityName?.EqualsI(entry.Name) == true)
+                        return slot;
+
+                return null;
+
+            case HotbarKind.Spell:
+                for (byte slot = 1; slot <= SpellBook.MAX_SLOTS; slot++)
+                    if (Spells.GetSlot(slot).AbilityName?.EqualsI(entry.Name) == true)
+                        return slot;
+
+                return null;
+
+            default:
+                for (byte slot = 1; slot <= Inventory.MAX_SLOTS; slot++)
+                {
+                    ref readonly var item = ref Items.GetSlot(slot);
+
+                    if (item.IsOccupied && (item.Name?.EqualsI(entry.Name) == true))
+                        return slot;
+                }
+
+                return null;
+        }
+    }
+
+    /// <summary>The number of an item in the inventory: the sum of its stacks, and 1 for each item that does not stack.</summary>
+    public uint CountOf(string itemName)
+    {
+        uint count = 0;
+
+        for (byte slot = 1; slot <= Inventory.MAX_SLOTS; slot++)
+        {
+            ref readonly var item = ref Items.GetSlot(slot);
+
+            if (item.IsOccupied && (item.Name?.EqualsI(itemName) == true))
+                count += item.Stackable ? item.Count : 1;
+        }
+
+        return count;
+    }
+
+    /// <summary>True when the player wears an item of this name.</summary>
+    public bool IsWorn(string itemName) => Worn.GetAll().Values.Any(item => item.Name.EqualsI(itemName));
+
+    /// <summary>Empties the entries of each ability that left its book <see cref="REMOVAL_WAIT_MS" /> ago and did not come back.</summary>
+    public void Tick()
+    {
+        if (Removals.Count == 0)
+            return;
+
+        var now = Clock();
+        var changed = false;
+
+        foreach (var ((kind, name), removedAt) in Removals.ToArray())
+        {
+            if (now - removedAt < REMOVAL_WAIT_MS)
+                continue;
+
+            Removals.Remove((kind, name));
+
+            var key = new HotbarEntry(kind, name);
+
+            if (Resolve(key) is null)
+                changed |= EmptyWhere(entry => entry.SameKey(key));
+        }
+
+        if (changed)
+            Changed?.Invoke();
+    }
+
+    /// <summary>
+    ///     At the end of a session: empties each item entry whose item the player neither carries nor wears, and each ability
+    ///     entry whose ability is not in its book. It does nothing until <see cref="SETTLE_MS" /> after the load, so a session
+    ///     that ends during the world entry keeps the entries whose ability or item has not arrived yet.
+    /// </summary>
+    public void DropGoneEntries()
+    {
+        if (LoadedAt is not { } loadedAt || (Clock() - loadedAt < SETTLE_MS))
+            return;
+
+        if (EmptyWhere(entry => (Resolve(entry) is null) && ((entry.Kind != HotbarKind.Item) || !IsWorn(entry.Name))))
+            Changed?.Invoke();
+    }
+
+    /// <summary>Empties every entry and shows the first page, for the next character; raises no change, because nothing saves it.</summary>
+    public void Reset()
+    {
+        Array.Clear(Entries);
+        Page = 0;
+        Removals.Clear();
+        Array.Clear(SkillNames);
+        Array.Clear(SpellNames);
+        LoadedAt = null;
+    }
+
+    /// <summary>
+    ///     The lines of the hotbar file: <c>version N</c>, <c>page N</c>, then one line for each entry,
+    ///     <c>page index kind sprite color name</c>, with the page and the index from 0.
+    /// </summary>
+    public IEnumerable<string> Format()
+    {
+        yield return FormattableString.Invariant($"{VERSION_KEY} {FILE_VERSION}");
+        yield return FormattableString.Invariant($"{PAGE_KEY} {Page}");
+
+        for (var page = 0; page < PAGES; page++)
+            for (var index = 0; index < SLOTS; index++)
+                if (Entries[page, index] is { } entry)
+                    yield return FormattableString.Invariant(
+                        $"{page} {index} {entry.Kind.ToString().ToLowerInvariant()} {entry.Sprite} {(byte)entry.Color} {entry.Name}");
+    }
+
+    /// <summary>
+    ///     Reads the lines of the hotbar file in place of the entries, at the world entry; a line that does not parse is
+    ///     skipped. It raises no change, so a load does not write the file again.
+    /// </summary>
+    public void Load(IEnumerable<string> lines)
+    {
+        Array.Clear(Entries);
+        Page = 0;
+        LoadedAt = Clock();
+
+        foreach (var line in lines)
+        {
+            var parts = line.Trim().Split(' ', 6, StringSplitOptions.RemoveEmptyEntries);
+
+            if ((parts.Length == 2) && (parts[0] == PAGE_KEY) && TryNumber(parts[1], PAGES, out var shown))
+                Page = shown;
+            else if ((parts.Length == 6)
+                     && TryNumber(parts[0], PAGES, out var page)
+                     && TryNumber(parts[1], SLOTS, out var index)
+                     && TryKind(parts[2], out var kind)
+                     && TryNumber(parts[3], ushort.MaxValue + 1, out var sprite)
+                     && TryNumber(parts[4], byte.MaxValue + 1, out var color)
+                     && !string.IsNullOrWhiteSpace(parts[5]))
+                Entries[page, index] = new HotbarEntry(kind, parts[5].Trim(), (ushort)sprite, (DisplayColor)color);
+        }
+    }
+
+    private static bool TryNumber(string text, int count, out int value)
+        => int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out value) && (value < count);
+
+    //only the names that Format writes; Enum.TryParse would also take a number or a list
+    private static bool TryKind(string text, out HotbarKind kind)
+    {
+        foreach (var candidate in Enum.GetValues<HotbarKind>())
+            if (candidate.ToString().ToLowerInvariant() == text)
+            {
+                kind = candidate;
+
+                return true;
+            }
+
+        kind = default;
+
+        return false;
+    }
+
+    private static bool InRange(int page, int index) => page is >= 0 and < PAGES && index is >= 0 and < SLOTS;
+
+    private bool EmptyWhere(Func<HotbarEntry, bool> match)
+    {
+        var emptied = false;
+
+        for (var page = 0; page < PAGES; page++)
+            for (var index = 0; index < SLOTS; index++)
+                if ((Entries[page, index] is { } entry) && match(entry))
+                {
+                    Entries[page, index] = null;
+                    emptied = true;
+                }
+
+        return emptied;
+    }
+
+    private void ObserveAbility(HotbarKind kind, string?[] names, byte slot, string? name)
+    {
+        var index = slot - 1;
+
+        if (index < 0 || index >= names.Length)
+            return;
+
+        var old = names[index];
+        names[index] = name;
+
+        if ((old is not null) && !old.EqualsI(name ?? string.Empty))
+            Removals[(kind, old.ToLowerInvariant())] = Clock();
+    }
+
+    private void ForgetAbilities(HotbarKind kind, string?[] names)
+    {
+        Array.Clear(names);
+
+        foreach (var key in Removals.Keys.Where(key => key.Kind == kind).ToArray())
+            Removals.Remove(key);
+    }
+}

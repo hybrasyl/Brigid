@@ -20,6 +20,7 @@ public sealed class LocalPlayerSettingsRepository
     private const string ABILITY_KEY = "Ability";
     private const string FAMILY_LIST_FILE = "Familylist.cfg";
     private const string FRIEND_LIST_FILE = "Friendlist.cfg";
+    private const string HOTBAR_FILE = "Hotbar.cfg";
     private const string MACRO_FILE = "Macro.cfg";
     private const string PERSONAL_VIEW_FILE = "PersonalView.cfg";
     private const string SKILL_BOOK_FILE = "SkillBook.cfg";
@@ -29,6 +30,7 @@ public sealed class LocalPlayerSettingsRepository
     public string ExperiencePath => Path.Combine(PlayerDirectory, EXPERIENCE_FILE);
     public string FamilyListPath => Path.Combine(PlayerDirectory, FAMILY_LIST_FILE);
     public string FriendListPath => Path.Combine(PlayerDirectory, FRIEND_LIST_FILE);
+    public string HotbarPath => Path.Combine(PlayerDirectory, HOTBAR_FILE);
 
     // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
     public bool IsInitialized => PlayerDirectory is not null;
@@ -275,6 +277,24 @@ public sealed class LocalPlayerSettingsRepository
     /// <summary>Saves the pinned stats of Personal View to PersonalView.cfg (BRIG-151).</summary>
     public void SavePersonalViewPins(IEnumerable<string> names)
         => DataDiagnostics.Try(() => File.WriteAllLines(PersonalViewPath, names), "SavePersonalViewPins");
+
+    /// <summary>
+    ///     Loads the lines of the hotbar from Hotbar.cfg (BRIG-146). A file that is absent gives no lines; a file that cannot
+    ///     be read gives no lines, and the failure is logged.
+    /// </summary>
+    public string[] LoadHotbar()
+    {
+        string[] lines = [];
+
+        if (File.Exists(HotbarPath))
+            DataDiagnostics.Try(() => lines = File.ReadAllLines(HotbarPath), "LoadHotbar");
+
+        return lines;
+    }
+
+    /// <summary>Saves the lines of the hotbar to Hotbar.cfg (BRIG-146).</summary>
+    public void SaveHotbar(IEnumerable<string> lines)
+        => DataDiagnostics.Try(() => File.WriteAllLines(HotbarPath, lines), "SaveHotbar");
 
     /// <summary>
     ///     Loads the family list from Familylist.cfg.

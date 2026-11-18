@@ -66,7 +66,7 @@ public sealed partial class WorldScreen
         }
 
         var item = WorldState.Inventory.GetSlot(number);
-        ShowItemTooltip(item.Name, item.CurrentDurability, item.MaxDurability);
+        ShowItemTooltip(item.NameWithCount, item.CurrentDurability, item.MaxDurability);
     }
 
     //the slot under the pointer in the Equipment window of the new hud: its item, or the name of an empty slot (BRIG-151)
@@ -708,6 +708,26 @@ public sealed partial class WorldScreen
 
         PersonalViewPinsLoaded = true;
         EquipmentWindow.SetPins(PersonalStats.Parse(DataContext.LocalPlayerSettings.LoadPersonalViewPins()));
+    }
+
+    //the hotbar, once for this screen's character, as the pins of Personal View (BRIG-146)
+    private bool HotbarLoaded;
+
+    private void LoadHotbar()
+    {
+        if (HotbarLoaded)
+            return;
+
+        HotbarLoaded = true;
+        WorldState.Hotbar.Load(DataContext.LocalPlayerSettings.LoadHotbar());
+    }
+
+    //the hotbar, saved for the character at each change, after its load: a change before the load is the reset of the
+    //last character, and a save then would write over this character's file (BRIG-146)
+    private void SaveHotbar()
+    {
+        if (CharacterFolderReady && HotbarLoaded)
+            DataContext.LocalPlayerSettings.SaveHotbar(WorldState.Hotbar.Format());
     }
 
     //the pins of Personal View, saved for the character at each change (BRIG-151)

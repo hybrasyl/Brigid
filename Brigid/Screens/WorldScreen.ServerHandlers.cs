@@ -50,6 +50,7 @@ public sealed partial class WorldScreen
             MainHud.ConvertsExperiencePastCap = ServerProfileKey.IsHybrasyl(GlobalSettings.LobbyHost, Game.Connection.ServerName);
             LoadPlayerExperience();
             LoadPersonalViewPins();
+            LoadHotbar();
             WorldState.ReloadChants();
             LoadOwnProfile(args.Name);
 
@@ -610,7 +611,7 @@ public sealed partial class WorldScreen
 
         //surface the slot's hover description (e.g. "Apple[ 10 ]") in the HUD bar while the popup
         //is open — matches retail behavior of pinning the operated-on item's tooltip text.
-        WorldHud.SetDescription(WorldState.Inventory.GetSlot(fromSlot).Name);
+        WorldHud.SetDescription(WorldState.Inventory.GetSlot(fromSlot).NameWithCount);
     }
 
     private void HandleExchangeClosed(string? message)
