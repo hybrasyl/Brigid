@@ -60,6 +60,12 @@ internal static class DialogPalette
     //the fill of a focused text field
     public static readonly Color InputFocus = RowHoverFill;
 
+    //the meters of the new HUD (BRIG-148): the empty part of a meter, and the fills. The fills carry meaning (health is red,
+    //mana is blue), so they are literal and not theme colour roles
+    public static readonly Color MeterTrack = new(21, 28, 35);
+    public static readonly Color HealthFill = new(178, 58, 51);
+    public static readonly Color ManaFill = new(47, 98, 181);
+
     /// <summary>
     ///     The flat value of a <c>ui_theme</c> colour role: the one colour that every control uses for <paramref name="role" />
     ///     when it is not themed or the theme does not set that colour (BRIG-122 D4).

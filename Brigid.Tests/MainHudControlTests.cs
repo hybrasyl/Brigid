@@ -75,8 +75,6 @@ public class MainHudControlTests : IDisposable
     [Theory]
     [InlineData("toast")]
     [InlineData("effect_bar")]
-    [InlineData("health_bar")]
-    [InlineData("mana_bar")]
     [InlineData("hotbar")]
     [InlineData("player_plate")]
     [InlineData("experience_bar")]

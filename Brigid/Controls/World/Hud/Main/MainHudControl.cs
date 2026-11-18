@@ -69,8 +69,16 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         //the places of the parts that later cards add
         AddChild(Place("toast", MainHudLayout.Toast));
         AddChild(Place("effect_bar", MainHudLayout.EffectBar));
-        AddChild(Place("health_bar", MainHudLayout.HealthBar));
-        AddChild(Place("mana_bar", MainHudLayout.ManaBar));
+        HealthBar = new HudMeter("health_bar", MainHudLayout.HealthBar, ThemeRoles.HudHealthTrack, ThemeRoles.HudHealthFill, DialogPalette.HealthFill)
+        {
+            Label = "HP"
+        };
+        ManaBar = new HudMeter("mana_bar", MainHudLayout.ManaBar, ThemeRoles.HudManaTrack, ThemeRoles.HudManaFill, DialogPalette.ManaFill)
+        {
+            Label = "MP"
+        };
+        AddChild(HealthBar);
+        AddChild(ManaBar);
         AddChild(Place("hotbar", MainHudLayout.Hotbar));
         AddChild(Place("player_plate", MainHudLayout.PlayerPlate));
         AddChild(Place("experience_bar", MainHudLayout.ExperienceBar));
@@ -111,6 +119,12 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// <summary>The chat box over the bottom left of the world (BRIG-145).</summary>
     public ChatBoxControl ChatBox { get; }
 
+    /// <summary>The health bar of the bottom area (BRIG-148).</summary>
+    internal HudMeter HealthBar { get; }
+
+    /// <summary>The mana bar of the bottom area (BRIG-148).</summary>
+    internal HudMeter ManaBar { get; }
+
     /// <summary>Closes the open panels. Returns true when a panel was open, so that Escape closes the panels first.</summary>
     public bool ClosePanels() => Windows.CloseAll();
 
@@ -135,19 +149,30 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         base.Dispose();
     }
 
-    //weight, gold and mail come with the attributes, as on the classic HUD
+    //weight, gold, mail, health and mana come with the attributes, as on the classic HUD
     private void OnAttributesChanged()
     {
         if (Attributes.Current is { } attrs)
             ShowAttributes(attrs);
     }
 
-    /// <summary>Shows the weight, the gold and the mail state of <paramref name="attrs" /> on the top bar.</summary>
+    /// <summary>
+    ///     Shows the weight, the gold and the mail state of <paramref name="attrs" /> on the top bar, and its health and mana
+    ///     in their meters.
+    /// </summary>
     internal void ShowAttributes(PlayerAttributes attrs)
     {
         TopBar.SetWeight(attrs.CurrentWeight, attrs.MaxWeight);
         TopBar.SetGold(attrs.Gold);
         TopBar.SetMail(attrs.HasMail, attrs.HasParcel);
+        ShowMeter(HealthBar, attrs.CurrentHp, attrs.MaxHp);
+        ShowMeter(ManaBar, attrs.CurrentMp, attrs.MaxMp);
+    }
+
+    private static void ShowMeter(HudMeter meter, uint current, uint max)
+    {
+        meter.SetFill(current, max);
+        meter.Value = HudFormat.Meter(current, max);
     }
 
     public Rectangle ViewportBounds => MainHudLayout.World;

@@ -159,8 +159,9 @@ public sealed class PrimitiveGalleryTests : IDisposable
                     .Where(field => field.IsLiteral)
                     .Select(field => (string)field.GetRawConstantValue()!)
                     .Except(ThemeRoles.StatusIcons)
-                    //the new HUD shows its surfaces and icons (MainHudControlTests, HudTopBarTests)
+                    //the new HUD shows its surfaces, bars and icons (MainHudControlTests, HudTopBarTests, HudMeterTests)
                     .Except(ThemeRoles.HudSurfaces)
+                    .Except(ThemeRoles.HudMeters)
                     .Except(ThemeRoles.HudIcons)
                     .Except(ThemeRoles.WindowIcons)
                     .Except(ThemeRoles.ChatIcons);
