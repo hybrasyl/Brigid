@@ -1,4 +1,5 @@
 #region
+using System.Reflection;
 using Brigid.DevModules;
 using Brigid.Networking;
 using Brigid.Screens;
@@ -124,6 +125,18 @@ public sealed class DevModuleLoaderTests : IDisposable
         Assert.Contains("removed the Test listener that failed", lines);
     }
 
+    //a module type whose members name an assembly that is not there throws in the type check; the client must still start
+    [Fact]
+    public void ATypeWhoseCheckThrowsIsSkippedAndTheOthersLoad()
+    {
+        var host = new FakeDevHost();
+
+        var types = DevModuleLoader.SelectModuleTypes([new MissingDependencyType(), typeof(ListedModule), typeof(string)], "module.dll", host);
+
+        Assert.Equal([typeof(ListedModule)], types);
+        Assert.Contains(host.Lines, line => line.Contains("the type check failed") && line.Contains(nameof(FileNotFoundException)));
+    }
+
     private void CopySampleModule(string fileName)
         => File.Copy(Path.Combine(AppContext.BaseDirectory, "devmodule-sample", "Brigid.Tests.SampleModule.dll"), Path.Combine(Root, fileName));
 }
@@ -163,4 +176,30 @@ public sealed class FakeDevHost : IDevHost
         add => UpdateListeners += value;
         remove => UpdateListeners -= value;
     }
+}
+
+/// <summary>A dev module type for the type check test.</summary>
+public sealed class ListedModule : IDevModule
+{
+    public string Name => "listed";
+
+    public string Description => string.Empty;
+
+    public IReadOnlyList<DevAction> Actions => [];
+
+    public void Initialize(IDevHost host) { }
+
+    public void Shutdown() { }
+}
+
+/// <summary>A type whose constructor lookup throws, as a module type that names a missing assembly does.</summary>
+internal sealed class MissingDependencyType() : TypeDelegator(typeof(ListedModule))
+{
+    protected override ConstructorInfo GetConstructorImpl(
+        BindingFlags bindingAttr,
+        Binder? binder,
+        CallingConventions callConvention,
+        Type[] types,
+        ParameterModifier[]? modifiers)
+        => throw new FileNotFoundException("Could not load file or assembly 'Missing.Dependency'");
 }

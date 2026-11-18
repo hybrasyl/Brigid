@@ -835,11 +835,8 @@ public sealed class ConnectionManager : IDisposable
                 Y = (ushort)y
             });
 
-    /// <summary>
-    ///     Processes queued inbound packets, driving state transitions. Call this from the game loop's Update method.
-    /// </summary>
-    //each hop starts its world entry again: the entry flags, WorldEntering, and the map, which is the map of this
-    //connection only, so that the world screen never shows the map of an earlier one
+    //each hop starts its world entry again: the entry flags, WorldEntering, and the map, which is the map of the last
+    //connection, so that RequestMapData does not ask with the size of an earlier map
     internal void ResetEntryForHop()
     {
         EntryState = WorldEntryState.None;
@@ -850,6 +847,9 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>Sets the state, for the tests of what depends on it.</summary>
     internal void SetStateForTest(ConnectionState state) => State = state;
 
+    /// <summary>
+    ///     Processes queued inbound packets, driving state transitions. Call this from the game loop's Update method.
+    /// </summary>
     public void ProcessPackets(List<IServerPacket> buffer)
     {
         Client.DrainPackets(buffer);

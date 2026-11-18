@@ -3,8 +3,9 @@ namespace Brigid.DevModules;
 /// <summary>
 ///     A developer tool that the client loads from <see cref="Data.AppPaths.DevModulesDir" /> when <c>BRIGID_DEV_MODULES</c>
 ///     is set (BRIG-29). A dev module is its own assembly, and it never ships to players. Make the class public, with a
-///     public constructor with no parameters. Reference the client with <c>Private="false"</c>, so that the client is not
-///     copied beside the module. The loader reads the file into memory, so <c>Assembly.Location</c> is empty in a module.
+///     public constructor with no parameters. Reference the client with <c>Private="false"</c>, so that <c>Brigid.dll</c>
+///     is not copied beside the module. The other client assemblies (<c>Brigid.Data</c> and the others) can still be in
+///     the module's output; the loader skips a file with the name of a client or runtime assembly. The loader reads the file into memory, so <c>Assembly.Location</c> is empty in a module.
 ///     <para>
 ///         The contract. A module can read the state of the client and show debug UI. It can also give input that a
 ///         player could give: keys, text and mouse events through SDL, which go through <see cref="InputBuffer" /> and the

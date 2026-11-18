@@ -29,7 +29,7 @@ public static class AppPaths
     /// <summary>
     ///     True when <c>BRIGID_APP_ROOT</c> gives <see cref="AppRoot" />. The smoke tests set it, so that a run never reads
     ///     or writes the developer's own settings. With it set, no migration into <see cref="AppRoot" /> runs: the folder
-    ///     has only what the test put in it.
+    ///     has only what the test put in it, and the client does not ask GitHub for a new release.
     /// </summary>
     public static bool IsAppRootOverridden => AppRootOverride is not null;
 

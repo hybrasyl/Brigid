@@ -13,11 +13,15 @@ namespace Brigid.TestDriver;
 ///     and only for the current user. Each message is one line of JSON. The reader thread puts each request in
 ///     <see cref="Requests" />, and the game thread takes them; a reply goes through <see cref="Send" /> to the writer
 ///     thread, so the game thread never waits on the pipe. When the test closes the pipe (it ended, or its process
-///     stopped), <see cref="ClientLeft" /> becomes true, and the driver closes the client. A .NET named pipe is a Unix
-///     domain socket on Linux and macOS.
+///     stopped), or does not connect in time (<see cref="DefaultConnectTimeout" />), <see cref="ClientLeft" /> becomes true, and the
+///     driver closes the client. A .NET named pipe is a Unix domain socket on Linux and macOS.
 /// </summary>
 internal sealed class PipeServer : IDisposable
 {
+    //longer than the harness waits for the start, so only a test that is gone gets here
+    internal static readonly TimeSpan DefaultConnectTimeout = TimeSpan.FromMinutes(3);
+
+    private readonly TimeSpan ConnectTimeout;
     private readonly NamedPipeServerStream Pipe;
     private readonly Action<string> Log;
     private readonly CancellationTokenSource Stop = new();
@@ -27,12 +31,13 @@ internal sealed class PipeServer : IDisposable
 
     internal ConcurrentQueue<JsonObject> Requests { get; } = new();
 
-    /// <summary>True when the test connected and then closed the pipe.</summary>
+    /// <summary>True when the test connected and then closed the pipe, or did not connect in time.</summary>
     internal bool ClientLeft => Left;
 
-    internal PipeServer(string pipeName, Action<string> log)
+    internal PipeServer(string pipeName, Action<string> log, TimeSpan? connectTimeout = null)
     {
         Log = log;
+        ConnectTimeout = connectTimeout ?? DefaultConnectTimeout;
         Pipe = new NamedPipeServerStream(
             pipeName,
             PipeDirection.InOut,
@@ -58,7 +63,22 @@ internal sealed class PipeServer : IDisposable
     {
         try
         {
-            Pipe.WaitForConnectionAsync(Stop.Token).GetAwaiter().GetResult();
+            using (var connect = CancellationTokenSource.CreateLinkedTokenSource(Stop.Token))
+            {
+                connect.CancelAfter(ConnectTimeout);
+
+                try
+                {
+                    Pipe.WaitForConnectionAsync(connect.Token).GetAwaiter().GetResult();
+                } catch (OperationCanceledException) when (!Stop.IsCancellationRequested)
+                {
+                    Log($"test driver: no test connected in {ConnectTimeout.TotalSeconds} s");
+                    Left = true;
+
+                    return;
+                }
+            }
+
             Log("test driver: the test connected");
 
             using var reader = new StreamReader(Pipe, new UTF8Encoding(false), false, 4096, leaveOpen: true);

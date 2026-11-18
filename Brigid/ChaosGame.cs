@@ -621,7 +621,8 @@ public sealed class ChaosGame : Game
             ClientSettings.Apply(launcherChoices);
 
         AssetPackRegistry.SelectUiTheme(ClientSettings.UiTheme);
-        //load keybind overrides (DataPath was resolved during config/launcher setup); pure defaults if absent.
+        //load keybind overrides from the app folder (DataPath was resolved during config/launcher setup, for the move of
+        //an older keybinds.json from the data folder); pure defaults if absent.
         Keybinds.Load();
         //LoadContent constructed FontEngine early (with the default face) so the launcher's frames have a non-null
         //Instance; now that ClientSettings is loaded, switch to the user's saved face before the lobby appears.

@@ -1,5 +1,7 @@
+using System.Reflection;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
+using DALib.Networking.Packets.Server;
 using DALib.Networking.Wire;
 using Xunit;
 
@@ -55,6 +57,9 @@ public sealed class WorldEnteringTests
     public void AHopClearsTheMapOfTheLastConnection()
     {
         using var manager = new ConnectionManager();
+        typeof(ConnectionManager).GetMethod("HandleMapInfo", BindingFlags.Instance | BindingFlags.NonPublic)!
+                                 .Invoke(manager, [new MapInfoPacket { MapId = 137, Name = "a room", Width = 30, Height = 20, Flags = default, Checksum = default }]);
+        Assert.NotNull(manager.MapInfo);
 
         manager.ResetEntryForHop();
 

@@ -1,3 +1,4 @@
+using Brigid.Collections;
 using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Rendering;
@@ -28,7 +29,7 @@ public sealed class OrangeBarOverflowTests
         FontEngine.Initialize(0);
         Assert.True(TextRenderer.MeasureWidth(LONG) > WIDTH, "the message must be wider than a line");
 
-        var lines = SystemMessagePanel.WrapHistory([new Chat.OrangeBarMessage(LONG, Color.Orange)], WIDTH);
+        var lines = Wrap([new Chat.OrangeBarMessage(LONG, Color.Orange)]);
 
         Assert.True(lines.Count > 1);
         Assert.All(lines, line => Assert.Equal(Color.Orange, line.Color));
@@ -47,8 +48,60 @@ public sealed class OrangeBarOverflowTests
             new("last", Color.Cyan)
         ];
 
-        var lines = SystemMessagePanel.WrapHistory(history, WIDTH);
+        var lines = Wrap(history);
 
         Assert.Equal(history, lines);
+    }
+
+    //a new message wraps only itself, and the full history buffer drops its oldest message: the lines must be those of
+    //a wrap of the whole history
+    [Fact]
+    public void AnAppendGivesTheLinesOfAFullWrap()
+    {
+        FontEngine.Initialize(0);
+        var history = new CircularBuffer<Chat.OrangeBarMessage>(4);
+        var wrapped = new WrappedHistory();
+        wrapped.Rebuild(history, WIDTH);
+
+        string[] texts = ["one", LONG, string.Empty, "two words", LONG + " again", "three", "a last message that wraps over the width"];
+
+        for (var i = 0; i < texts.Length; i++)
+        {
+            history.Add(new Chat.OrangeBarMessage(texts[i], i % 2 == 0 ? Color.Orange : Color.Cyan));
+
+            //two messages at once on every third message, as when the panel was hidden for a while
+            if ((i % 3 == 1) && (i + 1 < texts.Length))
+            {
+                history.Add(new Chat.OrangeBarMessage(texts[++i], Color.White));
+                wrapped.Append(history, 2, WIDTH);
+            } else
+                wrapped.Append(history, 1, WIDTH);
+
+            Assert.Equal(Wrap(history), wrapped.Lines);
+        }
+    }
+
+    [Fact]
+    public void MoreNewMessagesThanTheHistoryHoldsWrapsItAll()
+    {
+        FontEngine.Initialize(0);
+        var history = new CircularBuffer<Chat.OrangeBarMessage>(2);
+        var wrapped = new WrappedHistory();
+        wrapped.Rebuild(history, WIDTH);
+
+        foreach (var text in new[] { "a", "b", LONG })
+            history.Add(new Chat.OrangeBarMessage(text, Color.Orange));
+
+        wrapped.Append(history, 3, WIDTH);
+
+        Assert.Equal(Wrap(history), wrapped.Lines);
+    }
+
+    private static List<Chat.OrangeBarMessage> Wrap(IReadOnlyList<Chat.OrangeBarMessage> history)
+    {
+        var wrapped = new WrappedHistory();
+        wrapped.Rebuild(history, WIDTH);
+
+        return wrapped.Lines.ToList();
     }
 }

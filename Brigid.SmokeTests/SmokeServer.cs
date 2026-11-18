@@ -195,12 +195,16 @@ public sealed class SmokeServer : IAsyncLifetime
     /// <summary>Removes the run's containers, network and volumes, and its two files.</summary>
     async Task IAsyncLifetime.DisposeAsync()
     {
-        if (OverrideFile is not null)
-            await RunComposeAsync(["down", "--volumes", "--remove-orphans"], CommandTimeout);
-
-        foreach (var file in new[] { OverrideFile, ConfigFile })
-            if (file is not null && File.Exists(file))
-                File.Delete(file);
+        try
+        {
+            if (OverrideFile is not null)
+                await RunComposeAsync(["down", "--volumes", "--remove-orphans"], CommandTimeout);
+        } finally
+        {
+            foreach (var file in new[] { OverrideFile, ConfigFile })
+                if (file is not null && File.Exists(file))
+                    File.Delete(file);
+        }
     }
 
     //the changes to the compose file for a smoke run:

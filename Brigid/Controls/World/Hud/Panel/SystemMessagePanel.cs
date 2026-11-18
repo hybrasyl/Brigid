@@ -3,7 +3,6 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
-using Brigid.Rendering;
 using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -24,8 +23,11 @@ public sealed class SystemMessagePanel : ExpandablePanel
     private readonly ScrollBarBinder Binder;
     private readonly IReadOnlyList<Chat.OrangeBarMessage> History;
     //the wrapped lines of History; the scroll model counts these lines, not the messages
-    private List<Chat.OrangeBarMessage> DisplayLines = [];
+    private readonly WrappedHistory Wrapped = new();
     private readonly FontGenerationStamp LayoutStamp = new();
+    //the messages added since the last wrap, and whether the next wrap must start again (a clear)
+    private int AddedSinceWrap;
+    private bool RewrapAll = true;
     private readonly int LineWidth;
     //Offset is lines-from-bottom (0 = newest at bottom); Inverted maps wheel/page + the bar thumb accordingly
     private readonly ScrollModel Model = new() { Inverted = true };
@@ -150,30 +152,16 @@ public sealed class SystemMessagePanel : ExpandablePanel
         base.Dispose();
     }
 
-    private void OnChatCleared() => HistoryChanged = true;
-
-    private void OnOrangeBarMessageAdded(Chat.OrangeBarMessage _) => HistoryChanged = true;
-
-    /// <summary>
-    ///     The lines of <paramref name="history" /> wrapped at <paramref name="width" />, oldest first. Each line keeps the
-    ///     color of its message, and an empty message is one empty line.
-    /// </summary>
-    internal static List<Chat.OrangeBarMessage> WrapHistory(IReadOnlyList<Chat.OrangeBarMessage> history, int width)
+    private void OnChatCleared()
     {
-        var lines = new List<Chat.OrangeBarMessage>();
+        RewrapAll = true;
+        HistoryChanged = true;
+    }
 
-        for (var i = 0; i < history.Count; i++)
-        {
-            var message = history[i];
-            var wrapped = TextRenderer.WrapLines(message.Text, width);
-
-            if (wrapped.Count == 0)
-                lines.Add(message with { Text = string.Empty });
-            else
-                lines.AddRange(wrapped.Select(line => message with { Text = line }));
-        }
-
-        return lines;
+    private void OnOrangeBarMessageAdded(Chat.OrangeBarMessage _)
+    {
+        AddedSinceWrap++;
+        HistoryChanged = true;
     }
 
     private void RefreshDisplay()
@@ -184,12 +172,13 @@ public sealed class SystemMessagePanel : ExpandablePanel
         RenderedScrollOffset = Model.Offset;
 
         var maxLines = Math.Min(MaxVisibleLines, Lines.Length);
-        var startIndex = Math.Max(0, DisplayLines.Count - maxLines - Model.Offset);
+        var lines = Wrapped.Lines;
+        var startIndex = Math.Max(0, lines.Count - maxLines - Model.Offset);
         var lineIndex = 0;
 
-        for (var i = startIndex; (i < DisplayLines.Count) && (lineIndex < maxLines); i++)
+        for (var i = startIndex; (i < lines.Count) && (lineIndex < maxLines); i++)
         {
-            var msg = DisplayLines[i];
+            var msg = lines[i];
             Lines[lineIndex].Text = msg.Text;
             Lines[lineIndex].ForegroundColor = msg.Color;
             lineIndex++;
@@ -222,7 +211,7 @@ public sealed class SystemMessagePanel : ExpandablePanel
         Bar.Visible = expanded;
         Bar.Height = DisplayBounds.Height;
 
-        Model.SetMetrics(DisplayLines.Count, MaxVisibleLines);
+        Model.SetMetrics(Wrapped.Lines.Count, MaxVisibleLines);
 
         //show/hide labels based on current line count
         for (var i = 0; i < Lines.Length; i++)
@@ -267,10 +256,17 @@ public sealed class SystemMessagePanel : ExpandablePanel
             var wasAtBottom = Model.Offset == 0;
             HistoryChanged = false;
             RenderedScrollOffset = -1;
-            DisplayLines = WrapHistory(History, LineWidth);
+
+            if (RewrapAll || LayoutStamp.Changed)
+                Wrapped.Rebuild(History, LineWidth);
+            else
+                Wrapped.Append(History, AddedSinceWrap, LineWidth);
+
+            AddedSinceWrap = 0;
+            RewrapAll = false;
             LayoutStamp.Mark();
 
-            Model.SetMetrics(DisplayLines.Count, MaxVisibleLines);
+            Model.SetMetrics(Wrapped.Lines.Count, MaxVisibleLines);
 
             //stick to the bottom when already there; otherwise keep the same lines-from-bottom offset. The offset counts
             //from the newest line, so an entry evicted from the full buffer needs no change to it

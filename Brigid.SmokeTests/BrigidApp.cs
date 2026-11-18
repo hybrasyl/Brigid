@@ -31,8 +31,13 @@ public sealed class BrigidApp : IAsyncDisposable
     private static readonly TimeSpan DefaultWait = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
 
+    //a run that a killed test host left: older than this, its folder or file is not in use
+    private static readonly TimeSpan StaleAge = TimeSpan.FromHours(1);
+    private static int Swept;
+
     private readonly Process Client;
     private readonly List<string> Output = [];
+    private bool Started;
     private readonly List<string> Captures = [];
     private DriverClient? Driver;
 
@@ -92,6 +97,10 @@ public sealed class BrigidApp : IAsyncDisposable
     private static async Task<BrigidApp> StartAsync(string testName)
     {
         var (clientDll, driverDll) = SmokeEnvironment.BuildPaths();
+
+        if (Interlocked.Exchange(ref Swept, 1) == 0)
+            SweepStaleTempEntries();
+
         var root = Path.Combine(Path.GetTempPath(), "brigid-smoke-" + Guid.NewGuid().ToString("N"));
         BrigidApp? app = null;
 
@@ -102,17 +111,32 @@ public sealed class BrigidApp : IAsyncDisposable
             app.Client.OutputDataReceived += (_, e) => app.Record(e.Data);
             app.Client.ErrorDataReceived += (_, e) => app.Record(e.Data);
             app.Client.Start();
+            app.Started = true;
             app.Client.BeginOutputReadLine();
             app.Client.BeginErrorReadLine();
 
             using var cancel = new CancellationTokenSource(StartTimeout);
-            var exited = app.Client.WaitForExitAsync(cancel.Token);
-            var connect = DriverClient.ConnectAsync(pipe, cancel.Token);
 
-            if (await Task.WhenAny(connect, exited) != connect)
-                throw new InvalidOperationException($"the client stopped before the driver started (exit code {app.Client.ExitCode})");
+            try
+            {
+                var exited = app.Client.WaitForExitAsync(cancel.Token);
+                var connect = DriverClient.ConnectAsync(pipe, cancel.Token);
 
-            app.Driver = await connect;
+                if ((await Task.WhenAny(connect, exited) != connect) || !connect.IsCompletedSuccessfully)
+                {
+                    if (app.Client.HasExited)
+                        throw new InvalidOperationException($"the client stopped before the driver started (exit code {app.Client.ExitCode})");
+
+                    if (cancel.IsCancellationRequested)
+                        throw new TimeoutException($"the driver did not start in {StartTimeout.TotalSeconds} s");
+                }
+
+                app.Driver = await connect;
+            } finally
+            {
+                //a connect that still waits stops here, not at the end of the run
+                await cancel.CancelAsync();
+            }
 
             return app;
         } catch (Exception ex)
@@ -378,6 +402,15 @@ public sealed class BrigidApp : IAsyncDisposable
     /// <summary>Asks the client to close, kills it when it does not, and deletes its temporary app folder.</summary>
     public async ValueTask DisposeAsync()
     {
+        //a process that did not start has no state to read
+        if (!Started)
+        {
+            Client.Dispose();
+            DeleteRoot(Root);
+
+            return;
+        }
+
         if (Driver is not null)
         {
             if (!Client.HasExited)
@@ -418,9 +451,28 @@ public sealed class BrigidApp : IAsyncDisposable
             try
             {
                 Directory.Delete(root, true);
-            } catch (IOException)
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Thread.Sleep(200);
+            }
+    }
+
+    //the app folders and the server files of runs whose test host was killed, so DisposeAsync did not run
+    private static void SweepStaleTempEntries()
+    {
+        var temp = new DirectoryInfo(Path.GetTempPath());
+        var before = DateTime.UtcNow - StaleAge;
+
+        foreach (var entry in temp.EnumerateFileSystemInfos("brigid-smoke-*").Where(entry => entry.LastWriteTimeUtc < before))
+            try
+            {
+                if (entry is DirectoryInfo folder)
+                    folder.Delete(true);
+                else
+                    entry.Delete();
+            } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                //still in use, or not ours to delete: the next run tries again
             }
     }
 }

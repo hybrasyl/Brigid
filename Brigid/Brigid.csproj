@@ -33,7 +33,7 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Brigid.Tests" />
-        <!-- the BRIG-184 test driver dev module: the pointer seam and the scancode map in InputBuffer -->
+        <!-- the BRIG-184 test driver dev module: the input seams of InputBuffer, the frame capture, and the map state and tile points of WorldScreen -->
         <InternalsVisibleTo Include="Brigid.TestDriver" />
     </ItemGroup>
 

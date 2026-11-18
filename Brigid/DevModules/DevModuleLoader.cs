@@ -195,11 +195,31 @@ internal static class DevModuleLoader
             types = ex.Types;
         }
 
-        return types.OfType<Type>()
-                    .Where(type => type is { IsClass: true, IsAbstract: false, IsVisible: true }
-                                   && typeof(IDevModule).IsAssignableFrom(type)
-                                   && (type.GetConstructor(Type.EmptyTypes) is not null))
-                    .OrderBy(type => type.FullName, StringComparer.Ordinal);
+        return SelectModuleTypes(types.OfType<Type>(), file, host);
+    }
+
+    /// <summary>
+    ///     The public classes of <paramref name="types" /> that are dev modules and have a public constructor with no
+    ///     parameters, in name order. The check of each type is module code: a type whose members name an assembly that is
+    ///     not there throws while it is checked, so the check runs through <see cref="Guard" /> and skips that type.
+    /// </summary>
+    internal static IReadOnlyList<Type> SelectModuleTypes(IEnumerable<Type> types, string file, IDevHost host)
+        => types.Where(type => IsModuleType(type, file, host))
+                .OrderBy(type => type.FullName, StringComparer.Ordinal)
+                .ToList();
+
+    private static bool IsModuleType(Type type, string file, IDevHost host)
+    {
+        var isModule = false;
+
+        Guard(
+            host.Log,
+            $"{type.FullName} in {file}: the type check",
+            () => isModule = type is { IsClass: true, IsAbstract: false, IsVisible: true }
+                             && typeof(IDevModule).IsAssignableFrom(type)
+                             && (type.GetConstructor(Type.EmptyTypes) is not null));
+
+        return isModule;
     }
 
     private static (IDevModule Module, ModuleHost Host)? TryStart(Type type, string file, IDevHost host)
