@@ -115,6 +115,15 @@ public abstract class UIElement : IDisposable
             Width,
             Height);
 
+    /// <summary>Sets the position and the size of the element from <paramref name="bounds" />, in its parent's space.</summary>
+    public virtual void SetBounds(Rectangle bounds)
+    {
+        X = bounds.X;
+        Y = bounds.Y;
+        Width = bounds.Width;
+        Height = bounds.Height;
+    }
+
     public Rectangle ScreenBounds
         => new(
             ScreenX,

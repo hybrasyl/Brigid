@@ -330,6 +330,16 @@ public sealed class KeybindsTests
         Assert.Equal(CommandId.World_ChatScrollDown, Keybinds.Resolve(WinKey(Keys.Down, shift: true), KeybindContext.WorldHud));
     }
 
+    //BRIG-144: Shift+/ selects the new HUD while it is built; / keeps the swap of the classic and the large HUD
+    [Fact]
+    public void WorldHud_ShiftSlash_IsTheMainHud_BareSlash_IsTheSwap()
+    {
+        Keybinds.ResetAll();
+
+        Assert.Equal(CommandId.World_ToggleMainHud, Keybinds.Resolve(WinKey(Keys.OemQuestion, shift: true), KeybindContext.WorldHud));
+        Assert.Equal(CommandId.World_SwapHudLayout, Keybinds.Resolve(WinKey(Keys.OemQuestion), KeybindContext.WorldHud));
+    }
+
     [Theory]
     [InlineData(Keys.Up, CommandId.Move_Up)]
     [InlineData(Keys.C, CommandId.Move_Up)]

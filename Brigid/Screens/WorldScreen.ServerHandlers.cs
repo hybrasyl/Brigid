@@ -921,7 +921,7 @@ public sealed partial class WorldScreen
         //group open state — server is source of truth, sync all ui
         StatusBook.SetGroupOpen(args.CanGroup);
         WorldState.UserOptions.SetValue(12, args.CanGroup);
-        WorldHud.SetGroupOpen(args.CanGroup);
+        UpdateHuds(HudOps.SetGroupOpen, args.CanGroup);
 
         //group members — parse groupstring into state, ui subscribes via event
         if (!string.IsNullOrEmpty(args.GroupStatusText))

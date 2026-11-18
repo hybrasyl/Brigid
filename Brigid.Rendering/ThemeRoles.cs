@@ -46,6 +46,11 @@ public static class ThemeRoles
     public const string FrameSign = "frame.sign";
     public const string FramePopup = "frame.popup";
 
+    //the new HUD (BRIG-144): the bar over the world, the area under it, and the strips beside it
+    public const string HudTopBar = "hud.top_bar";
+    public const string HudBottomBar = "hud.bottom_bar";
+    public const string HudSideEdge = "hud.side_edge";
+
     //content roles: icons, drawn on every host through IconArt, not only on a themed host
     //social status icons, one image for each status
     public const string StatusAwake = "icon.status.awake";
@@ -78,6 +83,12 @@ public static class ThemeRoles
     [
         Text, TextDisabled, TextSelected, TextTitle, TextError, Divider, Border, RowHover, RowSelected, InputText, InputFocus
     ];
+
+    /// <summary>
+    ///     The surfaces of the new HUD (BRIG-144). The HUD shows them, not the primitive gallery, because a small sample
+    ///     cannot show a bar the width of the screen.
+    /// </summary>
+    public static readonly string[] HudSurfaces = [HudTopBar, HudBottomBar, HudSideEdge];
 
     /// <summary>The social status icon parts, indexed by the wire value of the status (awake is 0).</summary>
     public static readonly string[] StatusIcons =

@@ -146,7 +146,7 @@ public sealed partial class WorldScreen
             var capturedX = tileX;
             var capturedY = tileY;
 
-            WorldHud.ChatInput.ShowPrompt(
+            ShownChatInput?.ShowPrompt(
                 $"Number of items to drop [ 0 - {(int)invSlot.Count} ]: ",
                 12,
                 text =>
@@ -400,10 +400,10 @@ public sealed partial class WorldScreen
             {
                 var macroText = OptionsModal.GetMacroValue(slot - 1);
 
-                if (macroText.Length > 0)
+                if ((macroText.Length > 0) && ShownChatInput is { } chat)
                 {
-                    WorldHud.ChatInput.Focus($"{WorldHud.PlayerName}: ", Color.White);
-                    WorldHud.ChatInput.SetText(macroText, macroText.Length);
+                    chat.Focus($"{WorldHud.PlayerName}: ", Color.White);
+                    chat.SetText(macroText, macroText.Length);
                 }
 
                 break;
@@ -641,8 +641,8 @@ public sealed partial class WorldScreen
         //enter — toggle chat focus
         if (Keybinds.Matches(e, CommandId.World_ChatFocus))
         {
-            if (!WorldHud.ChatInput.IsFocused)
-                WorldHud.ChatInput.Focus($"{WorldHud.PlayerName}: ", Color.White);
+            if (ShownChatInput is { IsFocused: false } chat)
+                chat.Focus($"{WorldHud.PlayerName}: ", Color.White);
 
             e.Handled = true;
 
@@ -769,7 +769,7 @@ public sealed partial class WorldScreen
         //shout hotkey (shift+1)
         if (Keybinds.Matches(e, CommandId.World_Shout))
         {
-            WorldHud.ChatInput.Focus($"{WorldHud.PlayerName}! ", Color.Yellow);
+            ShownChatInput?.Focus($"{WorldHud.PlayerName}! ", Color.Yellow);
             e.Handled = true;
 
             return;
@@ -778,7 +778,7 @@ public sealed partial class WorldScreen
         //whisper hotkey (shift+")
         if (Keybinds.Matches(e, CommandId.World_Whisper))
         {
-            WorldHud.ChatInput.FocusWhisper();
+            ShownChatInput?.FocusWhisper();
             e.Handled = true;
 
             return;
@@ -901,7 +901,7 @@ public sealed partial class WorldScreen
             if (WorldHud.ChatInput.Mode != ChatMode.None)
                 WorldHud.ChatInput.Unfocus();
             else
-                WorldHud.ChatInput.FocusIgnore();
+                ShownChatInput?.FocusIgnore();
 
             e.Handled = true;
 
@@ -921,6 +921,15 @@ public sealed partial class WorldScreen
         if (Keybinds.Matches(e, CommandId.World_SwapHudLayout))
         {
             SwapHudLayout();
+            e.Handled = true;
+
+            return;
+        }
+
+        //shift+/ — the new hud and back, while it is built
+        if (Keybinds.Matches(e, CommandId.World_ToggleMainHud))
+        {
+            ToggleMainHud();
             e.Handled = true;
 
             return;
@@ -1539,7 +1548,7 @@ public sealed partial class WorldScreen
                 name,
                 () => Game.Connection.ClickEntity(id),
                 () => Game.Connection.SendGroupInvite(ClientGroupSwitch.TryInvite, name),
-                () => WorldHud.ChatInput.Focus($"-> {name}: ", TextColors.Whisper));
+                () => ShownChatInput?.Focus($"-> {name}: ", TextColors.Whisper));
         }
     }
 

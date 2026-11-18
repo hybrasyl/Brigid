@@ -1,4 +1,5 @@
 #region
+using System.Diagnostics;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
@@ -578,7 +579,7 @@ public sealed partial class WorldScreen
             WorldList.OnClose += () => hud.UsersButton.IsSelected = false;
         }
 
-        WorldList.OnWhisperRequested += name => WorldHud.ChatInput.Focus($"-> {name}: ", TextColors.Whisper);
+        WorldList.OnWhisperRequested += name => ShownChatInput?.Focus($"-> {name}: ", TextColors.Whisper);
 
         if (hud.BulletinButton is not null)
         {
@@ -733,18 +734,64 @@ public sealed partial class WorldScreen
             }
     }
 
-    private void ResetBulletinButtonSelection() => WorldHud.BulletinButton?.IsSelected = false;
+    //both legacy huds: a board can close while the hud that opened it is hidden
+    private void ResetBulletinButtonSelection()
+    {
+        SmallHud.BulletinButton?.IsSelected = false;
+        LargeHud.BulletinButton?.IsSelected = false;
+    }
 
-    private void ResetMailButtonSelection() => WorldHud.MailButton?.IsSelected = false;
+    private void ResetMailButtonSelection()
+    {
+        SmallHud.MailButton?.IsSelected = false;
+        LargeHud.MailButton?.IsSelected = false;
+    }
 
+    /// <summary>
+    ///     The chat input that shows, or null on the new HUD: its chat input is the hidden classic box until BRIG-145, and a
+    ///     hidden box that takes the focus loses it to the dispatcher but stays in its chat mode (BRIG-127 D41).
+    /// </summary>
+    private ChatInputControl? ShownChatInput => WorldHud == MainHud ? null : WorldHud.ChatInput;
+
+    //'/': the classic and the large hud; nothing while the new hud shows
     private void SwapHudLayout()
     {
+        if (HudSwitch.Swap())
+            ActivateHud(HudFor(HudSwitch.Active));
+    }
+
+    //shift+/: the new hud, and back to the hud that showed before it
+    private void ToggleMainHud()
+    {
+        HudSwitch.ToggleMain();
+        ActivateHud(HudFor(HudSwitch.Active));
+    }
+
+    private IWorldHud HudFor(HudLayout layout)
+        => layout switch
+        {
+            HudLayout.Classic => SmallHud,
+            HudLayout.Large   => LargeHud,
+            HudLayout.Main    => MainHud,
+            _                 => throw new UnreachableException()
+        };
+
+    /// <summary>
+    ///     Shows <paramref name="hud" /> in place of the current HUD, and moves the camera and each popup that is placed in
+    ///     the world area to its viewport.
+    /// </summary>
+    private void ActivateHud(IWorldHud hud)
+    {
         WorldHud.Inventory.ForceHoverExit();
+
+        //a chat box that has the focus would keep its chat mode while its hud is hidden
+        if (WorldHud.ChatInput.Mode != ChatMode.None)
+            WorldHud.ChatInput.Unfocus();
 
         var activeTab = WorldHud.ActiveTab;
 
         ((UIPanel)WorldHud).Visible = false;
-        WorldHud = WorldHud == SmallHud ? LargeHud : SmallHud;
+        WorldHud = hud;
         ((UIPanel)WorldHud).Visible = true;
         WorldHud.ShowTab(activeTab);
 
@@ -782,18 +829,20 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>
-    ///     Calls an action on all HUD instances so both stay in sync regardless of which is visible.
+    ///     Calls an action on all HUD instances so they stay in sync regardless of which is visible.
     /// </summary>
     private void UpdateHuds<T>(Action<IWorldHud, T> op, T arg)
     {
         op(SmallHud, arg);
         op(LargeHud, arg);
+        op(MainHud, arg);
     }
 
     private void UpdateHuds<T1, T2>(Action<IWorldHud, T1, T2> op, T1 arg1, T2 arg2)
     {
         op(SmallHud, arg1, arg2);
         op(LargeHud, arg1, arg2);
+        op(MainHud, arg1, arg2);
     }
 
     /// <summary>
@@ -850,6 +899,9 @@ public sealed partial class WorldScreen
         public static readonly Action<IWorldHud, bool> SetTransportSecure =
             static (h, secure) => h.SetTransportSecure(secure);
 
+        public static readonly Action<IWorldHud, bool> SetGroupOpen =
+            static (h, groupOpen) => h.SetGroupOpen(groupOpen);
+
         public static readonly Action<IWorldHud, string> ShowPersistentMessage =
             static (h, msg) => h.ShowPersistentMessage(msg);
 
@@ -863,7 +915,7 @@ public sealed partial class WorldScreen
         };
 
         public static readonly Action<IWorldHud, byte, EffectColor> SetEffect =
-            static (h, icon, color) => h.EffectBar.SetEffect(icon, color);
+            static (h, icon, color) => h.SetEffect(icon, color);
     }
     #endregion
 

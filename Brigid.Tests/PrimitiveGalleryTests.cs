@@ -158,7 +158,9 @@ public sealed class PrimitiveGalleryTests : IDisposable
                     .GetFields(BindingFlags.Public | BindingFlags.Static)
                     .Where(field => field.IsLiteral)
                     .Select(field => (string)field.GetRawConstantValue()!)
-                    .Except(ThemeRoles.StatusIcons);
+                    .Except(ThemeRoles.StatusIcons)
+                    //the new HUD shows its surfaces (MainHudControlTests)
+                    .Except(ThemeRoles.HudSurfaces);
 
         Assert.All(roles, role => Assert.Contains(role, texts));
 

@@ -69,6 +69,7 @@ public static class KeybindCatalog
         new(CommandId.World_Settings, "Settings", KeybindSection.Panels),
         new(CommandId.World_KeybindMenu, "Keybinds", KeybindSection.Panels),
         new(CommandId.World_SwapHudLayout, "Swap HUD Layout", KeybindSection.Panels),
+        new(CommandId.World_ToggleMainHud, "New HUD", KeybindSection.Panels),
 
         new(CommandId.World_TabInventory, "Inventory", KeybindSection.HudTabs),
         new(CommandId.World_TabInventoryExpand, "Inventory (Expand)", KeybindSection.HudTabs),
