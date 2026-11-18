@@ -54,15 +54,15 @@ internal sealed class HudTopBar : HudBarPanel
         SecureIcon = AddIcon(server, "secure", MainHudLayout.SecureIconIn(server.Bounds));
         SecureIcon.Role = ThemeRoles.IconHudSecure;
         SecureIcon.Visible = false;
-        ServerName = AddLabel(server, "server_name", MainHudLayout.ServerNameIn(server.Bounds), HorizontalAlignment.Left);
+        ServerName = server.AddLabel("server_name", MainHudLayout.ServerNameIn(server.Bounds), HorizontalAlignment.Left);
         server.Clicked += () => ServerClicked?.Invoke();
 
         var gold = AddBox("gold_box", MainHudLayout.GoldBox, () => [Line(HudFormat.GoldTooltip(Gold) ?? "Gold")]);
         AddIcon(gold, "gold_icon", MainHudLayout.BoxIconAt(0)).Role = ThemeRoles.IconHudGold;
-        GoldLabel = AddLabel(gold, "gold", MainHudLayout.BoxTextIn(gold.Bounds), HorizontalAlignment.Left);
+        GoldLabel = gold.AddLabel("gold", MainHudLayout.BoxTextIn(gold.Bounds), HorizontalAlignment.Left);
 
         var zone = AddBox("zone_box", MainHudLayout.ZoneBox, () => [Line(ZoneLabel!.Text)]);
-        ZoneLabel = AddLabel(zone, "zone", MainHudLayout.BoxTextIn(zone.Bounds, withIcon: false), HorizontalAlignment.Center);
+        ZoneLabel = zone.AddLabel("zone", MainHudLayout.BoxTextIn(zone.Bounds, withIcon: false), HorizontalAlignment.Center);
 
         var mail = AddBox("mail_box", MainHudLayout.MailBox, MailLines);
         MailIcon = AddIcon(mail, "mail", MainHudLayout.BoxIconAt(0));
@@ -74,10 +74,10 @@ internal sealed class HudTopBar : HudBarPanel
 
         var weight = AddBox("weight_box", MainHudLayout.WeightBox, () => [Line($"Weight {CurrentWeight} of {MaxWeight}")]);
         AddIcon(weight, "weight_icon", MainHudLayout.BoxIconAt(0)).Role = ThemeRoles.IconHudWeight;
-        WeightLabel = AddLabel(weight, "weight", MainHudLayout.BoxTextIn(weight.Bounds), HorizontalAlignment.Left);
+        WeightLabel = weight.AddLabel("weight", MainHudLayout.BoxTextIn(weight.Bounds), HorizontalAlignment.Left);
 
         var clockBox = AddBox("clock_box", MainHudLayout.ClockBox, ClockLines);
-        ClockLabel = AddLabel(clockBox, "clock", MainHudLayout.BoxTextIn(clockBox.Bounds, withIcon: false), HorizontalAlignment.Center);
+        ClockLabel = clockBox.AddLabel("clock", MainHudLayout.BoxTextIn(clockBox.Bounds, withIcon: false), HorizontalAlignment.Center);
         clockBox.Clicked += ToggleClock;
 
         ShowLatency(null);
@@ -242,24 +242,5 @@ internal sealed class HudTopBar : HudBarPanel
         box.AddChild(icon);
 
         return icon;
-    }
-
-    private static UILabel AddLabel(HudBox box, string name, Rectangle bounds, HorizontalAlignment alignment)
-    {
-        var label = new UILabel
-        {
-            Name = name,
-            HorizontalAlignment = alignment,
-            VerticalAlignment = VerticalAlignment.Center,
-            PaddingLeft = 0,
-            PaddingRight = 0,
-            IsHitTestVisible = false
-        };
-
-        label.SetBounds(bounds);
-        label.SetForegroundRole(ThemeRoles.Text);
-        box.AddChild(label);
-
-        return label;
     }
 }

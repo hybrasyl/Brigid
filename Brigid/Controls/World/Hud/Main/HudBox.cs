@@ -7,10 +7,11 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Brigid.Controls.World.Hud.Main;
 
 /// <summary>
-///     A box of the top bar of the new HUD: the <see cref="ThemeRoles.HudBox" /> part, else a dark fill with a border in the
-///     theme's divider colour. Its labels and icons do not take the mouse, so the box gets the hover and the click.
+///     A box of the new HUD: a box of the top bar, or the player plate. It draws the <see cref="ThemeRoles.HudBox" /> part,
+///     else a dark fill with a border in the theme's divider colour. Its labels and icons do not take the mouse, so the box
+///     gets the hover and the click.
 /// </summary>
-internal sealed class HudBox : UIPanel
+internal class HudBox : UIPanel
 {
     public HudBox(string name, Rectangle bounds)
     {
@@ -51,4 +52,24 @@ internal sealed class HudBox : UIPanel
     public override void OnMouseEnter() => Entered?.Invoke(this);
 
     public override void OnMouseLeave() => Left?.Invoke();
+
+    /// <summary>Adds a label in <paramref name="bounds" /> of the box, in the colour of <paramref name="role" />.</summary>
+    internal UILabel AddLabel(string name, Rectangle bounds, HorizontalAlignment alignment, string role = ThemeRoles.Text)
+    {
+        var label = new UILabel
+        {
+            Name = name,
+            HorizontalAlignment = alignment,
+            VerticalAlignment = VerticalAlignment.Center,
+            PaddingLeft = 0,
+            PaddingRight = 0,
+            IsHitTestVisible = false
+        };
+
+        label.SetBounds(bounds);
+        label.SetForegroundRole(role);
+        AddChild(label);
+
+        return label;
+    }
 }

@@ -151,6 +151,16 @@ internal static class MainHudLayout
     public static readonly Rectangle Divider = new(EDGE, BottomArea.Top + 65, World.Width, 1);
     public static readonly Rectangle PlayerPlate = new(EDGE, BottomArea.Top + 70, 125, 24);
 
+    //the side of the player's icon on the plate: the head of the aisling, at its own pixel size
+    private const int PLATE_ICON = 17;
+
+    //the parts of the player plate, in the plate: the icon at the left, then two lines, the name over the level and class
+    private const int PLATE_PAD = 3;
+    private const int PLATE_TEXT_LEFT = PLATE_PAD + PLATE_ICON + 4;
+    public static readonly Rectangle PlateIcon = new(PLATE_PAD, (PlayerPlate.Height - PLATE_ICON) / 2, PLATE_ICON, PLATE_ICON);
+    public static readonly Rectangle PlateName = new(PLATE_TEXT_LEFT, 0, PlayerPlate.Width - PLATE_TEXT_LEFT - PLATE_PAD, PlayerPlate.Height / 2);
+    public static readonly Rectangle PlateDetail = PlateName with { Y = PlayerPlate.Height / 2 };
+
     /// <summary>The row of window buttons, right-aligned; the space at its left is for the pet plate (BRIG-4).</summary>
     public static readonly Rectangle WindowButtons = new(260, BottomArea.Top + 70, World.Right - 260, 24);
 

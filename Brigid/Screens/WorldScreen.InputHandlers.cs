@@ -1369,11 +1369,8 @@ public sealed partial class WorldScreen
                     else if (ClientSettings.EnableProfileClick)
                     {
                         if (entity.Id == Game.Connection.AislingId)
-                        {
-                            SelfProfileRequested = true;
-                            SelfProfileRequestedTab = StatusBookTab.Equipment;
-                            Game.Connection.RequestSelfProfile();
-                        } else
+                            RequestStatusBook(StatusBookTab.Equipment);
+                        else
                             Game.Connection.ClickEntity(entity.Id);
                     }
                 } else if (MapRenderer.TryHitTestForeground(MapFile, Camera, e.ScreenX - viewport.X, e.ScreenY - viewport.Y, out var fgX, out var fgY))

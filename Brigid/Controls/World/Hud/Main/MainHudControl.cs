@@ -66,9 +66,11 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         ChatBox = new ChatBoxControl(chat ?? WorldState.Chat);
         AddChild(ChatBox);
 
-        //the places of the parts that later cards add
+        //the places of the parts that later cards add (BRIG-162, BRIG-147)
         AddChild(Place("toast", MainHudLayout.Toast));
         AddChild(Place("effect_bar", MainHudLayout.EffectBar));
+
+        //the meters (BRIG-148)
         HealthBar = new HudMeter("health_bar", MainHudLayout.HealthBar, ThemeRoles.HudHealthTrack, ThemeRoles.HudHealthFill, DialogPalette.HealthFill)
         {
             Label = "HP"
@@ -97,7 +99,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         AddChild(ManaBar);
         AddChild(ExperienceBar);
         AddChild(Place("hotbar", MainHudLayout.Hotbar));
-        AddChild(Place("player_plate", MainHudLayout.PlayerPlate));
+        Plate = new HudPlayerPlate();
+        Plate.Clicked += () => PlateClicked?.Invoke();
+        AddChild(Plate);
         Windows = new HudWindowHost(Tooltip);
         AddChild(Windows.Row);
 
@@ -128,6 +132,22 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     /// <summary>A click on the mail box of the top bar: the mail.</summary>
     public event Action? MailClicked;
+
+    /// <summary>A click on the player plate: the status book, until the Details window (D34).</summary>
+    public event Action? PlateClicked;
+
+    /// <summary>The player plate of the bottom area (BRIG-148).</summary>
+    internal HudPlayerPlate Plate { get; }
+
+    /// <summary>The class name of the player, from the self profile, on the player plate.</summary>
+    public void SetPlayerClass(string className) => Plate.SetClass(className);
+
+    /// <summary>Shows the head of the aisling of <paramref name="appearance" /> on the player plate.</summary>
+    public void SetPlayerAppearance(AislingRenderer renderer, in AislingAppearance appearance)
+        => Plate.SetIcon(renderer.RenderHead(in appearance, MainHudLayout.PlateIcon.Width));
+
+    /// <summary>Shows no icon on the player plate, for a form that is not an aisling.</summary>
+    public void ClearPlayerIcon() => Plate.SetIcon(null);
 
     /// <summary>The windows of the HUD: its button row, its panels and the windows that the world screen binds.</summary>
     internal HudWindowHost Windows { get; }
@@ -206,6 +226,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         TopBar.SetMail(attrs.HasMail, attrs.HasParcel);
         ShowMeter(HealthBar, attrs.CurrentHp, attrs.MaxHp);
         ShowMeter(ManaBar, attrs.CurrentMp, attrs.MaxMp);
+        Plate.SetLevel(attrs.Level);
 
         var experience = HudExperience.Describe(attrs, ConvertsExperiencePastCap);
         ExperienceBar.SetFill(experience.Fraction);
@@ -247,7 +268,11 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     #region The shell
     public ChatInputControl ChatInput => ChatBox.Input;
 
-    public void SetPlayerName(string name) => PlayerName = name;
+    public void SetPlayerName(string name)
+    {
+        PlayerName = name;
+        Plate.SetName(name);
+    }
 
     public void ShowPersistentMessage(string text) => PersistentMessage.SetMessage(text);
 

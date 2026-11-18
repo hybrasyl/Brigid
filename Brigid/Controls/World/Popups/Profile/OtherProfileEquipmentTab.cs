@@ -18,7 +18,6 @@ namespace Brigid.Controls.World.Popups.Profile;
 /// </summary>
 public sealed class OtherProfileEquipmentTab : PrefabPanel
 {
-    private const int PAPERDOLL_IDLE_FRAME = 5;
 
     private readonly UILabel? ClanLabel;
     private readonly UILabel? ClanTitleLabel;
@@ -286,7 +285,7 @@ public sealed class OtherProfileEquipmentTab : PrefabPanel
     public void SetPaperdoll(AislingRenderer renderer, in AislingAppearance appearance)
     {
         PaperdollTexture?.Dispose();
-        PaperdollTexture = renderer.Render(in appearance, PAPERDOLL_IDLE_FRAME, flipHorizontal: true);
+        PaperdollTexture = renderer.RenderSouthIdle(in appearance);
 
         PaperdollImage?.Texture = PaperdollTexture;
     }

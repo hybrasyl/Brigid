@@ -17,7 +17,6 @@ namespace Brigid.Controls.World.Popups.Profile;
 public sealed class SelfProfileEquipmentTab : PrefabPanel
 {
     //idle frame for south-facing direction (walk anim frames 5-9, idle = 5)
-    private const int PAPERDOLL_IDLE_FRAME = 5;
     private readonly UILabel? AcLabel;
     private readonly UILabel? ClanLabel;
     private readonly UILabel? ClanTitleLabel;
@@ -335,7 +334,7 @@ public sealed class SelfProfileEquipmentTab : PrefabPanel
         PaperdollTexture?.Dispose();
 
         //south-facing (direction=2) = right idle frame (5) + horizontal flip
-        PaperdollTexture = renderer.Render(in appearance, PAPERDOLL_IDLE_FRAME, flipHorizontal: true);
+        PaperdollTexture = renderer.RenderSouthIdle(in appearance);
 
         PaperdollImage?.Texture = PaperdollTexture;
     }

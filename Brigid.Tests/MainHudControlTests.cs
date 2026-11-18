@@ -76,7 +76,6 @@ public class MainHudControlTests : IDisposable
     [InlineData("toast")]
     [InlineData("effect_bar")]
     [InlineData("hotbar")]
-    [InlineData("player_plate")]
     public void EachLaterPartHasAPlaceThatDoesNotTakeTheMouse(string name)
     {
         var (hud, _) = NewHud();

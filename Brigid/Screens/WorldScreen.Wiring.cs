@@ -596,20 +596,10 @@ public sealed partial class WorldScreen
             };
         }
 
-        hud.InventoryReactivated += () =>
-        {
-            SelfProfileRequested = true;
-            SelfProfileRequestedTab = StatusBookTab.Equipment;
-            Game.Connection.RequestSelfProfile();
-        };
+        hud.InventoryReactivated += () => RequestStatusBook(StatusBookTab.Equipment);
 
         if (hud.LegendButton is not null)
-            hud.LegendButton.Clicked += () =>
-            {
-                SelfProfileRequested = true;
-                SelfProfileRequestedTab = StatusBookTab.Legend;
-                Game.Connection.RequestSelfProfile();
-            };
+            hud.LegendButton.Clicked += () => RequestStatusBook(StatusBookTab.Legend);
 
         if (hud.ServerBoxButton is not null)
             hud.ServerBoxButton.Clicked += ToggleServerInfo;
@@ -736,10 +726,21 @@ public sealed partial class WorldScreen
     }
 
     /// <summary>The new HUD's own controls; its legacy panels are the classic HUD's, which WireHudPanels wired.</summary>
+    //the status book opens on the self profile that the server sends back
+    private void RequestStatusBook(StatusBookTab tab)
+    {
+        SelfProfileRequested = true;
+        SelfProfileRequestedTab = tab;
+        Game.Connection.RequestSelfProfile();
+    }
+
     private void WireMainHud()
     {
         MainHud.ServerBoxClicked += ToggleServerInfo;
         MainHud.MailClicked += OpenMail;
+
+        //the player plate opens the status book, as a second press of the inventory key does on the classic HUD
+        MainHud.PlateClicked += () => RequestStatusBook(StatusBookTab.Equipment);
         WireChatInput(MainHud.ChatInput);
 
         //the chat box opens as the player left it

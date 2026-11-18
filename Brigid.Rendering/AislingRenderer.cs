@@ -536,6 +536,118 @@ public sealed class AislingRenderer : IDisposable
         bool? isFrontFacing = null,
         int emotionFrame = -1)
     {
+        using var composite = RenderComposite(
+            in appearance,
+            frameIndex,
+            out contentBottomY,
+            animSuffix,
+            flipHorizontal,
+            isFrontFacing,
+            emotionFrame);
+
+        return composite is not null ? TextureConverter.ToTexture2D(composite) : null;
+    }
+
+    /// <summary>
+    ///     Renders the aisling as the paperdolls show it: south-facing, at idle (the right idle frame, flipped). The caller
+    ///     owns the texture.
+    /// </summary>
+    public Texture2D? RenderSouthIdle(in AislingAppearance appearance) => Render(in appearance, RIGHT_IDLE_FRAME, flipHorizontal: true);
+
+    /// <summary>
+    ///     The head of the aisling as a texture of side <paramref name="size" /> (the player plate of the new HUD, BRIG-148):
+    ///     the south idle figure with no weapon and no shield, which can reach above the head, cut by <see cref="HeadCrop" />.
+    ///     The cut is on the composite, before the upload. Null for an appearance that renders nothing. The caller owns the
+    ///     texture.
+    /// </summary>
+    public Texture2D? RenderHead(in AislingAppearance appearance, int size)
+    {
+        var bare = appearance with
+        {
+            WeaponSprite = 0,
+            ShieldSprite = 0
+        };
+
+        using var figure = RenderComposite(in bare, RIGHT_IDLE_FRAME, out _, flipHorizontal: true);
+        using var head = figure is null ? null : CutHead(figure, size);
+
+        return head is not null ? TextureConverter.ToTexture2D(head) : null;
+    }
+
+    /// <summary>
+    ///     The square of side <paramref name="size" /> of <paramref name="figure" /> at <see cref="HeadCrop" />, or null for a
+    ///     figure with no pixel that is not clear. The part of the square outside the figure is clear.
+    /// </summary>
+    internal static SKImage? CutHead(SKImage figure, int size)
+    {
+        using var source = SKBitmap.FromImage(figure);
+        var pixels = source.Pixels;
+        var alpha = new byte[pixels.Length];
+
+        for (var i = 0; i < pixels.Length; i++)
+            alpha[i] = pixels[i].Alpha;
+
+        if (HeadCrop(alpha, source.Width, source.Height, size) is not { } crop)
+            return null;
+
+        using var head = new SKBitmap(size, size);
+
+        using (var canvas = new SKCanvas(head))
+        {
+            canvas.Clear(SKColors.Transparent);
+            canvas.DrawImage(figure, -crop.X, -crop.Y);
+        }
+
+        return SKImage.FromBitmap(head);
+    }
+
+    /// <summary>
+    ///     The square of side <paramref name="size" /> that holds the head of a figure in a <paramref name="width" /> by
+    ///     <paramref name="height" /> image of <paramref name="alpha" /> values: its top is the first row with a pixel that is
+    ///     not clear, and it is centred on the pixels that are not clear in its rows. Null for an image with no such pixel.
+    ///     The square can go past the edges of the image.
+    /// </summary>
+    internal static Rectangle? HeadCrop(ReadOnlySpan<byte> alpha, int width, int height, int size)
+    {
+        var top = -1;
+
+        for (var y = 0; (y < height) && (top < 0); y++)
+            for (var x = 0; x < width; x++)
+                if (alpha[y * width + x] > 0)
+                {
+                    top = y;
+
+                    break;
+                }
+
+        if (top < 0)
+            return null;
+
+        var left = width;
+        var right = -1;
+
+        for (var y = top; y < Math.Min(height, top + size); y++)
+            for (var x = 0; x < width; x++)
+                if (alpha[y * width + x] > 0)
+                {
+                    left = Math.Min(left, x);
+                    right = Math.Max(right, x);
+                }
+
+        var centre = (left + right + 1) / 2;
+
+        return new Rectangle(centre - size / 2, top, size, size);
+    }
+
+    private SKImage? RenderComposite(
+        in AislingAppearance appearance,
+        int frameIndex,
+        out int contentBottomY,
+        string animSuffix = WALK_ANIM,
+        bool flipHorizontal = false,
+        bool? isFrontFacing = null,
+        int emotionFrame = -1)
+    {
         contentBottomY = 0;
         var layers = RenderLayers;
         Array.Clear(layers, 0, layers.Length);
@@ -591,9 +703,7 @@ public sealed class AislingRenderer : IDisposable
 
             var order = isFront ? FRONT_ORDER : BACK_ORDER;
 
-            using var composite = Composite(layers, order, flipHorizontal, out contentBottomY);
-
-            return composite is not null ? TextureConverter.ToTexture2D(composite) : null;
+            return Composite(layers, order, flipHorizontal, out contentBottomY);
         } finally
         {
             //layer SKImages are owned by LayerImageCache — do not dispose them here, just release references.
