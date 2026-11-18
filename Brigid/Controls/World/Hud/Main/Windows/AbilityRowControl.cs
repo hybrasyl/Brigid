@@ -124,16 +124,7 @@ internal sealed class AbilityRowControl : UIPanel
 
     private UILabel AddLine(string name, string role)
     {
-        var label = new UILabel
-        {
-            Name = name,
-            VerticalAlignment = VerticalAlignment.Center,
-            PaddingLeft = 0,
-            PaddingRight = 0,
-            IsHitTestVisible = false
-        };
-
-        label.SetForegroundRole(role);
+        var label = HudText.Label(name, role);
         AddChild(label);
 
         return label;

@@ -106,9 +106,8 @@ internal static class MainHudLayout
     public const int ABILITY_ICON = 32;
     private const int ABILITY_FILTER_TOP = ABILITY_TAB_HEIGHT + 2;
     private const int ABILITY_LIST_TOP = ABILITY_FILTER_TOP + 18;
-    private const int ABILITY_ARROW = 14;
+    public const int ABILITY_ARROW = 14;
     private const int ABILITY_PAGE_NUMBER = 34;
-    private const int ABILITY_ROWS = 8;
 
     /// <summary>The parts of the Abilities window in a content of <paramref name="width" /> by <paramref name="height" />.</summary>
     public static AbilitiesLayout AbilitiesIn(int width, int height)
@@ -122,7 +121,7 @@ internal static class MainHudLayout
         var learnedLabel = unlearnedLabel with { X = learnedBox.Right + 3, Width = 52 };
 
         //eight rows of 33 px as in the wireframe, else as close as the height needs, and never under the icon
-        var pitch = Math.Clamp((height - ABILITY_LIST_TOP) / ABILITY_ROWS, ABILITY_ICON, ABILITY_ICON + 1);
+        var pitch = Math.Clamp((height - ABILITY_LIST_TOP) / Windows.AbilityList.ROWS, ABILITY_ICON, ABILITY_ICON + 1);
 
         return new AbilitiesLayout(
             new Rectangle(0, 0, 2 * ABILITY_TAB_WIDTH + 4, ABILITY_TAB_HEIGHT),

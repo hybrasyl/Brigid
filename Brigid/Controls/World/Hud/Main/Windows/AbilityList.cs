@@ -32,8 +32,8 @@ internal sealed record AbilityRow(
 /// <summary>
 ///     The rows of the Abilities window (BRIG-149, BRIG-127 D21, D35). The skills come first, then the spells. In each kind
 ///     the learned abilities come in the order of their book slots, so the primary, secondary and utility pages of D21
-///     stay together; then the abilities of the class ability metadata that the book does not have (the metafile lists
-///     part of them, Sabrael 2026-11-18), in the order of the metadata. A page holds 16 rows, down the left column and then
+///     stay together; then the abilities of the class ability metadata that the book does not have (the server sends
+///     part of that list in the metafile today), in the order of the metadata. A page holds 16 rows, down the left column and then
 ///     down the right one.
 /// </summary>
 internal static class AbilityList

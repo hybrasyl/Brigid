@@ -21,7 +21,7 @@ namespace Brigid.Controls.World.Hud.Main.Windows;
 ///     Unlearned filter is on (the attributes decide the blue or grey icon of an ability that the player can learn); it
 ///     keeps its page.
 /// </summary>
-internal sealed class AbilitiesWindowControl : UIPanel
+internal sealed class AbilitiesWindowControl : HudWindowContent
 {
     private readonly SkillBook Skills;
     private readonly SpellBook Spells;
@@ -88,8 +88,6 @@ internal sealed class AbilitiesWindowControl : UIPanel
         TraitsText.Text = "Traits come in a later update.";
         TraitsText.Visible = false;
 
-        LayOut(MainHudLayout.AbilitiesIn(Width, Height));
-
         Skills.SlotChanged += OnBookChanged;
         Skills.Cleared += OnChanged;
         Spells.SlotChanged += OnBookChanged;
@@ -122,13 +120,6 @@ internal sealed class AbilitiesWindowControl : UIPanel
     internal string PageText => PageNumber.Text;
 
     internal bool ShowsTraits => Tabs.SelectedIndex == 1;
-
-    /// <summary>The panel gives the content its bounds; the window lays out again in them.</summary>
-    public override void SetBounds(Rectangle bounds)
-    {
-        base.SetBounds(bounds);
-        LayOut(MainHudLayout.AbilitiesIn(bounds.Width, bounds.Height));
-    }
 
     /// <summary>Shows another page; a page past the end stops at the end.</summary>
     public void TurnPage(int delta)
@@ -178,8 +169,10 @@ internal sealed class AbilitiesWindowControl : UIPanel
         base.Dispose();
     }
 
-    private void LayOut(AbilitiesLayout layout)
+    protected override void LayOut(int width, int height)
     {
+        var layout = MainHudLayout.AbilitiesIn(width, height);
+
         Tabs.X = layout.Tabs.X;
         Tabs.Y = layout.Tabs.Y;
         Place(UnlearnedBox, layout.UnlearnedBox);
@@ -255,7 +248,7 @@ internal sealed class AbilitiesWindowControl : UIPanel
 
     private TextButton AddPageButton(string name, string text, int delta)
     {
-        var button = new TextButton(text, 14, 14) { Name = name };
+        var button = new TextButton(text, MainHudLayout.ABILITY_ARROW, MainHudLayout.ABILITY_ARROW) { Name = name };
         button.Clicked += () => TurnPage(delta);
         AddChild(button);
 
@@ -264,17 +257,7 @@ internal sealed class AbilitiesWindowControl : UIPanel
 
     private UILabel AddText(string name, HorizontalAlignment alignment, string role)
     {
-        var label = new UILabel
-        {
-            Name = name,
-            HorizontalAlignment = alignment,
-            VerticalAlignment = VerticalAlignment.Center,
-            PaddingLeft = 0,
-            PaddingRight = 0,
-            IsHitTestVisible = false
-        };
-
-        label.SetForegroundRole(role);
+        var label = HudText.Label(name, role, alignment);
         AddChild(label);
 
         return label;
