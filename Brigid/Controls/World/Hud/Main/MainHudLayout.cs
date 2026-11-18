@@ -268,7 +268,10 @@ internal static class MainHudLayout
             WINDOW_BUTTON,
             WINDOW_BUTTON);
 
-    public static readonly Rectangle ExperienceBar = new(EDGE, BottomArea.Top + 98, World.Width, SCREEN_HEIGHT - (BottomArea.Top + 98));
+    //the experience bar keeps a gap above the bottom edge of the window, so it does not touch the window frame
+    private const int EXPERIENCE_HEIGHT = 11;
+    private const int BOTTOM_GAP = 2;
+    public static readonly Rectangle ExperienceBar = new(EDGE, SCREEN_HEIGHT - BOTTOM_GAP - EXPERIENCE_HEIGHT, World.Width, EXPERIENCE_HEIGHT);
 
     //the parts of the effect bar (BRIG-147), in the bar: a slot around a half-size spell icon for each effect, from the left
     private const int EFFECT_SLOT = 18;
