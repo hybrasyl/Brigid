@@ -216,7 +216,8 @@ public sealed class InputDispatcher : IDisposable
     /// <summary>
     ///     Removes a panel from the control stack. If the removed panel contains the explicitly focused element, clears
     ///     explicit focus. A panel that is not on the stack changes nothing: a Hide on a hidden panel calls this. A lower
-    ///     panel changes no focus in the panels above it, and gives its stashed focus to the panel directly above it.
+    ///     panel changes no focus in the panels above it, and gives its stashed focus to the panel directly above it. A
+    ///     shown text box outside the panel that has the focus keeps it.
     /// </summary>
     public void RemoveControl(UIPanel panel)
     {
@@ -247,6 +248,11 @@ public sealed class InputDispatcher : IDisposable
             //the stash now belongs to the panel above, so the focus goes to the top
             stashed = null;
         }
+
+        //a text box outside this panel that the player focused while this panel was on top keeps the keys: neither the
+        //stash nor the new top takes them from it
+        if (ExplicitFocusElement is UITextBox { IsFocused: true } live && IsEffectivelyVisible(live))
+            return;
 
         //prefer the focus that was active before this panel pushed (typically a textbox
         //in the panel below). without this, a popup over a login textbox would leave

@@ -52,6 +52,46 @@ public class ControlStackFocusTests
         Assert.Equal(1, dispatcher.ControlStackCount);
     }
 
+    //the player clicked a box in the lower panel while the top panel was open, and the server closed the top panel: the new
+    //top took the focus from the box, which kept its caret, and no key reached it
+    [Fact]
+    public void RemoveControl_TheTopPanelLeavesTheFocusOfABoxBelowIt()
+    {
+        using var dispatcher = WorldDispatcher();
+        var (options, macroBox) = PanelWithBox();
+        var dialog = new UIPanel();
+
+        dispatcher.PushControl(options);
+        dispatcher.PushControl(dialog);
+        macroBox.IsFocused = true;
+
+        dispatcher.RemoveControl(dialog);
+
+        Assert.Same(macroBox, dispatcher.ExplicitFocus);
+        Assert.True(macroBox.IsFocused);
+    }
+
+    //the stash of the top panel does not take the focus from a box that the player focused after the push
+    [Fact]
+    public void RemoveControl_TheStashDoesNotTakeTheFocusFromABoxFocusedLater()
+    {
+        using var dispatcher = WorldDispatcher();
+        var (options, macroBox) = PanelWithBox();
+        var friendBox = new UITextBox { X = 10, Y = 40, Width = 100, Height = 14 };
+        options.AddChild(friendBox);
+        var dialog = new UIPanel();
+
+        dispatcher.PushControl(options);
+        macroBox.IsFocused = true;
+        dispatcher.PushControl(dialog);
+        friendBox.IsFocused = true;
+
+        dispatcher.RemoveControl(dialog);
+
+        Assert.Same(friendBox, dispatcher.ExplicitFocus);
+        Assert.False(macroBox.IsFocused);
+    }
+
     [Fact]
     public void RemoveControl_ALowerPanelKeepsTheTextFocusInTheTopPanel()
     {
