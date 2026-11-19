@@ -217,7 +217,8 @@ public sealed class ChaosGame : Game
         MetaSync = new MetaFileSync(
             static () => MetaFilePath,
             name => Connection.SendMetaDataRequest(MetaDataRequestType.DataByName, name),
-            () => OnMetaDataSyncComplete?.Invoke());
+            () => OnMetaDataSyncComplete?.Invoke(),
+            names => DataContext.MetaFiles.SetListedNames(names));
         Connection.OnMetaData += HandleMetaData;
         Connection.OnWorldEntryComplete += () => Connection.SendMetaDataRequest(MetaDataRequestType.AllCheckSums);
         Connection.StateChanged += OnConnectionStateChanged;
@@ -593,7 +594,9 @@ public sealed class ChaosGame : Game
             return false;
 
         ScopeServerCaches();
+        MetaSync.End();
         DataContext.MetaFiles.ClearCaches();
+        DataContext.MetaFiles.ForgetListedNames();
         CertificateTrustStore.ClearPendingPrompts();
         NoticeDebugLog.Write($"lobby server changed to {GlobalSettings.LobbyHost}:{GlobalSettings.LobbyPort}");
 
@@ -911,14 +914,41 @@ public sealed class ChaosGame : Game
         PacketBuffer.Clear();
         Connection.ProcessPackets(PacketBuffer);
 
+        //the metafile sync runs on this thread, and only while the connection is in World: a loss, a logout and a world
+        //transfer each leave World, and each world entry asks for a new list. The state is read here, because a close
+        //raises StateChanged on the network thread
+        if (Connection.State == ConnectionState.World)
+            TickMetaSync();
+        else
+            MetaSync.End();
+
         Screens.Update(gameTime);
 
         base.Update(gameTime);
     }
 
     #region Metadata Sync
+    //a completion from a time limit runs the same handlers as a completion from a packet, so it logs a failure as
+    //ConnectionManager.ProcessPackets does, and the game loop continues
+    private void TickMetaSync()
+    {
+        try
+        {
+            MetaSync.Tick();
+        } catch (Exception ex)
+        {
+            NoticeDebugLog.Write($"!!! metafile sync tick threw {ex.GetType().Name}: {ex.Message}");
+            NoticeDebugLog.Write($"  stack: {ex.StackTrace}");
+        }
+    }
+
     private void HandleMetaData(ServerPackets.MetafilePacket pkt)
     {
+        //the sync runs only in World: a list or an answer handled after a close is dropped, and the next world entry asks
+        //for a new list
+        if (Connection.State != ConnectionState.World)
+            return;
+
         switch (pkt)
         {
             case ServerPackets.MetafileChecksumsPacket checksums:

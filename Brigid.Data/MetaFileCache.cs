@@ -14,18 +14,19 @@ namespace Brigid.Data;
 public static class MetaFileCache
 {
     /// <summary>
-    ///     Returns the CRC-32 of the decompressed metafile. Returns 0 when the name is refused, or the file is absent,
-    ///     unreadable or not valid zlib data. A 0 makes the sync download the file again.
+    ///     Returns the CRC-32 of the decompressed metafile. Returns null when the name is refused, or the file is absent,
+    ///     unreadable or not valid zlib data. Null never equals a listed checksum, so the sync downloads the file again; a
+    ///     CRC-32 can be 0 (BRIG-166).
     /// </summary>
-    public static uint GetChecksum(string directory, string name)
+    public static uint? GetChecksum(string directory, string name)
     {
         if (!FileNames.IsSafeName(name))
-            return 0;
+            return null;
 
         var path = Path.Combine(directory, name);
 
         if (!File.Exists(path))
-            return 0;
+            return null;
 
         try
         {
@@ -36,7 +37,7 @@ public static class MetaFileCache
         //rule 6 exemption: a corrupt or locked cache file reads as absent, and the sync downloads it again
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
-            return 0;
+            return null;
         }
     }
 
@@ -48,7 +49,7 @@ public static class MetaFileCache
     /// file again on a mismatch.</remarks>
     public static bool IsValidPayload(byte[] payload, uint checksum) => (payload.Length > 0) && (GetPayloadChecksum(payload) == checksum);
 
-    //null when the payload is not valid zlib data
+    //null when the payload is not valid zlib data, or holds no data
     private static uint? GetPayloadChecksum(byte[] payload)
     {
         try
@@ -64,7 +65,9 @@ public static class MetaFileCache
         }
     }
 
-    private static uint GetDecompressedChecksum(Stream compressed)
+    //null when the data decompresses to nothing: data that is not valid can end with no error and no bytes, and the
+    //CRC-32 of no bytes is 0. A metafile holds at least its entry count.
+    private static uint? GetDecompressedChecksum(Stream compressed)
     {
         using var zlib = new ZLibStream(compressed, CompressionMode.Decompress);
         using var data = new MemoryStream();
@@ -72,7 +75,7 @@ public static class MetaFileCache
         zlib.CopyTo(data);
 
         //retail + Hybrasyl both send standard (inverted) CRC-32 — verified against the retail checksum routine
-        return CRC32.Calculate(data.ToArray());
+        return data.Length > 0 ? CRC32.Calculate(data.ToArray()) : null;
     }
 
     /// <summary>Writes a metafile, and makes the directory when it is not there. Returns false when the name is refused or the write fails.</summary>
@@ -90,9 +93,10 @@ public static class MetaFileCache
     ///     returns the names it deleted. Subdirectories are not touched. A directory that cannot be read deletes nothing.
     /// </summary>
     /// <remarks>
-    ///     A metafile that the server no longer lists is stale, but the repository still reads it. The server splits item
-    ///     metadata across <c>ItemInfoN</c> files and the split moves when items change, so an old file can give an item
-    ///     its old class or level. The comparison here is ordinal, but the client's pending set ignores case. So on a
+    ///     A metafile that the server no longer lists is stale. The repository reads only the listed files (BRIG-167), but
+    ///     a stale file on disk is read again before the first list of the next session. The server splits item metadata
+    ///     across <c>ItemInfoN</c> files and the split moves when items change, so an old file can give an item its old
+    ///     class or level. The comparison here is ordinal, but the client's pending set ignores case. So on a
     ///     case-insensitive file system, this method deletes a file whose name changed case, and the sync downloads it
     ///     again.
     /// </remarks>
