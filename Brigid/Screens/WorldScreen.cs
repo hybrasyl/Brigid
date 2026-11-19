@@ -191,7 +191,10 @@ public sealed partial class WorldScreen : IScreen
     {
         None,
         EndLogout,
-        ConnectionLost
+        ConnectionLost,
+
+        /// <summary>A close came while packets of the connection still wait: decide after the next drain.</summary>
+        DecideNextFrame
     }
 
     //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.

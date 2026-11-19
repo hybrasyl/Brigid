@@ -298,7 +298,7 @@ public sealed class LobbyLoginScreen : IScreen
         MaybeShowTrustPrompt();
         MaybeShowInsecurePrompt();
 
-        if (ConnectionLost)
+        if (ConnectionLost && !DecidesLaterForQueuedPackets(FollowingRedirect, Game.Connection.Client.HasQueuedPackets))
         {
             ConnectionLost = false;
 
@@ -714,6 +714,13 @@ public sealed class LobbyLoginScreen : IScreen
     /// </summary>
     internal static bool IsLostConnection(bool followingRedirect, ConnectionState state)
         => !followingRedirect || (state == ConnectionState.Disconnected);
+
+    /// <summary>
+    ///     Whether a close waits for the next drain before <see cref="IsLostConnection" /> decides. A server close keeps
+    ///     the packets that came before it, and a Redirect and a close can come between the drain and this update. While
+    ///     no redirect is under way and packets wait, the screen decides after the game loop handles them.
+    /// </summary>
+    internal static bool DecidesLaterForQueuedPackets(bool followingRedirect, bool packetsWait) => packetsWait && !followingRedirect;
 
     private void OnConnectionError(string error)
     {

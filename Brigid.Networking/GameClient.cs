@@ -615,6 +615,12 @@ public sealed class GameClient : IDisposable
     }
 
     /// <summary>
+    ///     True while inbound packets wait for the game loop. A server close keeps the packets that came before it, so a
+    ///     screen that sees a close while this is true decides after the next drain: a Redirect can be among them.
+    /// </summary>
+    public bool HasQueuedPackets => !InboundQueue.IsEmpty;
+
+    /// <summary>
     ///     Drains queued inbound packets into the provided buffer. Call from the game loop thread.
     /// </summary>
     /// <param name="buffer">The list to append dequeued packets to.</param>

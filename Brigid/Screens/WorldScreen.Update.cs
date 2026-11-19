@@ -17,17 +17,20 @@ public sealed partial class WorldScreen
     /// <summary>
     ///     What Update does with a connection event. A close that came before the game loop handled the server's Redirect
     ///     does nothing: the redirect is under way, and its own result (Login, World, or a connect that fails) decides. A
-    ///     close in the grace time is the logout (Exit to Menu goes to the login screen, and Exit Game closes the client).
-    ///     Any other close is a lost connection.
+    ///     close while packets of the connection still wait is decided after the next drain, because a server can send a
+    ///     Redirect and close between the drain and this update. A close in the grace time is the logout (Exit to Menu goes
+    ///     to the login screen, and Exit Game closes the client). Any other close is a lost connection.
     /// </summary>
     internal static ConnectionOutcome ConnectionOutcomeFor(
         ConnectionEvent connectionEvent,
         bool redirectInProgress,
-        bool awaitingLogout)
+        bool awaitingLogout,
+        bool packetsWait)
         => connectionEvent switch
         {
             ConnectionEvent.LoggedOut => ConnectionOutcome.EndLogout,
             ConnectionEvent.Closed when redirectInProgress => ConnectionOutcome.None,
+            ConnectionEvent.Closed when packetsWait => ConnectionOutcome.DecideNextFrame,
             ConnectionEvent.Closed when awaitingLogout => ConnectionOutcome.EndLogout,
             ConnectionEvent.Closed => ConnectionOutcome.ConnectionLost,
             _ => ConnectionOutcome.None
@@ -37,8 +40,14 @@ public sealed partial class WorldScreen
     {
         var connectionEvent = (ConnectionEvent)Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.None);
 
-        switch (ConnectionOutcomeFor(connectionEvent, RedirectInProgress, ExitFlow.IsAwaitingLogout))
+        switch (ConnectionOutcomeFor(connectionEvent, RedirectInProgress, ExitFlow.IsAwaitingLogout, Game.Connection.Client.HasQueuedPackets))
         {
+            //a logout recorded since then stays
+            case ConnectionOutcome.DecideNextFrame:
+                Interlocked.CompareExchange(ref PendingConnectionEvent, (int)ConnectionEvent.Closed, (int)ConnectionEvent.None);
+
+                break;
+
             case ConnectionOutcome.EndLogout:
                 EndLogout();
 

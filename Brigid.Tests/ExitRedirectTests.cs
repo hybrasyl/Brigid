@@ -63,18 +63,27 @@ public sealed class ExitRedirectTests
 
     //the expected outcome is an object, because ConnectionOutcome is internal (BRIG-181)
     [Theory]
-    [InlineData(ConnectionEvent.LoggedOut, false, false, WorldScreen.ConnectionOutcome.EndLogout)]
-    [InlineData(ConnectionEvent.Closed, true, false, WorldScreen.ConnectionOutcome.None)]
-    [InlineData(ConnectionEvent.Closed, true, true, WorldScreen.ConnectionOutcome.None)]
-    [InlineData(ConnectionEvent.Closed, false, true, WorldScreen.ConnectionOutcome.EndLogout)]
-    [InlineData(ConnectionEvent.Closed, false, false, WorldScreen.ConnectionOutcome.ConnectionLost)]
-    [InlineData(ConnectionEvent.None, false, true, WorldScreen.ConnectionOutcome.None)]
+    [InlineData(ConnectionEvent.LoggedOut, false, false, false, WorldScreen.ConnectionOutcome.EndLogout)]
+    [InlineData(ConnectionEvent.LoggedOut, false, false, true, WorldScreen.ConnectionOutcome.EndLogout)]
+    [InlineData(ConnectionEvent.Closed, true, false, false, WorldScreen.ConnectionOutcome.None)]
+    [InlineData(ConnectionEvent.Closed, true, true, false, WorldScreen.ConnectionOutcome.None)]
+    [InlineData(ConnectionEvent.Closed, true, false, true, WorldScreen.ConnectionOutcome.None)]
+    [InlineData(ConnectionEvent.Closed, false, true, false, WorldScreen.ConnectionOutcome.EndLogout)]
+    [InlineData(ConnectionEvent.Closed, false, false, false, WorldScreen.ConnectionOutcome.ConnectionLost)]
+
+    //a Redirect and a close came between the drain and the update: the Redirect still waits in the queue
+    [InlineData(ConnectionEvent.Closed, false, false, true, WorldScreen.ConnectionOutcome.DecideNextFrame)]
+    [InlineData(ConnectionEvent.Closed, false, true, true, WorldScreen.ConnectionOutcome.DecideNextFrame)]
+    [InlineData(ConnectionEvent.None, false, true, false, WorldScreen.ConnectionOutcome.None)]
     public void AConnectionEventHasTheOutcomeOfItsCase(
         object connectionEvent,
         bool redirectInProgress,
         bool awaitingLogout,
+        bool packetsWait,
         object expected)
-        => Assert.Equal(expected, WorldScreen.ConnectionOutcomeFor((ConnectionEvent)connectionEvent, redirectInProgress, awaitingLogout));
+        => Assert.Equal(
+            expected,
+            WorldScreen.ConnectionOutcomeFor((ConnectionEvent)connectionEvent, redirectInProgress, awaitingLogout, packetsWait));
 
     //BRIG-180: the server's close can come on the network thread before the game loop handles the Redirect. The state is
     //then Disconnected, and the redirect must take its target from the state that the connection was in

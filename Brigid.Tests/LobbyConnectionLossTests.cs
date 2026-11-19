@@ -18,4 +18,14 @@ public sealed class LobbyConnectionLossTests
     [InlineData(true, ConnectionState.Disconnected, true)]
     public void ACloseIsALostConnectionUnlessARedirectGoesOn(bool followingRedirect, ConnectionState state, bool expected)
         => Assert.Equal(expected, LobbyLoginScreen.IsLostConnection(followingRedirect, state));
+
+    //a Redirect and a close can come between the drain and the update; the Redirect then still waits in the queue, and
+    //the lobby decides after the next drain
+    [Theory]
+    [InlineData(false, true, true)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, false)]
+    public void ACloseWaitsForTheQueuedPacketsUnlessARedirectGoesOn(bool followingRedirect, bool packetsWait, bool expected)
+        => Assert.Equal(expected, LobbyLoginScreen.DecidesLaterForQueuedPackets(followingRedirect, packetsWait));
 }

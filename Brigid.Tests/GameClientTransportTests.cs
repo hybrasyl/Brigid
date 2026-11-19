@@ -259,13 +259,16 @@ public class GameClientTransportTests
 
     /// <summary>
     ///     A server sends a Redirect and then closes the connection. The teardown of the close keeps the packets that
-    ///     arrived before it, so the game loop still gets the Redirect (BRIG-176).
+    ///     arrived before it, so the game loop still gets the Redirect (BRIG-176). The Redirect waits in the queue when the
+    ///     close is raised, so a screen that sees the close decides after the next drain.
     /// </summary>
     [Fact(Timeout = TEST_TIMEOUT_MS)]
     public async Task ServerClose_KeepsThePacketsThatArrivedBeforeIt()
     {
         using var listener = new LoopbackListener();
         using var client = new GameClient();
+        bool? queuedAtClose = null;
+        client.OnDisconnected += _ => queuedAtClose = client.HasQueuedPackets;
 
         client.ResetCrypto();
         await client.ConnectAsync("127.0.0.1", listener.Port);
@@ -286,9 +289,11 @@ public class GameClientTransportTests
         await accepted.WriteAsync(redirect);
         await accepted.FlushAsync();
         listener.ShutdownSend();
-        await WaitUntilAsync(() => !client.Connected);
+        await WaitUntilAsync(() => queuedAtClose is not null);
 
+        Assert.True(queuedAtClose);
         Assert.IsType<RedirectPacket>(await DrainOneAsync(client));
+        Assert.False(client.HasQueuedPackets);
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition)
