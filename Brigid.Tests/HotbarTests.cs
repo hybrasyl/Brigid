@@ -306,25 +306,86 @@ public class HotbarTests
         Assert.Equal(0, changes);
     }
 
-    //Sabrael, 2026-11-18: the Hybrasyl servers share the file; an entry that only the other server has stays, dimmed
+    //Sabrael, 2026-11-18: the Hybrasyl servers share the file; an entry that only the other server has stays, dimmed. The
+    //file named one server, the last that saved it, so the second session on the other server swept the entry
     [Fact]
-    public void TheEndOfASessionOnAnotherServerEmptiesNothing()
+    public void AnEntryOfAnotherServerStaysForEverySessionOnThisServer()
+    {
+        var text = new[] { "version 1", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail" };
+
+        for (var session = 0; session < 3; session++)
+        {
+            var hotbar = NewHotbar();
+            hotbar.Load(text, "qa.example/Hybrasyl");
+            Now += Hotbar.SETTLE_MS;
+
+            hotbar.SetPage(session + 1);
+            hotbar.DropGoneEntries();
+
+            Assert.Equal(Assail, hotbar.Get(0, 0));
+            Assert.Equal("prod.example/Hybrasyl", hotbar.OwnerOf(0, 0));
+            text = [.. hotbar.Format()];
+        }
+
+        //back on the first server, the entry is that server's, and its sweep empties it
+        var home = NewHotbar();
+        home.Load(text, "PROD.example/Hybrasyl");
+        Now += Hotbar.SETTLE_MS;
+        home.DropGoneEntries();
+
+        Assert.Null(home.Get(0, 0));
+    }
+
+    //an entry that the player puts in a slot is this server's, and the sweep of this server empties it
+    [Fact]
+    public void AnEntryPutInASlotIsOfThisSessionsServer()
     {
         var hotbar = NewHotbar();
-        hotbar.Load(["version 1", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
+        hotbar.Load(["version 2", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
         Now += Hotbar.SETTLE_MS;
+        hotbar.Set(0, 1, BeagIoc);
+        hotbar.Move(0, 1, 2, 5);
+
+        Assert.Equal("qa.example/Hybrasyl", hotbar.OwnerOf(2, 5));
+        Assert.Equal(
+            ["version 2", "page 0", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail", "server qa.example/Hybrasyl", "2 5 spell 2 0 beag ioc"],
+            hotbar.Format());
 
         hotbar.DropGoneEntries();
-        Assert.Equal(Assail, hotbar.Get(0));
 
-        //the save names this session's server, so the next session on this server sweeps
-        Assert.Contains("server qa.example/Hybrasyl", hotbar.Format());
+        Assert.Equal(Assail, hotbar.Get(0, 0));
+        Assert.Null(hotbar.Get(2, 5));
+    }
 
-        var next = NewHotbar();
-        next.Load(hotbar.Format(), "QA.example/Hybrasyl");
-        Now += Hotbar.SETTLE_MS;
-        next.DropGoneEntries();
-        Assert.Null(next.Get(0));
+    //the removal wait of an ability that leaves the book empties only the entries of this server
+    [Fact]
+    public void ARemovalOnThisServerLeavesTheEntryOfAnotherServer()
+    {
+        var hotbar = NewHotbar();
+        Skills.SetSlot(1, 1, "Assail");
+        hotbar.Load(["version 2", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
+        hotbar.Set(0, 1, Assail);
+
+        Skills.ClearSlot(1);
+        Now += Hotbar.REMOVAL_WAIT_MS;
+        hotbar.Tick();
+
+        Assert.Equal(Assail, hotbar.Get(0, 0));
+        Assert.Null(hotbar.Get(0, 1));
+    }
+
+    //a name with spaces at its ends was trimmed at the load, so it did not resolve and was swept
+    [Fact]
+    public void ANameKeepsItsSpaces()
+    {
+        var hotbar = NewHotbar();
+        var spaced = new HotbarEntry(HotbarKind.Item, " Old  Coat ", 4);
+        hotbar.Set(0, 0, spaced);
+
+        var copy = NewHotbar();
+        copy.Load(hotbar.Format());
+
+        Assert.Equal(spaced, copy.Get(0, 0));
     }
 
     //a file that names no server (and a session whose server is not known) sweeps as before
@@ -449,7 +510,7 @@ public class HotbarTests
     {
         var hotbar = NewHotbar();
 
-        Assert.False(hotbar.Load(["version 2", "page 3", "0 0 skill 1 0 Assail"]));
+        Assert.False(hotbar.Load([$"version {Hotbar.FILE_VERSION + 1}", "page 3", "0 0 skill 1 0 Assail"]));
         Assert.Null(hotbar.Get(0, 0));
         Assert.Equal(0, hotbar.Page);
 
@@ -473,7 +534,7 @@ public class HotbarTests
 
         Assert.Equal(Assail, hotbar.Get(0, 0));
         Assert.Equal(0, hotbar.Page);
-        Assert.Equal(["version 1", "page 0", "0 0 skill 1 0 Assail"], hotbar.Format());
+        Assert.Equal([$"version {Hotbar.FILE_VERSION}", "page 0", "0 0 skill 1 0 Assail"], hotbar.Format());
     }
 
     [Fact]

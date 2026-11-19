@@ -205,7 +205,7 @@ public sealed class LocalPlayerSettingsRepository
 
     /// <summary>Saves the level starts to Experience.cfg (BRIG-148).</summary>
     public void SaveExperience(SavedExperience experience)
-        => DataDiagnostics.Try(() => File.WriteAllLines(ExperiencePath, FormatExperience(experience)), "SaveExperience");
+        => WriteLinesThroughTemp(ExperiencePath, FormatExperience(experience), "SaveExperience");
 
     /// <summary>
     ///     Reads Experience.cfg lines: <c>Level: {level} {start}</c> and <c>Ability: {level} {start}</c>. A line that does not
@@ -276,7 +276,7 @@ public sealed class LocalPlayerSettingsRepository
 
     /// <summary>Saves the pinned stats of Personal View to PersonalView.cfg (BRIG-151).</summary>
     public void SavePersonalViewPins(IEnumerable<string> names)
-        => DataDiagnostics.Try(() => File.WriteAllLines(PersonalViewPath, names), "SavePersonalViewPins");
+        => WriteLinesThroughTemp(PersonalViewPath, names, "SavePersonalViewPins");
 
     /// <summary>
     ///     Loads the lines of the hotbar from Hotbar.cfg (BRIG-146). A file that is absent gives no lines. A file that cannot
@@ -293,8 +293,29 @@ public sealed class LocalPlayerSettingsRepository
     }
 
     /// <summary>Saves the lines of the hotbar to Hotbar.cfg (BRIG-146).</summary>
-    public void SaveHotbar(IEnumerable<string> lines)
-        => DataDiagnostics.Try(() => File.WriteAllLines(HotbarPath, lines), "SaveHotbar");
+    public void SaveHotbar(IEnumerable<string> lines) => WriteLinesThroughTemp(HotbarPath, lines, "SaveHotbar");
+
+    /// <summary>The suffix of the file that a save writes before it replaces the file.</summary>
+    internal const string TEMP_SUFFIX = ".tmp";
+
+    //the hotbar saves at each change, also at each wheel notch: the lines go to a file beside the target, which then
+    //replaces it, so a crash or a write that fails part way keeps the old file. Returns false on a failure
+    internal static bool WriteLinesThroughTemp(string path, IEnumerable<string> lines, string what)
+    {
+        var temp = path + TEMP_SUFFIX;
+
+        if (DataDiagnostics.Try(
+                () =>
+                {
+                    File.WriteAllLines(temp, lines);
+                    File.Move(temp, path, overwrite: true);
+                }, what))
+            return true;
+
+        DataDiagnostics.Try(() => File.Delete(temp), $"{what} (delete {Path.GetFileName(temp)})");
+
+        return false;
+    }
 
     /// <summary>
     ///     Loads the family list from Familylist.cfg.

@@ -57,8 +57,9 @@ public readonly record struct HotbarEntryState(byte? Slot, ushort Sprite, Displa
 ///     </para>
 ///     <para>
 ///         The Hybrasyl servers (QA, production) share one file for a character name, because the per-character files
-///         have one folder for every Hybrasyl host. So the file names the server that saved it, and the sweep runs only when
-///         this session is on that server: an entry that only the other server has stays, dimmed (Sabrael, 2026-11-18).
+///         have one folder for every Hybrasyl host. So each entry keeps the server of the session that put it in its slot,
+///         and the sweep and the removal wait empty only the entries of this session's server: an entry that only the
+///         other server has stays, dimmed, for as many sessions as the player has there (Sabrael, 2026-11-18).
 ///     </para>
 /// </remarks>
 public sealed class Hotbar
@@ -73,14 +74,21 @@ public sealed class Hotbar
     /// </summary>
     public const int SETTLE_MS = 5000;
 
-    /// <summary>The version of the hotbar file.</summary>
-    public const int FILE_VERSION = 1;
+    /// <summary>
+    ///     The version of the hotbar file. Version 2 gives a <c>server</c> line before the entries of each server; version 1
+    ///     had one <c>server</c> line, the server that saved the file, and it reads as the server of each entry. A client of
+    ///     version 1 does not read a file of version 2, so it cannot sweep the entries of another server.
+    /// </summary>
+    public const int FILE_VERSION = 2;
 
     private const string VERSION_KEY = "version";
     private const string PAGE_KEY = "page";
     private const string SERVER_KEY = "server";
 
     private readonly HotbarEntry?[,] Entries = new HotbarEntry?[PAGES, SLOTS];
+
+    //the server of the session that put each entry in its slot, or null when that server was not known
+    private readonly string?[,] Owners = new string?[PAGES, SLOTS];
     private readonly SkillBook Skills;
     private readonly SpellBook Spells;
     private readonly Inventory Items;
@@ -96,9 +104,8 @@ public sealed class Hotbar
 
     private long? LoadedAt;
 
-    //the server of this session, and the server that saved the file before it (null: the file names none)
+    //the server of this session (its host and name), or null when it is not known
     private string? Server;
-    private string? SavedServer;
 
     /// <param name="clock">The time in milliseconds; null for <see cref="Environment.TickCount64" />.</param>
     public Hotbar(SkillBook skills, SpellBook spells, Inventory items, Equipment worn, Func<long>? clock = null)
@@ -134,6 +141,7 @@ public sealed class Hotbar
             return;
 
         Entries[page, index] = entry;
+        Owners[page, index] = Server;
         Changed?.Invoke();
     }
 
@@ -144,6 +152,7 @@ public sealed class Hotbar
             return;
 
         Entries[page, index] = null;
+        Owners[page, index] = null;
         Changed?.Invoke();
     }
 
@@ -156,6 +165,7 @@ public sealed class Hotbar
             return;
 
         (Entries[fromPage, from], Entries[toPage, to]) = (Entries[toPage, to], Entries[fromPage, from]);
+        (Owners[fromPage, from], Owners[toPage, to]) = (Owners[toPage, to], Owners[fromPage, from]);
         Changed?.Invoke();
     }
 
@@ -304,51 +314,71 @@ public sealed class Hotbar
 
     /// <summary>
     ///     At the end of a session: empties each item entry whose item the player neither carries nor wears, and each ability
-    ///     entry whose ability is not in its book. It does nothing until <see cref="SETTLE_MS" /> after the load, so a session
-    ///     that ends during the world entry keeps the entries whose ability or item has not arrived yet.
+    ///     entry whose ability is not in its book, of the entries of this session's server. It does nothing until
+    ///     <see cref="SETTLE_MS" /> after the load, so a session that ends during the world entry keeps the entries whose
+    ///     ability or item has not arrived yet.
     /// </summary>
     public void DropGoneEntries()
     {
         if (LoadedAt is not { } loadedAt || (Clock() - loadedAt < SETTLE_MS))
             return;
 
-        if ((SavedServer is not null) && !SavedServer.EqualsI(Server ?? string.Empty))
-            return;
-
         if (EmptyWhere(entry => (Resolve(entry) is null) && ((entry.Kind != HotbarKind.Item) || !IsWorn(entry.Name))))
             Changed?.Invoke();
     }
+
+    /// <summary>The server of the session that put the entry at <paramref name="index" /> of <paramref name="page" />, or null.</summary>
+    internal string? OwnerOf(int page, int index) => InRange(page, index) ? Owners[page, index] : null;
 
     /// <summary>Empties every entry and shows the first page, for the next character; raises no change, because nothing saves it.</summary>
     public void Reset()
     {
         Array.Clear(Entries);
+        Array.Clear(Owners);
         Page = 0;
         Removals.Clear();
         Array.Clear(SkillNames);
         Array.Clear(SpellNames);
         LoadedAt = null;
         Server = null;
-        SavedServer = null;
     }
 
     /// <summary>
-    ///     The lines of the hotbar file: <c>version N</c>, <c>server S</c> (the server of this session, when it is known),
-    ///     <c>page N</c>, then one line for each entry, <c>page index kind sprite color name</c>, with the page and the index
-    ///     from 0.
+    ///     The lines of the hotbar file: <c>version N</c>, <c>page N</c>, the entries of no known server, then for each
+    ///     server <c>server S</c> and its entries. An entry is one line, <c>page index kind sprite color name</c>, with the
+    ///     page and the index from 0.
     /// </summary>
     public IEnumerable<string> Format()
     {
         yield return FormattableString.Invariant($"{VERSION_KEY} {FILE_VERSION}");
-
-        if (!string.IsNullOrWhiteSpace(Server))
-            yield return $"{SERVER_KEY} {Server}";
-
         yield return FormattableString.Invariant($"{PAGE_KEY} {Page}");
 
+        List<string?> owners = [null];
+
+        foreach (var owner in Owners)
+            if ((owner is not null) && !owners.Contains(owner))
+                owners.Add(owner);
+
+        foreach (var owner in owners)
+        {
+            var lines = EntryLinesOf(owner).ToList();
+
+            if (lines.Count == 0)
+                continue;
+
+            if (owner is not null)
+                yield return $"{SERVER_KEY} {owner}";
+
+            foreach (var line in lines)
+                yield return line;
+        }
+    }
+
+    private IEnumerable<string> EntryLinesOf(string? owner)
+    {
         for (var page = 0; page < PAGES; page++)
             for (var index = 0; index < SLOTS; index++)
-                if (Entries[page, index] is { } entry)
+                if ((Entries[page, index] is { } entry) && (Owners[page, index] == owner))
                     yield return FormattableString.Invariant(
                         $"{page} {index} {entry.Kind.ToString().ToLowerInvariant()} {entry.Sprite} {(byte)entry.Color} {entry.Name}");
     }
@@ -357,17 +387,18 @@ public sealed class Hotbar
     ///     Reads the lines of the hotbar file in place of the entries, at the world entry; a line that does not parse is
     ///     skipped. It raises no change, so a load does not write the file again. A file of a version after
     ///     <see cref="FILE_VERSION" /> (a newer client wrote it) loads no entry, and the result is false: the caller must not
-    ///     write over it.
+    ///     write over it. A <c>server</c> line gives the server of the entries after it. A name keeps its spaces.
     /// </summary>
     /// <param name="lines">The lines of the file.</param>
     /// <param name="server">The server of this session (its host and name), or null when it is not known.</param>
     public bool Load(IEnumerable<string> lines, string? server = null)
     {
         Array.Clear(Entries);
+        Array.Clear(Owners);
         Page = 0;
         LoadedAt = Clock();
         Server = string.IsNullOrWhiteSpace(server) ? null : server.Trim();
-        SavedServer = null;
+        string? owner = null;
 
         var all = lines.ToArray();
 
@@ -379,23 +410,35 @@ public sealed class Hotbar
         {
             if (line.Trim().StartsWith(SERVER_KEY + " ", StringComparison.Ordinal))
             {
-                SavedServer = line.Trim()[(SERVER_KEY.Length + 1)..].Trim();
+                var named = line.Trim()[(SERVER_KEY.Length + 1)..].Trim();
+                owner = named.Length == 0 ? null : named;
 
                 continue;
             }
 
-            var parts = line.Trim().Split(' ', 6, StringSplitOptions.RemoveEmptyEntries);
+            var setting = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-            if ((parts.Length == 2) && (parts[0] == PAGE_KEY) && TryNumber(parts[1], PAGES, out var shown))
+            if ((setting.Length == 2) && (setting[0] == PAGE_KEY) && TryNumber(setting[1], PAGES, out var shown))
+            {
                 Page = shown;
-            else if ((parts.Length == 6)
-                     && TryNumber(parts[0], PAGES, out var page)
-                     && TryNumber(parts[1], SLOTS, out var index)
-                     && TryKind(parts[2], out var kind)
-                     && TryNumber(parts[3], ushort.MaxValue + 1, out var sprite)
-                     && TryNumber(parts[4], byte.MaxValue + 1, out var color)
-                     && !string.IsNullOrWhiteSpace(parts[5]))
-                Entries[page, index] = new HotbarEntry(kind, parts[5].Trim(), (ushort)sprite, (DisplayColor)color);
+
+                continue;
+            }
+
+            //Format writes one space between the fields, so the name is the rest of the line, with its own spaces
+            var parts = line.Split(' ', 6);
+
+            if ((parts.Length == 6)
+                && TryNumber(parts[0], PAGES, out var page)
+                && TryNumber(parts[1], SLOTS, out var index)
+                && TryKind(parts[2], out var kind)
+                && TryNumber(parts[3], ushort.MaxValue + 1, out var sprite)
+                && TryNumber(parts[4], byte.MaxValue + 1, out var color)
+                && !string.IsNullOrWhiteSpace(parts[5]))
+            {
+                Entries[page, index] = new HotbarEntry(kind, parts[5], (ushort)sprite, (DisplayColor)color);
+                Owners[page, index] = owner;
+            }
         }
 
         return true;
@@ -422,20 +465,24 @@ public sealed class Hotbar
 
     private static bool InRange(int page, int index) => page is >= 0 and < PAGES && index is >= 0 and < SLOTS;
 
+    //empties the matching entries of this session's server; an entry of no known server counts as this server's
     private bool EmptyWhere(Func<HotbarEntry, bool> match)
     {
         var emptied = false;
 
         for (var page = 0; page < PAGES; page++)
             for (var index = 0; index < SLOTS; index++)
-                if ((Entries[page, index] is { } entry) && match(entry))
+                if ((Entries[page, index] is { } entry) && IsOfThisServer(Owners[page, index]) && match(entry))
                 {
                     Entries[page, index] = null;
+                    Owners[page, index] = null;
                     emptied = true;
                 }
 
         return emptied;
     }
+
+    private bool IsOfThisServer(string? owner) => (owner is null) || owner.EqualsI(Server ?? string.Empty);
 
     private void ObserveAbility(HotbarKind kind, string?[] names, byte slot, string? name)
     {
