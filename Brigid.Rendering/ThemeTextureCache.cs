@@ -60,7 +60,13 @@ internal sealed class ThemeTextureCache<TKey, TValue>
     ///     Gets the value for <paramref name="key" />, or makes it with <paramref name="create" />. A null result is cached
     ///     too, so a part that does not exist is not looked up again.
     /// </summary>
-    public TValue? GetOrCreate(TKey key, Func<TValue?> create)
+    public TValue? GetOrCreate(TKey key, Func<TValue?> create) => GetOrCreate(key, create, static (_, make) => make());
+
+    /// <summary>
+    ///     Gets the value for <paramref name="key" />, or makes it with <paramref name="create" />, which takes the key and
+    ///     <paramref name="state" />. A static <paramref name="create" /> makes no closure, for a lookup on each draw.
+    /// </summary>
+    public TValue? GetOrCreate<TState>(TKey key, TState state, Func<TKey, TState, TValue?> create)
     {
         var now = Clock();
         DisposeExpired(now);
@@ -72,7 +78,7 @@ internal sealed class ThemeTextureCache<TKey, TValue>
             return entry.Value;
         }
 
-        var value = create();
+        var value = create(key, state);
         var bytes = value is null ? 0 : SizeOf(value);
         Entries[key] = new Entry(value, bytes, now);
         Bytes += bytes;
