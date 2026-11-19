@@ -73,8 +73,12 @@ public class MainHudControlTests : IDisposable
         hud.ChatBox.Input.Focus("Sabrael: ", Microsoft.Xna.Framework.Color.White);
         Assert.True(hud.DrawsChatInputOnTop);
 
+        //the input draws once, after the panels, and the tooltip after it
+        Assert.Equal([hud.ChatBox.Input, (Brigid.Controls.Components.UIElement)hud.Children.Single(child => child.Name == "hud_tooltip")], hud.LateDraws);
+
         hud.ChatBox.Input.Unfocus();
         Assert.False(hud.DrawsChatInputOnTop);
+        Assert.Empty(hud.LateDraws);
     }
 
     [Fact]

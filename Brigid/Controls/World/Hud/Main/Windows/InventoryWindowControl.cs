@@ -260,6 +260,18 @@ internal sealed class InventoryWindowControl : HudWindowContent
             RaiseHover();
     }
 
+    //a drag that starts on a slot hides the tooltip of that slot at once: the pointer is still on it
+    public override void Update(GameTime gameTime)
+    {
+        if ((HoveredSlot is not null) && (ActiveDrag() is not null))
+        {
+            HoveredSlot = null;
+            RaiseHover();
+        }
+
+        base.Update(gameTime);
+    }
+
     private void OnPointerChanged(byte slot, bool entered)
     {
         //during a drag no item tooltip shows, as on the classic inventory: the drag icon is what the player looks at

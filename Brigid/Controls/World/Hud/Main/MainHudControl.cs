@@ -217,12 +217,29 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// </summary>
     internal bool DrawsChatInputOnTop => Visible && ChatBox.Visible && ChatBox.Input.Visible && ChatBox.Input.IsFocused;
 
+    /// <summary>
+    ///     The children that the HUD draws after the others, in order: while the chat input draws on top, the input and then
+    ///     the tooltip, so that the input draws once and the tooltip stays over it.
+    /// </summary>
+    internal IReadOnlyList<UIElement> LateDraws => DrawsChatInputOnTop ? [ChatBox.Input, Tooltip] : [];
+
     public override void Draw(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch)
     {
-        base.Draw(spriteBatch);
+        if (!DrawsChatInputOnTop)
+        {
+            base.Draw(spriteBatch);
 
-        if (DrawsChatInputOnTop)
-            ChatBox.Input.Draw(spriteBatch);
+            return;
+        }
+
+        ChatBox.Input.HoldDraw = true;
+        Tooltip.HoldDraw = true;
+        base.Draw(spriteBatch);
+        ChatBox.Input.HoldDraw = false;
+        Tooltip.HoldDraw = false;
+
+        foreach (var late in LateDraws)
+            late.Draw(spriteBatch);
     }
 
     public override void Dispose()

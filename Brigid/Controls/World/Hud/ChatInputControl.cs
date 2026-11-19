@@ -3,6 +3,7 @@ using Brigid.Controls.Components;
 using Brigid.Data.Models;
 using Chaos.Extensions.Common;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 #endregion
 
@@ -525,6 +526,15 @@ public sealed class ChatInputControl : UIPanel
 
                 break;
         }
+    }
+
+    /// <summary>True while the host draws the input itself, after its other children (the new HUD, over its panels).</summary>
+    internal bool HoldDraw { get; set; }
+
+    public override void Draw(SpriteBatch spriteBatch)
+    {
+        if (!HoldDraw)
+            base.Draw(spriteBatch);
     }
 
     public override void Update(GameTime gameTime)

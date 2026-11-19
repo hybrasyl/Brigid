@@ -442,90 +442,91 @@ public sealed partial class WorldScreen
         return true;
     }
 
+    /// <summary>True for the first press of a slot key; false for a repeat of the OS while the player holds the key.</summary>
+    internal static bool UsesSlot(KeyDownEvent e) => !e.IsRepeat;
+
     /// <summary>
     ///     The slot of a number key, from 0, or null. On the new HUD it is a slot of the hotbar (BRIG-146, D4), and a key with
     ///     a modifier is not a slot key: Ctrl and Alt are emotes, Shift+1 is Shout, Cmd is the macOS primary modifier, and
     ///     Shift with the other keys is free for the page keys of a later card. On the classic HUDs it is a slot of the panel
     ///     that shows, with any modifier, as before.
     /// </summary>
-    /// <summary>True for the first press of a slot key; false for a repeat of the OS while the player holds the key.</summary>
-    internal static bool UsesSlot(KeyDownEvent e) => !e.IsRepeat;
-
-    //the panels of the classic HUDs whose slots the number keys use
-    private static readonly HashSet<HudTab> SlotKeyTabs =
-        [HudTab.Inventory, HudTab.Skills, HudTab.SkillsAlt, HudTab.Spells, HudTab.SpellsAlt, HudTab.Tools, HudTab.Chat, HudTab.MessageHistory];
-
     internal static int? SlotHotkeyOf(KeyDownEvent e, bool onNewHud)
         => (!onNewHud || (e.Modifiers == KeyModifiers.None)) && (Keybinds.NumberRowIndexOf(e.Key) is >= 0 and var index) ? index : null;
 
+    /// <summary>What a number key uses on a classic HUD: an inventory slot, a skill or spell slot, or a chat macro.</summary>
+    internal enum ClassicSlotKind
+    {
+        Item,
+        Skill,
+        Spell,
+        Macro
+    }
+
+    /// <summary>
+    ///     What the number key of <paramref name="slot" /> (from 1) uses on the classic panel <paramref name="tab" />, or null
+    ///     for a panel whose slots the number keys do not use. The book slot of a skill or a spell is the slot of its page.
+    /// </summary>
+    internal static (ClassicSlotKind Kind, byte Slot)? ClassicSlotUseOf(HudTab tab, int slot)
+        => tab switch
+        {
+            HudTab.Inventory                     => (ClassicSlotKind.Item, (byte)slot),
+            HudTab.Skills                        => (ClassicSlotKind.Skill, (byte)slot),
+            HudTab.SkillsAlt                     => (ClassicSlotKind.Skill, (byte)(slot + 36)),
+            HudTab.Spells                        => (ClassicSlotKind.Spell, (byte)slot),
+            HudTab.SpellsAlt                     => (ClassicSlotKind.Spell, (byte)(slot + 36)),
+            HudTab.Tools when slot is >= 1 and <= 6 => (ClassicSlotKind.Skill, (byte)(72 + slot)),
+            HudTab.Tools                         => (ClassicSlotKind.Spell, (byte)(66 + slot)),
+            HudTab.Chat or HudTab.MessageHistory => (ClassicSlotKind.Macro, (byte)slot),
+            _                                    => null
+        };
+
     //the number keys: on the new HUD the hotbar, also an empty slot (BRIG-146); on the classic HUDs the slots of the
-    //panel that shows
+    //panel that shows. A held key uses its slot once: a potion is not drunk at each repeat of the OS. The repeat is
+    //consumed where the press is used, and goes on where the press goes on
     private bool HandleSlotHotkey(KeyDownEvent e)
     {
         if (SlotHotkeyOf(e, WorldHud == MainHud) is not { } index)
             return false;
 
-        //a held key uses its slot once: a potion is not drunk at each repeat of the OS. The repeat is consumed where the
-        //press is used, and goes on where the press goes on
-        if (!UsesSlot(e))
-        {
-            if ((WorldHud != MainHud) && !SlotKeyTabs.Contains(WorldHud.ActiveTab))
-                return false;
-
-            e.Handled = true;
-
-            return true;
-        }
-
         if (WorldHud == MainHud)
         {
-            MainHud.HotbarStrip.Use(index);
+            if (UsesSlot(e))
+                MainHud.HotbarStrip.Use(index);
+
             e.Handled = true;
 
             return true;
         }
 
-        var slot = index + 1;
+        if (ClassicSlotUseOf(WorldHud.ActiveTab, index + 1) is not { } use)
+            return false;
 
-        var byteSlot = (byte)slot;
+        var (kind, slot) = use;
 
-        switch (WorldHud.ActiveTab)
+        e.Handled = true;
+
+        if (!UsesSlot(e))
+            return true;
+
+        switch (kind)
         {
-            case HudTab.Inventory:
-                Game.Connection.UseItem(byteSlot);
+            case ClassicSlotKind.Item:
+                Game.Connection.UseItem(slot);
 
                 break;
 
-            case HudTab.Skills:
-                HandleSkillSlotClicked(byteSlot);
+            case ClassicSlotKind.Skill:
+                HandleSkillSlotClicked(slot);
 
                 break;
 
-            case HudTab.SkillsAlt:
-                HandleSkillSlotClicked((byte)(byteSlot + 36));
+            case ClassicSlotKind.Spell:
+                HandleSpellSlotClicked(slot);
 
                 break;
 
-            case HudTab.Spells:
-                HandleSpellSlotClicked(byteSlot);
-
-                break;
-
-            case HudTab.SpellsAlt:
-                HandleSpellSlotClicked((byte)(byteSlot + 36));
-
-                break;
-
-            case HudTab.Tools:
-                if (slot is >= 1 and <= 6)
-                    HandleSkillSlotClicked((byte)(72 + slot));
-                else
-                    HandleSpellSlotClicked((byte)(66 + slot));
-
-                break;
-
-            case HudTab.Chat:
-            case HudTab.MessageHistory:
+            case ClassicSlotKind.Macro:
             {
                 var macroText = OptionsModal.GetMacroValue(slot - 1);
 
@@ -537,12 +538,7 @@ public sealed partial class WorldScreen
 
                 break;
             }
-
-            default:
-                return false;
         }
-
-        e.Handled = true;
 
         return true;
     }

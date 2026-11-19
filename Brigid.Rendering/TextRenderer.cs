@@ -303,11 +303,6 @@ public static class TextRenderer
         => string.IsNullOrEmpty(text) ? 0 : FontEngine.Instance.MeasureWidth(text, FontEngine.Instance.UiSize, style);
 
     /// <summary>
-    ///     Clips <paramref name="text" /> to at most <paramref name="maxChars" /> characters, appending a single-glyph
-    ///     ellipsis ("…") when it overflows so the result never exceeds the budget. One home for the truncation rule so
-    ///     list/tab/label sites share the same ellipsis instead of each rolling their own "…" vs "..." variant.
-    /// </summary>
-    /// <summary>
     ///     <paramref name="text" /> when it fits <paramref name="width" />, else its longest start that fits with the
     ///     ellipsis ("…") after it. <paramref name="measure" /> gives a width at the size and spacing of the draw. A start
     ///     never ends in half of a surrogate pair.
@@ -335,6 +330,11 @@ public static class TextRenderer
         return "…";
     }
 
+    /// <summary>
+    ///     Clips <paramref name="text" /> to at most <paramref name="maxChars" /> characters, appending a single-glyph
+    ///     ellipsis ("…") when it overflows so the result never exceeds the budget. One home for the truncation rule so
+    ///     list/tab/label sites share the same ellipsis instead of each rolling their own "…" vs "..." variant.
+    /// </summary>
     public static string Truncate(string text, int maxChars)
     {
         if (string.IsNullOrEmpty(text) || (text.Length <= maxChars))

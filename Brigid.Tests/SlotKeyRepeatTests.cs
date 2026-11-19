@@ -56,6 +56,25 @@ public sealed class SlotKeyRepeatTests
         Assert.Equal(2, root.Uses);
     }
 
+    //one table decides which classic panels take the number keys, for the press and for its repeats
+    [Theory]
+    [InlineData(HudTab.Inventory, 3, WorldScreen.ClassicSlotKind.Item, 3)]
+    [InlineData(HudTab.Skills, 3, WorldScreen.ClassicSlotKind.Skill, 3)]
+    [InlineData(HudTab.SkillsAlt, 3, WorldScreen.ClassicSlotKind.Skill, 39)]
+    [InlineData(HudTab.Spells, 12, WorldScreen.ClassicSlotKind.Spell, 12)]
+    [InlineData(HudTab.SpellsAlt, 1, WorldScreen.ClassicSlotKind.Spell, 37)]
+    [InlineData(HudTab.Tools, 6, WorldScreen.ClassicSlotKind.Skill, 78)]
+    [InlineData(HudTab.Tools, 7, WorldScreen.ClassicSlotKind.Spell, 73)]
+    [InlineData(HudTab.Chat, 2, WorldScreen.ClassicSlotKind.Macro, 2)]
+    [InlineData(HudTab.MessageHistory, 2, WorldScreen.ClassicSlotKind.Macro, 2)]
+    public void AClassicPanelGivesTheSlotOfANumberKey(HudTab tab, int slot, object kind, int bookSlot)
+        => Assert.Equal(((WorldScreen.ClassicSlotKind)kind, (byte)bookSlot), WorldScreen.ClassicSlotUseOf(tab, slot));
+
+    [Theory]
+    [InlineData(HudTab.Stats)]
+    [InlineData(HudTab.ExtendedStats)]
+    public void AClassicPanelWithNoSlotsTakesNoNumberKey(HudTab tab) => Assert.Null(WorldScreen.ClassicSlotUseOf(tab, 1));
+
     [Fact]
     public void AKeyEventForgetsTheRepeatAtAReset()
     {

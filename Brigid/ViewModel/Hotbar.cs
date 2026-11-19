@@ -137,7 +137,10 @@ public sealed class Hotbar
     /// <summary>Puts <paramref name="entry" /> at <paramref name="index" /> of <paramref name="page" />, in place of the entry there.</summary>
     public void Set(int page, int index, HotbarEntry entry)
     {
-        if (!InRange(page, index) || string.IsNullOrWhiteSpace(entry.Name) || (Entries[page, index] == entry))
+        //the same entry again takes this server: a file of version 1 gave every entry the server that saved it last
+        if (!InRange(page, index)
+            || string.IsNullOrWhiteSpace(entry.Name)
+            || ((Entries[page, index] == entry) && string.Equals(Owners[page, index], Server, StringComparison.OrdinalIgnoreCase)))
             return;
 
         Entries[page, index] = entry;

@@ -31,6 +31,15 @@ internal sealed class HudTooltip : TooltipFrame
     /// <summary>Shows the lines of <paramref name="lines" /> over <paramref name="anchor" />.</summary>
     public void ShowAbove(UIElement anchor, Func<IReadOnlyList<TooltipLine>> lines) => Show(anchor, lines, false);
 
+    /// <summary>True while the host draws the tooltip itself, after the focused chat input.</summary>
+    internal bool HoldDraw { get; set; }
+
+    public override void Draw(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch)
+    {
+        if (!HoldDraw)
+            base.Draw(spriteBatch);
+    }
+
     public void Hide()
     {
         Visible = false;

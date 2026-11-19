@@ -354,7 +354,9 @@ internal sealed class DetailsWindowControl : HudWindowContent
     {
         while (ActivityLines.Count < layout.ActivityLineCount)
         {
+            //the line is fitted with an ellipsis, so it never squeezes: its shadow margin would start the squeeze
             var line = HudText.Label($"activity_{ActivityLines.Count}", ThemeRoles.Text);
+            line.ShrinkToFit = false;
             ActivityLines.Add(line);
             AddChild(line);
         }

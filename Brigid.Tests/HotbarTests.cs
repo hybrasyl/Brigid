@@ -374,6 +374,23 @@ public class HotbarTests
         Assert.Null(hotbar.Get(0, 1));
     }
 
+    //a file of version 1 gave each entry the server that saved it last; the player who puts the same entry in its slot
+    //again on this server makes it this server's
+    [Fact]
+    public void TheSameEntryPutAgainTakesThisServer()
+    {
+        var hotbar = NewHotbar();
+        hotbar.Load(["version 1", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
+        var changes = 0;
+        hotbar.Changed += () => changes++;
+
+        hotbar.Set(0, 0, Assail);
+        hotbar.Set(0, 0, Assail);
+
+        Assert.Equal("qa.example/Hybrasyl", hotbar.OwnerOf(0, 0));
+        Assert.Equal(1, changes);
+    }
+
     //a name with spaces at its ends was trimmed at the load, so it did not resolve and was swept
     [Fact]
     public void ANameKeepsItsSpaces()

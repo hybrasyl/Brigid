@@ -375,6 +375,14 @@ public class InventoryWindowTests : IDisposable
         Assert.Equal([1, null], hovers);
         Assert.Null(window.HoveredSlot);
 
+        //a drag that starts on the hovered slot hides its tooltip at the next update, with the pointer still on it
+        drag = null;
+        SlotOf(window, 3).OnMouseEnter();
+        drag = new object();
+        window.Update(new GameTime());
+
+        Assert.Null(window.HoveredSlot);
+
         drag = null;
         SlotOf(window, 2).OnMouseEnter();
 
