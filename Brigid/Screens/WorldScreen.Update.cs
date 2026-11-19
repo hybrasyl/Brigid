@@ -347,6 +347,9 @@ public sealed partial class WorldScreen
                 HideOnPressOutside(AislingContext, evt.X, evt.Y);
                 HideOnPressOutside(DoorContext, evt.X, evt.Y);
                 HideOnPressOutside(ChatTabMenu, evt.X, evt.Y);
+                HideOnPressOutside(AbilityMetadataDetails, evt.X, evt.Y);
+                HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y);
+                HideOnPressOutside(InventoryLists, evt.X, evt.Y);
 
                 continue;
             }
