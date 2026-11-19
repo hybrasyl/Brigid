@@ -461,9 +461,10 @@ public sealed class MetaFileSyncTests : IDisposable
 
         At(sync, t - 1);
         sync.OnData("ItemInfo1", ContentChecksum, Compress([9, 9])); //ItemInfo1 request 2; both times restart at t - 1
-        At(sync, (2 * t) - 1);                                        //ItemInfo1 request 3, ItemInfo0 request 2
+        At(sync, (2 * t) - 1);                                        //ItemInfo1 try 3 with no request; ItemInfo0 request 2
 
-        Assert.Equal(5, Requests.Count);
+        Assert.Equal(4, Requests.Count);
+        Assert.Equal("ItemInfo0", Requests[^1]);
 
         At(sync, (3 * t) - 1); //ItemInfo1 stops at the limit; ItemInfo0 request 3
 
@@ -514,6 +515,33 @@ public sealed class MetaFileSyncTests : IDisposable
 
         Assert.Equal(1, Completions);
         Assert.All(names, name => Assert.True(OnDisk(name)));
+
+        //each time limit requests only the oldest file again: one request for each gap, not one for each file that waits
+        Assert.Equal(names.Length * 2, Requests.Count);
+    }
+
+    //two time limits in a gap still leave the third try: answers 25 s apart complete every file, with two requests again
+    //for each gap
+    [Fact]
+    public void Tick_AnswersTwoTimeLimitsApartCompleteEveryFile()
+    {
+        const long gap = (2 * TIMEOUT_MS) + 5000;
+        string[] names = ["ItemInfo0", "ItemInfo1", "ItemInfo2"];
+        var sync = NewSync();
+        sync.OnChecksums(Listing(names));
+
+        for (var i = 0; i < names.Length; i++)
+        {
+            var start = i * gap;
+            At(sync, start + TIMEOUT_MS);
+            At(sync, start + (2 * TIMEOUT_MS));
+            At(sync, start + gap);
+            Answer(sync, names[i]);
+        }
+
+        Assert.Equal(1, Completions);
+        Assert.All(names, name => Assert.True(OnDisk(name)));
+        Assert.Equal(names.Length * 3, Requests.Count);
     }
 
     //an answer clears only the time limits: a bad payload still counts, so a server that always sends bad data stops
