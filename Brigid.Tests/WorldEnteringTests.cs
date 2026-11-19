@@ -36,6 +36,23 @@ public sealed class WorldEnteringTests
         Assert.Equal(2, raised);
     }
 
+    //the lobby switches to the world screen on the event, so the screen exists before the first world packet: a packet in
+    //the buffer is handled after the event
+    [Fact]
+    public void ItIsRaisedBeforeTheFirstPacketIsHandled()
+    {
+        using var manager = new ConnectionManager();
+        List<string> order = [];
+        manager.WorldEntering += () => order.Add("entering");
+        manager.OnMapInfo += _ => order.Add("map info");
+        List<IServerPacket> buffer = [new MapInfoPacket { MapId = 137, Name = "a room", Width = 30, Height = 20, Flags = default, Checksum = default }];
+
+        manager.SetStateForTest(ConnectionState.World);
+        manager.ProcessPackets(buffer);
+
+        Assert.Equal(["entering", "map info"], order);
+    }
+
     [Theory]
     [InlineData(ConnectionState.Disconnected)]
     [InlineData(ConnectionState.Connecting)]

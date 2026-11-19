@@ -12,6 +12,10 @@ public sealed class PipeServerTests
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
 
+    //a client of another user of the machine cannot drive the test client
+    [Fact]
+    public void ThePipeTakesOnlyAClientOfTheSameUser() => Assert.True(PipeServer.Options.HasFlag(PipeOptions.CurrentUserOnly));
+
     [Fact]
     public async Task ATestThatDoesNotConnectInTimeIsGone()
     {

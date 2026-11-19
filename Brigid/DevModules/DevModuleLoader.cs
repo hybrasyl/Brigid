@@ -27,13 +27,19 @@ internal static class DevModuleLoader
     ///     Loads the modules when <see cref="GlobalSettings.DevModulesEnabled" /> is true, and returns their host. Returns
     ///     null, and does nothing, when it is false. Called one time, from <c>ChaosGame.FinishAssetInitialization</c>.
     /// </summary>
-    internal static DevHost? Load(ChaosGame game)
+    internal static DevHost? Load(ChaosGame game) => Load(GlobalSettings.DevModulesEnabled, () => new DevHost(game), AppPaths.DevModulesDir);
+
+    /// <summary>
+    ///     Makes the host and loads the modules in <paramref name="directory" /> when <paramref name="enabled" /> is true.
+    ///     Returns null, makes no host and reads no folder, when it is false. Internal for the tests.
+    /// </summary>
+    internal static THost? Load<THost>(bool enabled, Func<THost> makeHost, string directory) where THost : class, IDevHost
     {
-        if (!GlobalSettings.DevModulesEnabled)
+        if (!enabled)
             return null;
 
-        var host = new DevHost(game);
-        LoadFrom(AppPaths.DevModulesDir, host);
+        var host = makeHost();
+        LoadFrom(directory, host);
 
         return host;
     }

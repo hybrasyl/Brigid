@@ -23,8 +23,12 @@ public static class AppPaths
     /// <summary>The environment variable that puts <see cref="AppRoot" /> in another folder (BRIG-184).</summary>
     public const string APP_ROOT_VARIABLE = "BRIGID_APP_ROOT";
 
-    //read one time: every path below is relative to it, so it must not change while the client runs
-    private static readonly string? AppRootOverride = ResolveAppRootOverride(Environment.GetEnvironmentVariable(APP_ROOT_VARIABLE));
+    //read one time: every path below is relative to it, so it must not change while the client runs. Only the tests set it
+    //again (SetAppRootOverrideForTests)
+    private static string? AppRootOverride = ResolveAppRootOverride(Environment.GetEnvironmentVariable(APP_ROOT_VARIABLE));
+
+    /// <summary>Sets the folder that <c>BRIGID_APP_ROOT</c> gives, or null for none, for the tests.</summary>
+    internal static void SetAppRootOverrideForTests(string? root) => AppRootOverride = ResolveAppRootOverride(root);
 
     /// <summary>
     ///     True when <c>BRIGID_APP_ROOT</c> gives <see cref="AppRoot" />. The smoke tests set it, so that a run never reads

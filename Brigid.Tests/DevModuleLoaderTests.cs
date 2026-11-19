@@ -137,6 +137,52 @@ public sealed class DevModuleLoaderTests : IDisposable
         Assert.Contains(host.Lines, line => line.Contains("the type check failed") && line.Contains(nameof(FileNotFoundException)));
     }
 
+    //the gate is the guard that matters most: with BRIGID_DEV_MODULES not set, no host is made and no module loads, also
+    //when the folder holds one
+    [Fact]
+    public void WithTheSettingOffNothingLoads()
+    {
+        CopySampleModule("sample.dll");
+        var made = false;
+
+        var host = DevModuleLoader.Load(
+            false,
+            () =>
+            {
+                made = true;
+
+                return Host;
+            },
+            Root);
+
+        Assert.Null(host);
+        Assert.False(made);
+        Assert.Empty(DevModuleLoader.Modules);
+    }
+
+    [Fact]
+    public void WithTheSettingOnTheModulesLoad()
+    {
+        CopySampleModule("sample.dll");
+
+        Assert.Same(Host, DevModuleLoader.Load(true, () => Host, Root));
+        Assert.Single(DevModuleLoader.Modules);
+    }
+
+    //the test process does not set BRIGID_DEV_MODULES, so the setting is off; a run that sets it gets its own value
+    [Fact]
+    public void TheSettingFollowsTheEnvironmentVariable()
+        => Assert.Equal(GlobalSettings.IsTruthy(Environment.GetEnvironmentVariable("BRIGID_DEV_MODULES")), GlobalSettings.DevModulesEnabled);
+
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("0", false)]
+    [InlineData("no", false)]
+    [InlineData("1", true)]
+    [InlineData(" true ", true)]
+    public void OnlyATruthyValueTurnsTheSettingOn(string? value, bool expected) => Assert.Equal(expected, GlobalSettings.IsTruthy(value));
+
     private void CopySampleModule(string fileName)
         => File.Copy(Path.Combine(AppContext.BaseDirectory, "devmodule-sample", "Brigid.Tests.SampleModule.dll"), Path.Combine(Root, fileName));
 }

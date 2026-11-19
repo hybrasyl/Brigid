@@ -34,6 +34,12 @@ internal sealed class PipeServer : IDisposable
     /// <summary>True when the test connected and then closed the pipe, or did not connect in time.</summary>
     internal bool ClientLeft => Left;
 
+    /// <summary>
+    ///     The options of the pipe. <see cref="PipeOptions.CurrentUserOnly" /> refuses a client of another user of the
+    ///     machine, so only the test that started the client can drive it.
+    /// </summary>
+    internal const PipeOptions Options = PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly;
+
     internal PipeServer(string pipeName, Action<string> log, TimeSpan? connectTimeout = null)
     {
         Log = log;
@@ -43,7 +49,7 @@ internal sealed class PipeServer : IDisposable
             PipeDirection.InOut,
             1,
             PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+            Options);
         new Thread(ReadLoop) { IsBackground = true, Name = "brigid-test-driver-read" }.Start();
         new Thread(WriteLoop) { IsBackground = true, Name = "brigid-test-driver-write" }.Start();
     }
