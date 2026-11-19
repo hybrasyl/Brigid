@@ -33,6 +33,11 @@ public static class WorldState
     private static List<SkillChantEntry>? CachedSkillChants;
     private static List<SpellChantEntry>? CachedSpellChants;
 
+    //true after a read of the chant file failed: slots that the server filled then have no chant, so the next read that
+    //succeeds gives every slot its chant, and a save does not write the empty chants over the file
+    private static bool SkillChantReadFailed;
+    private static bool SpellChantReadFailed;
+
     /// <summary>
     ///     The player's entity ID, assigned by the server.
     /// </summary>
@@ -322,6 +327,8 @@ public static class WorldState
     {
         Clear();
         InvalidateChantCache();
+        SkillChantReadFailed = false;
+        SpellChantReadFailed = false;
         PlayerEntityId = 0;
         PlayerName = string.Empty;
         Inventory.Clear();
@@ -555,19 +562,49 @@ public static class WorldState
     }
 
     //the chants of the file, or null when the file cannot be read. A failed read is not cached, so the next use reads the
-    //file again
+    //file again. The first read that succeeds after a failed read gives every occupied slot its chant
     private static List<SkillChantEntry>? SkillChants()
     {
-        if (CachedSkillChants is null && DataContext.LocalPlayerSettings.TryLoadSkillChants(out var loaded))
-            CachedSkillChants = loaded;
+        if (CachedSkillChants is not null)
+            return CachedSkillChants;
+
+        if (!DataContext.LocalPlayerSettings.TryLoadSkillChants(out var loaded))
+        {
+            SkillChantReadFailed = true;
+
+            return null;
+        }
+
+        CachedSkillChants = loaded;
+
+        if (SkillChantReadFailed)
+        {
+            SkillChantReadFailed = false;
+            ApplySkillChants();
+        }
 
         return CachedSkillChants;
     }
 
     private static List<SpellChantEntry>? SpellChants()
     {
-        if (CachedSpellChants is null && DataContext.LocalPlayerSettings.TryLoadSpellChants(out var loaded))
-            CachedSpellChants = loaded;
+        if (CachedSpellChants is not null)
+            return CachedSpellChants;
+
+        if (!DataContext.LocalPlayerSettings.TryLoadSpellChants(out var loaded))
+        {
+            SpellChantReadFailed = true;
+
+            return null;
+        }
+
+        CachedSpellChants = loaded;
+
+        if (SpellChantReadFailed)
+        {
+            SpellChantReadFailed = false;
+            ApplySpellChants();
+        }
 
         return CachedSpellChants;
     }
@@ -605,7 +642,17 @@ public static class WorldState
         if (!DataContext.LocalPlayerSettings.IsInitialized)
             return;
 
-        for (byte i = 1; (i <= SpellBook.MAX_SLOTS) && SpellChants() is not null; i++)
+        if (SpellChants() is not null)
+            ApplySpellChants();
+
+        if (SkillChants() is not null)
+            ApplySkillChants();
+    }
+
+    //gives each occupied slot its chants from the cached file; call it only while the cache holds the file
+    private static void ApplySpellChants()
+    {
+        for (byte i = 1; i <= SpellBook.MAX_SLOTS; i++)
         {
             var spell = SpellBook.GetSlot(i);
 
@@ -623,8 +670,11 @@ public static class WorldState
                     chants);
             }
         }
+    }
 
-        for (byte i = 1; (i <= SkillBook.MAX_SLOTS) && SkillChants() is not null; i++)
+    private static void ApplySkillChants()
+    {
+        for (byte i = 1; i <= SkillBook.MAX_SLOTS; i++)
         {
             var skill = SkillBook.GetSlot(i);
 
@@ -695,38 +745,44 @@ public static class WorldState
         }
     }
 
+    /// <summary>Puts a skill from the server in its slot, with its chant from the file. Internal for the tests.</summary>
+    internal static void AddSkill(AddSkillPacket args)
+    {
+        var chant = LookupSkillChant(args.Name);
+
+        SkillBook.SetSlot(
+            args.Slot,
+            args.Icon,
+            args.Name,
+            chant);
+    }
+
+    /// <summary>Puts a spell from the server in its slot, with its chants from the file. Internal for the tests.</summary>
+    internal static void AddSpell(AddSpellPacket args)
+    {
+        var chants = LookupSpellChants(args.Name);
+
+        SpellBook.SetSlot(
+            args.Slot,
+            args.Icon,
+            args.Name,
+            (SpellType)(byte)args.UseType,
+            args.Prompt,
+            args.CastLines,
+            chants);
+    }
+
     /// <summary>
     ///     Subscribes to ConnectionManager events and routes them to state mutations.
     ///     Call once at startup after ConnectionManager is constructed.
     /// </summary>
     public static void SubscribeTo(ConnectionManager connection)
     {
-        connection.OnAddSkillToPane += args =>
-        {
-            var chant = LookupSkillChant(args.Name);
-
-            SkillBook.SetSlot(
-                args.Slot,
-                args.Icon,
-                args.Name,
-                chant);
-        };
+        connection.OnAddSkillToPane += AddSkill;
 
         connection.OnRemoveSkillFromPane += args => SkillBook.ClearSlot(args.Slot);
 
-        connection.OnAddSpellToPane += args =>
-        {
-            var chants = LookupSpellChants(args.Name);
-
-            SpellBook.SetSlot(
-                args.Slot,
-                args.Icon,
-                args.Name,
-                (SpellType)(byte)args.UseType,
-                args.Prompt,
-                args.CastLines,
-                chants);
-        };
+        connection.OnAddSpellToPane += AddSpell;
 
         connection.OnRemoveSpellFromPane += args => SpellBook.ClearSlot(args.Slot);
 

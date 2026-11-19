@@ -33,6 +33,9 @@ public static class DataContext
     public static TileRepository Tiles { get; private set; } = null!;
     public static UiComponentRepository UserControls { get; private set; } = null!;
 
+    /// <summary>Sets the character settings repository with no game data, for the tests.</summary>
+    internal static void UseLocalPlayerSettingsForTests(LocalPlayerSettingsRepository settings) => LocalPlayerSettings = settings;
+
     public static void Initialize(ushort clientVersion, string dataPath)
     {
         ClientVersion = clientVersion;
