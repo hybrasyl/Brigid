@@ -39,6 +39,12 @@ internal sealed class DetailsWindowControl : HudWindowContent
     private readonly IconButton[] LowerButtons = new IconButton[StatRaise.Stats.Length];
     private readonly UILabel RemainingText;
     private readonly List<UILabel> ActivityLines = [];
+
+    //the full text of each activity line that is cut to its width, else null; the tooltip shows it
+    private readonly List<string?> ActivityFullTexts = [];
+    private readonly TooltipFrame ActivityTooltip = new(MainHudLayout.TOOLTIP_TEXT_WIDTH) { Name = "activity_tooltip" };
+    private readonly FontGenerationStamp ActivityFit = new();
+    private string? ActivityTooltipText;
     private byte[]? ShownPortrait;
     private DetailsLayout? Layout;
     private bool ShownWaiting;
@@ -160,7 +166,42 @@ internal sealed class DetailsWindowControl : HudWindowContent
         if (ShownWaiting && (StatPoints.Waiting == 0))
             ShowPoints();
 
+        //a new face or window size moves the width of the text, so the cut lines are fitted again
+        if (Visible && ActivityFit.Changed)
+            ShowActivity();
+
         base.Update(gameTime);
+    }
+
+    /// <summary>The full text of the activity line at <paramref name="index" /> when it is cut to its width, else null.</summary>
+    internal string? ActivityFullTextAt(int index) => index < ActivityFullTexts.Count ? ActivityFullTexts[index] : null;
+
+    /// <summary>The text that the activity line at <paramref name="index" /> shows.</summary>
+    internal string ActivityTextAt(int index) => ActivityLines[index].Text;
+
+    public override void Draw(SpriteBatch spriteBatch)
+    {
+        if (!Visible)
+            return;
+
+        base.Draw(spriteBatch);
+
+        //a line cut with an ellipsis shows its full text at the cursor. The tooltip has no parent: its position is in
+        //screen coordinates, and the window does not clip it
+        var hovered = ActivityLines.FindIndex(line => line.Visible && line.ContainsPoint(InputBuffer.MouseX, InputBuffer.MouseY));
+
+        if ((hovered < 0) || (ActivityFullTextAt(hovered) is not { } full))
+            return;
+
+        if (full != ActivityTooltipText)
+        {
+            ActivityTooltip.SetLines([TooltipLine.Themed(full, ThemeRoles.Text)]);
+            ActivityTooltipText = full;
+        }
+
+        ActivityTooltip.PlaceAtCursor(InputBuffer.MouseX, InputBuffer.MouseY);
+        ActivityTooltip.Visible = true;
+        ActivityTooltip.Draw(spriteBatch);
     }
 
     public override void Dispose()
@@ -168,6 +209,7 @@ internal sealed class DetailsWindowControl : HudWindowContent
         Profile.Changed -= ShowProfile;
         Attributes.Changed -= ShowAttributes;
         Activity.Changed -= ShowActivity;
+        ActivityTooltip.Dispose();
 
         base.Dispose();
     }
@@ -323,15 +365,27 @@ internal sealed class DetailsWindowControl : HudWindowContent
         ShowActivity();
     }
 
+    //a line that is wider than its label ends in an ellipsis, and its tooltip shows the full text: a squeeze to fit made
+    //the glyphs of a long line overlap (Sabrael, 2026-11-19)
     private void ShowActivity()
     {
+        ActivityFit.Mark();
+
+        while (ActivityFullTexts.Count < ActivityLines.Count)
+            ActivityFullTexts.Add(null);
+
         for (var i = 0; i < ActivityLines.Count; i++)
         {
+            var line = ActivityLines[i];
             var shown = i < Activity.Entries.Count;
-            ActivityLines[i].Visible = shown;
-            ActivityLines[i].Text = shown
+            var full = shown
                 ? string.Create(CultureInfo.InvariantCulture, $"{Activity.Entries[i].Time:HH:mm} {Activity.Entries[i].Text}")
                 : string.Empty;
+            var fitted = TextRenderer.FitWithEllipsis(full, line.Width, line.MeasureText);
+
+            line.Visible = shown;
+            line.Text = fitted;
+            ActivityFullTexts[i] = fitted == full ? null : full;
         }
     }
 }

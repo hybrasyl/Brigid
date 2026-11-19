@@ -21,6 +21,9 @@ public class UILabel : UIElement
     private const float MIN_CHAR_SPACING = -4f;
 
     private readonly TextElement TextElement = new();
+
+    /// <summary>The width of <paramref name="text" /> at the size and spacing that the label draws at.</summary>
+    internal int MeasureText(string text) => TextElement.Measure(text);
     private int CursorPosition;
     private int SelectionAnchor;
     private bool Dragging;
