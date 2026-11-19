@@ -14,7 +14,8 @@ namespace Brigid.ViewModel;
 ///     readings. A level block before the experience block gives a reading at the new level with the total of the level
 ///     before, under the start, so a reading under the start gives no threshold. A reading with 0 experience to the next
 ///     level gives no threshold: a server sends it at the level cap, and Hybrasyl also when an experience formula changes
-///     under a character.
+///     under a character. A level block with no experience block in its packet gives no threshold either: its experience is
+///     the last one known, and at a gain of more than one level no start shows that it is old.
 /// </remarks>
 public sealed class ExperienceSpan
 {
@@ -62,8 +63,10 @@ public sealed class ExperienceSpan
 
     /// <summary>
     ///     Takes a reading of the track. Returns true when the reading teaches a new start, so that the caller saves it.
+    ///     <paramref name="experienceIsNew" /> is false when the packet had no experience block, so <paramref name="total" />
+    ///     and <paramref name="toNext" /> are the last ones known: the reading moves the level and gives no threshold.
     /// </summary>
-    public bool Observe(byte level, uint total, uint toNext)
+    public bool Observe(byte level, uint total, uint toNext, bool experienceIsNew = true)
     {
         var learned = false;
 
@@ -87,7 +90,7 @@ public sealed class ExperienceSpan
 
         //a reading under the start of its level has the experience of the level before (its level block came first), so
         //its threshold is the threshold of the level before
-        if ((toNext > 0) && !(Start is { } start && (total < start)))
+        if (experienceIsNew && (toNext > 0) && !(Start is { } start && (total < start)))
         {
             var threshold = (ulong)total + toNext;
 
