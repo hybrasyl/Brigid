@@ -34,9 +34,14 @@ public static class WorldState
     private static List<SpellChantEntry>? CachedSpellChants;
 
     //true after a read of the chant file failed: slots that the server filled then have no chant, so the next read that
-    //succeeds gives every slot its chant, and a save does not write the empty chants over the file
+    //succeeds gives every slot its chant, and a save does not write the empty chants over the file. The file wins over a
+    //chant that the player typed while it could not be read: the save of that chant was refused, and the player was told
     private static bool SkillChantReadFailed;
     private static bool SpellChantReadFailed;
+
+    //true when the last read succeeded after a failed read, until the add handler gives every slot its chants
+    private static bool SkillChantsRecovered;
+    private static bool SpellChantsRecovered;
 
     /// <summary>
     ///     The player's entity ID, assigned by the server.
@@ -329,6 +334,8 @@ public static class WorldState
         InvalidateChantCache();
         SkillChantReadFailed = false;
         SpellChantReadFailed = false;
+        SkillChantsRecovered = false;
+        SpellChantsRecovered = false;
         PlayerEntityId = 0;
         PlayerName = string.Empty;
         Inventory.Clear();
@@ -562,7 +569,7 @@ public static class WorldState
     }
 
     //the chants of the file, or null when the file cannot be read. A failed read is not cached, so the next use reads the
-    //file again. The first read that succeeds after a failed read gives every occupied slot its chant
+    //file again. A read that succeeds after a failed read marks the chants recovered; it changes no slot itself
     private static List<SkillChantEntry>? SkillChants()
     {
         if (CachedSkillChants is not null)
@@ -580,7 +587,7 @@ public static class WorldState
         if (SkillChantReadFailed)
         {
             SkillChantReadFailed = false;
-            ApplySkillChants();
+            SkillChantsRecovered = true;
         }
 
         return CachedSkillChants;
@@ -603,7 +610,7 @@ public static class WorldState
         if (SpellChantReadFailed)
         {
             SpellChantReadFailed = false;
-            ApplySpellChants();
+            SpellChantsRecovered = true;
         }
 
         return CachedSpellChants;
@@ -647,6 +654,9 @@ public static class WorldState
 
         if (SkillChants() is not null)
             ApplySkillChants();
+
+        SkillChantsRecovered = false;
+        SpellChantsRecovered = false;
     }
 
     //gives each occupied slot its chants from the cached file; call it only while the cache holds the file
@@ -755,6 +765,13 @@ public static class WorldState
             args.Icon,
             args.Name,
             chant);
+
+        //the read for this slot is the first that succeeded after a failed read: the slots before it have no chant
+        if (SkillChantsRecovered)
+        {
+            SkillChantsRecovered = false;
+            ApplySkillChants();
+        }
     }
 
     /// <summary>Puts a spell from the server in its slot, with its chants from the file. Internal for the tests.</summary>
@@ -770,6 +787,12 @@ public static class WorldState
             args.Prompt,
             args.CastLines,
             chants);
+
+        if (SpellChantsRecovered)
+        {
+            SpellChantsRecovered = false;
+            ApplySpellChants();
+        }
     }
 
     /// <summary>

@@ -43,9 +43,6 @@ public sealed class ExitRedirectTests
         Assert.Equal(ConnectionState.World, manager.RedirectTargetFor(ConnectionState.World));
     }
 
-    //the server close of the old connection can raise its event after a redirect's new connection reached the world; a
-    //Disconnected then stopped the world actions on a live socket. A close of a connection that is not the current one
-    //changes nothing, and a close of the current one still goes to Disconnected
     //the game loop set Connecting for a redirect, and the close of the old connection came after it: the hop goes on
     [Fact]
     public void ACloseDuringTheConnectOfARedirectKeepsConnecting()
@@ -58,6 +55,9 @@ public sealed class ExitRedirectTests
         Assert.Equal(ConnectionState.Connecting, manager.State);
     }
 
+    //the server close of the old connection can raise its event after a redirect's new connection reached the world; a
+    //Disconnected then stopped the world actions on a live socket. A close of a connection that is not the current one
+    //changes nothing, and a close of the current one still goes to Disconnected
     [Fact]
     public void ALateCloseOfAReplacedConnectionLeavesTheStateAsItIs()
     {

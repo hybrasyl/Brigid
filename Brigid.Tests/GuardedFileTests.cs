@@ -66,6 +66,48 @@ public sealed class GuardedFileTests : IDisposable
         Assert.False(File.Exists(file.Path + GuardedFile.TEMP_SUFFIX));
     }
 
+    //the trust store saves on the game loop and on the connect task; two saves shared the temporary file, and one could
+    //delete the other's file before its move
+    [Fact]
+    public void TwoThreadsThatSaveOneFileBothSave()
+    {
+        var file = FileNamed("known-servers.json");
+        var results = new List<SaveResult>();
+
+        void SaveMany(string text)
+        {
+            for (var i = 0; i < 100; i++)
+            {
+                var result = SaveText(file, text);
+
+                lock (results)
+                    results.Add(result);
+            }
+        }
+
+        Parallel.Invoke(() => SaveMany("a"), () => SaveMany("b"));
+
+        Assert.All(results, result => Assert.Equal(SaveResult.Saved, result));
+        Assert.Contains(File.ReadAllText(file.Path), new[] { "a", "b" });
+        Assert.False(File.Exists(file.Path + GuardedFile.TEMP_SUFFIX));
+    }
+
+    //a virus scanner or the search indexer can open the new file for a moment just after the write
+    [Fact]
+    public void AMoveThatAnotherProgramBlocksForAMomentIsTriedAgain()
+    {
+        var file = FileNamed("Macro.cfg");
+        File.WriteAllText(file.Path, "old");
+        var held = new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var release = Task.Delay(30).ContinueWith(_ => held.Dispose());
+
+        var result = SaveText(file, "new");
+        release.Wait();
+
+        Assert.Equal(SaveResult.Saved, result);
+        Assert.Equal("new", File.ReadAllText(file.Path));
+    }
+
     [Fact]
     public void ASaveReplacesTheFileAndLeavesNoTemporaryFile()
     {

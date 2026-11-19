@@ -80,6 +80,9 @@ public sealed class GuardedFile
 
     private volatile bool UnreadableFlag;
 
+    //one save at a time for this file: the saves share its temporary file
+    private readonly Lock SaveGate = new();
+
     /// <summary>
     ///     Raised when a save does not go through, with why: <see cref="SaveResult.Unreadable" /> (the last read failed,
     ///     so the save was refused) or <see cref="SaveResult.Failed" /> (the write failed: another program holds the file,
@@ -146,21 +149,47 @@ public sealed class GuardedFile
         }
 
         //the write goes to a file beside the target, which then replaces the target, so a write that fails part way
-        //leaves the old file as it was
+        //leaves the old file as it was. Two threads can save one file (the trust store saves on the game loop and on the
+        //connect task), and they share the temporary file, so one save at a time
         var temp = Path + TEMP_SUFFIX;
 
-        if (DataDiagnostics.Try(
-                () =>
-                {
-                    write(temp);
-                    File.Move(temp, Path, overwrite: true);
-                }, $"save {FileName}"))
-            return SaveResult.Saved;
+        using (SaveGate.EnterScope())
+        {
+            if (DataDiagnostics.Try(
+                    () =>
+                    {
+                        write(temp);
+                        MoveOver(temp, Path);
+                    }, $"save {FileName}"))
+                return SaveResult.Saved;
 
-        DataDiagnostics.Try(() => File.Delete(temp), $"delete {FileName}{TEMP_SUFFIX}");
+            DataDiagnostics.Try(() => File.Delete(temp), $"delete {FileName}{TEMP_SUFFIX}");
+        }
+
         RaiseNotSaved(SaveResult.Failed);
 
         return SaveResult.Failed;
+    }
+
+    /// <summary>The tries of the move over the file, which a virus scanner or a search indexer can hold for a moment.</summary>
+    internal const int MOVE_TRIES = 3;
+
+    private const int MOVE_RETRY_MS = 50;
+
+    //a program that opens the new file just after the write (a virus scanner, the search indexer) makes the move fail
+    //for a moment; the last failure goes on to the caller
+    private static void MoveOver(string temp, string target)
+    {
+        for (var tries = 1; ; tries++)
+            try
+            {
+                File.Move(temp, target, overwrite: true);
+
+                return;
+            } catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && (tries < MOVE_TRIES))
+            {
+                Thread.Sleep(MOVE_RETRY_MS);
+            }
     }
 
     private void RaiseNotSaved(SaveResult result)
