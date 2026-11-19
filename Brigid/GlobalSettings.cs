@@ -88,7 +88,7 @@ public static class GlobalSettings
 
         ResolveConnectionConfig();
 
-        DevModulesEnabled = IsTruthy(Environment.GetEnvironmentVariable("BRIGID_DEV_MODULES"));
+        DevModulesEnabled = ResolveDevModulesEnabled(Environment.GetEnvironmentVariable);
 
         if (DevModulesEnabled)
             NoticeDebugLog.Write($"[dev-module] BRIGID_DEV_MODULES is set; dev modules load from {AppPaths.DevModulesDir}");
@@ -218,6 +218,15 @@ public static class GlobalSettings
 
     private static int ParsePort(string? value)
         => int.TryParse(value, out var p) && p is >= 1 and <= 65535 ? p : LauncherConfig.DEFAULT_PORT;
+
+    /// <summary>The environment variable that turns on the dev modules (BRIG-29).</summary>
+    internal const string DEV_MODULES_VARIABLE = "BRIGID_DEV_MODULES";
+
+    /// <summary>The dev module setting that the environment gives, through <paramref name="environment" />.</summary>
+    internal static bool ResolveDevModulesEnabled(Func<string, string?> environment) => IsTruthy(environment(DEV_MODULES_VARIABLE));
+
+    /// <summary>Sets <see cref="DevModulesEnabled" />, for the tests; a test puts it back when it ends.</summary>
+    internal static void SetDevModulesEnabledForTests(bool enabled) => DevModulesEnabled = enabled;
 
     internal static bool IsTruthy(string? value)
     {

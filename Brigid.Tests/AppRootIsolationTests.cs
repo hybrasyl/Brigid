@@ -30,7 +30,7 @@ public sealed class AppRootIsolationTests : IDisposable
 
     public void Dispose()
     {
-        AppPaths.SetAppRootOverrideForTests(Environment.GetEnvironmentVariable(AppPaths.APP_ROOT_VARIABLE));
+        AppPaths.ResetAppRootOverrideForTests();
         GlobalSettings.DataPath = OriginalDataPath;
         ClientSettings.SoundVolume = OriginalSoundVolume;
         Keybinds.ResetAll();

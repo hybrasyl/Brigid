@@ -20,10 +20,13 @@ public sealed class DevModuleLoaderTests : IDisposable
     private readonly string Root = Directory.CreateTempSubdirectory("brigid-devmodules-").FullName;
     private readonly FakeDevHost Host = new();
 
+    private readonly bool OriginalSetting = GlobalSettings.DevModulesEnabled;
+
     public DevModuleLoaderTests() => DevModuleLoader.ResetForTest();
 
     public void Dispose()
     {
+        GlobalSettings.SetDevModulesEnabledForTests(OriginalSetting);
         DevModuleLoader.ResetForTest();
         Directory.Delete(Root, true);
     }
@@ -143,10 +146,10 @@ public sealed class DevModuleLoaderTests : IDisposable
     public void WithTheSettingOffNothingLoads()
     {
         CopySampleModule("sample.dll");
+        GlobalSettings.SetDevModulesEnabledForTests(false);
         var made = false;
 
         var host = DevModuleLoader.Load(
-            false,
             () =>
             {
                 made = true;
@@ -164,15 +167,24 @@ public sealed class DevModuleLoaderTests : IDisposable
     public void WithTheSettingOnTheModulesLoad()
     {
         CopySampleModule("sample.dll");
+        GlobalSettings.SetDevModulesEnabledForTests(true);
 
-        Assert.Same(Host, DevModuleLoader.Load(true, () => Host, Root));
+        Assert.Same(Host, DevModuleLoader.Load(() => Host, Root));
         Assert.Single(DevModuleLoader.Modules);
     }
 
     //the test process does not set BRIGID_DEV_MODULES, so the setting is off; a run that sets it gets its own value
     [Fact]
     public void TheSettingFollowsTheEnvironmentVariable()
-        => Assert.Equal(GlobalSettings.IsTruthy(Environment.GetEnvironmentVariable("BRIGID_DEV_MODULES")), GlobalSettings.DevModulesEnabled);
+        => Assert.Equal(GlobalSettings.IsTruthy(Environment.GetEnvironmentVariable(GlobalSettings.DEV_MODULES_VARIABLE)), GlobalSettings.DevModulesEnabled);
+
+    //the setting reads its own variable: a value of 1 there turns it on, and no other variable does
+    [Fact]
+    public void TheSettingReadsBrigidDevModules()
+    {
+        Assert.True(GlobalSettings.ResolveDevModulesEnabled(name => name == "BRIGID_DEV_MODULES" ? "1" : null));
+        Assert.False(GlobalSettings.ResolveDevModulesEnabled(name => name == "BRIGID_DEV_MODULES" ? null : "1"));
+    }
 
     [Theory]
     [InlineData(null, false)]

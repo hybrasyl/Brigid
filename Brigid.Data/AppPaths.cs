@@ -30,6 +30,9 @@ public static class AppPaths
     /// <summary>Sets the folder that <c>BRIGID_APP_ROOT</c> gives, or null for none, for the tests.</summary>
     internal static void SetAppRootOverrideForTests(string? root) => AppRootOverride = ResolveAppRootOverride(root);
 
+    /// <summary>Sets the folder of <c>BRIGID_APP_ROOT</c> again from the environment, as at the start, for the tests.</summary>
+    internal static void ResetAppRootOverrideForTests() => SetAppRootOverrideForTests(Environment.GetEnvironmentVariable(APP_ROOT_VARIABLE));
+
     /// <summary>
     ///     True when <c>BRIGID_APP_ROOT</c> gives <see cref="AppRoot" />. The smoke tests set it, so that a run never reads
     ///     or writes the developer's own settings. With it set, no migration into <see cref="AppRoot" /> runs: the folder

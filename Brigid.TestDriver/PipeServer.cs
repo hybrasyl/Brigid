@@ -49,7 +49,7 @@ internal sealed class PipeServer : IDisposable
             PipeDirection.InOut,
             1,
             PipeTransmissionMode.Byte,
-            Options);
+            Options); //PipeServerTests pins the options; the stream does not expose them, so keep this argument the constant
         new Thread(ReadLoop) { IsBackground = true, Name = "brigid-test-driver-read" }.Start();
         new Thread(WriteLoop) { IsBackground = true, Name = "brigid-test-driver-write" }.Start();
     }
