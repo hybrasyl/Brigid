@@ -296,6 +296,78 @@ public class GameClientTransportTests
         Assert.False(client.HasQueuedPackets);
     }
 
+    /// <summary>
+    ///     A new connect can start after a server close ended the old pump set and before its teardown took the lock. The
+    ///     late teardown frees only the old connection: the new socket, stream and pumps stay, and the close of the old
+    ///     connection raises no event.
+    /// </summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task ServerClose_ALateTeardownLeavesTheConnectionThatReplacedIt()
+    {
+        using var first = new LoopbackListener();
+        using var second = new LoopbackListener();
+        using var client = new GameClient();
+        var closed = new List<int>();
+        client.OnDisconnected += number =>
+        {
+            lock (closed)
+                closed.Add(number);
+        };
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", first.Port);
+        _ = await first.AcceptAsync();
+        var oldConnection = client.CurrentConnection;
+
+        client.ServerCloseEndedForTests = () =>
+        {
+            client.ServerCloseEndedForTests = null;
+            client.ResetCrypto();
+            client.ConnectAsync("127.0.0.1", second.Port)
+                  .GetAwaiter()
+                  .GetResult();
+        };
+
+        var acceptSecond = second.AcceptAsync();
+        first.ShutdownSend();
+
+        Assert.True(await first.ReadsEndOfStreamAsync(), "the late teardown did not close the old socket");
+        _ = await acceptSecond;
+
+        //the event comes after the teardown closes the socket; give a wrong event the time to arrive
+        await Task.Delay(200);
+
+        lock (closed)
+            Assert.Empty(closed);
+
+        Assert.NotEqual(oldConnection, client.CurrentConnection);
+        Assert.True(client.Connected);
+        Assert.True(client.HoldsEveryPart);
+    }
+
+    /// <summary>A Disconnect returns after the receive loop ended, so the loop's buffer is not given back while it reads.</summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task Disconnect_WaitsForTheReceiveLoopToEnd()
+    {
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+        var loopEnded = false;
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+
+        client.ReceiveLoopEndingForTests = () =>
+        {
+            Thread.Sleep(200);
+            Volatile.Write(ref loopEnded, true);
+        };
+
+        client.Disconnect();
+
+        Assert.True(Volatile.Read(ref loopEnded));
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         using var timeout = new CancellationTokenSource(TIMEOUT_MS);

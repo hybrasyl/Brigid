@@ -175,6 +175,18 @@ public sealed class GameClient : IDisposable
     /// <summary>True while the client holds a socket, a stream or a pump set, for the tests.</summary>
     internal bool HoldsConnection => Socket is not null || Transport is not null || Pumps is not null;
 
+    /// <summary>True while the client holds a socket, a stream and a pump set, for the tests.</summary>
+    internal bool HoldsEveryPart => Socket is not null && Transport is not null && Pumps is not null;
+
+    /// <summary>For the tests: runs on the receive loop's thread when the loop ends, before it tries to end its pump set.</summary>
+    internal Action? ReceiveLoopEndingForTests { get; set; }
+
+    /// <summary>
+    ///     For the tests: runs on the receive loop's thread after a server close ended its pump set, before the teardown
+    ///     takes the connect lock. A new connect can start in this gap.
+    /// </summary>
+    internal Action? ServerCloseEndedForTests { get; set; }
+
     /// <summary>
     ///     The remote endpoint of the active socket, or null when not connected.
     /// </summary>
@@ -1032,8 +1044,11 @@ public sealed class GameClient : IDisposable
         {
             //the server closed the connection, or the read failed. A Disconnect that came first ended the pump set and
             //tears it down itself
+            ReceiveLoopEndingForTests?.Invoke();
+
             if (pumps.TryEnd())
             {
+                ServerCloseEndedForTests?.Invoke();
                 bool wasLive;
 
                 using (ConnectLock.EnterScope())
