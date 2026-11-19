@@ -87,8 +87,18 @@ public sealed class MetaFileRepository
             return;
         }
 
-        var files = Directory.GetFiles(MetaFileDirectory)
-                             .Select(f => (Path: f, Name: Path.GetFileName(f)))
+        string[] paths = [];
+
+        //a folder that cannot be listed gives an empty index, as a missing folder does. The sync completion calls this
+        //from the game loop, outside the packet handler's catch
+        if (!DataDiagnostics.Try(() => paths = Directory.GetFiles(MetaFileDirectory), "list metafiles for the item index"))
+        {
+            ItemIndex = index.ToFrozenDictionary();
+
+            return;
+        }
+
+        var files = paths.Select(f => (Path: f, Name: Path.GetFileName(f)))
                              .Where(f => f.Name.StartsWithI("ItemInfo") && IsListed(f.Name))
                              .Where(f => ushort.TryParse(f.Name.AsSpan("ItemInfo".Length), out _))
                              .ToArray();

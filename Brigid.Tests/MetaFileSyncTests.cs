@@ -495,6 +495,44 @@ public sealed class MetaFileSyncTests : IDisposable
         Assert.Equal("ItemInfo0", Requests[^1]);
     }
 
+    //answers that come more than the time limit apart still complete every file: each answer clears the time limits that
+    //the files that wait used
+    [Fact]
+    public void Tick_AnswersMoreThanTheTimeLimitApartCompleteEveryFile()
+    {
+        const long gap = TIMEOUT_MS + 2000;
+        string[] names = ["ItemInfo0", "ItemInfo1", "ItemInfo2", "ItemInfo3", "ItemInfo4"];
+        var sync = NewSync();
+        sync.OnChecksums(Listing(names));
+
+        for (var i = 0; i < names.Length; i++)
+        {
+            At(sync, ((i + 1) * gap) - 2000);
+            At(sync, (i + 1) * gap);
+            Answer(sync, names[i]);
+        }
+
+        Assert.Equal(1, Completions);
+        Assert.All(names, name => Assert.True(OnDisk(name)));
+    }
+
+    //an answer clears only the time limits: a bad payload still counts, so a server that always sends bad data stops
+    [Fact]
+    public void Tick_AnAnswerToAnotherFileDoesNotClearABadPayloadCount()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0", "ItemInfo1"));
+
+        sync.OnData("ItemInfo0", ContentChecksum, Compress([9, 9]));
+        sync.OnData("ItemInfo0", ContentChecksum, Compress([9, 9]));
+        Answer(sync, "ItemInfo1");
+        sync.OnData("ItemInfo0", ContentChecksum, Compress([9, 9]));
+
+        Assert.Equal(MetaFileSync.MAX_REQUESTS, Requests.Count(name => name == "ItemInfo0"));
+        Assert.Equal(1, Completions);
+        Assert.False(OnDisk("ItemInfo0"));
+    }
+
     //the cache keeps its old copy of a file that has no answer
     [Fact]
     public void Tick_KeepsTheOldCopyOfAFileWithNoAnswer()

@@ -93,9 +93,10 @@ public static class MetaFileCache
     ///     returns the names it deleted. Subdirectories are not touched. A directory that cannot be read deletes nothing.
     /// </summary>
     /// <remarks>
-    ///     A metafile that the server no longer lists is stale, but the repository still reads it. The server splits item
-    ///     metadata across <c>ItemInfoN</c> files and the split moves when items change, so an old file can give an item
-    ///     its old class or level. The comparison here is ordinal, but the client's pending set ignores case. So on a
+    ///     A metafile that the server no longer lists is stale. The repository reads only the listed files (BRIG-167), but
+    ///     a stale file on disk is read again before the first list of the next session. The server splits item metadata
+    ///     across <c>ItemInfoN</c> files and the split moves when items change, so an old file can give an item its old
+    ///     class or level. The comparison here is ordinal, but the client's pending set ignores case. So on a
     ///     case-insensitive file system, this method deletes a file whose name changed case, and the sync downloads it
     ///     again.
     /// </remarks>

@@ -116,4 +116,76 @@ public sealed class MetaFileRepositoryTests : IDisposable
 
         Assert.Equal(2, Repository.GetAll("SEvent").Count);
     }
+
+    //the sync completion builds the index from the game loop, outside the packet handler's catch: a folder that cannot
+    //be listed gives an empty index and does not throw
+    [Fact]
+    public void AFolderThatCannotBeListedGivesAnEmptyIndex()
+    {
+        using var denied = DenyListing(Root);
+
+        if (!denied.Works)
+            return;
+
+        Repository.BuildItemIndex();
+
+        Assert.Empty(Repository.GetItemMetadata("Stick"));
+    }
+
+    private static ListingDenied DenyListing(string directory) => new(directory);
+
+    //refuses the listing of a folder to this process; Works is false when the OS still lists it (a root user)
+    private sealed class ListingDenied : IDisposable
+    {
+        private readonly string Directory;
+        private readonly System.Security.AccessControl.FileSystemAccessRule? Rule;
+
+        public bool Works { get; }
+
+        public ListingDenied(string directory)
+        {
+            Directory = directory;
+
+            if (OperatingSystem.IsWindows())
+            {
+                var user = System.Security.Principal.WindowsIdentity.GetCurrent().User!;
+                Rule = new System.Security.AccessControl.FileSystemAccessRule(
+                    user,
+                    System.Security.AccessControl.FileSystemRights.ListDirectory,
+                    System.Security.AccessControl.AccessControlType.Deny);
+                var info = new DirectoryInfo(directory);
+                var security = info.GetAccessControl();
+                security.AddAccessRule(Rule);
+                info.SetAccessControl(security);
+            } else
+                File.SetUnixFileMode(directory, UnixFileMode.UserExecute);
+
+            Works = !CanList(directory);
+        }
+
+        private static bool CanList(string directory)
+        {
+            try
+            {
+                System.IO.Directory.GetFiles(directory);
+
+                return true;
+            } catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        public void Dispose()
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                var info = new DirectoryInfo(Directory);
+                var security = info.GetAccessControl();
+                security.RemoveAccessRule(Rule!);
+                info.SetAccessControl(security);
+            } else
+                File.SetUnixFileMode(Directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
 }

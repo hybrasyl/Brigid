@@ -918,7 +918,7 @@ public sealed class ChaosGame : Game
         //transfer each leave World, and each world entry asks for a new list. The state is read here, because a close
         //raises StateChanged on the network thread
         if (Connection.State == ConnectionState.World)
-            MetaSync.Tick();
+            TickMetaSync();
         else
             MetaSync.End();
 
@@ -928,6 +928,20 @@ public sealed class ChaosGame : Game
     }
 
     #region Metadata Sync
+    //a completion from a time limit runs the same handlers as a completion from a packet, so it logs a failure as
+    //ConnectionManager.ProcessPackets does, and the game loop continues
+    private void TickMetaSync()
+    {
+        try
+        {
+            MetaSync.Tick();
+        } catch (Exception ex)
+        {
+            NoticeDebugLog.Write($"!!! metafile sync tick threw {ex.GetType().Name}: {ex.Message}");
+            NoticeDebugLog.Write($"  stack: {ex.StackTrace}");
+        }
+    }
+
     private void HandleMetaData(ServerPackets.MetafilePacket pkt)
     {
         //the sync runs only in World: a list or an answer handled after a close is dropped, and the next world entry asks

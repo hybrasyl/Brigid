@@ -5,7 +5,8 @@ namespace Brigid.Data;
 ///     not name, and requests each file whose checksum differs. It writes a file only when it requested the file and the
 ///     CRC-32 of the data matches the checksum in the data packet, as retail does (BRIG-114). When no answer comes for
 ///     <see cref="REQUEST_TIMEOUT_SECONDS" />, the files that wait are requested again, under the same limit as a bad
-///     payload (BRIG-165). The sync completes when no request is open. Call its methods on one thread (the game loop).
+///     payload (BRIG-165). An answer to any file clears the time limits that the files that wait used, because the server
+///     answers in order. The sync completes when no request is open. Call its methods on one thread (the game loop).
 /// </summary>
 public sealed class MetaFileSync
 {
@@ -18,8 +19,9 @@ public sealed class MetaFileSync
     /// <summary>
     ///     The time with no answer to any request before the files that wait are requested again. A server that does not
     ///     know a name sends nothing (Hybrasyl); without a time limit, one such file holds the sync open for the session.
-    ///     The server answers in order, so each answer restarts the time of the files that wait: a slow first download of
-    ///     the whole catalog is not cut off.
+    ///     The server answers in order, so each answer restarts the time of the files that wait, and clears the time limits
+    ///     that they used: a slow first download of the whole catalog is not cut off, also when answers are more than this
+    ///     time apart.
     /// </summary>
     public const int REQUEST_TIMEOUT_SECONDS = 10;
 
@@ -37,11 +39,16 @@ public sealed class MetaFileSync
     private readonly Dictionary<string, Entry> Pending = new(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="Name">The name as the checksum list gives it.</param>
-    /// <param name="Requests">The number of requests sent.</param>
+    /// <param name="Failures">The requests again after a bad payload, a failed write or an answer to a replaced list.</param>
+    /// <param name="Silences">The requests again after a time limit, since the last answer to any file.</param>
     /// <param name="Listed">The checksum in the list.</param>
     /// <param name="Replaced">The checksum in a list that this list replaced while the file was pending, when it differs.</param>
     /// <param name="SentAt">The clock timestamp of the last request.</param>
-    private readonly record struct Entry(string Name, int Requests, uint Listed, uint? Replaced, long SentAt);
+    private readonly record struct Entry(string Name, int Failures, int Silences, uint Listed, uint? Replaced, long SentAt)
+    {
+        /// <summary>The requests that count toward <see cref="MAX_REQUESTS" />, the first request included.</summary>
+        public int Requests => 1 + Failures + Silences;
+    }
 
     /// <param name="directory">The metafile folder. It is read each time, because it depends on the server scope.</param>
     /// <param name="request">Sends the request for one file by name.</param>
@@ -118,7 +125,7 @@ public sealed class MetaFileSync
 
         foreach (var (name, checksum) in listed)
             if (MetaFileCache.GetChecksum(directory, name) != checksum)
-                Pending[name] = new Entry(name, 1, checksum, replaced.TryGetValue(name, out var old) && (old != checksum) ? old : null, now);
+                Pending[name] = new Entry(name, 0, 0, checksum, replaced.TryGetValue(name, out var old) && (old != checksum) ? old : null, now);
 
         foreach (var name in Pending.Keys)
             Request(name);
@@ -152,17 +159,18 @@ public sealed class MetaFileSync
             return;
         }
 
-        var (listedName, requests, listedChecksum, replacedChecksum, _) = pending;
+        var (listedName, _, _, listedChecksum, replacedChecksum, _) = pending;
         var valid = MetaFileCache.IsValidPayload(data, checksum);
 
         RestartWaitTimes();
+        pending = Pending[name];
 
         //a late answer to the replaced list matches the replaced checksum: drop it once and request the file again. After
         //that the checksum in the data packet decides, so a server whose list and data disagree for good still completes
         if (valid && (checksum == replacedChecksum) && (checksum != listedChecksum))
         {
             Log($"{listedName} answers a checksum list that a later list replaced. Requesting it again.");
-            Pending[name] = pending with { Requests = requests + 1, Replaced = null, SentAt = Clock.GetTimestamp() };
+            Pending[name] = pending with { Failures = pending.Failures + 1, Replaced = null, SentAt = Clock.GetTimestamp() };
             Request(listedName);
 
             return;
@@ -174,7 +182,7 @@ public sealed class MetaFileSync
 
             //a failed write is requested again too: the round trip gives a short lock (a virus scanner, for example) time
             //to clear, and it uses the same limit, so a disk that cannot be written does not hold the sync open
-            if (!RequestAgainOrStop(pending, problem))
+            if (!RequestAgainOrStop(pending, problem, silence: false))
                 return;
         } else
             Pending.Remove(name);
@@ -185,7 +193,8 @@ public sealed class MetaFileSync
 
     /// <summary>
     ///     When no answer came for <see cref="REQUEST_TIMEOUT_SECONDS" />, requests each file that waits again, up to
-    ///     <see cref="MAX_REQUESTS" /> requests; then the cache keeps its old copy and the entry completes. Call it once each
+    ///     <see cref="MAX_REQUESTS" /> requests since the last answer to any file; then the cache keeps its old copy and the
+    ///     entry completes. Call it once each
     ///     frame while the connection is in World.
     /// </summary>
     public void Tick()
@@ -202,20 +211,22 @@ public sealed class MetaFileSync
         var stopped = false;
 
         foreach (var entry in due)
-            stopped |= RequestAgainOrStop(entry, "has no answer");
+            stopped |= RequestAgainOrStop(entry, "has no answer", silence: true);
 
         if (stopped && (Pending.Count == 0))
             Complete();
     }
 
     //requests the file again, or, at MAX_REQUESTS, stops: the cache keeps its old copy, and the entry leaves the pending
-    //set. Returns true when it stopped
-    private bool RequestAgainOrStop(Entry entry, string problem)
+    //set. A silence is a request again after a time limit. Returns true when it stopped
+    private bool RequestAgainOrStop(Entry entry, string problem, bool silence)
     {
         if (entry.Requests < MAX_REQUESTS)
         {
             Log($"{entry.Name} {problem}. Requesting it again ({entry.Requests + 1} of {MAX_REQUESTS}).");
-            Pending[entry.Name] = entry with { Requests = entry.Requests + 1, SentAt = Clock.GetTimestamp() };
+            Pending[entry.Name] = silence
+                ? entry with { Silences = entry.Silences + 1, SentAt = Clock.GetTimestamp() }
+                : entry with { Failures = entry.Failures + 1, SentAt = Clock.GetTimestamp() };
             Request(entry.Name);
 
             return false;
@@ -227,13 +238,14 @@ public sealed class MetaFileSync
         return true;
     }
 
-    //an answer shows that the server works through the requests, so the files that wait get a new time limit
+    //an answer shows that the server works through the requests, so the files that wait get a new time limit, and the
+    //time limits that they used do not count. A server that answers more slowly than the time limit then completes
     private void RestartWaitTimes()
     {
         var now = Clock.GetTimestamp();
 
         foreach (var entry in Pending.Values.ToArray())
-            Pending[entry.Name] = entry with { SentAt = now };
+            Pending[entry.Name] = entry with { Silences = 0, SentAt = now };
     }
 
     /// <summary>
