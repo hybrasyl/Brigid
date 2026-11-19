@@ -62,6 +62,21 @@ public class MainHudControlTests : IDisposable
         UiAssert.NamedTree(hud);
     }
 
+    //the panels draw over the chat box (D30); with Mastery open, Enter focused an input that the player could not see
+    [Fact]
+    public void TheFocusedChatInputDrawsOverThePanels()
+    {
+        var (hud, _) = NewHud();
+
+        Assert.False(hud.DrawsChatInputOnTop);
+
+        hud.ChatBox.Input.Focus("Sabrael: ", Microsoft.Xna.Framework.Color.White);
+        Assert.True(hud.DrawsChatInputOnTop);
+
+        hud.ChatBox.Input.Unfocus();
+        Assert.False(hud.DrawsChatInputOnTop);
+    }
+
     [Fact]
     public void TheWorldAreaIsTheViewportAndPassesTheMouseOn()
     {

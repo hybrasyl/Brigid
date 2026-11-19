@@ -211,6 +211,20 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         base.Update(gameTime);
     }
 
+    /// <summary>
+    ///     True while the chat input has the focus. The panels draw over the chat box (D30), but the player must see what
+    ///     they type, so the focused input draws again over the panels (Sabrael, 2026-11-19).
+    /// </summary>
+    internal bool DrawsChatInputOnTop => Visible && ChatBox.Visible && ChatBox.Input.Visible && ChatBox.Input.IsFocused;
+
+    public override void Draw(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch)
+    {
+        base.Draw(spriteBatch);
+
+        if (DrawsChatInputOnTop)
+            ChatBox.Input.Draw(spriteBatch);
+    }
+
     public override void Dispose()
     {
         Attributes.Changed -= OnAttributesChanged;
