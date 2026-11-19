@@ -122,6 +122,14 @@ public class HudEffectBarTests : IDisposable
         Assert.Equal([(ushort)300], IconReads);
     }
 
+    //the placeholder of an unknown icon is the 32 x 32 checker; drawn whole, it covered the border of the 18 x 18 slot
+    [Theory]
+    [InlineData(32, 32, 15, 15)]
+    [InlineData(15, 15, 15, 15)]
+    [InlineData(10, 12, 10, 12)]
+    public void TheSlotDrawsAtMostTheIconSquare(int width, int height, int drawnWidth, int drawnHeight)
+        => Assert.Equal(new Rectangle(0, 0, drawnWidth, drawnHeight), HudEffectSlot.IconSourceRect(width, height));
+
     [Fact]
     public void TheIconIsReadOnceForAnEffect()
     {

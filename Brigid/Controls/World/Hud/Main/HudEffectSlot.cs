@@ -47,6 +47,10 @@ internal sealed class HudEffectSlot : UIElement
         Visible = true;
     }
 
+    /// <summary>The part of an icon texture that the slot draws: at most the icon square, from the top left.</summary>
+    internal static Rectangle IconSourceRect(int width, int height)
+        => new(0, 0, Math.Min(width, MainHudLayout.EFFECT_ICON), Math.Min(height, MainHudLayout.EFFECT_ICON));
+
     public void Clear()
     {
         Icon = null;
@@ -75,7 +79,10 @@ internal sealed class HudEffectSlot : UIElement
 
         var icon = new Vector2(ScreenX + MainHudLayout.EffectIconInSlot.X, ScreenY + MainHudLayout.EffectIconInSlot.Y);
 
-        DrawTexture(spriteBatch, IconTexture, icon, Color.White);
+        //the placeholder of an unknown icon is the 32 x 32 checker: only the icon's own square draws, so the border stays
+        if (IconTexture is { } texture)
+            DrawTexture(spriteBatch, texture, icon, IconSourceRect(texture.Width, texture.Height), Color.White);
+
         DrawTexture(spriteBatch, Wedges.ForGone(spriteBatch.GraphicsDevice, Gone), icon, ClockWedgeCache.SwipeColor);
     }
 }
