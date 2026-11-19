@@ -330,8 +330,10 @@ public static class InputBuffer
 
         if (isDown)
         {
+            //a key that the player holds gives one press and then the OS repeats; a slot key uses its slot once a press
+            var repeat = Marshal.ReadByte(sdlEvent, Sdl.KEYBOARDEVENT_REPEAT_OFFSET) != 0;
             HeldKeys.Add(key);
-            PendingEvents.Add(BufferedInputEvent.ForKeyDown(key, mods));
+            PendingEvents.Add(BufferedInputEvent.ForKeyDown(key, mods) with { IsRepeat = repeat });
         } else
         {
             HeldKeys.Remove(key);
@@ -576,6 +578,9 @@ public readonly record struct BufferedInputEvent(
     int WheelDelta,
     KeyModifiers Modifiers)
 {
+    /// <summary>True for a key down that the OS repeats while the key is held, not the first press.</summary>
+    public bool IsRepeat { get; init; }
+
     public static BufferedInputEvent ForKeyDown(Keys key, KeyModifiers modifiers)
         => new(
             BufferedInputKind.KeyDown,

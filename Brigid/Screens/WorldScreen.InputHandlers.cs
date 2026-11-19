@@ -441,6 +441,13 @@ public sealed partial class WorldScreen
     ///     Shift with the other keys is free for the page keys of a later card. On the classic HUDs it is a slot of the panel
     ///     that shows, with any modifier, as before.
     /// </summary>
+    /// <summary>True for the first press of a slot key; false for a repeat of the OS while the player holds the key.</summary>
+    internal static bool UsesSlot(KeyDownEvent e) => !e.IsRepeat;
+
+    //the panels of the classic HUDs whose slots the number keys use
+    private static readonly HashSet<HudTab> SlotKeyTabs =
+        [HudTab.Inventory, HudTab.Skills, HudTab.SkillsAlt, HudTab.Spells, HudTab.SpellsAlt, HudTab.Tools, HudTab.Chat, HudTab.MessageHistory];
+
     internal static int? SlotHotkeyOf(KeyDownEvent e, bool onNewHud)
         => (!onNewHud || (e.Modifiers == KeyModifiers.None)) && (Keybinds.NumberRowIndexOf(e.Key) is >= 0 and var index) ? index : null;
 
@@ -450,6 +457,18 @@ public sealed partial class WorldScreen
     {
         if (SlotHotkeyOf(e, WorldHud == MainHud) is not { } index)
             return false;
+
+        //a held key uses its slot once: a potion is not drunk at each repeat of the OS. The repeat is consumed where the
+        //press is used, and goes on where the press goes on
+        if (!UsesSlot(e))
+        {
+            if ((WorldHud != MainHud) && !SlotKeyTabs.Contains(WorldHud.ActiveTab))
+                return false;
+
+            e.Handled = true;
+
+            return true;
+        }
 
         if (WorldHud == MainHud)
         {
