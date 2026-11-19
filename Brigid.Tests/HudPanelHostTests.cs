@@ -127,4 +127,45 @@ public class HudPanelHostTests
         Assert.True(host.CloseAll());
         Assert.False(host.IsOpen("inventory"));
     }
+
+    //BRIG-150: the swap button of a compact panel
+    [Fact]
+    public void SwapSidesChangesTheSidesOfTheTwoCompactPanels()
+    {
+        var host = new HudPanelHost();
+        host.Toggle("inventory", COMPACT);
+        host.Toggle("abilities", COMPACT);
+
+        Assert.True(host.SwapSides());
+
+        Assert.Equal(("inventory", "abilities"), (host.Left, host.Right));
+    }
+
+    [Fact]
+    public void SwapSidesMovesOneCompactPanelAndTheNextOpensOnTheOtherSide()
+    {
+        var host = new HudPanelHost();
+        host.Toggle("inventory", COMPACT);
+
+        Assert.True(host.SwapSides());
+        Assert.Equal(("inventory", (string?)null), (host.Left, host.Right));
+
+        host.Toggle("abilities", COMPACT);
+        Assert.Equal(("inventory", "abilities"), (host.Left, host.Right));
+
+        //when the right panel closes, the left panel moves to the right, as before a swap (D30)
+        host.Close("abilities");
+        Assert.Equal(((string?)null, "inventory"), (host.Left, host.Right));
+    }
+
+    [Fact]
+    public void SwapSidesDoesNothingForALargePanelOrNoPanel()
+    {
+        var host = new HudPanelHost();
+        Assert.False(host.SwapSides());
+
+        host.Toggle("mastery", LARGE);
+        Assert.False(host.SwapSides());
+        Assert.Equal(((string?)null, (string?)null, "mastery"), (host.Left, host.Right, host.Large));
+    }
 }

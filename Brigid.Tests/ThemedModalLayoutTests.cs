@@ -2,6 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
+using Brigid.Controls.World.Hud.Main;
 using Brigid.Controls.World.Popups;
 using Brigid.Controls.World.Popups.Boards;
 using Brigid.Controls.World.Popups.Dialog;
@@ -48,6 +49,17 @@ public sealed class ThemedModalLayoutTests : IDisposable
     //Options is left out: its setting labels read msg.tbl, which a test does not load. It lays out from ContentBounds as
     //the others do
     public static TheoryData<string> Modals => ["boards", "castable", "keybind", "serverinfo", "certificate", "insecure", "pause", "popup", "itemamount", "goldamount", "textpopup", "profiletext", "abilitydetails", "eventdetails", "exchange", "group", "groupbox"];
+
+    //the windows of the new HUD have one size: the theme fits the frame (Sabrael, 2026-11-18), so a wide border does not
+    //move the content
+    [Fact]
+    public void AHudWindowPanelKeepsItsContentUnderAWideThemedFrame()
+    {
+        using var panel = new HudPanel(HudWindows.Inventory);
+
+        Assert.True(panel.IsThemed);
+        Assert.Equal(new Rectangle(HudPanel.PADDING, HudPanel.PADDING + 16, 310 - 2 * HudPanel.PADDING, 339 - 2 * HudPanel.PADDING - 16), panel.ContentBounds);
+    }
 
     [Theory]
     [MemberData(nameof(Modals))]

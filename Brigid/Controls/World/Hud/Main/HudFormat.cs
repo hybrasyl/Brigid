@@ -10,21 +10,27 @@ internal static class HudFormat
     private const uint MILLION = 1_000_000;
     private const uint BILLION = 1_000_000_000;
 
+    /// <summary>The gold, as <see cref="Amount" />.</summary>
+    public static string Gold(uint gold) => Amount(gold);
+
     /// <summary>
-    ///     The gold, with thousands separators up to 999,999, then in short form (1.2M, 12M, 1.2B). The short form drops the
-    ///     digits after it and never rounds up, so it never shows more gold than the player has.
+    ///     An amount (the gold, a currency), with thousands separators up to 999,999, then in short form (1.2M, 12M, 1.2B).
+    ///     The short form drops the digits after it and never rounds up, so it never shows more than the player has.
     /// </summary>
-    public static string Gold(uint gold)
-        => gold switch
+    public static string Amount(uint amount)
+        => amount switch
         {
-            < MILLION      => gold.ToString("N0", CultureInfo.InvariantCulture),
-            < 10 * MILLION => $"{gold / MILLION}.{gold / (MILLION / 10) % 10}M",
-            < BILLION      => $"{gold / MILLION}M",
-            _              => $"{gold / BILLION}.{gold / (BILLION / 10) % 10}B"
+            < MILLION      => amount.ToString("N0", CultureInfo.InvariantCulture),
+            < 10 * MILLION => $"{amount / MILLION}.{amount / (MILLION / 10) % 10}M",
+            < BILLION      => $"{amount / MILLION}M",
+            _              => $"{amount / BILLION}.{amount / (BILLION / 10) % 10}B"
         };
 
     /// <summary>The tooltip of the gold box: the full amount when the box shows the short form, else null.</summary>
-    public static string? GoldTooltip(uint gold) => gold < MILLION ? null : $"{gold.ToString("N0", CultureInfo.InvariantCulture)} gold";
+    public static string? GoldTooltip(uint gold) => FullAmount(gold) is { } full ? $"{full} gold" : null;
+
+    /// <summary>The full amount, for a tooltip, when <see cref="Amount" /> shows the short form; else null.</summary>
+    public static string? FullAmount(uint amount) => amount < MILLION ? null : Number(amount);
 
     public static string Weight(int current, int max) => $"{current}/{max}";
 

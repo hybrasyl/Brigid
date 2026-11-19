@@ -99,8 +99,8 @@ internal static class MainHudLayout
 
     //the Abilities window (BRIG-149, the approved wireframe), in the content of its panel: the tabs at the left of the
     //first line and the page arrows with the page number at its right; the filters of the Abilities tab on the second
-    //line; then two columns of eight rows. The content is smaller under a themed frame with a wide border, so the window
-    //lays out from the size of its content, and the rows come closer when the height is short
+    //line; then two columns of eight rows. The window lays out from the size of its content, and the rows come closer
+    //when the height is short
     public const int ABILITY_TAB_WIDTH = 82;
     public const int ABILITY_TAB_HEIGHT = 18;
     public const int ABILITY_ICON = 32;
@@ -136,6 +136,48 @@ internal static class MainHudLayout
             ABILITY_LIST_TOP,
             pitch,
             width / 2);
+    }
+
+    //the Inventory window (BRIG-150, the approved wireframe), in the content of its panel: the C, H and E buttons at the
+    //right of the first line, a grid of 9 by 8 slots, and a last line with Q, the weight, the gold and the gold bag, and
+    //the coin button. The slots are 32 px with a 1 px gap, as in the wireframe, and touch when the content is smaller
+    public const int INVENTORY_COLUMNS = 9;
+    public const int INVENTORY_ROWS = 8;
+    public const int INVENTORY_SLOT = 32;
+    public const int INVENTORY_BUTTON_WIDTH = 18;
+    public const int INVENTORY_BUTTON_HEIGHT = 14;
+    public const int INVENTORY_GOLD_BAG = 16;
+    private const int INVENTORY_LINE = 16;
+    private const int INVENTORY_LINE_GAP = 2;
+    private const int INVENTORY_GRID_TOP = INVENTORY_LINE + INVENTORY_LINE_GAP;
+    private const int INVENTORY_GAP = 4;
+    private const int INVENTORY_BAG_GAP = 2;
+    private const int INVENTORY_WEIGHT_WIDTH = 110;
+    private const int INVENTORY_GOLD_WIDTH = 80;
+
+    /// <summary>The parts of the Inventory window in a content of <paramref name="width" /> by <paramref name="height" />.</summary>
+    public static InventoryLayout InventoryIn(int width, int height)
+    {
+        //the grid is one gap narrower than its pitches: the last slot has no gap after it
+        var gridHeight = height - INVENTORY_GRID_TOP - INVENTORY_LINE_GAP - INVENTORY_LINE;
+        var fit = Math.Min((width + 1) / INVENTORY_COLUMNS, (gridHeight + 1) / INVENTORY_ROWS);
+        var pitch = Math.Clamp(fit, INVENTORY_SLOT, INVENTORY_SLOT + 1);
+        var gridWidth = INVENTORY_COLUMNS * pitch - (pitch - INVENTORY_SLOT);
+        var gridLeft = Math.Max(0, (width - gridWidth) / 2);
+
+        var buttonY = (INVENTORY_LINE - INVENTORY_BUTTON_HEIGHT) / 2;
+        var end = new Rectangle(width - INVENTORY_BUTTON_WIDTH, buttonY, INVENTORY_BUTTON_WIDTH, INVENTORY_BUTTON_HEIGHT);
+        var home = end with { X = end.X - INVENTORY_BUTTON_WIDTH - INVENTORY_GAP };
+        var compact = home with { X = home.X - INVENTORY_BUTTON_WIDTH - INVENTORY_GAP };
+
+        var lineY = height - INVENTORY_LINE;
+        var questItems = new Rectangle(0, lineY + buttonY, INVENTORY_BUTTON_WIDTH, INVENTORY_BUTTON_HEIGHT);
+        var currency = questItems with { X = width - INVENTORY_BUTTON_WIDTH };
+        var weight = new Rectangle(questItems.Right + INVENTORY_GAP, lineY, INVENTORY_WEIGHT_WIDTH, INVENTORY_LINE);
+        var goldBag = new Rectangle(currency.X - INVENTORY_GAP - INVENTORY_GOLD_BAG, lineY, INVENTORY_GOLD_BAG, INVENTORY_GOLD_BAG);
+        var gold = new Rectangle(goldBag.X - INVENTORY_BAG_GAP - INVENTORY_GOLD_WIDTH, lineY, INVENTORY_GOLD_WIDTH, INVENTORY_LINE);
+
+        return new InventoryLayout(compact, home, end, gridLeft, INVENTORY_GRID_TOP, pitch, questItems, weight, goldBag, gold, currency);
     }
 
     //over the world: the chat box (BRIG-145) at the bottom left, the toast (BRIG-162) at the bottom right
@@ -226,7 +268,10 @@ internal static class MainHudLayout
             WINDOW_BUTTON,
             WINDOW_BUTTON);
 
-    public static readonly Rectangle ExperienceBar = new(EDGE, BottomArea.Top + 98, World.Width, SCREEN_HEIGHT - (BottomArea.Top + 98));
+    //the experience bar keeps a gap above the bottom edge of the window, so it does not touch the window frame
+    private const int EXPERIENCE_HEIGHT = 11;
+    private const int BOTTOM_GAP = 2;
+    public static readonly Rectangle ExperienceBar = new(EDGE, SCREEN_HEIGHT - BOTTOM_GAP - EXPERIENCE_HEIGHT, World.Width, EXPERIENCE_HEIGHT);
 
     //the parts of the effect bar (BRIG-147), in the bar: a slot around a half-size spell icon for each effect, from the left
     private const int EFFECT_SLOT = 18;
@@ -271,4 +316,27 @@ internal sealed record AbilitiesLayout(
 
     /// <summary>The level in a row of <paramref name="rowWidth" />, under the name.</summary>
     public static Rectangle LevelIn(int rowWidth) => NameIn(rowWidth) with { Y = 16 };
+}
+
+/// <summary>The parts of the Inventory window in its content (<see cref="MainHudLayout.InventoryIn" />).</summary>
+internal sealed record InventoryLayout(
+    Rectangle Compact,
+    Rectangle Home,
+    Rectangle End,
+    int GridLeft,
+    int GridTop,
+    int Pitch,
+    Rectangle QuestItems,
+    Rectangle Weight,
+    Rectangle GoldBag,
+    Rectangle Gold,
+    Rectangle Currency)
+{
+    /// <summary>The slot at <paramref name="index" /> of the grid, from 0: across each row, from the top left.</summary>
+    public Rectangle SlotAt(int index)
+        => new(
+            GridLeft + index % MainHudLayout.INVENTORY_COLUMNS * Pitch,
+            GridTop + index / MainHudLayout.INVENTORY_COLUMNS * Pitch,
+            MainHudLayout.INVENTORY_SLOT,
+            MainHudLayout.INVENTORY_SLOT);
 }

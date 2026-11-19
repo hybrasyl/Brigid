@@ -35,6 +35,12 @@ public sealed class TextButton : UIPanel
 
     public event ClickedHandler? Clicked;
 
+    /// <summary>
+    ///     A right click, for a host that gives the button a second action. With no handler, a right click does nothing. A
+    ///     disabled button takes the right click with no action.
+    /// </summary>
+    public event ClickedHandler? RightClicked;
+
     public TextButton(string text, int width, int height, FontStyle labelStyle = FontStyle.Regular)
     {
         Width = width;
@@ -180,6 +186,19 @@ public sealed class TextButton : UIPanel
 
     public override void OnClick(ClickEvent e)
     {
+        if (e.Button == MouseButton.Right)
+        {
+            if (RightClicked is null)
+                return;
+
+            if (Enabled)
+                RightClicked.Invoke();
+
+            e.Handled = true;
+
+            return;
+        }
+
         if (e.Button != MouseButton.Left)
             return;
 

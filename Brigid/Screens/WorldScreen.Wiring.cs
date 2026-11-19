@@ -770,6 +770,25 @@ public sealed partial class WorldScreen
         abilities.UseRequested += UseAbility;
         abilities.DetailsRequested += ShowAbilityDetails;
         windows.BindPanel(HudWindows.Abilities, abilities);
+
+        var inventory = new InventoryWindowControl(WorldState.Inventory, WorldState.Attributes);
+        InventoryWindow = inventory;
+        inventory.UseRequested += HandleInventorySlotClicked;
+        inventory.SwapRequested += (from, to) => Game.Connection.SwapSlot(PanelType.Inventory, from, to);
+        inventory.HoverChanged += ShowInventoryWindowTooltip;
+        inventory.ListRequested += OpenInventoryList;
+
+        //the window button also selects the hidden classic inventory, as A does, so the number keys use the items. The
+        //lists close with the window
+        windows.BindPanel(
+            HudWindows.Inventory,
+            inventory,
+            () => MainHud.ShowTab(HudTab.Inventory),
+            () =>
+            {
+                inventory.ClearHover();
+                InventoryLists.Hide();
+            });
         windows.BindWindow(HudWindows.Menu, TogglePauseMenu, () => PauseMenu.Visible);
         windows.BindWindow(HudWindows.Mail, ToggleBoards, IsAnyBoardPanelVisible);
         windows.BindWindow(HudWindows.Community, ToggleWorldList, () => WorldList.Visible);
@@ -855,6 +874,13 @@ public sealed partial class WorldScreen
     private void ActivateHud(IWorldHud hud)
     {
         WorldHud.Inventory.ForceHoverExit();
+
+        //the panels of the new hud stay open while it is hidden, so its Inventory window ends its hover and its lists here
+        if (WorldHud == MainHud)
+        {
+            InventoryWindow.ClearHover();
+            InventoryLists.Hide();
+        }
 
         //a chat box that has the focus would keep its chat mode while its hud is hidden
         if (WorldHud.ChatInput.Mode != ChatMode.None)

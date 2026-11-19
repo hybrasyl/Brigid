@@ -23,9 +23,11 @@ internal static class DialogPalette
     public static readonly Color Divider = new(64, 56, 36);
     public static readonly Color Title = new(226, 202, 120);
 
-    //list rows + selection
+    //list rows + selection; the alternate fill shades every second row of a read-only list (the Currency and Quest
+    //Items lists of the new HUD)
     public static readonly Color RowHoverFill = new(38, 40, 48);
     public static readonly Color RowSelectedFill = new(74, 58, 22);
+    public static readonly Color RowAlternateFill = new(24, 26, 34);
     public static readonly Color SelectedText = new(255, 208, 96);
 
     //vertical text tabs
@@ -67,7 +69,7 @@ internal static class DialogPalette
     public static readonly Color ManaFill = new(47, 98, 181);
     public static readonly Color ExperienceFill = new(217, 164, 65);
 
-    //the experience meter at the level cap: the experience toward a Crystallized Reflection, or the ability experience
+    //the experience meter at the level cap: the full bar on Hybrasyl, or the ability experience on retail
     public static readonly Color CapFill = ManaFill;
 
     /// <summary>
@@ -85,6 +87,7 @@ internal static class DialogPalette
         ThemeRoles.Border       => FrameBorder,
         ThemeRoles.RowHover     => RowHoverFill,
         ThemeRoles.RowSelected  => RowSelectedFill,
+        ThemeRoles.RowAlternate => RowAlternateFill,
         ThemeRoles.InputText    => Text,
         ThemeRoles.InputFocus   => InputFocus,
         _                       => throw new ArgumentOutOfRangeException(nameof(role), role, "not a ui_theme colour role")

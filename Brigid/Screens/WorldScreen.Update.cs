@@ -297,18 +297,19 @@ public sealed partial class WorldScreen
         if (ItemTooltip.Visible)
             ItemTooltip.UpdatePosition(InputBuffer.MouseX, InputBuffer.MouseY);
 
-        //── tooltip dismissal — clear hovered slot when blocking panels are visible ──
-        if (HoveredInventorySlot is not null
-            && (OtherProfile.Visible || NpcSession.Visible || InputDispatcher.Instance?.TopModal is not null))
+        //── tooltip dismissal — hide the item tooltip when blocking panels are visible ──
+        if (InventoryTooltipShown && ItemTooltipBlocked)
         {
-            HoveredInventorySlot = null;
+            InventoryTooltipShown = false;
             ItemTooltip.Hide();
         }
 
         //── track which entity the mouse is hovering over ──
         var hoverEntity = GetEntityAtScreen(InputBuffer.MouseX, InputBuffer.MouseY);
 
-        var isItemDrag = GetDraggingPanel() is { } dragPanel && (dragPanel == WorldHud.Inventory);
+        //an item or gold drag of the classic inventory or of the Inventory window: a drop on the player goes to the ground
+        var isItemDrag = (GetDraggingPanel() is { } dragPanel && (dragPanel == WorldHud.Inventory))
+                         || InputDispatcher.Instance?.ActiveDragPayload is ItemDragPayload or GoldDragPayload;
 
         var newHoveredId = hoverEntity?.Type is ClientEntityType.Aisling or ClientEntityType.Creature
                            && !hoverEntity.IsHidden
@@ -352,7 +353,8 @@ public sealed partial class WorldScreen
                     || HideOnPressOutside(DoorContext, evt.X, evt.Y)
                     || HideOnPressOutside(ChatTabMenu, evt.X, evt.Y)
                     || HideOnPressOutside(AbilityMetadataDetails, evt.X, evt.Y)
-                    || HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y)))
+                    || HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y)
+                    || HideOnPressOutside(InventoryLists, evt.X, evt.Y)))
                 Game.Dispatcher.SwallowPress(i);
         }
 

@@ -7,9 +7,9 @@ namespace Brigid.Controls.World.Hud.Main.Windows;
 
 /// <summary>
 ///     The content of a window of the new HUD, which a window card binds to its panel with
-///     <see cref="HudWindowHost.BindPanel" />. The panel gives the content its bounds, and a themed frame with a wide
-///     border makes them smaller than the flat ones, so the content lays out in <see cref="LayOut" /> from the size that
-///     it gets, not from fixed numbers.
+///     <see cref="HudWindowHost.BindPanel" />. The panel gives the content its bounds, and the content lays out in
+///     <see cref="LayOut" /> from the size that it gets, not from fixed numbers. The content of a panel has one size with or
+///     without a theme (<see cref="HudPanel" />).
 /// </summary>
 internal abstract class HudWindowContent : UIPanel
 {
@@ -21,4 +21,11 @@ internal abstract class HudWindowContent : UIPanel
 
     /// <summary>Places the children in a content of <paramref name="width" /> by <paramref name="height" />.</summary>
     protected abstract void LayOut(int width, int height);
+
+    /// <summary>Moves a primitive to the place of <paramref name="bounds" />; the primitives size themselves.</summary>
+    protected static void Place(UIElement element, Rectangle bounds)
+    {
+        element.X = bounds.X;
+        element.Y = bounds.Y;
+    }
 }

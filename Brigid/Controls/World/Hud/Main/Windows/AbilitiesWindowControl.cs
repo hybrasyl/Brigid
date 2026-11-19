@@ -16,7 +16,7 @@ namespace Brigid.Controls.World.Hud.Main.Windows;
 ///     the page arrows with the page number on the first line, the Unlearned and Learned filters on the second, and pages
 ///     of 16 rows of <see cref="AbilityList" />. The filters, the arrows and the page number belong to the Abilities tab;
 ///     the Traits tab is a placeholder (D6). The window lays out from the size of its content
-///     (<see cref="MainHudLayout.AbilitiesIn" />), which a themed frame makes smaller. The list builds again at the next
+///     (<see cref="MainHudLayout.AbilitiesIn" />). The list builds again at the next
 ///     update after a book slot changes, a filter changes, the metadata arrives, or the attributes change while the
 ///     Unlearned filter is on (the attributes decide the blue or grey icon of an ability that the player can learn); it
 ///     keeps its page.
@@ -221,13 +221,6 @@ internal sealed class AbilitiesWindowControl : HudWindowContent
     {
         if (UnlearnedBox.Checked)
             Dirty = true;
-    }
-
-    //a box of the given size keeps its size; the primitives size themselves
-    private static void Place(UIElement element, Rectangle bounds)
-    {
-        element.X = bounds.X;
-        element.Y = bounds.Y;
     }
 
     private (CheckBox Box, UILabel Label) AddFilter(string name, string text, bool on)

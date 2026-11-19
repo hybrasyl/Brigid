@@ -250,8 +250,9 @@ public sealed class PrimitiveGallery : CenteredModalPanel
         AddChipLabel(new UILabel { Name = "chip_border" }, 6);
         AddChipLabel(new UILabel { Name = "chip_row_hover" }, 7);
         AddChipLabel(new UILabel { Name = "chip_row_selected" }, 8);
-        AddChipLabel(new UILabel { Name = "chip_input_text" }, 9);
-        AddChipLabel(new UILabel { Name = "chip_input_focus" }, 10);
+        AddChipLabel(new UILabel { Name = "chip_row_alternate" }, 9);
+        AddChipLabel(new UILabel { Name = "chip_input_text" }, 10);
+        AddChipLabel(new UILabel { Name = "chip_input_focus" }, 11);
         by += (ThemeRoles.Colours.Length + 1) / 2 * CHIP_ROW + 8;
 
         //the social status icons: the theme's, else Brigid's own; an empty box has neither (the gallery reads no dat file)

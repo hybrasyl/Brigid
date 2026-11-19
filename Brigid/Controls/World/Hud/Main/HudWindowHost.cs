@@ -55,6 +55,7 @@ internal sealed class HudWindowHost
             {
                 var panel = new HudPanel(window);
                 panel.CloseRequested += closed => Close(closed.Window);
+                panel.SwapSidesRequested += SwapSides;
                 PanelOf[window] = panel;
             }
         }
@@ -65,6 +66,9 @@ internal sealed class HudWindowHost
 
     /// <summary>The panels of the windows that open in the HUD, hidden until they open.</summary>
     public IEnumerable<HudPanel> Panels => PanelOf.Values;
+
+    /// <summary>The panel of a panel window.</summary>
+    public HudPanel PanelFor(HudWindow window) => PanelOf[window];
 
     /// <summary>The button of <paramref name="window" />.</summary>
     public IconButton ButtonOf(HudWindow window) => Buttons[window];
@@ -121,6 +125,13 @@ internal sealed class HudWindowHost
         Require(window, panel: true);
         Host.Close(window.Id);
         PlacePanels();
+    }
+
+    /// <summary>The swap button of a compact panel: the compact panels change sides.</summary>
+    public void SwapSides()
+    {
+        if (Host.SwapSides())
+            PlacePanels();
     }
 
     /// <summary>Closes every panel. Returns true when a panel was open, so that Escape closes the panels first.</summary>

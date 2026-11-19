@@ -3,6 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
+using Brigid.Controls.World.Hud.Main;
 using Brigid.Controls.World.Hud.Main.Windows;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Hud.Panel.Slots;
@@ -32,27 +33,54 @@ public sealed partial class WorldScreen
     private void HandleInventorySlotClicked(byte slot)
     {
         Game.Connection.UseItem(slot);
-        HoveredInventorySlot = null;
+        InventoryTooltipShown = false;
         ItemTooltip.Hide();
     }
 
-    private void HandleInventoryHoverEnter(PanelSlot slot)
-    {
-        HoveredInventorySlot = slot;
-
-        ItemTooltip.Show(
-            slot.SlotName ?? string.Empty,
-            slot.CurrentDurability,
-            slot.MaxDurability,
-            InputBuffer.MouseX,
-            InputBuffer.MouseY);
-    }
+    private void HandleInventoryHoverEnter(PanelSlot slot) => ShowItemTooltip(slot.SlotName, slot.CurrentDurability, slot.MaxDurability);
 
     private void HandleInventoryHoverExit()
     {
-        HoveredInventorySlot = null;
+        InventoryTooltipShown = false;
         ItemTooltip.Hide();
     }
+
+    //Q or the coin button of the Inventory window: the list at the centre of the Inventory panel. The server sends no
+    //currencies and no item tags today, so each list is empty (BRIG-150)
+    private void OpenInventoryList(InventoryListKind kind)
+    {
+        var panel = MainHud.Windows.PanelFor(HudWindows.Inventory);
+
+        if (panel.Visible)
+            InventoryLists.Open(kind, [], panel.ScreenBounds);
+    }
+
+    //the item under the pointer in the Inventory window of the new hud, or none
+    private void ShowInventoryWindowTooltip(byte? slot)
+    {
+        if (slot is not { } number)
+        {
+            HandleInventoryHoverExit();
+
+            return;
+        }
+
+        var item = WorldState.Inventory.GetSlot(number);
+        ShowItemTooltip(item.Name, item.CurrentDurability, item.MaxDurability);
+    }
+
+    //the item tooltip at the pointer, for a hover on an item of either inventory; none while a blocking panel shows
+    private void ShowItemTooltip(string? name, int currentDurability, int maxDurability)
+    {
+        if (ItemTooltipBlocked)
+            return;
+
+        InventoryTooltipShown = true;
+        ItemTooltip.Show(name ?? string.Empty, currentDurability, maxDurability, InputBuffer.MouseX, InputBuffer.MouseY);
+    }
+
+    //a panel that hides the item tooltip: the other profile, the npc session, or a modal
+    private bool ItemTooltipBlocked => OtherProfile.Visible || NpcSession.Visible || InputDispatcher.Instance?.TopModal is not null;
 
     /// <summary>
     ///     Returns true if the point is over any visible popup window, preventing drops from passing through.
@@ -1488,26 +1516,73 @@ public sealed partial class WorldScreen
     /// </summary>
     private void OnRootDragDrop(DragDropEvent e)
     {
-        //a spell from the Abilities window, dropped on an aisling or a creature, is cast at it, as retail does
-        if (e.Payload is AbilityDragPayload ability)
+        switch (RootDropOf(e.Payload))
         {
-            if (ability.IsSpell)
-                HandleSpellSlotDropped(ability.Slot, e.ScreenX, e.ScreenY);
+            //a spell from the Abilities window, dropped on an aisling or a creature, is cast at it, as retail does
+            case RootDrop.Spell:
+                HandleSpellSlotDropped(((AbilityDragPayload)e.Payload!).Slot, e.ScreenX, e.ScreenY);
 
-            e.Handled = true;
+                break;
 
-            return;
+            //an item from the Inventory window goes where an item from the classic inventory goes
+            case RootDrop.Item:
+                HandleInventoryDropInViewport(((ItemDragPayload)e.Payload!).Slot, e.ScreenX, e.ScreenY);
+
+                break;
+
+            //the gold bag of the Inventory window is the gold bag of the classic inventory, slot 0
+            case RootDrop.Gold:
+                HandleInventoryDropInViewport(0, e.ScreenX, e.ScreenY);
+
+                break;
+
+            case RootDrop.ClassicSlot when ((SlotDragPayload)e.Payload!).Source.Parent is PanelBase { IsDragging: true } panel:
+                panel.CompleteDragOutside(e.ScreenX, e.ScreenY);
+
+                break;
+
+            case RootDrop.Ends:
+                break;
+
+            default:
+                return;
         }
 
-        if (e.Payload is not SlotDragPayload payload)
-            return;
-
-        if (payload.Source.Parent is not PanelBase { IsDragging: true } panel)
-            return;
-
-        panel.CompleteDragOutside(e.ScreenX, e.ScreenY);
         e.Handled = true;
     }
+
+    /// <summary>What a drop that reaches the root does with its payload.</summary>
+    internal enum RootDrop
+    {
+        /// <summary>Nothing: the drop passes on.</summary>
+        None,
+
+        /// <summary>The drag ends with no action: a skill of the Abilities window.</summary>
+        Ends,
+
+        /// <summary>A spell of the Abilities window, cast at the aisling or the creature under the pointer.</summary>
+        Spell,
+
+        /// <summary>An item of the Inventory window, dropped as from the classic inventory.</summary>
+        Item,
+
+        /// <summary>The gold bag of the Inventory window: the gold prompt, as from the classic gold bag.</summary>
+        Gold,
+
+        /// <summary>A slot of a classic panel, dropped outside its panel.</summary>
+        ClassicSlot
+    }
+
+    internal static RootDrop RootDropOf(object? payload)
+        => payload switch
+        {
+            AbilityDragPayload { IsSpell: true } => RootDrop.Spell,
+            AbilityDragPayload                   => RootDrop.Ends,
+            ItemDragPayload                      => RootDrop.Item,
+            GoldDragPayload                      => RootDrop.Gold,
+            SlotDragPayload                      => RootDrop.ClassicSlot,
+            _                                    => RootDrop.None
+        };
 
     #endregion
 

@@ -90,6 +90,13 @@ public class MainHudLayoutTests
     }
 
     [Fact]
+    public void TheExperienceBarEndsTwoPixelsAboveTheBottomEdge()
+    {
+        Assert.Equal(11, MainHudLayout.ExperienceBar.Height);
+        Assert.Equal(Screen.Bottom - 2, MainHudLayout.ExperienceBar.Bottom);
+    }
+
+    [Fact]
     public void TheHotbarHoldsTwelve32PxSlots()
     {
         Assert.Equal(32 + 4, MainHudLayout.Hotbar.Height);

@@ -111,9 +111,9 @@ public class AbilitiesWindowTests : IDisposable
     public void ARowGoesDownTheLeftColumnThenTheRight(int index, int column, int row)
         => Assert.Equal((column, row), AbilityList.PlaceOf(index));
 
-    //the flat content of a compact panel, and the content under a themed frame with an 11 px border (inset 14)
+    //the content of a compact panel, and a smaller content
     private static readonly Rectangle FlatContent = new(6, 22, 298, 311);
-    private static readonly Rectangle ThemedContent = new(14, 30, 282, 295);
+    private static readonly Rectangle SmallContent = new(14, 30, 282, 295);
 
     private AbilitiesWindowControl NewWindow(
         SkillBook skills,
@@ -300,7 +300,7 @@ public class AbilitiesWindowTests : IDisposable
         Assert.True(window.RowControls[0].Visible);
     }
 
-    //the flat content is the content of a compact panel with no theme
+    //the flat content is the content of a compact panel
     [Fact]
     public void TheFlatContentIsTheContentOfACompactPanel()
     {
@@ -310,7 +310,7 @@ public class AbilitiesWindowTests : IDisposable
         Assert.Equal(FlatContent, panel.ContentBounds);
     }
 
-    //every part is inside the content, and the parts of a line do not overlap, flat and under a wide themed frame
+    //every part is inside the content, and the parts of a line do not overlap, in the content of a panel and in a smaller one
     [Theory]
     [InlineData(298, 311)]
     [InlineData(282, 295)]
@@ -340,9 +340,9 @@ public class AbilitiesWindowTests : IDisposable
     public void TheWindowLaysOutInTheBoundsThatItGets()
     {
         var window = NewWindow(Skills(16), new SpellBook());
-        window.SetBounds(ThemedContent);
+        window.SetBounds(SmallContent);
 
-        var layout = MainHudLayout.AbilitiesIn(ThemedContent.Width, ThemedContent.Height);
+        var layout = MainHudLayout.AbilitiesIn(SmallContent.Width, SmallContent.Height);
         var last = window.RowControls[^1];
 
         Assert.Equal(layout.RowAt(1, 7), new Rectangle(last.X, last.Y, last.Width, last.Height));
