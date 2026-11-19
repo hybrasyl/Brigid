@@ -134,13 +134,51 @@ public sealed class ChatBoxControlTests : IDisposable
     [Fact]
     public void WhileHiddenTheSelectedTabShowsAMarkToo()
     {
+        var chat = Box.TabControls.Single(tab => tab.Name == "tab_chat");
         Box.SetCollapsed(true);
+
+        Assert.Equal(DialogPalette.SelectedText, chat.LabelColorForTests);
+
         Log.Add(ChatChannel.Say, "hello", Color.White);
 
         Assert.True(Box.IsMarked("Chat"));
+        Assert.Equal(DialogPalette.Title, chat.LabelColorForTests);
 
         Box.SetCollapsed(false);
         Assert.False(Box.IsMarked("Chat"));
+        Assert.Equal(DialogPalette.SelectedText, chat.LabelColorForTests);
+    }
+
+    //a click on the tab that is selected changed nothing the player could see, but went back to the newest line
+    [Fact]
+    public void SelectingTheSelectedTabKeepsTheScrollPosition()
+    {
+        for (var i = 0; i < 40; i++)
+            Log.Add(ChatChannel.Say, $"line {i}", Color.White);
+
+        Assert.True(Box.Scroll(10));
+        Assert.False(Box.View.Window.IsAtNewest);
+
+        Box.Select("Chat");
+
+        Assert.False(Box.View.Window.IsAtNewest);
+
+        Box.Select("System");
+
+        Assert.True(Box.View.Window.IsAtNewest);
+    }
+
+    [Fact]
+    public void DisposeLeavesNoListenerOnTheChatLog()
+    {
+        var log = new Chat();
+        var box = new ChatBoxControl(log);
+
+        Assert.True(log.ListenerCountForTests > 0);
+
+        box.Dispose();
+
+        Assert.Equal(0, log.ListenerCountForTests);
     }
 
     [Fact]
@@ -324,7 +362,8 @@ public sealed class ChatBoxControlTests : IDisposable
         Assert.Equal("y", Shown());
     }
 
-    //the mark is the title colour on a tab that is not selected; a selected tab shows its selected colour
+    //the mark is the title colour, also on a selected tab: a selected tab has a mark only while the box is hidden, and
+    //the mark is then the one sign of news. With no mark, a selected tab shows its selected colour
     [Fact]
     public void AMarkedTabShowsItsLabelInTheTitleColour()
     {
@@ -337,6 +376,9 @@ public sealed class ChatBoxControlTests : IDisposable
         Assert.Equal(DialogPalette.ForRole(ThemeRoles.TextTitle), label.ForegroundColor);
 
         tab.IsSelected = true;
+        Assert.Equal(DialogPalette.ForRole(ThemeRoles.TextTitle), label.ForegroundColor);
+
+        tab.IsMarked = false;
         Assert.Equal(DialogPalette.ForRole(ThemeRoles.TextSelected), label.ForegroundColor);
     }
 

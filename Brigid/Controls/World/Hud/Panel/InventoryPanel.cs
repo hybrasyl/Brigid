@@ -114,7 +114,7 @@ public sealed class InventoryPanel : PanelBase
             control.NormalTexture?.Dispose();
             control.NormalTexture = icon.Texture;
             control.TextureOffset = icon.Offset;
-            control.SlotName = data.Name;
+            control.SlotName = data.NameWithCount;
             control.CurrentDurability = data.CurrentDurability;
             control.MaxDurability = data.MaxDurability;
         } else

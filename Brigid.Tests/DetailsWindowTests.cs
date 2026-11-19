@@ -384,6 +384,32 @@ public class DetailsWindowTests : IDisposable
         Assert.Empty(activity.Entries);
     }
 
+    //a long line was squeezed until its glyphs overlapped; it ends in an ellipsis now, and its tooltip shows the full text
+    [Fact]
+    public void ALongActivityLineEndsInAnEllipsisAndKeepsItsFullText()
+    {
+        var (window, _, _, activity) = NewWindow();
+
+        activity.ObserveLegendMarks([Mark("Born")]);
+        activity.ObserveLegendMarks([Mark("Born"), Mark("Defeated the Great Dragon of the Eastern Woodlands (x3)")]);
+
+        var shown = window.ActivityTextAt(0);
+        var full = window.ActivityFullTextAt(0);
+
+        Assert.EndsWith("…", shown);
+        Assert.Equal("09:05 Legend: Defeated the Great Dragon of the Eastern Woodlands (x3)", full);
+        Assert.StartsWith(shown[..^1], full);
+        Assert.Null(window.ActivityFullTextAt(1));
+    }
+
+    [Theory]
+    [InlineData("abc", 30, "abc")]
+    [InlineData("abcdef", 30, "abcd…")]
+    [InlineData("ab cdef", 24, "ab…")]
+    [InlineData("abcdef", 3, "…")]
+    public void FitWithEllipsisKeepsTheLongestStartThatFits(string text, int width, string expected)
+        => Assert.Equal(expected, TextRenderer.FitWithEllipsis(text, width, value => value.Length * 6));
+
     [Fact]
     public void AnInvisibleMarkAndASecondMarkWithTheSameTextAreEntries()
     {

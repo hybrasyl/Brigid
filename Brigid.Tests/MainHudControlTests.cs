@@ -62,6 +62,25 @@ public class MainHudControlTests : IDisposable
         UiAssert.NamedTree(hud);
     }
 
+    //the panels draw over the chat box (D30); with Mastery open, Enter focused an input that the player could not see
+    [Fact]
+    public void TheFocusedChatInputDrawsOverThePanels()
+    {
+        var (hud, _) = NewHud();
+
+        Assert.False(hud.DrawsChatInputOnTop);
+
+        hud.ChatBox.Input.Focus("Sabrael: ", Microsoft.Xna.Framework.Color.White);
+        Assert.True(hud.DrawsChatInputOnTop);
+
+        //the input draws once, after the panels, and the tooltip after it
+        Assert.Equal([hud.ChatBox.Input, (Brigid.Controls.Components.UIElement)hud.Children.Single(child => child.Name == "hud_tooltip")], hud.LateDraws);
+
+        hud.ChatBox.Input.Unfocus();
+        Assert.False(hud.DrawsChatInputOnTop);
+        Assert.Empty(hud.LateDraws);
+    }
+
     [Fact]
     public void TheWorldAreaIsTheViewportAndPassesTheMouseOn()
     {
@@ -72,13 +91,12 @@ public class MainHudControlTests : IDisposable
         Assert.True(hud.IsThemed);
     }
 
-    [Theory]
-    [InlineData("toast")]
-    [InlineData("hotbar")]
-    public void EachLaterPartHasAPlaceThatDoesNotTakeTheMouse(string name)
+    //the toast is the place of a later card (BRIG-162); the hotbar of BRIG-146 takes the mouse
+    [Fact]
+    public void TheToastHasAPlaceThatDoesNotTakeTheMouse()
     {
         var (hud, _) = NewHud();
-        var place = hud.Children.Single(child => child.Name == name);
+        var place = hud.Children.Single(child => child.Name == "toast");
 
         Assert.False(place.IsHitTestVisible);
     }

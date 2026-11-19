@@ -127,6 +127,14 @@ internal sealed class HudPanel : FramePanel
             content.OnDragDrop(e);
     }
 
+    //a wheel turn over the panel that its content does not use stops here: at the root it would scroll the chat box under
+    //the panel
+    public override void OnMouseScroll(MouseScrollEvent e)
+    {
+        base.OnMouseScroll(e);
+        e.Handled = true;
+    }
+
     /// <summary>The X button: the host closes the panel.</summary>
     public event Action<HudPanel>? CloseRequested;
 

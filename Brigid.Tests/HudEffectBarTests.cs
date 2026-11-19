@@ -122,6 +122,14 @@ public class HudEffectBarTests : IDisposable
         Assert.Equal([(ushort)300], IconReads);
     }
 
+    //the placeholder of an unknown icon is the 32 x 32 checker; drawn whole, it covered the border of the 18 x 18 slot
+    [Theory]
+    [InlineData(32, 32, 15, 15)]
+    [InlineData(15, 15, 15, 15)]
+    [InlineData(10, 12, 10, 12)]
+    public void TheSlotDrawsAtMostTheIconSquare(int width, int height, int drawnWidth, int drawnHeight)
+        => Assert.Equal(new Rectangle(0, 0, drawnWidth, drawnHeight), HudEffectSlot.IconSourceRect(width, height));
+
     [Fact]
     public void TheIconIsReadOnceForAnEffect()
     {
@@ -215,10 +223,11 @@ public class HudEffectBarTests : IDisposable
     }
 
     //the cooldown swipe covers the rest of the turn after the time gone, so its edge also moves clockwise: with a quarter
-    //left, it covers from 9 o'clock to 12, not from 12 to 3
+    //left, it covers from 9 o'clock to 12, not from 12 to 3. A start of exactly 0.5 puts the 6 o'clock pixel on the edge,
+    //and MathF.Atan2 on osx-arm64 gives that pixel a turn just under 0.5, so the half-turn case starts at 0.45
     [Theory]
     [InlineData(0.75f, 1f, false, false, false, true)]
-    [InlineData(0.5f, 1f, false, false, true, true)]
+    [InlineData(0.45f, 1f, false, false, true, true)]
     [InlineData(0f, 1f, true, true, true, true)]
     [InlineData(1f, 1f, false, false, false, false)]
     public void TheRestOfTheTurnIsAnArcToTwelve(float start, float end, bool twelve, bool three, bool six, bool nine)

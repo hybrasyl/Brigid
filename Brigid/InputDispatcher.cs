@@ -472,6 +472,7 @@ public sealed class InputDispatcher : IDisposable
                     KeyDown.Reset();
                     KeyDown.Key = evt.Key;
                     KeyDown.Modifiers = evt.Modifiers;
+                    KeyDown.IsRepeat = evt.IsRepeat;
                     DispatchKeyboardEvent(root, KeyDown);
 
                     if ((focusBefore is null) && (ExplicitFocusElement is not null))

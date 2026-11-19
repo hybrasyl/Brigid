@@ -82,6 +82,15 @@ public abstract class KeyEvent : InputEvent
     public Keys Key { get; set; }
     public KeyModifiers Modifiers { get; set; }
 
+    /// <summary>True for a key down that the OS repeats while the key is held, not the first press.</summary>
+    public bool IsRepeat { get; set; }
+
+    public override void Reset()
+    {
+        base.Reset();
+        IsRepeat = false;
+    }
+
     public bool Shift => (Modifiers & KeyModifiers.Shift) != 0;
     public bool Ctrl => (Modifiers & KeyModifiers.Ctrl) != 0;
     public bool Alt => (Modifiers & KeyModifiers.Alt) != 0;

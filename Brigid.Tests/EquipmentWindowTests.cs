@@ -127,6 +127,39 @@ public class EquipmentWindowTests : IDisposable
         Assert.Equal(row * 34 + (row == 7 ? 12 : 0), slot.Y);
     }
 
+    //a swap of two wire slots (the rings, for example) kept one control for each wire slot, and no test failed
+    [Theory]
+    [InlineData("earrings", EquipmentSlot.Earrings)]
+    [InlineData("helm", EquipmentSlot.Helmet)]
+    [InlineData("necklace", EquipmentSlot.Necklace)]
+    [InlineData("armor", EquipmentSlot.Armor)]
+    [InlineData("left_ring", EquipmentSlot.LeftRing)]
+    [InlineData("left_glove", EquipmentSlot.LeftGaunt)]
+    [InlineData("belt", EquipmentSlot.Belt)]
+    [InlineData("boots", EquipmentSlot.Boots)]
+    [InlineData("right_ring", EquipmentSlot.RightRing)]
+    [InlineData("right_glove", EquipmentSlot.RightGaunt)]
+    [InlineData("greaves", EquipmentSlot.Greaves)]
+    [InlineData("weapon", EquipmentSlot.Weapon)]
+    [InlineData("offhand", EquipmentSlot.Shield)]
+    [InlineData("vanity_helm", EquipmentSlot.OverHelm)]
+    [InlineData("vanity_armor", EquipmentSlot.Overcoat)]
+    [InlineData("accessory_1", EquipmentSlot.Accessory1)]
+    [InlineData("accessory_2", EquipmentSlot.Accessory2)]
+    [InlineData("accessory_3", EquipmentSlot.Accessory3)]
+    public void EachSlotShowsItsWireSlot(string id, EquipmentSlot wire)
+        => Assert.Equal(wire, EquipmentSlots.All.Single(spec => spec.Id == id).Wire);
+
+    //an empty slot reads its role at each frame
+    [Fact]
+    public void TheIconRoleIsMadeOnce()
+    {
+        var spec = EquipmentSlots.All[0];
+
+        Assert.Same(spec.IconRole, spec.IconRole);
+        Assert.Equal("icon.equipment.earrings", spec.IconRole);
+    }
+
     [Fact]
     public void EveryWireSlotHasOneControlAndCapeMountAndTrinketHaveNone()
     {

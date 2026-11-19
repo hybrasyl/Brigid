@@ -55,6 +55,9 @@ public sealed class Chat
     /// <summary>Fired after an entry is added to the log.</summary>
     public event ChatEntryAddedHandler? EntryAdded;
 
+    /// <summary>The number of listeners of <see cref="EntryAdded" /> and <see cref="Cleared" />, for the tests.</summary>
+    internal int ListenerCountForTests => (EntryAdded?.GetInvocationList().Length ?? 0) + (Cleared?.GetInvocationList().Length ?? 0);
+
     /// <summary>The orange bar history of the classic and large HUDs, oldest first.</summary>
     public IReadOnlyList<ChatEntry> GetOrangeBarHistory() => OrangeBarHistory;
 

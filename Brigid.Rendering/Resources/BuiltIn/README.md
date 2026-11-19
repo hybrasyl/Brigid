@@ -23,3 +23,5 @@ The swap button of a compact window panel of the new HUD (BRIG-150), `icon.panel
 The empty-slot outlines of the Equipment window of the new HUD (BRIG-151), `icon.equipment.*`, one for each slot, are drawn at 128 by 128 for a 32 by 32 slot, in white line art with a 1.5-unit stroke. The slot draws them at 35% alpha, so they read as a faint outline of the item that the slot takes.
 
 The arrows of the stat raise of the Details window of the new HUD (BRIG-151), `icon.details.raise` and `icon.details.lower`, are drawn at 56 by 56 for a 14 by 14 button, in white line art with a 3-unit stroke: a chevron up and a chevron down.
+
+The page arrows of the hotbar of the new HUD (BRIG-146), `icon.hotbar.page_up` and `icon.hotbar.page_down`, are drawn at 56 by 56 for a 14 by 10 button (the icon area is 10 by 6), as solid white triangles that fill the width of the image; the button draws the square image in its 10 by 6 icon area at 6 by 6: up and down, as in the wireframe.

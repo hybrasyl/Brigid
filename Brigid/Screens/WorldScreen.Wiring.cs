@@ -764,8 +764,13 @@ public sealed partial class WorldScreen
         chatBox.TabMenuRequested += (tab, x, y) => ChatTabMenu.Show(x, y, tab, () => OpenChatTabEditor(tab), () => chatBox.RemoveCustomTab(tab));
         ChatTabEditor.Confirmed += chatBox.Apply;
 
+        //the hotbar uses an entry as a click on its book or inventory slot (BRIG-146)
+        MainHud.HotbarStrip.UseRequested += UseHotbarEntry;
+        MainHud.HotbarStrip.DetailsRequested += ShowHotbarDetails;
+
         //each button does what its key does; group is the open and closed toggle (D18), and a right click opens its window
         var windows = MainHud.Windows;
+
         var abilities = new AbilitiesWindowControl(WorldState.SkillBook, WorldState.SpellBook, WorldState.Attributes, () => WorldState.AbilityMetadata);
         abilities.UseRequested += UseAbility;
         abilities.DetailsRequested += ShowAbilityDetails;
@@ -779,8 +784,8 @@ public sealed partial class WorldScreen
         inventory.ListRequested += OpenInventoryList;
         inventory.UnequipRequested += Game.Connection.Unequip;
 
-        //the window button also selects the hidden classic inventory, as A does, so the number keys use the items. The
-        //lists close with the window
+        //the window button also selects the hidden classic inventory, as A does, until the post-merge keybind fix of
+        //BRIG-127 (the number keys use the hotbar, BRIG-146). The lists close with the window
         windows.BindPanel(
             HudWindows.Inventory,
             inventory,

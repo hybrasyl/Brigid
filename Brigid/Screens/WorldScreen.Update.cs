@@ -45,6 +45,9 @@ public sealed partial class WorldScreen
 
         var elapsedMs = (float)gameTime.ElapsedGameTime.TotalMilliseconds;
 
+        //an ability that left its book and did not come back in a swap leaves the hotbar (BRIG-146)
+        WorldState.Hotbar.Tick();
+
         //a lost connection or a transfer ends what only the old world server can finish: an open exit confirmation (its
         //timer would confirm to no server) and an open exchange (a cancel that waits would wait forever)
         if (Game.Connection.State != ConnectionState.World)
@@ -344,6 +347,9 @@ public sealed partial class WorldScreen
                 HideOnPressOutside(AislingContext, evt.X, evt.Y);
                 HideOnPressOutside(DoorContext, evt.X, evt.Y);
                 HideOnPressOutside(ChatTabMenu, evt.X, evt.Y);
+                HideOnPressOutside(AbilityMetadataDetails, evt.X, evt.Y);
+                HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y);
+                HideOnPressOutside(InventoryLists, evt.X, evt.Y);
 
                 continue;
             }

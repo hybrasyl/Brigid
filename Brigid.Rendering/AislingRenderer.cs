@@ -562,17 +562,21 @@ public sealed class AislingRenderer : IDisposable
     /// </summary>
     public Texture2D? RenderHead(in AislingAppearance appearance, int size)
     {
-        var bare = appearance with
-        {
-            WeaponSprite = 0,
-            ShieldSprite = 0
-        };
+        var bare = HeadAppearance(in appearance);
 
         using var figure = RenderComposite(in bare, RIGHT_IDLE_FRAME, out _, flipHorizontal: true);
         using var head = figure is null ? null : CutHead(figure, size);
 
         return head is not null ? TextureConverter.ToTexture2D(head) : null;
     }
+
+    /// <summary>The appearance that the head draws: the aisling with no weapon and no shield, which can reach above the head.</summary>
+    internal static AislingAppearance HeadAppearance(in AislingAppearance appearance)
+        => appearance with
+        {
+            WeaponSprite = 0,
+            ShieldSprite = 0
+        };
 
     /// <summary>
     ///     The square of side <paramref name="size" /> of <paramref name="figure" /> at <see cref="HeadCrop" />, or null for a

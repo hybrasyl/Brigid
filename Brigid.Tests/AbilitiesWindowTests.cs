@@ -301,6 +301,19 @@ public class AbilitiesWindowTests : IDisposable
     }
 
     //the flat content is the content of a compact panel
+    //BRIG-151: a wheel turn over a window that did not scroll reached the root, which scrolled the chat box under it
+    [Fact]
+    public void APanelTakesTheWheelTurnsThatItsContentDoesNotUse()
+    {
+        var panel = new HudPanel(HudWindows.Abilities);
+        Owned.Add(panel);
+        var turn = new MouseScrollEvent { Delta = 1 };
+
+        panel.OnMouseScroll(turn);
+
+        Assert.True(turn.Handled);
+    }
+
     [Fact]
     public void TheFlatContentIsTheContentOfACompactPanel()
     {

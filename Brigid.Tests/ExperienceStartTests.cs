@@ -209,6 +209,37 @@ public class ExperienceStartTests
         Assert.Equal(3000ul, attrs.LevelSpan.Start);
     }
 
+    //a level block alone at a gain of two levels has the experience of the level before; with no start, nothing showed that
+    //it was old, and its threshold became the start of the next level and was saved
+    [Fact]
+    public void ALevelBlockAloneGivesNoThreshold()
+    {
+        var attrs = new PlayerAttributes();
+        attrs.Update(Full(40, 900, 100));
+        attrs.Update(new AttributesPacket { Primary = new PrimaryAttributes { Level = 42 } });
+        attrs.Update(new AttributesPacket { Experience = new ExperienceAttributes { Experience = 5000, ExpToLevel = 1000 } });
+        attrs.Update(Full(43, 6100, 3900));
+
+        Assert.Equal(6000ul, attrs.LevelSpan.Start);
+    }
+
+    //the first level block of the next character is not read with the experience of the character before
+    [Fact]
+    public void AfterAClearALevelBlockAloneDoesNotReadTheOldExperience()
+    {
+        var attrs = new PlayerAttributes();
+        attrs.Update(Full(41, 900, 100));
+        attrs.Clear();
+
+        Assert.Equal(0u, attrs.TotalExp);
+
+        attrs.Update(new AttributesPacket { Primary = new PrimaryAttributes { Level = 42 } });
+        attrs.Update(new AttributesPacket { Experience = new ExperienceAttributes { Experience = 5000, ExpToLevel = 500 } });
+        attrs.Update(Full(43, 5600, 4400));
+
+        Assert.Equal(5500ul, attrs.LevelSpan.Start);
+    }
+
     //Hybrasyl sends 0 to the next level when the total is past a threshold that a formula change lowered
     [Fact]
     public void AReadingWithNothingToTheNextLevelGivesNoThreshold()

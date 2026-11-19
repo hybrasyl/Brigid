@@ -130,6 +130,9 @@ public static class WorldState
     /// </summary>
     public static SpellBook SpellBook { get; } = new();
 
+    /// <summary>The hotbar of the new HUD (BRIG-146). It reads the books, the inventory and the equipment, so it comes after them.</summary>
+    public static Hotbar Hotbar { get; } = new(SkillBook, SpellBook, Inventory, Equipment);
+
     /// <summary>
     ///     Authoritative server-controlled user option toggles.
     /// </summary>
@@ -333,6 +336,7 @@ public static class WorldState
         Inventory.Clear();
         SkillBook.Clear();
         SpellBook.Clear();
+        Hotbar.Reset();
         Equipment.Clear();
         Attributes.Clear();
         SelfProfile.Clear();

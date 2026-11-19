@@ -10,11 +10,12 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Brigid.Controls.World.Hud.Main.Windows;
 
 /// <summary>
-///     The base of an item slot of a window of the new HUD (the Inventory slot of BRIG-150, the Equipment slot of
-///     BRIG-151): the slot part (else a dark box with a border), the dim of a slot that takes nothing, the item icon or the
-///     empty-slot art of the subclass, and the border of a drop target while a drag that the slot takes is over it. A
-///     single click does nothing and does not reach the world under the window; a left drag of an item carries the payload
-///     of the subclass. The icon is a cached texture of <see cref="UiRenderer" />; the slot does not own it.
+///     The base of a slot of the new HUD that shows an icon (the Inventory slot of BRIG-150, the Equipment slot of BRIG-151,
+///     the hotbar slot of BRIG-146): the slot part (else a dark box with a border), the icon or the empty-slot art of the
+///     subclass, what the subclass draws over the icon (<see cref="DrawOverIcon" />), the dim (<see cref="Dimmed" />, by
+///     default a slot that takes nothing), and the border of a drop target while a drag that the slot takes is over it. By
+///     default a single click does nothing and does not reach the world under the slot; a left drag of an icon carries the
+///     payload of the subclass. The icon is a cached texture of <see cref="UiRenderer" />; the slot does not own it.
 /// </summary>
 internal abstract class HudItemSlotControl : UIPanel
 {
@@ -28,7 +29,7 @@ internal abstract class HudItemSlotControl : UIPanel
     /// <summary>False for a slot that takes nothing: it shows dimmed, with no item, and takes no drop.</summary>
     public bool Usable { get; }
 
-    /// <summary>The icon of the item, or null for an empty slot.</summary>
+    /// <summary>The icon that the slot shows, or null for an empty slot.</summary>
     public IconTexture? Icon { get; private set; }
 
     internal bool ShowsDropTarget => IsDropTarget;
@@ -42,13 +43,13 @@ internal abstract class HudItemSlotControl : UIPanel
     /// <summary>The icon of an item sprite in a colour, from <see cref="UiRenderer" />; null before the renderer exists.</summary>
     public static IconTexture? ItemIcon(ushort sprite, DisplayColor color) => UiRenderer.Instance?.GetItemIcon(sprite, color);
 
-    /// <summary>Shows the item <paramref name="icon" />, or an empty slot for null; a slot that takes nothing shows none.</summary>
+    /// <summary>Shows <paramref name="icon" />, or an empty slot for null; a slot that takes nothing shows none.</summary>
     protected void SetIcon(IconTexture? icon) => Icon = Usable ? icon : null;
 
     /// <summary>True for a drag that this slot takes: the slot shows the drop border while the drag is over it.</summary>
     protected abstract bool TakesDrop(object? payload);
 
-    /// <summary>The payload of a left drag of the item <paramref name="icon" />.</summary>
+    /// <summary>The payload of a left drag of the slot that shows <paramref name="icon" />.</summary>
     protected abstract object DragPayloadOf(IconTexture icon);
 
     /// <summary>A drop on the slot. The drop border ends before it.</summary>
@@ -60,7 +61,13 @@ internal abstract class HudItemSlotControl : UIPanel
     /// <summary>Draws the art of an empty slot; none by default.</summary>
     protected virtual void DrawEmpty(SpriteBatch spriteBatch, Rectangle bounds) { }
 
-    //a single click does nothing, and does not reach the world under the window
+    /// <summary>Draws over the icon, under the dim (the cooldown of a hotbar slot); nothing by default.</summary>
+    protected virtual void DrawOverIcon(SpriteBatch spriteBatch, Rectangle bounds) { }
+
+    /// <summary>True when the slot shows dimmed: by default a slot that takes nothing.</summary>
+    protected virtual bool Dimmed => !Usable;
+
+    //a single click does nothing, and does not reach the world under the slot
     public override void OnClick(ClickEvent e)
     {
         if (e.Button == MouseButton.Left)
@@ -116,8 +123,10 @@ internal abstract class HudItemSlotControl : UIPanel
         else
             DrawEmpty(spriteBatch, bounds);
 
-        //the dim goes over the icon and the outline, so a slot that takes nothing reads as disabled
-        if (!Usable)
+        DrawOverIcon(spriteBatch, bounds);
+
+        //the dim goes over the icon and the outline, so a slot that takes nothing, or a gone hotbar entry, reads as dimmed
+        if (Dimmed)
             DrawRectClipped(spriteBatch, bounds, Color.Black * DIM);
 
         if (IsDropTarget)

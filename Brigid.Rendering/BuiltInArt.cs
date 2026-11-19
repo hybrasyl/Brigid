@@ -48,7 +48,7 @@ public static class BuiltInArt
     /// </summary>
     public static bool TryDraw(SpriteBatch spriteBatch, string role, Rectangle bounds, Rectangle clip, Color? tint = null)
     {
-        //most roles have no image, so stop before the cache lookup and its closure
+        //most roles have no image, so stop before the cache lookup
         if (GetSource(role) is null)
             return false;
 
@@ -58,14 +58,16 @@ public static class BuiltInArt
         if ((native.Width <= 0) || (native.Height <= 0))
             return false;
 
+        //a static factory with the key: no closure on a draw
         var texture = Textures.GetOrCreate(
             (role, native.Width, native.Height),
-            () =>
+            0,
+            static (key, _) =>
             {
-                if (GetSource(role) is not { } source)
+                if (GetSource(key.Role) is not { } source)
                     return null;
 
-                using var composite = ThemeArt.Composite(Part, source, native.Width, native.Height, 1f, 1f);
+                using var composite = ThemeArt.Composite(Part, source, key.Width, key.Height, 1f, 1f);
 
                 return composite is null ? null : TextureConverter.ToTexture2D(composite);
             });

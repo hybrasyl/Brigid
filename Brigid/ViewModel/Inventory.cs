@@ -107,13 +107,10 @@ public sealed class Inventory
         if (index is < 0 or >= MAX_SLOTS)
             return;
 
-        //build display name with stack count suffix
-        var displayName = stackable && (count > 0) ? $"{name}[ {count} ]" : name;
-
         Slots[index] = new InventorySlotData(
             sprite,
             color,
-            displayName,
+            name,
             stackable,
             count,
             maxDurability,
@@ -139,6 +136,12 @@ public sealed class Inventory
         int CurrentDurability)
     {
         internal static readonly InventorySlotData Empty = default;
+
+        /// <summary>
+        ///     The name with the count of a stack, as retail shows a stack in its tooltip and description (e.g. "Apple[ 3 ]").
+        ///     <see cref="Name" /> is the item's name only, which the hotbar keeps an item by (BRIG-146).
+        /// </summary>
+        public string? NameWithCount { get; } = Stackable && (Count > 0) ? $"{Name}[ {Count} ]" : Name;
 
         /// <summary>
         ///     True if this slot contains an item (has a sprite assigned).

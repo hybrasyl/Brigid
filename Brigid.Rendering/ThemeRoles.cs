@@ -75,6 +75,9 @@ public static class ThemeRoles
     //a slot of the Equipment window of the new HUD (BRIG-151); a theme with no part for it draws its inventory slot
     public const string HudEquipmentSlot = "hud.equipment.slot";
 
+    //a slot of the hotbar of the new HUD (BRIG-146, D27); a theme with no part for it draws its inventory slot
+    public const string HudHotbarSlot = "hud.hotbar.slot";
+
     //content roles: icons, drawn on every host through IconArt, not only on a themed host
     //social status icons, one image for each status
     public const string StatusAwake = "icon.status.awake";
@@ -127,6 +130,10 @@ public static class ThemeRoles
     //the arrows of the stat raise of the Details window of the new HUD (BRIG-151)
     public const string IconDetailsRaise = "icon.details.raise";
     public const string IconDetailsLower = "icon.details.lower";
+
+    //the page arrows of the hotbar of the new HUD (BRIG-146)
+    public const string IconHotbarPageUp = "icon.hotbar.page_up";
+    public const string IconHotbarPageDown = "icon.hotbar.page_down";
 
     //the empty-slot outlines of the Equipment window of the new HUD (BRIG-151), one for each slot
     public const string IconEquipmentEarrings = "icon.equipment.earrings";
@@ -194,6 +201,9 @@ public static class ThemeRoles
     /// <summary>The parts of the Equipment window of the new HUD (BRIG-151), which the HUD shows, not the primitive gallery.</summary>
     public static readonly string[] HudEquipment = [HudEquipmentSlot];
 
+    /// <summary>The parts of the hotbar of the new HUD (BRIG-146), which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] HudHotbar = [HudHotbarSlot];
+
     /// <summary>
     ///     The icons of the window buttons of the new HUD (BRIG-144), in the order of the row. A button is
     ///     <c>icon.window.</c> and the id of its window.
@@ -222,6 +232,9 @@ public static class ThemeRoles
 
     /// <summary>The arrows of the stat raise of the Details window of the new HUD (BRIG-151), which the HUD shows, not the primitive gallery.</summary>
     public static readonly string[] DetailsIcons = [IconDetailsRaise, IconDetailsLower];
+
+    /// <summary>The page arrows of the hotbar of the new HUD (BRIG-146), which the HUD shows, not the primitive gallery.</summary>
+    public static readonly string[] HotbarIcons = [IconHotbarPageUp, IconHotbarPageDown];
 
     /// <summary>
     ///     The empty-slot outlines of the Equipment window of the new HUD (BRIG-151), in the order of its slots, which the HUD

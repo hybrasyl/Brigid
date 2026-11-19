@@ -10,8 +10,8 @@ namespace Brigid.Controls.World.Hud.Main.Windows;
 /// <param name="Wire">The equipment slot of the wire, or null for a slot that the wire does not have yet.</param>
 internal sealed record EquipmentSlotSpec(string Id, string Name, EquipmentSlot? Wire)
 {
-    /// <summary>The empty-slot art: an outline of the item, drawn dim.</summary>
-    public string IconRole => $"icon.equipment.{Id}";
+    /// <summary>The empty-slot art: an outline of the item, drawn dim. Made once: an empty slot reads it at each frame.</summary>
+    public string IconRole { get; } = $"icon.equipment.{Id}";
 }
 
 /// <summary>

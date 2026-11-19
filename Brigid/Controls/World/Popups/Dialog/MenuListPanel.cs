@@ -227,7 +227,7 @@ public sealed class MenuListPanel : FramedDialogPanelBase
                 continue;
 
             var icon = renderer.GetItemIcon(slotData.Sprite, slotData.Color);
-            AddEntry(slotData.Name ?? string.Empty, slot, icon);
+            AddEntry(slotData.NameWithCount ?? string.Empty, slot, icon);
         }
     }
 

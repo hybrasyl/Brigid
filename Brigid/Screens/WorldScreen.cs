@@ -330,6 +330,9 @@ public sealed partial class WorldScreen : IScreen
         //from the static WorldState.UserOptions — otherwise a handler leaks per world re-entry)
         userOptions.SettingToggled += HandleSettingToggled;
 
+        //the hotbar saves for the character at each change; UnloadContent detaches it from the static WorldState (BRIG-146)
+        WorldState.Hotbar.Changed += SaveHotbar;
+
         //ZIndex 10 = the top modal tier (matches the exit/disconnect popups), so it renders above the HUD
         //(-1). No SetViewportBounds call: it keeps the default full-window viewport and centers on the window
         //rather than the play-area viewport.
@@ -875,6 +878,10 @@ public sealed partial class WorldScreen : IScreen
         //the lobby), and StopAmbient cannot throw
         Game.SoundSystem.StopAmbient();
 
+        //the end of the session: an item or an ability that is gone leaves the hotbar (an item's slot showed dimmed until
+        //now), and the save goes before the reset, which empties the hotbar (BRIG-146)
+        WorldState.Hotbar.DropGoneEntries();
+        WorldState.Hotbar.Changed -= SaveHotbar;
         WorldState.ResetAll();
 
         MapRenderer.Dispose();

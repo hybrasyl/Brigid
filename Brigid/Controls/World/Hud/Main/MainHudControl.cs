@@ -41,7 +41,8 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// <param name="clock">The source of the local time of the clock; null for the system clock.</param>
     /// <param name="attributes">The player's attributes; null for <see cref="WorldState.Attributes" />.</param>
     /// <param name="chat">The chat log of the chat box; null for <see cref="WorldState.Chat" />.</param>
-    public MainHudControl(IWorldHud classic, TimeProvider? clock = null, PlayerAttributes? attributes = null, Chat? chat = null)
+    /// <param name="hotbar">The hotbar (BRIG-146); null for <see cref="WorldState.Hotbar" />.</param>
+    public MainHudControl(IWorldHud classic, TimeProvider? clock = null, PlayerAttributes? attributes = null, Chat? chat = null, Hotbar? hotbar = null)
     {
         Classic = classic;
         Attributes = attributes ?? WorldState.Attributes;
@@ -67,11 +68,14 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         ChatBox = new ChatBoxControl(chat ?? WorldState.Chat);
         AddChild(ChatBox);
 
-        //the places of the parts that later cards add (BRIG-162, BRIG-146)
+        //the place of the part that a later card adds (BRIG-162)
         AddChild(Place("toast", MainHudLayout.Toast));
         EffectBar = new HudEffectBar();
         AddChild(EffectBar);
-        AddChild(Place("hotbar", MainHudLayout.Hotbar));
+
+        //the hotbar (BRIG-146)
+        HotbarStrip = new HotbarControl(hotbar ?? WorldState.Hotbar, Tooltip);
+        AddChild(HotbarStrip);
 
         //the meters (BRIG-148)
         HealthBar = new HudMeter("health_bar", MainHudLayout.HealthBar, ThemeRoles.HudHealthTrack, ThemeRoles.HudHealthFill, DialogPalette.HealthFill)
@@ -160,6 +164,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     /// <summary>The effect bar at the top of the bottom area (BRIG-147).</summary>
     internal HudEffectBar EffectBar { get; }
 
+    /// <summary>The hotbar (BRIG-146).</summary>
+    internal HotbarControl HotbarStrip { get; }
+
     /// <summary>The health bar of the bottom area (BRIG-148).</summary>
     internal HudMeter HealthBar { get; }
 
@@ -202,6 +209,37 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         Windows.RefreshSelection();
 
         base.Update(gameTime);
+    }
+
+    /// <summary>
+    ///     True while the chat input has the focus. The panels draw over the chat box (D30), but the player must see what
+    ///     they type, so the focused input draws again over the panels (Sabrael, 2026-11-19).
+    /// </summary>
+    internal bool DrawsChatInputOnTop => Visible && ChatBox.Visible && ChatBox.Input.Visible && ChatBox.Input.IsFocused;
+
+    /// <summary>
+    ///     The children that the HUD draws after the others, in order: while the chat input draws on top, the input and then
+    ///     the tooltip, so that the input draws once and the tooltip stays over it.
+    /// </summary>
+    internal IReadOnlyList<UIElement> LateDraws => DrawsChatInputOnTop ? [ChatBox.Input, Tooltip] : [];
+
+    public override void Draw(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch)
+    {
+        if (!DrawsChatInputOnTop)
+        {
+            base.Draw(spriteBatch);
+
+            return;
+        }
+
+        ChatBox.Input.HoldDraw = true;
+        Tooltip.HoldDraw = true;
+        base.Draw(spriteBatch);
+        ChatBox.Input.HoldDraw = false;
+        Tooltip.HoldDraw = false;
+
+        foreach (var late in LateDraws)
+            late.Draw(spriteBatch);
     }
 
     public override void Dispose()
@@ -320,8 +358,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     //F hides and shows the chat box. Shift+F shows its System tab (BRIG-145). The ability keys open and close the
     //Abilities window (BRIG-149). A and Shift+A open and close the Inventory window (BRIG-150). These keys also select the
-    //hidden classic panel, because the number keys use its slots until the hotbar (a temporary measure of BRIG-127). For
-    //the inventory the HUD only selects the panel: on the classic HUD a second A opens the status book, and Shift+A
+    //hidden classic panel, which the number keys do not use on this HUD (the hotbar takes them, BRIG-146); the
+    //post-merge keybind fix of BRIG-127 removes the selection with the hidden panels. For the inventory the HUD only
+    //selects the panel: on the classic HUD a second A opens the status book, and Shift+A
     //expands the panel. G opens and closes the Details window and Shift+G the Equipment window (BRIG-151), in place of
     //the hidden classic stats panels. The other tab keys act on the hidden classic panels until the cards of their windows.
     public void HandleTabActivation(HudTab tab, bool shift)

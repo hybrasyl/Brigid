@@ -123,6 +123,12 @@ public sealed class PlayerAttributes
         HasMail = false;
         HasParcel = false;
         HasPrimary = false;
+
+        //the next character's first level block must not read this character's experience
+        TotalExp = 0;
+        ToNextLevel = 0;
+        TotalAbility = 0;
+        ToNextAbility = 0;
         LevelSpan.Reset();
         AbilitySpan.Reset();
     }
@@ -205,8 +211,9 @@ public sealed class PlayerAttributes
 
         if (HasPrimary && (pkt.Primary is not null || pkt.Experience is not null))
         {
-            learned |= LevelSpan.Observe(Level, TotalExp, ToNextLevel);
-            learned |= AbilitySpan.Observe(Ability, TotalAbility, ToNextAbility);
+            var experienceIsNew = pkt.Experience is not null;
+            learned |= LevelSpan.Observe(Level, TotalExp, ToNextLevel, experienceIsNew);
+            learned |= AbilitySpan.Observe(Ability, TotalAbility, ToNextAbility, experienceIsNew);
         }
 
         Changed?.Invoke();

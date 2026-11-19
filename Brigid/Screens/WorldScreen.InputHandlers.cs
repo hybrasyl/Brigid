@@ -66,7 +66,7 @@ public sealed partial class WorldScreen
         }
 
         var item = WorldState.Inventory.GetSlot(number);
-        ShowItemTooltip(item.Name, item.CurrentDurability, item.MaxDurability);
+        ShowItemTooltip(item.NameWithCount, item.CurrentDurability, item.MaxDurability);
     }
 
     //the slot under the pointer in the Equipment window of the new hud: its item, or the name of an empty slot (BRIG-151)
@@ -209,10 +209,7 @@ public sealed partial class WorldScreen
         var viewport = WorldHud.ViewportBounds;
 
         //only drop if released within the world viewport
-        if ((mouseX < viewport.X)
-            || (mouseX >= (viewport.X + viewport.Width))
-            || (mouseY < viewport.Y)
-            || (mouseY >= (viewport.Y + viewport.Height)))
+        if (!IsInViewport(viewport, mouseX, mouseY))
             return;
 
         if (MapFile is null)
@@ -334,14 +331,24 @@ public sealed partial class WorldScreen
         CastingSystem.BeginTargeting(spellSlot);
     }
 
+    /// <summary>
+    ///     True when a drop at (<paramref name="x" />, <paramref name="y" />) is in the world viewport. A drop on a HUD bar
+    ///     (the hotbar, the bottom bar of the new HUD) is not in the world, also when an entity's hit box reaches under it.
+    /// </summary>
+    internal static bool IsInViewport(Rectangle viewport, int x, int y) => viewport.Contains(x, y);
+
+    /// <summary>True for an entity that a dropped spell is cast at: an aisling or a creature, not a ground item.</summary>
+    internal static bool IsSpellDropTarget(ClientEntityType? type) => type is ClientEntityType.Aisling or ClientEntityType.Creature;
+
     private void HandleSpellSlotDropped(byte slot, int mouseX, int mouseY)
     {
-        if (IsOverVisiblePopup(mouseX, mouseY))
+        //a spell dropped on a HUD bar or in a gap of the hotbar is not cast at an entity behind the bar
+        if (IsOverVisiblePopup(mouseX, mouseY) || !IsInViewport(WorldHud.ViewportBounds, mouseX, mouseY))
             return;
 
         var entity = GetEntityAtScreen(mouseX, mouseY);
 
-        if (entity?.Type is not (ClientEntityType.Aisling or ClientEntityType.Creature))
+        if ((entity is null) || !IsSpellDropTarget(entity.Type))
             return;
 
         HandleSpellSlotClicked(slot);
@@ -373,20 +380,8 @@ public sealed partial class WorldScreen
         (CommandId.World_TabTools, null, HudTab.Tools)
     ];
 
-    private static readonly Keys[] EmoteKeys =
-    [
-        Keys.D1,
-        Keys.D2,
-        Keys.D3,
-        Keys.D4,
-        Keys.D5,
-        Keys.D6,
-        Keys.D7,
-        Keys.D8,
-        Keys.D9,
-        Keys.D0,
-        Keys.OemMinus
-    ];
+    //the number row but =, which has no emote
+    private static readonly Keys[] EmoteKeys = Keybinds.NumberRowKeys.Take(Keybinds.NumberRowKeys.Length - 1).ToArray();
 
     //ctrl+key emotes: 9-17 then 21-22 (skips 18-20 which don't exist in bodyanimation)
     private static readonly BodyAnimation[] CtrlEmotes =
@@ -447,72 +442,95 @@ public sealed partial class WorldScreen
         return true;
     }
 
-    private bool HandleSlotHotkey(KeyDownEvent e)
+    /// <summary>True for the first press of a slot key; false for a repeat of the OS while the player holds the key.</summary>
+    internal static bool UsesSlot(KeyDownEvent e) => !e.IsRepeat;
+
+    /// <summary>
+    ///     The slot of a number key, from 0, or null. On the new HUD it is a slot of the hotbar (BRIG-146, D4), and a key with
+    ///     a modifier is not a slot key: Ctrl and Alt are emotes, Shift+1 is Shout, Cmd is the macOS primary modifier, and
+    ///     Shift with the other keys is free for the page keys of a later card. On the classic HUDs it is a slot of the panel
+    ///     that shows, with any modifier, as before.
+    /// </summary>
+    internal static int? SlotHotkeyOf(KeyDownEvent e, bool onNewHud)
+        => (!onNewHud || (e.Modifiers == KeyModifiers.None)) && (Keybinds.NumberRowIndexOf(e.Key) is >= 0 and var index) ? index : null;
+
+    /// <summary>What a number key uses on a classic HUD: an inventory slot, a skill or spell slot, or a chat macro.</summary>
+    internal enum ClassicSlotKind
     {
-        var slot = e.Key switch
+        Item,
+        Skill,
+        Spell,
+        Macro
+    }
+
+    /// <summary>
+    ///     What the number key of <paramref name="slot" /> (from 1) uses on the classic panel <paramref name="tab" />, or null
+    ///     for a panel whose slots the number keys do not use. The book slot of a skill or a spell is the slot of its page.
+    /// </summary>
+    internal static (ClassicSlotKind Kind, byte Slot)? ClassicSlotUseOf(HudTab tab, int slot)
+        => tab switch
         {
-            Keys.D1       => 1,
-            Keys.D2       => 2,
-            Keys.D3       => 3,
-            Keys.D4       => 4,
-            Keys.D5       => 5,
-            Keys.D6       => 6,
-            Keys.D7       => 7,
-            Keys.D8       => 8,
-            Keys.D9       => 9,
-            Keys.D0       => 10,
-            Keys.OemMinus => 11,
-            Keys.OemPlus  => 12,
-            _             => -1
+            HudTab.Inventory                     => (ClassicSlotKind.Item, (byte)slot),
+            HudTab.Skills                        => (ClassicSlotKind.Skill, (byte)slot),
+            HudTab.SkillsAlt                     => (ClassicSlotKind.Skill, (byte)(slot + 36)),
+            HudTab.Spells                        => (ClassicSlotKind.Spell, (byte)slot),
+            HudTab.SpellsAlt                     => (ClassicSlotKind.Spell, (byte)(slot + 36)),
+            HudTab.Tools when slot is >= 1 and <= 6 => (ClassicSlotKind.Skill, (byte)(72 + slot)),
+            HudTab.Tools                         => (ClassicSlotKind.Spell, (byte)(66 + slot)),
+            HudTab.Chat or HudTab.MessageHistory => (ClassicSlotKind.Macro, (byte)slot),
+            _                                    => null
         };
 
-        if (slot < 0)
+    //the number keys: on the new HUD the hotbar, also an empty slot (BRIG-146); on the classic HUDs the slots of the
+    //panel that shows. A held key uses its slot once: a potion is not drunk at each repeat of the OS. The repeat is
+    //consumed where the press is used, and goes on where the press goes on
+    private bool HandleSlotHotkey(KeyDownEvent e)
+    {
+        if (SlotHotkeyOf(e, WorldHud == MainHud) is not { } index)
             return false;
 
-        var byteSlot = (byte)slot;
-
-        switch (WorldHud.ActiveTab)
+        if (WorldHud == MainHud)
         {
-            case HudTab.Inventory:
-                Game.Connection.UseItem(byteSlot);
+            if (UsesSlot(e))
+                MainHud.HotbarStrip.Use(index);
+
+            e.Handled = true;
+
+            return true;
+        }
+
+        if (ClassicSlotUseOf(WorldHud.ActiveTab, index + 1) is not { } use)
+            return false;
+
+        var (kind, slot) = use;
+
+        e.Handled = true;
+
+        if (!UsesSlot(e))
+            return true;
+
+        switch (kind)
+        {
+            case ClassicSlotKind.Item:
+                Game.Connection.UseItem(slot);
 
                 break;
 
-            case HudTab.Skills:
-                HandleSkillSlotClicked(byteSlot);
+            case ClassicSlotKind.Skill:
+                HandleSkillSlotClicked(slot);
 
                 break;
 
-            case HudTab.SkillsAlt:
-                HandleSkillSlotClicked((byte)(byteSlot + 36));
+            case ClassicSlotKind.Spell:
+                HandleSpellSlotClicked(slot);
 
                 break;
 
-            case HudTab.Spells:
-                HandleSpellSlotClicked(byteSlot);
-
-                break;
-
-            case HudTab.SpellsAlt:
-                HandleSpellSlotClicked((byte)(byteSlot + 36));
-
-                break;
-
-            case HudTab.Tools:
-                if (slot is >= 1 and <= 6)
-                    HandleSkillSlotClicked((byte)(72 + slot));
-                else
-                    HandleSpellSlotClicked((byte)(66 + slot));
-
-                break;
-
-            case HudTab.Chat:
-            case HudTab.MessageHistory:
+            case ClassicSlotKind.Macro:
             {
                 var macroText = OptionsModal.GetMacroValue(slot - 1);
 
-                //the new hud has no place for the macros yet (BRIG-145); its tab is the hidden classic hud's
-                if ((macroText.Length > 0) && (WorldHud != MainHud))
+                if (macroText.Length > 0)
                 {
                     WorldHud.ChatInput.Focus($"{WorldHud.PlayerName}: ", Color.White);
                     WorldHud.ChatInput.SetText(macroText, macroText.Length);
@@ -520,12 +538,7 @@ public sealed partial class WorldScreen
 
                 break;
             }
-
-            default:
-                return false;
         }
-
-        e.Handled = true;
 
         return true;
     }
@@ -544,6 +557,39 @@ public sealed partial class WorldScreen
             HandleSpellSlotClicked(slot);
         else
             HandleSkillSlotClicked(slot);
+    }
+
+    //a click or a number key on a hotbar entry: the entry as a click on its book or inventory slot (BRIG-146); a gone
+    //entry does nothing
+    private void UseHotbarEntry(HotbarEntry entry)
+    {
+        if (WorldState.Hotbar.Resolve(entry) is not { } slot)
+            return;
+
+        switch (entry.Kind)
+        {
+            case HotbarKind.Skill:
+                HandleSkillSlotClicked(slot);
+
+                break;
+
+            case HotbarKind.Spell:
+                HandleSpellSlotClicked(slot);
+
+                break;
+
+            default:
+                HandleInventorySlotClicked(slot);
+
+                break;
+        }
+    }
+
+    //a right click on a hotbar ability: its castable popup, as from the Abilities window (BRIG-146)
+    private void ShowHotbarDetails(HotbarEntry entry)
+    {
+        if ((WorldState.Hotbar.Resolve(entry) is { } slot) && (AbilityPanelOf(entry.Kind == HotbarKind.Spell, slot) is { } panel))
+            OpenCastablePopup(panel, slot);
     }
 
     //a right click: the castable popup of a learned ability, else the details of the status book
@@ -708,6 +754,33 @@ public sealed partial class WorldScreen
 
         PersonalViewPinsLoaded = true;
         EquipmentWindow.SetPins(PersonalStats.Parse(DataContext.LocalPlayerSettings.LoadPersonalViewPins()));
+    }
+
+    //the hotbar, once for this screen's character, as the pins of Personal View (BRIG-146)
+    private bool HotbarLoaded;
+
+    //a file that could not be read, or that a newer client wrote: this session does not write over it
+    private bool HotbarSaveBlocked;
+
+    private void LoadHotbar()
+    {
+        if (HotbarLoaded)
+            return;
+
+        HotbarLoaded = true;
+        var lines = DataContext.LocalPlayerSettings.LoadHotbar();
+
+        //the host and the server name: the Hybrasyl servers share the file, and the end-of-session sweep runs only on the
+        //server that saved it
+        HotbarSaveBlocked = lines is null || !WorldState.Hotbar.Load(lines, $"{GlobalSettings.LobbyHost}/{Game.Connection.ServerName}");
+    }
+
+    //the hotbar, saved for the character at each change, after its load: a save before the load would write the empty
+    //hotbar of the screen over this character's file (BRIG-146)
+    private void SaveHotbar()
+    {
+        if (CharacterFolderReady && HotbarLoaded && !HotbarSaveBlocked)
+            DataContext.LocalPlayerSettings.SaveHotbar(WorldState.Hotbar.Format());
     }
 
     //the pins of Personal View, saved for the character at each change (BRIG-151)
@@ -1617,6 +1690,7 @@ public sealed partial class WorldScreen
             ItemDragPayload                      => RootDrop.Item,
             GoldDragPayload                      => RootDrop.Gold,
             EquipmentDragPayload                 => RootDrop.Ends,
+            HotbarDragPayload                    => RootDrop.Ends,
             SlotDragPayload                      => RootDrop.ClassicSlot,
             _                                    => RootDrop.None
         };

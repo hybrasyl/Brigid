@@ -356,6 +356,39 @@ public class InventoryWindowTests : IDisposable
         Assert.Null(window.HoveredSlot);
     }
 
+    //the item tooltip showed over the other slots during a drag; the classic inventory shows none
+    [Fact]
+    public void DuringADragNoSlotIsHovered()
+    {
+        object? drag = null;
+        var window = new InventoryWindowControl(NewWindow().Items, new PlayerAttributes(), FakeIcon, activeDrag: () => drag);
+        Owned.Add(window);
+        var hovers = new List<byte?>();
+        window.HoverChanged += hovers.Add;
+
+        SlotOf(window, 1).OnMouseEnter();
+        drag = new object();
+        SlotOf(window, 2).OnMouseEnter();
+        SlotOf(window, 2).OnMouseLeave();
+        SlotOf(window, 1).OnMouseEnter();
+
+        Assert.Equal([1, null], hovers);
+        Assert.Null(window.HoveredSlot);
+
+        //a drag that starts on the hovered slot hides its tooltip at the next update, with the pointer still on it
+        drag = null;
+        SlotOf(window, 3).OnMouseEnter();
+        drag = new object();
+        window.Update(new GameTime());
+
+        Assert.Null(window.HoveredSlot);
+
+        drag = null;
+        SlotOf(window, 2).OnMouseEnter();
+
+        Assert.Equal((byte)2, window.HoveredSlot);
+    }
+
     [Fact]
     public void ALeaveOfTheSlotBeforeDoesNotClearTheHover()
     {

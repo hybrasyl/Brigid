@@ -38,6 +38,7 @@ internal sealed class InventoryWindowControl : HudWindowContent
     private readonly UILabel WeightText;
     private readonly UILabel GoldText;
     private readonly Func<long> Clock;
+    private readonly Func<object?> ActiveDrag;
     private readonly HashSet<byte> CompactSlots = [];
     private long CompactSentAt;
 
@@ -45,12 +46,15 @@ internal sealed class InventoryWindowControl : HudWindowContent
     /// <param name="attributes">The player's attributes, which hold the weight and the gold.</param>
     /// <param name="iconSource">The icon of an item sprite in a colour; null for the icons of <see cref="UiRenderer" />.</param>
     /// <param name="clock">The time in milliseconds; null for <see cref="Environment.TickCount64" />.</param>
+    /// <param name="activeDrag">The payload of the drag that is active, or null; null for the dispatcher's.</param>
     public InventoryWindowControl(
         Inventory items,
         PlayerAttributes attributes,
         Func<ushort, DisplayColor, IconTexture?>? iconSource = null,
-        Func<long>? clock = null)
+        Func<long>? clock = null,
+        Func<object?>? activeDrag = null)
     {
+        ActiveDrag = activeDrag ?? (() => InputDispatcher.Instance?.ActiveDragPayload);
         Name = "inventory_window";
         Items = items;
         Attributes = attributes;
@@ -256,8 +260,32 @@ internal sealed class InventoryWindowControl : HudWindowContent
             RaiseHover();
     }
 
+    //a drag that starts on a slot hides the tooltip of that slot at once: the pointer is still on it
+    public override void Update(GameTime gameTime)
+    {
+        if ((HoveredSlot is not null) && (ActiveDrag() is not null))
+        {
+            HoveredSlot = null;
+            RaiseHover();
+        }
+
+        base.Update(gameTime);
+    }
+
     private void OnPointerChanged(byte slot, bool entered)
     {
+        //during a drag no item tooltip shows, as on the classic inventory: the drag icon is what the player looks at
+        if (ActiveDrag() is not null)
+        {
+            if (HoveredSlot is null)
+                return;
+
+            HoveredSlot = null;
+            RaiseHover();
+
+            return;
+        }
+
         if (entered)
             HoveredSlot = slot;
         else if (HoveredSlot == slot)
