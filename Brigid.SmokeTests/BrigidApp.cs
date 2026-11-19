@@ -168,7 +168,9 @@ public sealed class BrigidApp : IAsyncDisposable
 
     private static Process CreateProcess(string clientDll, string root, out string pipe)
     {
-        pipe = "brigid-smoke-" + Guid.NewGuid().ToString("N");
+        //on Unix the pipe is a socket at $TMPDIR/CoreFxPipe_<name>, and macOS limits a socket path to 104 bytes with a
+        //$TMPDIR of about 50 characters, so the name keeps 12 hex digits of the GUID
+        pipe = "brigid-smoke-" + Guid.NewGuid().ToString("N")[..12];
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
             WorkingDirectory = Path.GetDirectoryName(clientDll)!,

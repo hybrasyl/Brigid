@@ -35,7 +35,8 @@ public sealed class PipeServerTests
         Assert.True(await BecomesTrueAsync(() => server.ClientLeft));
     }
 
-    private static string NewPipeName() => "brigid-pipe-test-" + Guid.NewGuid().ToString("N");
+    //short, as in BrigidApp: on macOS the socket path $TMPDIR/CoreFxPipe_<name> must fit in 104 bytes
+    private static string NewPipeName() => "brigid-pipe-test-" + Guid.NewGuid().ToString("N")[..12];
 
     private static async Task<bool> BecomesTrueAsync(Func<bool> condition, TimeSpan? timeout = null)
     {
