@@ -88,6 +88,17 @@ public sealed class SelectableTab : UIPanel
 
     public void SetText(string text) => Label.Text = text;
 
+    /// <summary>The colour that the label draws, for the tests.</summary>
+    internal Color LabelColorForTests
+    {
+        get
+        {
+            Label.ApplyForegroundRole();
+
+            return Label.DrawnForegroundColor;
+        }
+    }
+
     //the label fills the tab, also when a host sizes the tab to its text after it is made
     public override void SetBounds(Rectangle bounds)
     {
@@ -117,11 +128,12 @@ public sealed class SelectableTab : UIPanel
     private void RefreshVisual()
     {
         BackgroundColor = IsSelected ? DialogPalette.TabSelectedFill : DialogPalette.TabIdleFill;
-        //the label takes the theme colour at draw time, because the tab takes the theme from its parent
-        if (IsSelected)
-            Label.SetForegroundRole(ThemeRoles.TextSelected);
-        else if (IsMarked)
+        //the label takes the theme colour at draw time, because the tab takes the theme from its parent. A mark goes
+        //before the selection: a selected tab has a mark only while its content is hidden (a collapsed chat box)
+        if (IsMarked)
             Label.SetForegroundRole(ThemeRoles.TextTitle);
+        else if (IsSelected)
+            Label.SetForegroundRole(ThemeRoles.TextSelected);
         else
             Label.SetForegroundRole(ThemeRoles.Text);
     }

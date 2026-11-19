@@ -42,12 +42,18 @@ internal sealed class ChatLogWindow
     /// <summary>True while the window follows the newest entry.</summary>
     public bool IsAtNewest => BottomSequence is null;
 
-    /// <summary>The tab whose entries the window shows. A change goes back to the newest entry.</summary>
+    /// <summary>
+    ///     The tab whose entries the window shows. A change goes back to the newest entry; the tab that the window shows
+    ///     keeps its place.
+    /// </summary>
     public ChatTab Tab
     {
         get => ShownTab;
         set
         {
+            if (ReferenceEquals(ShownTab, value))
+                return;
+
             ShownTab = value;
             ScrollToNewest();
         }
