@@ -46,6 +46,37 @@ public sealed class GuardedFileTests : IDisposable
         return refusals;
     }
 
+    //a save wrote the file in place, so a write that failed part way left a cut file that loaded as valid
+    [Fact]
+    public void AWriteThatFailsPartWayKeepsTheOldFile()
+    {
+        var file = FileNamed("Hotbar.cfg");
+        File.WriteAllText(file.Path, "good");
+
+        var result = file.Save(
+            path =>
+            {
+                File.WriteAllText(path, "go");
+
+                throw new IOException("the disk is full");
+            });
+
+        Assert.Equal(SaveResult.Failed, result);
+        Assert.Equal("good", File.ReadAllText(file.Path));
+        Assert.False(File.Exists(file.Path + GuardedFile.TEMP_SUFFIX));
+    }
+
+    [Fact]
+    public void ASaveReplacesTheFileAndLeavesNoTemporaryFile()
+    {
+        var file = FileNamed("Macro.cfg");
+        File.WriteAllText(file.Path, "old");
+
+        Assert.Equal(SaveResult.Saved, SaveText(file, "new"));
+        Assert.Equal("new", File.ReadAllText(file.Path));
+        Assert.False(File.Exists(file.Path + GuardedFile.TEMP_SUFFIX));
+    }
+
     [Fact]
     public void ALockedFileReadsAsEmptyAndItsSaveIsRefused()
     {

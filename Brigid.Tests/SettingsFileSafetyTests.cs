@@ -67,6 +67,18 @@ public sealed class SettingsFileSafetyTests : IDisposable
         Assert.Equal(GOOD_LAUNCHER, File.ReadAllText(path));
     }
 
+    //a null entry in the server list threw at the start
+    [Fact]
+    public void ALauncherConfigDropsANullServerAndAServerWithNoHost()
+    {
+        var path = WriteFile("launcher.json", "{ \"Servers\": [ null, { \"Host\": null }, { \"Host\": \"qa.hybrasyl.com\", \"Port\": 2610 } ] }");
+
+        LauncherConfig.Load(path);
+
+        Assert.Equal(["qa.hybrasyl.com:2610"], LauncherConfig.Servers.Select(server => server.Key));
+        Assert.Equal("qa.hybrasyl.com:2610", LauncherConfig.GetSelectedServer()?.Key);
+    }
+
     [Fact]
     public void ALockedTrustStoreKeepsTheAcceptedServers()
     {

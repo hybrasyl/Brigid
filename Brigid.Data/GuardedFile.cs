@@ -126,9 +126,14 @@ public sealed class GuardedFile
         }
     }
 
+    /// <summary>The suffix of the file that a save writes before it replaces the file.</summary>
+    public const string TEMP_SUFFIX = ".tmp";
+
     /// <summary>
     ///     Writes the file through <see cref="DataDiagnostics.Try" />, unless the last read of it failed. A save that is
-    ///     refused or whose write fails logs and raises <see cref="NotSaved" />.
+    ///     refused or whose write fails logs and raises <see cref="NotSaved" />. <paramref name="write" /> writes to the
+    ///     path that it is given, a file beside the target that then replaces the target, so a write that fails part way
+    ///     keeps the old file.
     /// </summary>
     public SaveResult Save(Action<string> write)
     {
@@ -140,9 +145,19 @@ public sealed class GuardedFile
             return SaveResult.Unreadable;
         }
 
-        if (DataDiagnostics.Try(() => write(Path), $"save {FileName}"))
+        //the write goes to a file beside the target, which then replaces the target, so a write that fails part way
+        //leaves the old file as it was
+        var temp = Path + TEMP_SUFFIX;
+
+        if (DataDiagnostics.Try(
+                () =>
+                {
+                    write(temp);
+                    File.Move(temp, Path, overwrite: true);
+                }, $"save {FileName}"))
             return SaveResult.Saved;
 
+        DataDiagnostics.Try(() => File.Delete(temp), $"delete {FileName}{TEMP_SUFFIX}");
         RaiseNotSaved(SaveResult.Failed);
 
         return SaveResult.Failed;

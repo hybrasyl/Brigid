@@ -110,7 +110,8 @@ public static class LauncherConfig
                 file.MarkCorrupt(ex.Message);
             }
 
-        Servers = model?.Servers ?? [];
+        //a hand edit can leave a null entry or an entry with no host; such an entry has no server to connect to
+        Servers = [.. (model?.Servers ?? []).Where(server => (server is not null) && !string.IsNullOrWhiteSpace(server.Host))];
         SelectedServer = model?.SelectedServer;
         AssetPath = model?.AssetPath;
         WindowMultiplier = model?.WindowMultiplier;
