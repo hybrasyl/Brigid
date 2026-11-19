@@ -209,10 +209,7 @@ public sealed partial class WorldScreen
         var viewport = WorldHud.ViewportBounds;
 
         //only drop if released within the world viewport
-        if ((mouseX < viewport.X)
-            || (mouseX >= (viewport.X + viewport.Width))
-            || (mouseY < viewport.Y)
-            || (mouseY >= (viewport.Y + viewport.Height)))
+        if (!IsInViewport(viewport, mouseX, mouseY))
             return;
 
         if (MapFile is null)
@@ -334,14 +331,24 @@ public sealed partial class WorldScreen
         CastingSystem.BeginTargeting(spellSlot);
     }
 
+    /// <summary>
+    ///     True when a drop at (<paramref name="x" />, <paramref name="y" />) is in the world viewport. A drop on a HUD bar
+    ///     (the hotbar, the bottom bar of the new HUD) is not in the world, also when an entity's hit box reaches under it.
+    /// </summary>
+    internal static bool IsInViewport(Rectangle viewport, int x, int y) => viewport.Contains(x, y);
+
+    /// <summary>True for an entity that a dropped spell is cast at: an aisling or a creature, not a ground item.</summary>
+    internal static bool IsSpellDropTarget(ClientEntityType? type) => type is ClientEntityType.Aisling or ClientEntityType.Creature;
+
     private void HandleSpellSlotDropped(byte slot, int mouseX, int mouseY)
     {
-        if (IsOverVisiblePopup(mouseX, mouseY))
+        //a spell dropped on a HUD bar or in a gap of the hotbar is not cast at an entity behind the bar
+        if (IsOverVisiblePopup(mouseX, mouseY) || !IsInViewport(WorldHud.ViewportBounds, mouseX, mouseY))
             return;
 
         var entity = GetEntityAtScreen(mouseX, mouseY);
 
-        if (entity?.Type is not (ClientEntityType.Aisling or ClientEntityType.Creature))
+        if ((entity is null) || !IsSpellDropTarget(entity.Type))
             return;
 
         HandleSpellSlotClicked(slot);

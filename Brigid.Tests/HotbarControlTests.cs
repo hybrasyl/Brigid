@@ -7,6 +7,7 @@ using Brigid.Controls.World.Hud.Main;
 using Brigid.Definitions;
 using Brigid.Models;
 using Brigid.Rendering;
+using Brigid.Rendering.Definitions;
 using Brigid.Screens;
 using Brigid.Systems.Keybinds;
 using Brigid.ViewModel;
@@ -235,6 +236,36 @@ public class HotbarControlTests : IDisposable
     [Fact]
     public void ARootDropOfAHotbarSlotEnds()
         => Assert.Equal(WorldScreen.RootDrop.Ends, WorldScreen.RootDropOf(new HotbarDragPayload(0, 0, null)));
+
+    //BRIG-149: a skill from the Abilities window that reaches the root ends; only a spell is cast at the entity under it
+    [Fact]
+    public void ARootDropOfASkillEndsAndOfASpellCasts()
+    {
+        Assert.Equal(WorldScreen.RootDrop.Ends, WorldScreen.RootDropOf(new AbilityDragPayload(false, 3, null)));
+        Assert.Equal(WorldScreen.RootDrop.Spell, WorldScreen.RootDropOf(new AbilityDragPayload(true, 3, null)));
+    }
+
+    [Theory]
+    [InlineData(ClientEntityType.Aisling, true)]
+    [InlineData(ClientEntityType.Creature, true)]
+    [InlineData(ClientEntityType.GroundItem, false)]
+    [InlineData(null, false)]
+    public void ADroppedSpellIsCastOnlyAtAnAislingOrACreature(ClientEntityType? type, bool expected)
+        => Assert.Equal(expected, WorldScreen.IsSpellDropTarget(type));
+
+    //a spell dropped in a gap of the hotbar reached the root, which cast it at an entity whose hit box reached under the
+    //bar; the root takes a spell or an item only in the world viewport
+    [Fact]
+    public void AGapOfTheHotbarIsNotInTheViewport()
+    {
+        var world = MainHudLayout.World;
+        var hotbar = MainHudLayout.Hotbar;
+
+        Assert.False(WorldScreen.IsInViewport(world, hotbar.Center.X, hotbar.Center.Y));
+        Assert.False(WorldScreen.IsInViewport(world, world.X, world.Bottom));
+        Assert.True(WorldScreen.IsInViewport(world, world.X, world.Bottom - 1));
+        Assert.True(WorldScreen.IsInViewport(world, world.Center.X, world.Center.Y));
+    }
 
     //a near miss: a drop in a gap between the slots or on the page column keeps the slot
     [Fact]
