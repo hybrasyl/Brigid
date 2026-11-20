@@ -28,7 +28,6 @@ internal sealed class LegendWindowControl : HudWindowContent
     private readonly UILabel EmptyText;
 
     private VirtualizedListView<LegendMarkEntry, LegendMarkRow>? List;
-    private IReadOnlyList<LegendMarkEntry>? ReadMarks;
 
     /// <param name="profile">The player's own profile.</param>
     /// <param name="iconOf">The icon of a mark id, or null when no art has it; the default reads the UI renderer.</param>
@@ -42,7 +41,7 @@ internal sealed class LegendWindowControl : HudWindowContent
         EmptyText.Text = EMPTY_TEXT;
         AddChild(EmptyText);
 
-        Profile.Changed += ShowMarks;
+        Profile.LegendMarksChanged += ShowMarks;
         ShowMarks();
     }
 
@@ -58,30 +57,22 @@ internal sealed class LegendWindowControl : HudWindowContent
     /// <summary>Binds a row as the list does when it draws: the mark and its icon, or no row for an empty slot.</summary>
     internal void BindRow(LegendMarkRow row, VirtualRow<LegendMarkEntry> slot) => row.Bind(slot, IconOf);
 
-    //the profile changes for its name, portrait and text too, and each self profile reply (a group action asks for one)
-    //gives a new list; only other marks change the rows and the scroll. Before the first profile, the window does not say
-    //that there are no marks
+    //only other marks change the rows and the scroll. Before the first profile, the window does not say that there are no
+    //marks
     private void ShowMarks()
     {
-        EmptyText.Visible = Profile.HasProfile && (Marks.Count == 0);
+        if (!Profile.LegendMarks.SequenceEqual(Marks))
+        {
+            Marks = Profile.LegendMarks.ToList();
+            List?.SetItems(Marks);
+        }
 
-        if (ReferenceEquals(Profile.LegendMarks, ReadMarks))
-            return;
-
-        ReadMarks = Profile.LegendMarks;
-        var marks = Profile.LegendMarks.ToList();
-
-        if (marks.SequenceEqual(Marks))
-            return;
-
-        Marks = marks;
-        List?.SetItems(Marks);
         EmptyText.Visible = Profile.HasProfile && (Marks.Count == 0);
     }
 
     public override void Dispose()
     {
-        Profile.Changed -= ShowMarks;
+        Profile.LegendMarksChanged -= ShowMarks;
 
         base.Dispose();
     }

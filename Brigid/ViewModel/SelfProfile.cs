@@ -7,7 +7,8 @@ namespace Brigid.ViewModel;
 /// <summary>
 ///     The player's own profile (BRIG-151): the facts of the last self profile (server <c>0x39</c>), the name from the
 ///     player's display packet, and the portrait and the profile text from the character folder. The Details and the
-///     Legend windows of the new HUD read it. It raises <see cref="Changed" /> at each change.
+///     Legend windows of the new HUD read it. It raises <see cref="Changed" /> at each change, and
+///     <see cref="LegendMarksChanged" /> only when the legend marks change.
 /// </summary>
 public sealed class SelfProfile
 {
@@ -53,6 +54,12 @@ public sealed class SelfProfile
     /// <summary>Raised after each change.</summary>
     public event Action? Changed;
 
+    /// <summary>
+    ///     Raised after <see cref="Changed" /> when the legend marks change, or when <see cref="HasProfile" /> changes. Each
+    ///     self profile reply (a group action asks for one) gives a new list; a list with the same marks does not raise it.
+    /// </summary>
+    public event Action? LegendMarksChanged;
+
     /// <summary>Sets the player's name.</summary>
     public void SetName(string name)
     {
@@ -72,6 +79,8 @@ public sealed class SelfProfile
         string nationName,
         IReadOnlyList<LegendMarkEntry> legendMarks)
     {
+        var marksChanged = !HasProfile || !LegendMarks.SequenceEqual(legendMarks);
+
         ClassName = className.Trim();
         GuildName = guildName.Trim();
         GuildRank = guildRank.Trim();
@@ -80,6 +89,9 @@ public sealed class SelfProfile
         LegendMarks = [.. legendMarks];
         HasProfile = true;
         Changed?.Invoke();
+
+        if (marksChanged)
+            LegendMarksChanged?.Invoke();
     }
 
     /// <summary>Sets the portrait file; returns false, with no change, for the same bytes.</summary>
@@ -107,6 +119,8 @@ public sealed class SelfProfile
     /// <summary>Forgets the character: a logout or a character switch.</summary>
     public void Clear()
     {
+        var marksChanged = HasProfile || (LegendMarks.Count > 0);
+
         Name = string.Empty;
         ClassName = string.Empty;
         GuildName = string.Empty;
@@ -118,5 +132,8 @@ public sealed class SelfProfile
         Portrait = [];
         ProfileText = string.Empty;
         Changed?.Invoke();
+
+        if (marksChanged)
+            LegendMarksChanged?.Invoke();
     }
 }

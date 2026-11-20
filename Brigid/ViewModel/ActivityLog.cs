@@ -25,7 +25,6 @@ public sealed class ActivityLog
     private byte LastLevel;
     private byte LastAbility;
     private Dictionary<(string Key, string Text), int>? LastMarks;
-    private IReadOnlyList<LegendMarkEntry>? ReadMarks;
 
     /// <param name="attributes">The player's attributes; the log reads the levels of each primary block.</param>
     /// <param name="profile">The player's profile; the log reads its legend marks.</param>
@@ -37,7 +36,7 @@ public sealed class ActivityLog
         Clock = clock ?? (() => DateTime.Now);
 
         Attributes.Changed += OnAttributesChanged;
-        Profile.Changed += OnProfileChanged;
+        Profile.LegendMarksChanged += OnLegendMarksChanged;
     }
 
     /// <summary>The entries, newest first.</summary>
@@ -92,7 +91,6 @@ public sealed class ActivityLog
         LastLevel = 0;
         LastAbility = 0;
         LastMarks = null;
-        ReadMarks = null;
         Changed?.Invoke();
     }
 
@@ -103,15 +101,11 @@ public sealed class ActivityLog
             ObserveLevels(Attributes.Level, Attributes.Ability);
     }
 
-    //the profile changes for its name, portrait and text too; a list of marks that was read already adds nothing, so the
-    //log skips it and does not count the marks again
-    private void OnProfileChanged()
+    //the profile raises this only for other marks, so the log does not count the same marks again
+    private void OnLegendMarksChanged()
     {
-        if (!Profile.HasProfile || ReferenceEquals(Profile.LegendMarks, ReadMarks))
-            return;
-
-        ReadMarks = Profile.LegendMarks;
-        ObserveLegendMarks(Profile.LegendMarks);
+        if (Profile.HasProfile)
+            ObserveLegendMarks(Profile.LegendMarks);
     }
 
     private static string Gain(string text, int steps) => steps == 1 ? text : $"{text} (+{steps})";
