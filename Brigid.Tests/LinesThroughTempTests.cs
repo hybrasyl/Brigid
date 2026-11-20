@@ -32,6 +32,43 @@ public sealed class LinesThroughTempTests : IDisposable
     }
 
     [Fact]
+    public void TheHotbarAndThePinsSaveThroughATemporaryFile()
+    {
+        var settings = new LocalPlayerSettingsRepository();
+        settings.UseFolderForTests(Folder);
+        File.WriteAllLines(settings.HotbarPath, ["version 2", "page 3"]);
+        File.WriteAllLines(settings.PersonalViewPath, ["Dex"]);
+
+        Assert.False(settings.SaveHotbar(FailsAfterOneLine()));
+        Assert.False(settings.SavePersonalViewPins(FailsAfterOneLine()));
+
+        Assert.Equal(["version 2", "page 3"], File.ReadAllLines(settings.HotbarPath));
+        Assert.Equal(["Dex"], File.ReadAllLines(settings.PersonalViewPath));
+    }
+
+    //a pin file that could not be read loaded as no pins, and the next toggle wrote over it
+    [Fact]
+    public void AFileThatCannotBeReadLoadsAsNullAndAnAbsentFileAsNoLines()
+    {
+        var settings = new LocalPlayerSettingsRepository();
+        settings.UseFolderForTests(Folder);
+
+        Assert.Equal([], settings.LoadPersonalViewPins());
+        Assert.Equal([], settings.LoadHotbar());
+
+        //a folder in the place of the file: the read fails on every platform
+        Directory.CreateDirectory(settings.PersonalViewPath);
+        Directory.CreateDirectory(settings.HotbarPath);
+
+        Assert.Null(settings.LoadPersonalViewPins());
+        Assert.Null(settings.LoadHotbar());
+    }
+
+    [Fact]
+    public void AFileInAFolderThatIsAbsentLoadsAsNoLines()
+        => Assert.Equal([], LocalPlayerSettingsRepository.ReadLinesOrNull(Path.Combine(Folder, "gone", "Hotbar.cfg"), "LoadHotbar"));
+
+    [Fact]
     public void AWriteReplacesTheFile()
     {
         var path = Path.Combine(Folder, "Hotbar.cfg");

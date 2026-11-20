@@ -1439,8 +1439,13 @@ public sealed partial class WorldScreen
     }
 
     //the logout completed: Exit Game closes the client, and every other logout goes to the login screen
+    //the session ended with a logout, not a lost connection
+    private bool LoggedOut;
+
     private void EndLogout()
     {
+        LoggedOut = true;
+
         if (ExitFlow.CompleteLogout())
             Game.Exit();
         else

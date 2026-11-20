@@ -110,13 +110,14 @@ public class ExperienceStartTests
         Assert.Equal(1000ul, span.Start);
     }
 
+    //a loss also makes the experience to the next level larger; the full level showed 2,100 of a level of 2,000
     [Fact]
-    public void ALossUnderTheStartGivesNothingGained()
+    public void ALossUnderTheStartGivesNothingGainedAndKeepsTheFullLevel()
     {
         var span = ExperienceSpan.ForLevel();
         span.Restore(41, 1000);
 
-        Assert.Equal((0ul, 2100ul), span.Progress(41, 900, 2100));
+        Assert.Equal((0ul, 2000ul), span.Progress(41, 900, 2100));
     }
 
     [Fact]
@@ -316,15 +317,49 @@ public class ExperienceStartTests
         Assert.Equal(new SavedExperience(null, new SavedLevelStart(4, 1000)), attrs.SavedStarts());
     }
 
+    private const string SERVER = "qa.hybrasyl.com/QA";
+
     [Fact]
     public void TheSaveReadsBackWhatItWrote()
     {
         var saved = new SavedExperience(new SavedLevelStart(41, 1000), new SavedLevelStart(3, 5_000_000_000));
-        var lines = LocalPlayerSettingsRepository.FormatExperience(saved);
+        var lines = LocalPlayerSettingsRepository.FormatExperience(saved, SERVER);
 
-        Assert.Equal(["Level: 41 1000", "Ability: 3 5000000000"], lines);
-        Assert.Equal(saved, LocalPlayerSettingsRepository.ParseExperience(lines));
-        Assert.Empty(LocalPlayerSettingsRepository.FormatExperience(new SavedExperience(null, null)));
+        Assert.Equal(["Server: qa.hybrasyl.com/QA", "Level: 41 1000", "Ability: 3 5000000000"], lines);
+        Assert.Equal(saved, LocalPlayerSettingsRepository.ParseExperience(lines, SERVER));
+        Assert.Empty(LocalPlayerSettingsRepository.FormatExperience(new SavedExperience(null, null), SERVER));
+    }
+
+    //the Hybrasyl servers share a character folder; a start of another server at the same level showed a wrong bar
+    [Fact]
+    public void TheStartsOfAnotherServerAreNotRestored()
+    {
+        var lines = LocalPlayerSettingsRepository.FormatExperience(new SavedExperience(new SavedLevelStart(41, 1000), null), SERVER);
+
+        Assert.Equal(new SavedExperience(null, null), LocalPlayerSettingsRepository.ParseExperience(lines, "prod.hybrasyl.com/Prod"));
+        Assert.Equal(new SavedExperience(null, null), LocalPlayerSettingsRepository.ParseExperience(["Level: 41 1000"], SERVER));
+    }
+
+    [Fact]
+    public void TheFileReadsBackWhatTheSaveWrote()
+    {
+        var folder = Directory.CreateTempSubdirectory("brigid-experience-").FullName;
+
+        try
+        {
+            var settings = new LocalPlayerSettingsRepository();
+            settings.UseFolderForTests(folder);
+            var saved = new SavedExperience(new SavedLevelStart(41, 1000), new SavedLevelStart(3, 50));
+
+            Assert.Equal(new SavedExperience(null, null), settings.LoadExperience(SERVER));
+
+            settings.SaveExperience(saved, SERVER);
+
+            Assert.Equal(saved, settings.LoadExperience(SERVER));
+        } finally
+        {
+            Directory.Delete(folder, true);
+        }
     }
 
     [Theory]
@@ -338,5 +373,5 @@ public class ExperienceStartTests
     [InlineData("Other: 41 1000")]
     [InlineData("")]
     public void ALineThatDoesNotParseGivesNoStart(string line)
-        => Assert.Equal(new SavedExperience(null, null), LocalPlayerSettingsRepository.ParseExperience([line]));
+        => Assert.Equal(new SavedExperience(null, null), LocalPlayerSettingsRepository.ParseExperience(["Server: " + SERVER, line], SERVER));
 }

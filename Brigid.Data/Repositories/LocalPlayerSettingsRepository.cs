@@ -18,6 +18,7 @@ public sealed class LocalPlayerSettingsRepository
     private const string EXPERIENCE_FILE = "Experience.cfg";
     private const string LEVEL_KEY = "Level";
     private const string ABILITY_KEY = "Ability";
+    private const string SERVER_KEY = "Server";
     private const string FAMILY_LIST_FILE = "Familylist.cfg";
     private const string FRIEND_LIST_FILE = "Friendlist.cfg";
     private const string HOTBAR_FILE = "Hotbar.cfg";
@@ -88,6 +89,9 @@ public sealed class LocalPlayerSettingsRepository
     ///     True when the old in-game-folder location holds per-character config worth importing — a subdirectory of
     ///     <c>DataPath</c> containing at least one recognizable config file. Drives the one-time import offer.
     /// </summary>
+    /// <summary>Uses <paramref name="folder" /> as the character folder, with no import and no default files.</summary>
+    internal void UseFolderForTests(string folder) => PlayerDirectory = folder;
+
     public bool HasLegacyCharacterData()
     {
         if (string.IsNullOrEmpty(DataContext.DataPath) || !Directory.Exists(DataContext.DataPath))
@@ -190,31 +194,28 @@ public sealed class LocalPlayerSettingsRepository
     }
 
     /// <summary>
-    ///     Loads the level starts from Experience.cfg (BRIG-148). A file that is absent gives no starts; a file that cannot
-    ///     be read gives no starts, and the failure is logged.
+    ///     Loads the level starts of <paramref name="server" /> from Experience.cfg (BRIG-148). A file that is absent, or that
+    ///     cannot be read, gives no starts; a failure is logged.
     /// </summary>
-    public SavedExperience LoadExperience()
-    {
-        string[] lines = [];
+    public SavedExperience LoadExperience(string server)
+        => ParseExperience(ReadLinesOrNull(ExperiencePath, "LoadExperience") ?? [], server);
 
-        if (File.Exists(ExperiencePath))
-            DataDiagnostics.Try(() => lines = File.ReadAllLines(ExperiencePath), "LoadExperience");
-
-        return ParseExperience(lines);
-    }
-
-    /// <summary>Saves the level starts to Experience.cfg (BRIG-148).</summary>
-    public void SaveExperience(SavedExperience experience)
-        => WriteLinesThroughTemp(ExperiencePath, FormatExperience(experience), "SaveExperience");
+    /// <summary>Saves the level starts of <paramref name="server" /> to Experience.cfg (BRIG-148).</summary>
+    public void SaveExperience(SavedExperience experience, string server)
+        => WriteLinesThroughTemp(ExperiencePath, FormatExperience(experience, server), "SaveExperience");
 
     /// <summary>
-    ///     Reads Experience.cfg lines: <c>Level: {level} {start}</c> and <c>Ability: {level} {start}</c>. A line that does not
-    ///     parse, or a key that is absent, gives null for that start.
+    ///     Reads Experience.cfg lines: <c>Server: {server}</c>, <c>Level: {level} {start}</c> and
+    ///     <c>Ability: {level} {start}</c>. The starts apply only when the server line names <paramref name="server" />:
+    ///     several servers share one character folder (<c>ServerProfileKey</c> gives every Hybrasyl host one key), and a
+    ///     start of another server at the same level shows a wrong bar. A line that does not parse, or a key that is absent,
+    ///     gives null for that start.
     /// </summary>
-    internal static SavedExperience ParseExperience(IReadOnlyList<string> lines)
+    internal static SavedExperience ParseExperience(IReadOnlyList<string> lines, string server)
     {
         SavedLevelStart? level = null;
         SavedLevelStart? ability = null;
+        var ownServer = false;
 
         foreach (var line in lines)
         {
@@ -222,6 +223,13 @@ public sealed class LocalPlayerSettingsRepository
 
             if (colon < 0)
                 continue;
+
+            if (line[..colon].Trim() == SERVER_KEY)
+            {
+                ownServer = line[(colon + 1)..].Trim() == server;
+
+                continue;
+            }
 
             var parts = line[(colon + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
@@ -243,13 +251,16 @@ public sealed class LocalPlayerSettingsRepository
             }
         }
 
-        return new SavedExperience(level, ability);
+        return ownServer ? new SavedExperience(level, ability) : new SavedExperience(null, null);
     }
 
-    /// <summary>Formats the level starts as Experience.cfg lines; <see cref="ParseExperience" /> reads them back.</summary>
-    internal static string[] FormatExperience(SavedExperience experience)
+    /// <summary>Formats the level starts of <paramref name="server" /> as Experience.cfg lines; <see cref="ParseExperience" /> reads them back.</summary>
+    internal static string[] FormatExperience(SavedExperience experience, string server)
     {
-        var lines = new List<string>();
+        if (experience is { Level: null, Ability: null })
+            return [];
+
+        var lines = new List<string> { $"{SERVER_KEY}: {server}" };
 
         if (experience.Level is { } level)
             lines.Add(FormattableString.Invariant($"{LEVEL_KEY}: {level.Level} {level.Start}"));
@@ -262,38 +273,41 @@ public sealed class LocalPlayerSettingsRepository
 
     /// <summary>
     ///     Loads the pinned stats of Personal View from PersonalView.cfg (BRIG-151), one name for each line. A file that is
-    ///     absent gives no pins; a file that cannot be read gives no pins, and the failure is logged.
+    ///     absent gives no pins. A file that cannot be read gives null, and the failure is logged: the caller must not
+    ///     write over it.
     /// </summary>
-    public string[] LoadPersonalViewPins()
-    {
-        string[] lines = [];
+    public string[]? LoadPersonalViewPins() => ReadLinesOrNull(PersonalViewPath, "LoadPersonalViewPins");
 
-        if (File.Exists(PersonalViewPath))
-            DataDiagnostics.Try(() => lines = File.ReadAllLines(PersonalViewPath), "LoadPersonalViewPins");
-
-        return lines;
-    }
-
-    /// <summary>Saves the pinned stats of Personal View to PersonalView.cfg (BRIG-151).</summary>
-    public void SavePersonalViewPins(IEnumerable<string> names)
+    /// <summary>Saves the pinned stats of Personal View to PersonalView.cfg (BRIG-151). Returns false on a failure.</summary>
+    public bool SavePersonalViewPins(IEnumerable<string> names)
         => WriteLinesThroughTemp(PersonalViewPath, names, "SavePersonalViewPins");
 
     /// <summary>
     ///     Loads the lines of the hotbar from Hotbar.cfg (BRIG-146). A file that is absent gives no lines. A file that cannot
     ///     be read gives null, and the failure is logged: the caller must not write over it.
     /// </summary>
-    public string[]? LoadHotbar()
+    public string[]? LoadHotbar() => ReadLinesOrNull(HotbarPath, "LoadHotbar");
+
+    /// <summary>Saves the lines of the hotbar to Hotbar.cfg (BRIG-146). Returns false on a failure.</summary>
+    public bool SaveHotbar(IEnumerable<string> lines) => WriteLinesThroughTemp(HotbarPath, lines, "SaveHotbar");
+
+    //the lines of a file: none when the file is absent, and null when it cannot be read (the failure is logged).
+    //File.Exists is also false when the check fails, so the read decides what is absent
+    internal static string[]? ReadLinesOrNull(string path, string what)
     {
-        string[] lines = [];
+        try
+        {
+            return File.ReadAllLines(path);
+        } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return [];
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            DataDiagnostics.Log?.Invoke($"[data] IO failed ({what}): {ex.GetType().Name}: {ex.Message}");
 
-        if (File.Exists(HotbarPath) && !DataDiagnostics.Try(() => lines = File.ReadAllLines(HotbarPath), "LoadHotbar"))
             return null;
-
-        return lines;
+        }
     }
-
-    /// <summary>Saves the lines of the hotbar to Hotbar.cfg (BRIG-146).</summary>
-    public void SaveHotbar(IEnumerable<string> lines) => WriteLinesThroughTemp(HotbarPath, lines, "SaveHotbar");
 
     /// <summary>The suffix of the file that a save writes before it replaces the file.</summary>
     internal const string TEMP_SUFFIX = ".tmp";

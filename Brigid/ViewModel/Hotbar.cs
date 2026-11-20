@@ -289,10 +289,14 @@ public sealed class Hotbar
     //true when the player wears an item of this name
     private bool IsWorn(string itemName) => Worn.GetAll().Values.Any(item => item.Name.EqualsI(itemName));
 
-    /// <summary>Empties the entries of each ability that left its book <see cref="REMOVAL_WAIT_MS" /> ago and did not come back.</summary>
-    public void Tick()
+    /// <summary>
+    ///     Empties the entries of each ability that left its book <see cref="REMOVAL_WAIT_MS" /> ago and did not come back.
+    ///     It empties nothing while <paramref name="inWorld" /> is false: with no world connection the add of a swap cannot
+    ///     come, and a removal waits until the connection is back.
+    /// </summary>
+    public void Tick(bool inWorld)
     {
-        if (Removals.Count == 0)
+        if ((Removals.Count == 0) || !inWorld)
             return;
 
         var now = Clock();

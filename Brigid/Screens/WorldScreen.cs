@@ -878,9 +878,15 @@ public sealed partial class WorldScreen : IScreen
         //the lobby), and StopAmbient cannot throw
         Game.SoundSystem.StopAmbient();
 
-        //the end of the session: an item or an ability that is gone leaves the hotbar (an item's slot showed dimmed until
-        //now), and the save goes before the reset, which empties the hotbar (BRIG-146)
-        WorldState.Hotbar.DropGoneEntries();
+        //the end of the session: after a logout, an item or an ability that is gone leaves the hotbar (an item's slot
+        //showed dimmed until now). A lost connection can end between the removal and the add of an equip, so the screen
+        //does not know what is gone. The save goes before the reset, which empties the hotbar (BRIG-146)
+        if (LoggedOut)
+            WorldState.Hotbar.DropGoneEntries();
+
+        if (HotbarUnsaved)
+            SaveHotbar();
+
         WorldState.Hotbar.Changed -= SaveHotbar;
         WorldState.ResetAll();
 

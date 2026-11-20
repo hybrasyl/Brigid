@@ -103,15 +103,17 @@ public sealed class ExperienceSpan
 
     /// <summary>
     ///     The experience gained in <paramref name="level" /> and the experience of the full level, or null when the start
-    ///     of that level is unknown. A total under the start (a loss) gives 0 gained.
+    ///     of that level is unknown. A total under the start (a loss) gives 0 gained; the full level stays the threshold
+    ///     less the start, because a loss also makes the experience to the next level larger.
     /// </summary>
     public (ulong Gained, ulong Full)? Progress(byte level, uint total, uint toNext)
     {
         if (Start is not { } start || (level != Level))
             return null;
 
+        var threshold = (ulong)total + toNext;
         var gained = total > start ? total - start : 0;
 
-        return (gained, gained + toNext);
+        return (gained, threshold > start ? threshold - start : 0);
     }
 }

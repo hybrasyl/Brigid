@@ -91,6 +91,6 @@ internal static class HudExperience
         => progress is { Full: > 0 } known ? (float)((double)known.Gained / known.Full) : 0;
 
     //the percent rounds down, so the tooltip shows 100% only for a full level
-    private static ulong Percent((ulong Gained, ulong Full) progress) => progress.Gained * 100 / progress.Full;
+    private static ulong Percent((ulong Gained, ulong Full) progress) => progress.Full > 0 ? progress.Gained * 100 / progress.Full : 0;
 
 }

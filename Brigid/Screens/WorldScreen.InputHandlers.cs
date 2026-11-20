@@ -740,12 +740,15 @@ public sealed partial class WorldScreen
     private void LoadPlayerExperience()
     {
         CharacterFolderReady = true;
-        WorldState.Attributes.RestoreStarts(DataContext.LocalPlayerSettings.LoadExperience());
+        WorldState.Attributes.RestoreStarts(DataContext.LocalPlayerSettings.LoadExperience(SessionServer));
     }
 
     //the pins of Personal View, once for this screen's character: a display packet of the player comes at each map change,
     //and a load there would put back the pins of a save that failed (BRIG-151)
     private bool PersonalViewPinsLoaded;
+
+    //the pin file could not be read: a save would write the pins of this session over the player's file
+    private bool PersonalViewPinsSaveBlocked;
 
     private void LoadPersonalViewPins()
     {
@@ -753,7 +756,9 @@ public sealed partial class WorldScreen
             return;
 
         PersonalViewPinsLoaded = true;
-        EquipmentWindow.SetPins(PersonalStats.Parse(DataContext.LocalPlayerSettings.LoadPersonalViewPins()));
+        var lines = DataContext.LocalPlayerSettings.LoadPersonalViewPins();
+        PersonalViewPinsSaveBlocked = lines is null;
+        EquipmentWindow.SetPins(PersonalStats.Parse(lines ?? []));
     }
 
     //the hotbar, once for this screen's character, as the pins of Personal View (BRIG-146)
@@ -770,9 +775,8 @@ public sealed partial class WorldScreen
         HotbarLoaded = true;
         var lines = DataContext.LocalPlayerSettings.LoadHotbar();
 
-        //the host and the server name: the Hybrasyl servers share the file, and the end-of-session sweep runs only on the
-        //server that saved it
-        HotbarSaveBlocked = lines is null || !WorldState.Hotbar.Load(lines, $"{GlobalSettings.LobbyHost}/{Game.Connection.ServerName}");
+        //the end-of-session sweep runs only on the entries of this server
+        HotbarSaveBlocked = lines is null || !WorldState.Hotbar.Load(lines, SessionServer);
     }
 
     //the hotbar, saved for the character at each change, after its load: a save before the load would write the empty
@@ -780,13 +784,17 @@ public sealed partial class WorldScreen
     private void SaveHotbar()
     {
         if (CharacterFolderReady && HotbarLoaded && !HotbarSaveBlocked)
-            DataContext.LocalPlayerSettings.SaveHotbar(WorldState.Hotbar.Format());
+            HotbarUnsaved = !DataContext.LocalPlayerSettings.SaveHotbar(WorldState.Hotbar.Format());
     }
+
+    //the last hotbar save failed; the end of the session tries it again, so the last change of a session is not lost
+    private bool HotbarUnsaved;
 
     //the pins of Personal View, saved for the character at each change (BRIG-151)
     private void SavePersonalViewPins(IReadOnlyList<PersonalStat> pins)
     {
-        if (CharacterFolderReady)
+        //a toggle before the load is not saved: the load puts the player's pins in its place
+        if (CharacterFolderReady && PersonalViewPinsLoaded && !PersonalViewPinsSaveBlocked)
             DataContext.LocalPlayerSettings.SavePersonalViewPins(PersonalStats.Format(pins));
     }
 
@@ -797,8 +805,12 @@ public sealed partial class WorldScreen
     private void SavePlayerExperience()
     {
         if (CharacterFolderReady)
-            DataContext.LocalPlayerSettings.SaveExperience(WorldState.Attributes.SavedStarts());
+            DataContext.LocalPlayerSettings.SaveExperience(WorldState.Attributes.SavedStarts(), SessionServer);
     }
+
+    //the host and the server name: the Hybrasyl servers share a character folder, so the hotbar and the level starts
+    //keep the server that saved them
+    private string SessionServer => $"{GlobalSettings.LobbyHost}/{Game.Connection.ServerName}";
 
     private void SaveSkillChants()
     {

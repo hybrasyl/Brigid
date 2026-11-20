@@ -88,7 +88,7 @@ public class HotbarTests
 
         Spells.SetSlot(5, 2, "beag ioc (Lev:2/50)");
         Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick();
+        hotbar.Tick(true);
 
         Assert.Equal(BeagIoc, hotbar.Get(0));
         Assert.Equal((byte)5, hotbar.Resolve(BeagIoc));
@@ -134,6 +134,29 @@ public class HotbarTests
         Assert.Equal(0u, hotbar.CountOf("Apple"));
     }
 
+    //the tick ran while the "Connection lost." popup showed, and deleted an ability whose add could not come any more
+    [Fact]
+    public void WithNoWorldConnectionARemovalEmptiesNothingAndWaitsForTheConnection()
+    {
+        var hotbar = NewHotbar();
+        Skills.SetSlot(3, 1, "assail");
+        hotbar.Set(0, 0, Assail);
+        var changes = 0;
+        hotbar.Changed += () => changes++;
+
+        Skills.ClearSlot(3);
+        Now += Hotbar.REMOVAL_WAIT_MS;
+        hotbar.Tick(false);
+
+        Assert.Equal(Assail, hotbar.Get(0, 0));
+        Assert.Equal(0, changes);
+
+        //the add of the swap arrives after the connection is back
+        Skills.SetSlot(5, 1, "assail");
+        hotbar.Tick(true);
+        Assert.Equal(Assail, hotbar.Get(0, 0));
+    }
+
     //a forgotten ability leaves the book and does not come back
     [Fact]
     public void AnAbilityThatLeavesTheBookEmptiesItsEntriesAfterTheWait()
@@ -147,11 +170,11 @@ public class HotbarTests
 
         Skills.ClearSlot(3);
         Now += Hotbar.REMOVAL_WAIT_MS - 1;
-        hotbar.Tick();
+        hotbar.Tick(true);
         Assert.Equal(Assail, hotbar.Get(0, 0));
 
         Now += 1;
-        hotbar.Tick();
+        hotbar.Tick(true);
 
         Assert.Null(hotbar.Get(0, 0));
         Assert.Null(hotbar.Get(4, 11));
@@ -171,7 +194,7 @@ public class HotbarTests
 
         Skills.ClearSlot(3);
         Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick();
+        hotbar.Tick(true);
 
         Assert.Null(hotbar.Get(0));
         Assert.Equal(spell, hotbar.Get(1));
@@ -188,7 +211,7 @@ public class HotbarTests
         Skills.ClearSlot(3);
         Skills.SetSlot(9, 1, "Assail");
         Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick();
+        hotbar.Tick(true);
 
         Assert.Equal(Assail, hotbar.Get(0));
     }
@@ -200,13 +223,13 @@ public class HotbarTests
         var hotbar = NewHotbar();
         hotbar.Load(["0 0 skill 1 0 Assail"]);
         Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick();
+        hotbar.Tick(true);
         Assert.Equal(Assail, hotbar.Get(0));
 
         Skills.SetSlot(3, 1, "Assail");
         Skills.Clear();
         Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick();
+        hotbar.Tick(true);
 
         Assert.Equal(Assail, hotbar.Get(0));
     }
@@ -223,7 +246,7 @@ public class HotbarTests
         Skills.Clear();
         Skills.SetSlot(3, 2, "Charge");
         Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick();
+        hotbar.Tick(true);
 
         Assert.Equal(Assail, hotbar.Get(0));
     }
@@ -238,7 +261,7 @@ public class HotbarTests
         hotbar.Reset();
         hotbar.Load(["0 0 skill 1 0 Assail"]);
         Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick();
+        hotbar.Tick(true);
 
         Assert.Equal(Assail, hotbar.Get(0));
     }
@@ -253,7 +276,7 @@ public class HotbarTests
 
         Items.ClearSlot(7);
         Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick();
+        hotbar.Tick(true);
         Assert.Equal(Potion, hotbar.Get(0));
         Assert.Null(hotbar.Resolve(Potion));
 
@@ -368,7 +391,7 @@ public class HotbarTests
 
         Skills.ClearSlot(1);
         Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick();
+        hotbar.Tick(true);
 
         Assert.Equal(Assail, hotbar.Get(0, 0));
         Assert.Null(hotbar.Get(0, 1));
