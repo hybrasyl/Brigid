@@ -736,7 +736,7 @@ public sealed partial class WorldScreen
     private void LoadPlayerExperience()
     {
         CharacterFolderReady = true;
-        WorldState.Attributes.RestoreStarts(DataContext.LocalPlayerSettings.LoadExperience(SessionServer));
+        WorldState.Attributes.RestoreStarts(DataContext.LocalPlayerSettings.LoadExperience());
     }
 
     //the pins of Personal View, once for this screen's character: a display packet of the player comes at each map change,
@@ -771,8 +771,7 @@ public sealed partial class WorldScreen
         HotbarLoaded = true;
         var lines = DataContext.LocalPlayerSettings.LoadHotbar();
 
-        //the end-of-session sweep runs only on the entries of this server
-        HotbarSaveBlocked = lines is null || !WorldState.Hotbar.Load(lines, SessionServer);
+        HotbarSaveBlocked = lines is null || !WorldState.Hotbar.Load(lines);
     }
 
     //the hotbar, saved for the character at each change, after its load: a save before the load would write the empty
@@ -801,12 +800,8 @@ public sealed partial class WorldScreen
     private void SavePlayerExperience()
     {
         if (CharacterFolderReady)
-            DataContext.LocalPlayerSettings.SaveExperience(WorldState.Attributes.SavedStarts(), SessionServer);
+            DataContext.LocalPlayerSettings.SaveExperience(WorldState.Attributes.SavedStarts());
     }
-
-    //the host and the server name: the Hybrasyl servers share a character folder, so the hotbar and the level starts
-    //keep the server that saved them
-    private string SessionServer => $"{GlobalSettings.LobbyHost}/{Game.Connection.ServerName}";
 
     private void SaveSkillChants()
     {

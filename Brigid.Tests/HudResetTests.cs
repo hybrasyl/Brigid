@@ -20,7 +20,7 @@ public sealed class HudResetTests : IDisposable
     [Fact]
     public void AResetForgetsTheHotbarOfTheCharacterBefore()
     {
-        WorldState.Hotbar.Load(["page 4", "0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
+        WorldState.Hotbar.Load(["page 4", "0 0 skill 1 0 Assail"]);
 
         WorldState.ResetAll();
 

@@ -43,7 +43,7 @@ public sealed partial class WorldScreen
             UpdateHuds(HudOps.SetServerName, Game.Connection.ServerName);
             var serverKey = ServerProfileKey.Resolve(GlobalSettings.LobbyHost, Game.Connection.ServerName);
             var importLegacy = ClientSettings.LegacyCharacterImport == ClientSettings.MigrationImport;
-            DataContext.LocalPlayerSettings.Initialize(args.Name, serverKey, importLegacy);
+            DataContext.LocalPlayerSettings.Initialize(args.Name, serverKey, $"{GlobalSettings.LobbyHost} {Game.Connection.ServerName}", importLegacy);
             LoadPlayerFamilyList();
             LoadPlayerFriendList();
             LoadPlayerMacros();

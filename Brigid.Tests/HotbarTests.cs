@@ -8,9 +8,8 @@ namespace Brigid.Tests;
 
 /// <summary>
 ///     BRIG-146 phase 1: the hotbar model. An entry is a kind and a name, so it follows its ability or item to another slot
-///     and keeps a level gain; an ability that leaves its book empties its entries after the wait of a swap; an item entry
-///     stays dimmed while its item is gone and empties at the end of the session, unless the player wears it; the file reads
-///     back what it wrote, and a load does not write it again.
+///     and keeps a level gain; an entry stays dimmed while its ability or item is gone and empties at the end of the session,
+///     unless the player wears the item; the file reads back what it wrote, and a load does not write it again.
 /// </summary>
 public class HotbarTests
 {
@@ -87,8 +86,6 @@ public class HotbarTests
         hotbar.Set(0, 0, BeagIoc);
 
         Spells.SetSlot(5, 2, "beag ioc (Lev:2/50)");
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(true);
 
         Assert.Equal(BeagIoc, hotbar.Get(0));
         Assert.Equal((byte)5, hotbar.Resolve(BeagIoc));
@@ -134,136 +131,55 @@ public class HotbarTests
         Assert.Equal(0u, hotbar.CountOf("Apple"));
     }
 
-    //the tick ran while the "Connection lost." popup showed, and deleted an ability whose add could not come any more
+    //Sabrael, 2026-11-19: an ability that leaves its book stays, dimmed, as an item does; the server sends a swap in the
+    //book as a removal and an add, and a timer that emptied the entries after a removal also ran while disconnected
     [Fact]
-    public void WithNoWorldConnectionARemovalEmptiesNothingAndWaitsForTheConnection()
+    public void AnAbilityThatLeavesTheBookShowsGoneAndKeepsItsEntries()
     {
         var hotbar = NewHotbar();
-        Skills.SetSlot(3, 1, "assail");
-        hotbar.Set(0, 0, Assail);
-        var changes = 0;
-        hotbar.Changed += () => changes++;
-
-        Skills.ClearSlot(3);
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(false);
-
-        Assert.Equal(Assail, hotbar.Get(0, 0));
-        Assert.Equal(0, changes);
-
-        //the add of the swap arrives after the connection is back
-        Skills.SetSlot(5, 1, "assail");
-        hotbar.Tick(true);
-        Assert.Equal(Assail, hotbar.Get(0, 0));
-    }
-
-    //a forgotten ability leaves the book and does not come back
-    [Fact]
-    public void AnAbilityThatLeavesTheBookEmptiesItsEntriesAfterTheWait()
-    {
-        var hotbar = NewHotbar();
-        Skills.SetSlot(3, 1, "assail");
+        Skills.SetSlot(3, 1, "Assail");
         hotbar.Set(0, 0, Assail);
         hotbar.Set(4, 11, Assail);
         var changes = 0;
         hotbar.Changed += () => changes++;
 
         Skills.ClearSlot(3);
-        Now += Hotbar.REMOVAL_WAIT_MS - 1;
-        hotbar.Tick(true);
+        Now += 60_000;
+
         Assert.Equal(Assail, hotbar.Get(0, 0));
+        Assert.Equal(Assail, hotbar.Get(4, 11));
+        Assert.True(hotbar.StateOf(Assail).IsGone);
+        Assert.Equal(0, changes);
 
-        Now += 1;
-        hotbar.Tick(true);
-
-        Assert.Null(hotbar.Get(0, 0));
-        Assert.Null(hotbar.Get(4, 11));
-        Assert.Equal(1, changes);
+        //the add of a swap
+        Skills.SetSlot(9, 1, "Assail");
+        Assert.Equal((byte)9, hotbar.StateOf(Assail).Slot);
     }
 
     //a skill and a spell can have the same name; they are two entries
     [Fact]
-    public void ASkillThatLeavesTheBookKeepsTheSpellOfTheSameName()
+    public void ASkillThatIsGoneAtTheEndOfTheSessionKeepsTheSpellOfTheSameName()
     {
-        var hotbar = NewHotbar();
-        var spell = new HotbarEntry(HotbarKind.Spell, "Assail");
-        Skills.SetSlot(3, 1, "Assail");
+        var hotbar = SettledHotbar("0 0 skill 1 0 Assail", "0 1 spell 0 0 Assail");
         Spells.SetSlot(3, 1, "Assail");
-        hotbar.Set(0, 0, Assail);
-        hotbar.Set(0, 1, spell);
 
-        Skills.ClearSlot(3);
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(true);
+        hotbar.DropGoneEntries();
 
         Assert.Null(hotbar.Get(0));
-        Assert.Equal(spell, hotbar.Get(1));
+        Assert.Equal(new HotbarEntry(HotbarKind.Spell, "Assail"), hotbar.Get(1));
     }
 
-    //the server sends a swap in the book as a removal and an add
+    //an earlier build of the hotbar gave each server a line in a shared file; each server has its own file now, and a load
+    //skips such a line
     [Fact]
-    public void ASwapInTheBookEmptiesNothing()
+    public void ALoadSkipsAServerLine()
     {
         var hotbar = NewHotbar();
-        Skills.SetSlot(3, 1, "Assail");
-        hotbar.Set(0, 0, Assail);
 
-        Skills.ClearSlot(3);
-        Skills.SetSlot(9, 1, "Assail");
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(true);
+        Assert.True(hotbar.Load(["version 2", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail"]));
 
-        Assert.Equal(Assail, hotbar.Get(0));
-    }
-
-    //the world entry fills the book slot by slot, and a logout clears it: neither is an ability that leaves
-    [Fact]
-    public void TheWorldEntryAndAClearOfTheBookEmptyNothing()
-    {
-        var hotbar = NewHotbar();
-        hotbar.Load(["0 0 skill 1 0 Assail"]);
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(true);
-        Assert.Equal(Assail, hotbar.Get(0));
-
-        Skills.SetSlot(3, 1, "Assail");
-        Skills.Clear();
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(true);
-
-        Assert.Equal(Assail, hotbar.Get(0));
-    }
-
-    //after a clear, the next world entry can put another ability in an old slot of Assail before Assail arrives: that is
-    //not Assail leaving the book
-    [Fact]
-    public void AClearForgetsWhatTheSlotsHeld()
-    {
-        var hotbar = NewHotbar();
-        Skills.SetSlot(3, 1, "Assail");
-        hotbar.Set(0, 0, Assail);
-
-        Skills.Clear();
-        Skills.SetSlot(3, 2, "Charge");
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(true);
-
-        Assert.Equal(Assail, hotbar.Get(0));
-    }
-
-    [Fact]
-    public void AResetForgetsTheAbilitiesThatLeft()
-    {
-        var hotbar = NewHotbar();
-        Skills.SetSlot(3, 1, "Assail");
-        Skills.ClearSlot(3);
-
-        hotbar.Reset();
-        hotbar.Load(["0 0 skill 1 0 Assail"]);
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(true);
-
-        Assert.Equal(Assail, hotbar.Get(0));
+        Assert.Equal(Assail, hotbar.Get(0, 0));
+        Assert.Equal(["version 2", "page 0", "0 0 skill 1 0 Assail"], hotbar.Format());
     }
 
     //Sabrael, 2026-11-18: the slot of a gone item shows dimmed until the next login, or until another entry goes there
@@ -275,8 +191,6 @@ public class HotbarTests
         hotbar.Set(0, 0, Potion);
 
         Items.ClearSlot(7);
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(true);
         Assert.Equal(Potion, hotbar.Get(0));
         Assert.Null(hotbar.Resolve(Potion));
 
@@ -329,91 +243,6 @@ public class HotbarTests
         Assert.Equal(0, changes);
     }
 
-    //Sabrael, 2026-11-18: the Hybrasyl servers share the file; an entry that only the other server has stays, dimmed. The
-    //file named one server, the last that saved it, so the second session on the other server swept the entry
-    [Fact]
-    public void AnEntryOfAnotherServerStaysForEverySessionOnThisServer()
-    {
-        var text = new[] { "version 1", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail" };
-
-        for (var session = 0; session < 3; session++)
-        {
-            var hotbar = NewHotbar();
-            hotbar.Load(text, "qa.example/Hybrasyl");
-            Now += Hotbar.SETTLE_MS;
-
-            hotbar.SetPage(session + 1);
-            hotbar.DropGoneEntries();
-
-            Assert.Equal(Assail, hotbar.Get(0, 0));
-            Assert.Equal("prod.example/Hybrasyl", hotbar.OwnerOf(0, 0));
-            text = [.. hotbar.Format()];
-        }
-
-        //back on the first server, the entry is that server's, and its sweep empties it
-        var home = NewHotbar();
-        home.Load(text, "PROD.example/Hybrasyl");
-        Now += Hotbar.SETTLE_MS;
-        home.DropGoneEntries();
-
-        Assert.Null(home.Get(0, 0));
-    }
-
-    //an entry that the player puts in a slot is this server's, and the sweep of this server empties it
-    [Fact]
-    public void AnEntryPutInASlotIsOfThisSessionsServer()
-    {
-        var hotbar = NewHotbar();
-        hotbar.Load(["version 2", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
-        Now += Hotbar.SETTLE_MS;
-        hotbar.Set(0, 1, BeagIoc);
-        hotbar.Move(0, 1, 2, 5);
-
-        Assert.Equal("qa.example/Hybrasyl", hotbar.OwnerOf(2, 5));
-        Assert.Equal(
-            ["version 2", "page 0", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail", "server qa.example/Hybrasyl", "2 5 spell 2 0 beag ioc"],
-            hotbar.Format());
-
-        hotbar.DropGoneEntries();
-
-        Assert.Equal(Assail, hotbar.Get(0, 0));
-        Assert.Null(hotbar.Get(2, 5));
-    }
-
-    //the removal wait of an ability that leaves the book empties only the entries of this server
-    [Fact]
-    public void ARemovalOnThisServerLeavesTheEntryOfAnotherServer()
-    {
-        var hotbar = NewHotbar();
-        Skills.SetSlot(1, 1, "Assail");
-        hotbar.Load(["version 2", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
-        hotbar.Set(0, 1, Assail);
-
-        Skills.ClearSlot(1);
-        Now += Hotbar.REMOVAL_WAIT_MS;
-        hotbar.Tick(true);
-
-        Assert.Equal(Assail, hotbar.Get(0, 0));
-        Assert.Null(hotbar.Get(0, 1));
-    }
-
-    //a file of version 1 gave each entry the server that saved it last; the player who puts the same entry in its slot
-    //again on this server makes it this server's
-    [Fact]
-    public void TheSameEntryPutAgainTakesThisServer()
-    {
-        var hotbar = NewHotbar();
-        hotbar.Load(["version 1", "server prod.example/Hybrasyl", "0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
-        var changes = 0;
-        hotbar.Changed += () => changes++;
-
-        hotbar.Set(0, 0, Assail);
-        hotbar.Set(0, 0, Assail);
-
-        Assert.Equal("qa.example/Hybrasyl", hotbar.OwnerOf(0, 0));
-        Assert.Equal(1, changes);
-    }
-
     //a name with spaces at its ends was trimmed at the load, so it did not resolve and was swept
     [Fact]
     public void ANameKeepsItsSpaces()
@@ -426,20 +255,6 @@ public class HotbarTests
         copy.Load(hotbar.Format());
 
         Assert.Equal(spaced, copy.Get(0, 0));
-    }
-
-    //a file that names no server (and a session whose server is not known) sweeps as before
-    [Fact]
-    public void AFileThatNamesNoServerSweeps()
-    {
-        var hotbar = NewHotbar();
-        hotbar.Load(["0 0 skill 1 0 Assail"], "qa.example/Hybrasyl");
-        Now += Hotbar.SETTLE_MS;
-
-        hotbar.DropGoneEntries();
-
-        Assert.Null(hotbar.Get(0));
-        Assert.DoesNotContain(NewHotbar().Format(), line => line.StartsWith("server", StringComparison.Ordinal));
     }
 
     //a session that ends before the world entry settles must not empty the entries whose ability or item has not arrived

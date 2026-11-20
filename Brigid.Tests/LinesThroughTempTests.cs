@@ -53,8 +53,8 @@ public sealed class LinesThroughTempTests : IDisposable
         var settings = new LocalPlayerSettingsRepository();
         settings.UseFolderForTests(Folder);
 
-        Assert.Equal([], settings.LoadPersonalViewPins());
-        Assert.Equal([], settings.LoadHotbar());
+        Assert.Empty(Assert.IsType<string[]>(settings.LoadPersonalViewPins()));
+        Assert.Empty(Assert.IsType<string[]>(settings.LoadHotbar()));
 
         //a folder in the place of the file: the read fails on every platform
         Directory.CreateDirectory(settings.PersonalViewPath);
@@ -66,7 +66,7 @@ public sealed class LinesThroughTempTests : IDisposable
 
     [Fact]
     public void AFileInAFolderThatIsAbsentLoadsAsNoLines()
-        => Assert.Equal([], LocalPlayerSettingsRepository.ReadLinesOrNull(Path.Combine(Folder, "gone", "Hotbar.cfg"), "LoadHotbar"));
+        => Assert.Empty(Assert.IsType<string[]>(LocalPlayerSettingsRepository.ReadLinesOrNull(Path.Combine(Folder, "gone", "Hotbar.cfg"), "LoadHotbar")));
 
     [Fact]
     public void AWriteReplacesTheFile()

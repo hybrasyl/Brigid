@@ -18,7 +18,6 @@ public sealed class LocalPlayerSettingsRepository
     private const string EXPERIENCE_FILE = "Experience.cfg";
     private const string LEVEL_KEY = "Level";
     private const string ABILITY_KEY = "Ability";
-    private const string SERVER_KEY = "Server";
     private const string FAMILY_LIST_FILE = "Familylist.cfg";
     private const string FRIEND_LIST_FILE = "Friendlist.cfg";
     private const string HOTBAR_FILE = "Hotbar.cfg";
@@ -28,15 +27,19 @@ public sealed class LocalPlayerSettingsRepository
     private const string SPELL_BOOK_FILE = "SpellBook.cfg";
     private string PlayerDirectory { get; set; } = null!;
 
-    public string ExperiencePath => Path.Combine(PlayerDirectory, EXPERIENCE_FILE);
+    //the folder of this character's files that belong to one server: the hotbar, the level starts and the pins. The
+    //character folder has one key for every Hybrasyl host (ServerProfileKey), so QA and production share it
+    private string ServerDirectory { get; set; } = null!;
+
+    public string ExperiencePath => Path.Combine(ServerDirectory, EXPERIENCE_FILE);
     public string FamilyListPath => Path.Combine(PlayerDirectory, FAMILY_LIST_FILE);
     public string FriendListPath => Path.Combine(PlayerDirectory, FRIEND_LIST_FILE);
-    public string HotbarPath => Path.Combine(PlayerDirectory, HOTBAR_FILE);
+    public string HotbarPath => Path.Combine(ServerDirectory, HOTBAR_FILE);
 
     // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
     public bool IsInitialized => PlayerDirectory is not null;
     public string MacroPath => Path.Combine(PlayerDirectory, MACRO_FILE);
-    public string PersonalViewPath => Path.Combine(PlayerDirectory, PERSONAL_VIEW_FILE);
+    public string PersonalViewPath => Path.Combine(ServerDirectory, PERSONAL_VIEW_FILE);
 
     /// <summary>
     ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a
@@ -67,14 +70,16 @@ public sealed class LocalPlayerSettingsRepository
     ///     Initializes the repository for a specific character on a specific server. Character config lives under
     ///     <c>{AppPaths.ProfilesDir}/{serverKey}/{characterName}</c> (writable per-user location, keyed by server so the
     ///     same name on different servers doesn't collide). Creates the directory, imports any legacy config from the old
-    ///     in-game-folder location on first use, and ensures the default files exist.
+    ///     in-game-folder location on first use, and ensures the default files exist. The files that belong to one server
+    ///     go in a folder of the character folder named after <paramref name="server" /> (the host and the server name).
     /// </summary>
-    public void Initialize(string characterName, string serverKey, bool importLegacy)
+    public void Initialize(string characterName, string serverKey, string server, bool importLegacy)
     {
         //the character name is server-supplied — sanitize it before it becomes a path segment so a hostile/odd name
         //can't escape the profiles root. The legacy import still reads the raw-named legacy folder as its source.
         PlayerDirectory = AppPaths.ProfileDir(serverKey, FileNames.ToSafeName(characterName));
-        DataDiagnostics.Try(() => Directory.CreateDirectory(PlayerDirectory), "create profile dir");
+        ServerDirectory = Path.Combine(PlayerDirectory, FileNames.ToSafeName(server));
+        DataDiagnostics.Try(() => Directory.CreateDirectory(ServerDirectory), "create profile dir");
 
         //only pull in the old in-game-folder config if the user opted into the one-time import
         if (importLegacy)
@@ -85,8 +90,16 @@ public sealed class LocalPlayerSettingsRepository
         EnsureFileExists(MACRO_FILE);
     }
 
-    /// <summary>Uses <paramref name="folder" /> as the character folder, with no import and no default files.</summary>
-    internal void UseFolderForTests(string folder) => PlayerDirectory = folder;
+    /// <summary>
+    ///     Uses <paramref name="folder" /> as the character folder and its folder for <paramref name="server" />, with no
+    ///     import and no default files.
+    /// </summary>
+    internal void UseFolderForTests(string folder, string server = "test.example Test")
+    {
+        PlayerDirectory = folder;
+        ServerDirectory = Path.Combine(folder, FileNames.ToSafeName(server));
+        Directory.CreateDirectory(ServerDirectory);
+    }
 
     /// <summary>
     ///     True when the old in-game-folder location holds per-character config worth importing — a subdirectory of
@@ -194,28 +207,23 @@ public sealed class LocalPlayerSettingsRepository
     }
 
     /// <summary>
-    ///     Loads the level starts of <paramref name="server" /> from Experience.cfg (BRIG-148). A file that is absent, or that
+    ///     Loads the level starts from Experience.cfg (BRIG-148), in the folder of this server. A file that is absent, or that
     ///     cannot be read, gives no starts; a failure is logged.
     /// </summary>
-    public SavedExperience LoadExperience(string server)
-        => ParseExperience(ReadLinesOrNull(ExperiencePath, "LoadExperience") ?? [], server);
+    public SavedExperience LoadExperience() => ParseExperience(ReadLinesOrNull(ExperiencePath, "LoadExperience") ?? []);
 
-    /// <summary>Saves the level starts of <paramref name="server" /> to Experience.cfg (BRIG-148).</summary>
-    public void SaveExperience(SavedExperience experience, string server)
-        => WriteLinesThroughTemp(ExperiencePath, FormatExperience(experience, server), "SaveExperience");
+    /// <summary>Saves the level starts to Experience.cfg (BRIG-148), in the folder of this server.</summary>
+    public void SaveExperience(SavedExperience experience)
+        => WriteLinesThroughTemp(ExperiencePath, FormatExperience(experience), "SaveExperience");
 
     /// <summary>
-    ///     Reads Experience.cfg lines: <c>Server: {server}</c>, <c>Level: {level} {start}</c> and
-    ///     <c>Ability: {level} {start}</c>. The starts apply only when the server line names <paramref name="server" />:
-    ///     several servers share one character folder (<c>ServerProfileKey</c> gives every Hybrasyl host one key), and a
-    ///     start of another server at the same level shows a wrong bar. A line that does not parse, or a key that is absent,
-    ///     gives null for that start.
+    ///     Reads Experience.cfg lines: <c>Level: {level} {start}</c> and <c>Ability: {level} {start}</c>. A line that does not
+    ///     parse, or a key that is absent, gives null for that start.
     /// </summary>
-    internal static SavedExperience ParseExperience(IReadOnlyList<string> lines, string server)
+    internal static SavedExperience ParseExperience(IReadOnlyList<string> lines)
     {
         SavedLevelStart? level = null;
         SavedLevelStart? ability = null;
-        var ownServer = false;
 
         foreach (var line in lines)
         {
@@ -223,13 +231,6 @@ public sealed class LocalPlayerSettingsRepository
 
             if (colon < 0)
                 continue;
-
-            if (line[..colon].Trim() == SERVER_KEY)
-            {
-                ownServer = line[(colon + 1)..].Trim() == server;
-
-                continue;
-            }
 
             var parts = line[(colon + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
@@ -251,16 +252,13 @@ public sealed class LocalPlayerSettingsRepository
             }
         }
 
-        return ownServer ? new SavedExperience(level, ability) : new SavedExperience(null, null);
+        return new SavedExperience(level, ability);
     }
 
-    /// <summary>Formats the level starts of <paramref name="server" /> as Experience.cfg lines; <see cref="ParseExperience" /> reads them back.</summary>
-    internal static string[] FormatExperience(SavedExperience experience, string server)
+    /// <summary>Formats the level starts as Experience.cfg lines; <see cref="ParseExperience" /> reads them back.</summary>
+    internal static string[] FormatExperience(SavedExperience experience)
     {
-        if (experience is { Level: null, Ability: null })
-            return [];
-
-        var lines = new List<string> { $"{SERVER_KEY}: {server}" };
+        var lines = new List<string>();
 
         if (experience.Level is { } level)
             lines.Add(FormattableString.Invariant($"{LEVEL_KEY}: {level.Level} {level.Start}"));
