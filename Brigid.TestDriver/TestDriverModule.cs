@@ -21,7 +21,6 @@ public sealed class TestDriverModule : IDevModule
     private PipeServer? Server;
     private DriverContext? Context;
     private (JsonNode? Id, IEnumerator<JsonObject?> Steps)? Current;
-    private bool WindowPlaced;
 
     public string Name => "Test driver";
 
@@ -62,11 +61,9 @@ public sealed class TestDriverModule : IDevModule
         if (Host is null || Server is null)
             return;
 
-        Context ??= new DriverContext(Host, SdlInput.WindowId(Host.Game.Window.Handle));
-
-        if (!WindowPlaced)
+        if (Context is null)
         {
-            WindowPlaced = true;
+            Context = new DriverContext(Host, SdlInput.WindowId(Host.Game.Window.Handle));
             Host.Log($"test driver: the window is on display {SdlInput.MoveToSecondDisplay(Host.Game.Window.Handle)}");
         }
 
@@ -90,7 +87,7 @@ public sealed class TestDriverModule : IDevModule
                 Current = (id, DriverCommands.Start(request, Context));
             } catch (Exception ex)
             {
-                Fail(id, ex is DriverException ? ex.Message : ex.ToString());
+                Fail(id, ex);
 
                 return;
             }
@@ -107,7 +104,7 @@ public sealed class TestDriverModule : IDevModule
                 Finish(current.Id, result);
         } catch (Exception ex)
         {
-            Fail(current.Id, ex is DriverException ? ex.Message : ex.ToString());
+            Fail(current.Id, ex);
         }
     }
 
@@ -117,10 +114,11 @@ public sealed class TestDriverModule : IDevModule
         Server!.Send(new JsonObject { ["id"] = id, ["ok"] = true, ["result"] = result });
     }
 
-    private void Fail(JsonNode? id, string message)
+    //a DriverException is a reason for the test; any other exception is a bug, and its stack goes back too
+    private void Fail(JsonNode? id, Exception ex)
     {
         EndCurrent();
-        Server!.Send(new JsonObject { ["id"] = id, ["ok"] = false, ["error"] = message });
+        Server!.Send(new JsonObject { ["id"] = id, ["ok"] = false, ["error"] = ex is DriverException ? ex.Message : ex.ToString() });
     }
 
     //disposing the steps runs their finally blocks, which put the modifier keys back

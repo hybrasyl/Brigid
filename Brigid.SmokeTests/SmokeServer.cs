@@ -170,7 +170,7 @@ public sealed class SmokeServer : IAsyncLifetime
     ///     Starts the stopped server container again. <c>--no-deps</c>, because <c>compose start</c> would run the one-shot
     ///     world services again, and they fail on a world that is already there.
     /// </summary>
-    public async Task StartServiceAsync()
+    private async Task StartServiceAsync()
     {
         await RunComposeAsync(["up", "--detach", "--no-deps", "--no-build", SERVICE], CommandTimeout);
         await WaitForGreetingAsync();
@@ -254,7 +254,7 @@ public sealed class SmokeServer : IAsyncLifetime
         var projects = await RunDockerAsync(["compose", "ls", "--all", "--quiet", "--filter", $"name={SmokeOwner.PREFIX}"], "could not list the compose projects");
 
         foreach (var project in projects.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                                        .Where(project => SmokeOwner.IsStale(project, DateTime.MinValue, TimeSpan.Zero)))
+                                        .Where(SmokeOwner.IsStale))
             await RunAsync(["compose", "--project-name", project, "down", "--volumes", "--remove-orphans"], CommandTimeout, $"could not remove the stale smoke stack {project}");
     }
 

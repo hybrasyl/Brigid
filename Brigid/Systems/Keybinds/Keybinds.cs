@@ -424,7 +424,7 @@ public static class Keybinds
     ///     per-entry so one stale key doesn't discard every valid override.
     /// </summary>
     public static void Load()
-        => Load(AppPaths.IsAppRootOverridden ? AppPaths.KeybindsFile : MoveFromDataFolder(GlobalSettings.DataPath, AppPaths.KeybindsFile));
+        => Load(MoveFromDataFolder(AppPaths.LegacySource(GlobalSettings.DataPath), AppPaths.KeybindsFile));
 
     /// <summary>
     ///     Moves <c>keybinds.json</c> from <paramref name="dataPath" /> (the game data folder, where clients before
@@ -435,7 +435,7 @@ public static class Keybinds
     ///     <see cref="Save()" /> writes <paramref name="target" />. Not called when <c>BRIGID_APP_ROOT</c> is set, because a
     ///     temporary app folder must not take the player's file.
     /// </summary>
-    internal static string MoveFromDataFolder(string dataPath, string target)
+    internal static string MoveFromDataFolder(string? dataPath, string target)
     {
         if (string.IsNullOrWhiteSpace(dataPath) || File.Exists(target))
             return target;

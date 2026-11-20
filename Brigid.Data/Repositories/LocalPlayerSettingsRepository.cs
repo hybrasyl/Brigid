@@ -81,7 +81,7 @@ public sealed class LocalPlayerSettingsRepository
     /// </summary>
     public bool HasLegacyCharacterData()
     {
-        if (string.IsNullOrEmpty(DataContext.DataPath) || !Directory.Exists(DataContext.DataPath))
+        if (AppPaths.LegacySource(DataContext.DataPath) is not { } dataPath || !Directory.Exists(dataPath))
             return false;
 
         string[] probe = [FAMILY_LIST_FILE, FRIEND_LIST_FILE, MACRO_FILE, SKILL_BOOK_FILE, SPELL_BOOK_FILE];
@@ -90,7 +90,7 @@ public sealed class LocalPlayerSettingsRepository
         DataDiagnostics.Try(
             () =>
             {
-                foreach (var dir in Directory.EnumerateDirectories(DataContext.DataPath))
+                foreach (var dir in Directory.EnumerateDirectories(dataPath))
                     if (probe.Any(f => File.Exists(Path.Combine(dir, f))))
                     {
                         found = true;
@@ -110,7 +110,7 @@ public sealed class LocalPlayerSettingsRepository
     /// </summary>
     private void ImportLegacyCharacterFiles(string characterName)
     {
-        if (string.IsNullOrEmpty(DataContext.DataPath))
+        if (AppPaths.LegacySource(DataContext.DataPath) is not { } dataPath)
             return;
 
         //characterName is server-supplied. The legacy folder is always a single direct child of DataPath, so a name
@@ -118,7 +118,7 @@ public sealed class LocalPlayerSettingsRepository
         if (!FileNames.IsSafeName(characterName))
             return;
 
-        var legacyDir = Path.Combine(DataContext.DataPath, characterName);
+        var legacyDir = Path.Combine(dataPath, characterName);
 
         if (!Directory.Exists(legacyDir) || string.Equals(legacyDir, PlayerDirectory, StringComparison.OrdinalIgnoreCase))
             return;

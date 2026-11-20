@@ -46,10 +46,15 @@ internal static class SmokeEnvironment
                ? "set BRIGID_SMOKE_SERVER to the server checkout (the folder with docker-compose.yml) to run the specs that need a server"
                : null);
 
+    //the client's own rule (DataContext.IsValidDataDirectory): khanpal.dat and legend.dat, in any case. A folder with other
+    //archives passed here, and the client then refused it at the start
     internal static string? DataErrorFor(Func<string, string?> environment)
-        => environment("BRIGID_SMOKE_DATA") is not { } data || !Directory.Exists(data) || !Directory.EnumerateFiles(data, "*.dat").Any()
-            ? "BRIGID_SMOKE=1 is set, but BRIGID_SMOKE_DATA is not a Dark Ages data folder (the folder with the *.dat files)"
+        => environment("BRIGID_SMOKE_DATA") is not { } data || !Directory.Exists(data) || !HasArchive(data, "khanpal.dat") || !HasArchive(data, "legend.dat")
+            ? "BRIGID_SMOKE=1 is set, but BRIGID_SMOKE_DATA is not a Dark Ages data folder (the folder with khanpal.dat and legend.dat)"
             : null;
+
+    private static bool HasArchive(string folder, string name)
+        => Directory.EnumerateFiles(folder).Any(path => string.Equals(Path.GetFileName(path), name, StringComparison.OrdinalIgnoreCase));
 
     internal static string? ServerErrorFor(Func<string, string?> environment)
         => Value(environment, "BRIGID_SMOKE_SERVER") is { } server && !File.Exists(Path.Combine(server, "docker-compose.yml"))

@@ -40,6 +40,13 @@ public static class AppPaths
     /// </summary>
     public static bool IsAppRootOverridden => AppRootOverride is not null;
 
+    /// <summary>
+    ///     The folder that a migration reads a legacy file from: <paramref name="folder" />, or null when
+    ///     <c>BRIGID_APP_ROOT</c> is set, so a temporary app folder starts with only what the test put in it. An empty folder
+    ///     is null too. Each migration into <see cref="AppRoot" /> takes its source through this.
+    /// </summary>
+    public static string? LegacySource(string? folder) => IsAppRootOverridden || string.IsNullOrEmpty(folder) ? null : folder;
+
     /// <summary>The full path that <paramref name="value" /> gives, or null when it is empty.</summary>
     internal static string? ResolveAppRootOverride(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : Path.GetFullPath(value.Trim());

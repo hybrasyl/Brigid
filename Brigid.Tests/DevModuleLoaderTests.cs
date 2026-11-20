@@ -191,14 +191,6 @@ public sealed class DevModuleLoaderTests : IDisposable
         }
     }
 
-    //the setting reads its own variable: a value of 1 there turns it on, and no other variable does
-    [Fact]
-    public void TheSettingReadsBrigidDevModules()
-    {
-        Assert.True(GlobalSettings.ResolveDevModulesEnabled(name => name == "BRIGID_DEV_MODULES" ? "1" : null));
-        Assert.False(GlobalSettings.ResolveDevModulesEnabled(name => name == "BRIGID_DEV_MODULES" ? null : "1"));
-    }
-
     [Theory]
     [InlineData(null, false)]
     [InlineData("", false)]

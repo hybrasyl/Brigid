@@ -585,8 +585,8 @@ public sealed class LobbyLoginScreen : IScreen
     private void MaybeAddLegacyImportAlert()
     {
         //ask only until the player decides, and only when there is legacy per-character config to import; a temporary app
-        //folder (BRIGID_APP_ROOT) does not look at the developer's data folder
-        if ((ClientSettings.LegacyCharacterImport != ClientSettings.MigrationUndecided) || AppPaths.IsAppRootOverridden)
+        //folder (BRIGID_APP_ROOT) finds none (AppPaths.LegacySource)
+        if (ClientSettings.LegacyCharacterImport != ClientSettings.MigrationUndecided)
             return;
 
         if (!DataContext.LocalPlayerSettings.HasLegacyCharacterData())

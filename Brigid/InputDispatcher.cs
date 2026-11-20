@@ -875,20 +875,7 @@ public sealed class InputDispatcher : IDisposable
         return true;
     }
 
-    private static bool IsEffectivelyVisible(UIElement element)
-    {
-        var current = element;
-
-        while (current is not null)
-        {
-            if (!current.Visible)
-                return false;
-
-            current = current.Parent;
-        }
-
-        return true;
-    }
+    private static bool IsEffectivelyVisible(UIElement element) => element.IsEffectivelyVisible;
 
     private static void DispatchSingle(UIElement element, InputEvent e)
     {

@@ -15,13 +15,13 @@ namespace Brigid.DevModules;
 /// </summary>
 internal static class DevModuleLoader
 {
-    private static readonly List<IDevModule> LoadedModules = [];
-    private static readonly List<ModuleHost> ModuleHosts = [];
+    //each module that loaded and the host in front of it, in load order
+    private static readonly List<(IDevModule Module, ModuleHost Host)> Loaded = [];
     private static readonly List<DevModuleLoadContext> Contexts = [];
     private static Action<string> Log = static _ => { };
 
     /// <summary>The modules that loaded, in load order.</summary>
-    internal static IReadOnlyList<IDevModule> Modules => LoadedModules;
+    internal static IReadOnlyList<IDevModule> Modules => [.. Loaded.Select(entry => entry.Module)];
 
     /// <summary>
     ///     Loads the modules when <see cref="GlobalSettings.DevModulesEnabled" /> is true, and returns their host. Returns
@@ -69,7 +69,7 @@ internal static class DevModuleLoader
             return 0;
         }
 
-        var before = LoadedModules.Count;
+        var before = Loaded.Count;
 
         foreach (var path in files.Order(StringComparer.Ordinal))
         {
@@ -84,7 +84,7 @@ internal static class DevModuleLoader
             LoadAssembly(path, host);
         }
 
-        var count = LoadedModules.Count - before;
+        var count = Loaded.Count - before;
         host.Log($"{count} module(s) loaded from {directory}");
 
         return count;
@@ -97,14 +97,13 @@ internal static class DevModuleLoader
     /// </summary>
     internal static void UnloadAll()
     {
-        for (var i = LoadedModules.Count - 1; i >= 0; i--)
+        for (var i = Loaded.Count - 1; i >= 0; i--)
         {
-            Guard(Log, "a module shut down", LoadedModules[i].Shutdown);
-            ModuleHosts[i].Detach();
+            Guard(Log, "a module shut down", Loaded[i].Module.Shutdown);
+            Loaded[i].Host.Detach();
         }
 
-        LoadedModules.Clear();
-        ModuleHosts.Clear();
+        Loaded.Clear();
 
         foreach (var context in Contexts)
             context.Unload();
@@ -173,8 +172,7 @@ internal static class DevModuleLoader
         foreach (var type in FindModuleTypes(assembly, file, host))
             if (TryStart(type, file, host) is var (module, moduleHost))
             {
-                LoadedModules.Add(module);
-                ModuleHosts.Add(moduleHost);
+                Loaded.Add((module, moduleHost));
                 loaded++;
             }
 

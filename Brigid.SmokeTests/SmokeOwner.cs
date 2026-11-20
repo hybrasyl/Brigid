@@ -28,12 +28,8 @@ internal static class SmokeOwner
         return (dash > 0) && int.TryParse(rest[..dash], out var id) ? id : null;
     }
 
-    /// <summary>
-    ///     True when a run that a stopped test host left owns <paramref name="name" />: its process does not run. A name with
-    ///     no process id is stale when <paramref name="lastWrite" /> is older than <paramref name="staleAge" />.
-    /// </summary>
-    internal static bool IsStale(string name, DateTime lastWrite, TimeSpan staleAge)
-        => OwnerOf(name) is { } owner ? !Runs(owner) : lastWrite < DateTime.UtcNow - staleAge;
+    /// <summary>True when a run that a stopped test host left owns <paramref name="name" />: its process does not run.</summary>
+    internal static bool IsStale(string name) => OwnerOf(name) is { } owner && !Runs(owner);
 
     /// <summary>True when the process with <paramref name="id" /> runs.</summary>
     internal static bool Runs(int id)

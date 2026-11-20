@@ -15,15 +15,12 @@ namespace Brigid.DevModules;
 internal sealed class DevHost : IDevHost
 {
     private readonly string OutputPath = Path.Combine(AppPaths.DevModulesDir, "output");
-    private Action<IScreen?>? ScreenListeners;
-    private Action<GameTime>? UpdateListeners;
-
     public DevHost(ChaosGame game)
     {
         Game = game;
 
         //a listener that calls Switch again gets the newest screen, not the one that this change showed
-        game.Screens.ScreenChanged += _ => DevModuleLoader.RaiseEach(ref ScreenListeners, () => Game.Screens.ActiveScreen, Log, nameof(ScreenChanged));
+        game.Screens.ScreenChanged += _ => DevModuleLoader.RaiseEach(ref ScreenChanged, () => Game.Screens.ActiveScreen, Log, nameof(ScreenChanged));
     }
 
     public ChaosGame Game { get; }
@@ -46,18 +43,17 @@ internal sealed class DevHost : IDevHost
 
     public void Log(string message) => NoticeDebugLog.Write($"[dev-module] {message}");
 
-    public event Action<IScreen?>? ScreenChanged
-    {
-        add => ScreenListeners += value;
-        remove => ScreenListeners -= value;
-    }
+    public event Action<IScreen?>? ScreenChanged;
 
-    public event Action<GameTime>? UpdateStarted
-    {
-        add => UpdateListeners += value;
-        remove => UpdateListeners -= value;
-    }
+    public event Action<GameTime>? UpdateStarted;
 
-    /// <summary>Raises <see cref="UpdateStarted" />. Called by <c>ChaosGame.Update</c>, before the input of the update is read.</summary>
-    internal void RaiseUpdateStarted(GameTime gameTime) => DevModuleLoader.RaiseEach(ref UpdateListeners, () => gameTime, Log, nameof(UpdateStarted));
+    /// <summary>
+    ///     Raises <see cref="UpdateStarted" />. Called by <c>ChaosGame.Update</c>, before the input of the update is read.
+    ///     With no listener it makes nothing, because it runs at each update.
+    /// </summary>
+    internal void RaiseUpdateStarted(GameTime gameTime)
+    {
+        if (UpdateStarted is not null)
+            DevModuleLoader.RaiseEach(ref UpdateStarted, () => gameTime, Log, nameof(UpdateStarted));
+    }
 }

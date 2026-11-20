@@ -8,28 +8,29 @@ namespace Brigid.TestDriver;
 /// <summary>
 ///     Puts input events into SDL with <c>SDL_PushEvent</c>. SDL gives a pushed event to each event watch before the push
 ///     returns, so <see cref="InputBuffer" /> gets it as it gets a player's event (BRIG-184 phase 0). Each pushed event also
-///     stays in SDL's queue for MonoGame, so a key always goes down and then up.
+///     stays in SDL's queue for MonoGame, so a key always goes down and then up. The event types, field offsets and
+///     modifier bits are the ones that <see cref="Sdl" /> gives <see cref="InputBuffer" />, so the push and the read agree.
+///     The pointer does not go through SDL: <see cref="InputBuffer" /> reads the driver's pointer.
 /// </summary>
 internal static partial class SdlInput
 {
     private const string LIBRARY = "SDL2";
     private const int EVENT_SIZE = 56;
 
-    private const uint KEYDOWN = 0x300;
-    private const uint KEYUP = 0x301;
-    private const uint TEXTINPUT = 0x303;
-    private const uint MOUSEMOTION = 0x400;
-    private const uint MOUSEBUTTONDOWN = 0x401;
-    private const uint MOUSEBUTTONUP = 0x402;
-    private const uint MOUSEWHEEL = 0x403;
+    //SDL_CommonEvent: type(4) at 0, timestamp(4), windowID(4) at 8; SDL_KeyboardEvent: state(1) at 12;
+    //SDL_MouseButtonEvent: state(1) at 17, clicks(1) at 18
+    private const int WINDOW_ID_OFFSET = 8;
+    private const int KEYBOARDEVENT_STATE_OFFSET = 12;
+    private const int MOUSEBUTTONEVENT_STATE_OFFSET = 17;
+    private const int MOUSEBUTTONEVENT_CLICKS_OFFSET = 18;
 
     //the text field of SDL_TextInputEvent holds 32 bytes, with the terminating zero
     private const int TEXT_BYTES = 31;
 
-    internal const ushort KMOD_LSHIFT = 0x0001;
-    internal const ushort KMOD_LCTRL = 0x0040;
-    internal const ushort KMOD_LALT = 0x0100;
-    internal const ushort KMOD_LGUI = 0x0400;
+    internal const ushort KMOD_LSHIFT = (ushort)Sdl.KMOD_LSHIFT;
+    internal const ushort KMOD_LCTRL = (ushort)Sdl.KMOD_LCTRL;
+    internal const ushort KMOD_LALT = (ushort)Sdl.KMOD_LALT;
+    internal const ushort KMOD_LGUI = (ushort)Sdl.KMOD_LGUI;
 
     //the lock keys (num, caps, scroll) that a pushed chord keeps as they are
     private const ushort KMOD_LOCKS = 0x1000 | 0x2000 | 0x8000;
@@ -43,11 +44,11 @@ internal static partial class SdlInput
     {
         Span<byte> e = stackalloc byte[EVENT_SIZE];
         e.Clear();
-        Write(e, 0, down ? KEYDOWN : KEYUP);
-        Write(e, 8, windowId);
-        e[12] = (byte)(down ? 1 : 0);
-        Write(e, 16, scancode);
-        BitConverter.TryWriteBytes(e[24..], mods);
+        Write(e, 0, down ? Sdl.KEYDOWN : Sdl.KEYUP);
+        Write(e, WINDOW_ID_OFFSET, windowId);
+        e[KEYBOARDEVENT_STATE_OFFSET] = (byte)(down ? 1 : 0);
+        Write(e, Sdl.KEYBOARDEVENT_SCANCODE_OFFSET, scancode);
+        BitConverter.TryWriteBytes(e[Sdl.KEYBOARDEVENT_MOD_OFFSET..], mods);
         Push(e);
     }
 
@@ -59,9 +60,9 @@ internal static partial class SdlInput
         foreach (var (start, length) in TextChunks(bytes))
         {
             e.Clear();
-            Write(e, 0, TEXTINPUT);
-            Write(e, 8, windowId);
-            bytes.AsSpan(start, length).CopyTo(e[12..]);
+            Write(e, 0, Sdl.TEXTINPUT);
+            Write(e, WINDOW_ID_OFFSET, windowId);
+            bytes.AsSpan(start, length).CopyTo(e[Sdl.TEXTINPUTEVENT_TEXT_OFFSET..]);
             Push(e);
         }
     }
@@ -85,40 +86,18 @@ internal static partial class SdlInput
         }
     }
 
-    /// <summary>A motion event. SDL's own cursor does not move; <see cref="InputBuffer" /> reads the driver's pointer.</summary>
-    internal static void PushMotion(uint windowId, int windowX, int windowY)
-    {
-        Span<byte> e = stackalloc byte[EVENT_SIZE];
-        e.Clear();
-        Write(e, 0, MOUSEMOTION);
-        Write(e, 8, windowId);
-        Write(e, 20, windowX);
-        Write(e, 24, windowY);
-        Push(e);
-    }
-
-    /// <param name="button">1 for the left button, 3 for the right button.</param>
+    /// <param name="button"><see cref="Sdl.BUTTON_LEFT" /> or <see cref="Sdl.BUTTON_RIGHT" />.</param>
     internal static void PushButton(uint windowId, byte button, bool down, int windowX, int windowY)
     {
         Span<byte> e = stackalloc byte[EVENT_SIZE];
         e.Clear();
-        Write(e, 0, down ? MOUSEBUTTONDOWN : MOUSEBUTTONUP);
-        Write(e, 8, windowId);
-        e[16] = button;
-        e[17] = (byte)(down ? 1 : 0);
-        e[18] = 1;
-        Write(e, 20, windowX);
-        Write(e, 24, windowY);
-        Push(e);
-    }
-
-    internal static void PushWheel(uint windowId, int notches)
-    {
-        Span<byte> e = stackalloc byte[EVENT_SIZE];
-        e.Clear();
-        Write(e, 0, MOUSEWHEEL);
-        Write(e, 8, windowId);
-        Write(e, 20, notches);
+        Write(e, 0, down ? Sdl.MOUSEBUTTONDOWN : Sdl.MOUSEBUTTONUP);
+        Write(e, WINDOW_ID_OFFSET, windowId);
+        e[Sdl.MOUSEBUTTONEVENT_BUTTON_OFFSET] = button;
+        e[MOUSEBUTTONEVENT_STATE_OFFSET] = (byte)(down ? 1 : 0);
+        e[MOUSEBUTTONEVENT_CLICKS_OFFSET] = 1;
+        Write(e, Sdl.MOUSEBUTTONEVENT_X_OFFSET, windowX);
+        Write(e, Sdl.MOUSEBUTTONEVENT_Y_OFFSET, windowY);
         Push(e);
     }
 
@@ -128,7 +107,7 @@ internal static partial class SdlInput
     /// </summary>
     internal static ushort SetModifiers(ushort mods)
     {
-        var before = SDL_GetModState();
+        var before = (ushort)Sdl.SDL_GetModState();
         SDL_SetModState((ushort)((before & KMOD_LOCKS) | mods));
 
         return before;
@@ -145,7 +124,7 @@ internal static partial class SdlInput
     internal static int MoveToSecondDisplay(nint window)
     {
         for (var display = 0; display < SDL_GetNumVideoDisplays(); display++)
-            if ((SDL_GetDisplayBounds(display, out var bounds) == 0) && ((bounds.X != 0) || (bounds.Y != 0)))
+            if ((Sdl.SDL_GetDisplayBounds(display, out var bounds) == 0) && ((bounds.X != 0) || (bounds.Y != 0)))
             {
                 SDL_SetWindowPosition(window, bounds.X + 40, bounds.Y + 40);
 
@@ -177,20 +156,9 @@ internal static partial class SdlInput
         return map;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Rect
-    {
-        public int X;
-        public int Y;
-        public int W;
-        public int H;
-    }
-
+    //the calls that only the driver makes; the client's own calls are in Sdl
     [LibraryImport(LIBRARY)]
     private static partial int SDL_PushEvent(in byte sdlEvent);
-
-    [LibraryImport(LIBRARY)]
-    private static partial ushort SDL_GetModState();
 
     [LibraryImport(LIBRARY)]
     private static partial void SDL_SetModState(ushort modstate);
@@ -200,9 +168,6 @@ internal static partial class SdlInput
 
     [LibraryImport(LIBRARY)]
     private static partial int SDL_GetNumVideoDisplays();
-
-    [LibraryImport(LIBRARY)]
-    private static partial int SDL_GetDisplayBounds(int displayIndex, out Rect rect);
 
     [LibraryImport(LIBRARY)]
     private static partial void SDL_SetWindowPosition(nint window, int x, int y);

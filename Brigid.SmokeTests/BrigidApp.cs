@@ -31,8 +31,6 @@ public sealed class BrigidApp : IAsyncDisposable
     private static readonly TimeSpan DefaultWait = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
 
-    //a name from before the owner's process id was in it: older than this, its folder or file is not in use
-    private static readonly TimeSpan StaleAge = TimeSpan.FromHours(1);
     private static int Swept;
 
     private readonly Process Client;
@@ -299,9 +297,6 @@ public sealed class BrigidApp : IAsyncDisposable
     /// <summary>Types <paramref name="text" /> as text input.</summary>
     public Task TypeAsync(string text) => SendAsync("text", new JsonObject { ["text"] = text });
 
-    /// <summary>Turns the wheel over the control at <paramref name="path" />; a positive value turns it up.</summary>
-    public Task WheelAsync(string path, int notches) => SendAsync("wheel", new JsonObject { ["path"] = path, ["notches"] = notches });
-
     /// <summary>Saves the next frame, UI included, and returns its path in the client's temporary app folder.</summary>
     public async Task<string> ScreenshotAsync()
     {
@@ -320,20 +315,9 @@ public sealed class BrigidApp : IAsyncDisposable
     public async Task<T> WaitForAsync<T>(Func<Task<T>> probe, Func<T, bool> condition, string what, TimeSpan? timeout = null)
     {
         var wait = timeout ?? DefaultWait;
-        var deadline = DateTime.UtcNow + wait;
+        var (met, last) = await PollAsync(probe, condition, wait);
 
-        while (true)
-        {
-            var last = await probe();
-
-            if (condition(last))
-                return last;
-
-            if (DateTime.UtcNow >= deadline)
-                throw new TimeoutException($"waited {wait.TotalSeconds} s for {what}; the last value was {last?.ToString() ?? "null"}");
-
-            await Task.Delay(PollInterval);
-        }
+        return met ? last : throw new TimeoutException($"waited {wait.TotalSeconds} s for {what}; the last value was {last?.ToString() ?? "null"}");
     }
 
     /// <summary>
@@ -342,6 +326,14 @@ public sealed class BrigidApp : IAsyncDisposable
     /// </summary>
     public async Task<T?> TryWaitForAsync<T>(Func<Task<T>> probe, Func<T, bool> condition, TimeSpan timeout) where T: class
     {
+        var (met, last) = await PollAsync(probe, condition, timeout);
+
+        return met ? last : null;
+    }
+
+    //reads the probe until the condition is true or the time ends, and gives the last value read
+    private static async Task<(bool Met, T Last)> PollAsync<T>(Func<Task<T>> probe, Func<T, bool> condition, TimeSpan timeout)
+    {
         var deadline = DateTime.UtcNow + timeout;
 
         while (true)
@@ -349,10 +341,10 @@ public sealed class BrigidApp : IAsyncDisposable
             var last = await probe();
 
             if (condition(last))
-                return last;
+                return (true, last);
 
             if (DateTime.UtcNow >= deadline)
-                return null;
+                return (false, last);
 
             await Task.Delay(PollInterval);
         }
@@ -478,7 +470,7 @@ public sealed class BrigidApp : IAsyncDisposable
         var temp = new DirectoryInfo(Path.GetTempPath());
 
         foreach (var entry in temp.EnumerateFileSystemInfos(SmokeOwner.PREFIX + "*")
-                                  .Where(entry => SmokeOwner.IsStale(entry.Name, entry.LastWriteTimeUtc, StaleAge)))
+                                  .Where(entry => SmokeOwner.IsStale(entry.Name)))
             try
             {
                 if (entry is DirectoryInfo folder)

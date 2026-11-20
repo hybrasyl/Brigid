@@ -1,6 +1,8 @@
 #region
 using System.Net.Http;
 using System.Text.Json;
+using Brigid.Data;
+using Brigid.Networking;
 using Brigid.Utilities;
 using Chaos.Extensions.Common;
 #endregion
@@ -24,7 +26,17 @@ public static class UpdateChecker
     public static UpdateInfo? Available => AvailableInfo;
 
     public static void BeginCheck()
-        => _ = Task.Run(async () =>
+    {
+        //a test client (BRIGID_APP_ROOT) does not call GitHub: each smoke client would use one of the 60 requests an hour
+        //that GitHub allows
+        if (AppPaths.IsAppRootOverridden)
+        {
+            NoticeDebugLog.Write("[update] BRIGID_APP_ROOT is set, so the release check does not run");
+
+            return;
+        }
+
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -34,6 +46,7 @@ public static class UpdateChecker
                 //best-effort: no update notice is ever worth an error
             }
         });
+    }
 
     private static async Task CheckAsync()
     {

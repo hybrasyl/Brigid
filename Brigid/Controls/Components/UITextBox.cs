@@ -271,7 +271,7 @@ public class UITextBox : UIElement
 
             //verify the focused text box is still effectively visible
             //(its own visible flag and all ancestors are visible)
-            if (!IsEffectivelyVisible(FocusedTextBox))
+            if (!FocusedTextBox.IsEffectivelyVisible)
             {
                 FocusedTextBox.IsFocused = false;
 
@@ -950,15 +950,6 @@ public class UITextBox : UIElement
             return HitTestMultiLine(screenX, screenY);
 
         return HitTestCursorPosition(screenX - ScreenX - PaddingLeft);
-    }
-
-    private static bool IsEffectivelyVisible(UIElement element)
-    {
-        for (var current = element; current is not null; current = current.Parent)
-            if (!current.Visible)
-                return false;
-
-        return true;
     }
 
     /// <summary>

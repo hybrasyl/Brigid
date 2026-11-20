@@ -54,11 +54,11 @@ public sealed class TestDriverTests
         var root = Tree();
         var label = UiLocator.Find(root, "continue")!;
 
-        Assert.True(UiLocator.IsShown(label));
+        Assert.True(label.IsEffectivelyVisible);
 
         root.FindChild<UIPanel>("buttons")!.Visible = false;
 
-        Assert.False(UiLocator.IsShown(label));
+        Assert.False(label.IsEffectivelyVisible);
     }
 
     [Theory]

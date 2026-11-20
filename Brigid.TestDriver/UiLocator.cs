@@ -39,16 +39,6 @@ internal static class UiLocator
         return current;
     }
 
-    /// <summary>True when <paramref name="element" /> and each of its parents is visible.</summary>
-    internal static bool IsShown(UIElement element)
-    {
-        for (UIElement? e = element; e is not null; e = e.Parent)
-            if (!e.Visible)
-                return false;
-
-        return true;
-    }
-
     /// <summary>The path of names from the root to <paramref name="element" />, for error messages.</summary>
     internal static string PathOf(UIElement element)
     {

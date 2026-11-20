@@ -182,11 +182,10 @@ public static class AssetPackRegistry
     /// </summary>
     private static void TryMigrateLegacyPacks(string assetsDir)
     {
-        //a temporary app folder (BRIGID_APP_ROOT) starts with only the packs that the test put in it
-        if (string.IsNullOrEmpty(DataContext.DataPath) || AppPaths.IsAppRootOverridden)
+        if (AppPaths.LegacySource(DataContext.DataPath) is not { } dataPath)
             return;
 
-        var legacyDir = Path.Combine(DataContext.DataPath, LEGACY_PACK_SUBFOLDER);
+        var legacyDir = Path.Combine(dataPath, LEGACY_PACK_SUBFOLDER);
 
         try
         {

@@ -29,8 +29,8 @@ public sealed class HarnessTests
     public void TheOwnerIsTheProcessIdInTheName(string name, int? owner) => Assert.Equal(owner, SmokeOwner.OwnerOf(name));
 
     [Fact]
-    public void ANameOfARunThatStillGoesIsNotStaleWhateverItsAge()
-        => Assert.False(SmokeOwner.IsStale(SmokeOwner.NewName(8), DateTime.MinValue, TimeSpan.Zero));
+    public void ANameOfARunThatStillGoesIsNotStale()
+        => Assert.False(SmokeOwner.IsStale(SmokeOwner.NewName(8)));
 
     [Fact]
     public void ANameOfAStoppedRunIsStale()
@@ -38,18 +38,12 @@ public sealed class HarnessTests
         using var stopped = Process.Start(new ProcessStartInfo("dotnet", "--version") { RedirectStandardOutput = true })!;
         stopped.WaitForExit();
 
-        Assert.True(SmokeOwner.IsStale($"{SmokeOwner.PREFIX}{stopped.Id}-abcd1234", DateTime.UtcNow, TimeSpan.FromHours(1)));
+        Assert.True(SmokeOwner.IsStale($"{SmokeOwner.PREFIX}{stopped.Id}-abcd1234"));
     }
 
-    //a name from before the process id was in it is stale by its age
+    //a name with no process id is not a smoke run's name; nothing removes it
     [Fact]
-    public void ANameWithNoOwnerIsStaleByItsAge()
-    {
-        const string old = "brigid-smoke-0123456789abcdef0123456789abcdef";
-
-        Assert.True(SmokeOwner.IsStale(old, DateTime.UtcNow.AddHours(-2), TimeSpan.FromHours(1)));
-        Assert.False(SmokeOwner.IsStale(old, DateTime.UtcNow, TimeSpan.FromHours(1)));
-    }
+    public void ANameWithNoOwnerIsNotStale() => Assert.False(SmokeOwner.IsStale("brigid-smoke-0123456789abcdef0123456789abcdef"));
 
     [Fact]
     public void WithoutTheSwitchEveryTestSkips()
@@ -76,7 +70,12 @@ public sealed class HarnessTests
 
         try
         {
-            File.WriteAllBytes(Path.Combine(data, "legend.dat"), [0]);
+            File.WriteAllBytes(Path.Combine(data, "Legend.dat"), [0]);
+
+            //the client refuses a folder without khanpal.dat
+            Assert.NotNull(SmokeEnvironment.DataErrorFor(Environment(("BRIGID_SMOKE_DATA", data))));
+
+            File.WriteAllBytes(Path.Combine(data, "khanpal.dat"), [0]);
 
             Assert.Null(SmokeEnvironment.DataErrorFor(Environment(("BRIGID_SMOKE_DATA", data))));
         } finally

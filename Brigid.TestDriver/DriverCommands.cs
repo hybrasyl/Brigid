@@ -41,7 +41,6 @@ internal static class DriverCommands
             "click"      => Click(request, context),
             "key"        => Key(request, context),
             "text"       => Text(RequiredString(request, "text"), context),
-            "wheel"      => Wheel(request, context),
             "screenshot" => Screenshot(context),
             "quit"       => Quit(context),
             _            => throw new DriverException($"unknown command \"{command}\"")
@@ -118,7 +117,7 @@ internal static class DriverCommands
             ["found"] = true,
             ["path"] = UiLocator.PathOf(element),
             ["type"] = element.GetType().Name,
-            ["shown"] = UiLocator.IsShown(element),
+            ["shown"] = element.IsEffectivelyVisible,
             ["enabled"] = element.Enabled,
             ["x"] = element.ScreenX,
             ["y"] = element.ScreenY,
@@ -149,16 +148,14 @@ internal static class DriverCommands
         var (x, y, path) = Target(request, context);
         var button = (request["button"]?.GetValue<string>() ?? "left") switch
         {
-            "left"  => (byte)1,
-            "right" => (byte)3,
+            "left"  => Sdl.BUTTON_LEFT,
+            "right" => Sdl.BUTTON_RIGHT,
             var other => throw new DriverException($"unknown button \"{other}\"")
         };
         var (mods, _) = Modifiers(request);
 
-        //hover first, as a player's mouse arrives before it presses
+        //hover first, as a player's mouse arrives before it presses; InputBuffer reads the pointer at the next update
         InputBuffer.SetPointerOverride(x, y);
-        var (windowX, windowY) = InputBuffer.ToWindowPoint(x, y);
-        SdlInput.PushMotion(context.WindowId, windowX, windowY);
 
         yield return null;
 
@@ -166,7 +163,7 @@ internal static class DriverCommands
 
         try
         {
-            (windowX, windowY) = InputBuffer.ToWindowPoint(x, y);
+            var (windowX, windowY) = InputBuffer.ToWindowPoint(x, y);
             SdlInput.PushButton(context.WindowId, button, true, windowX, windowY);
 
             yield return null;
@@ -225,23 +222,6 @@ internal static class DriverCommands
         yield return new JsonObject();
     }
 
-    private static IEnumerator<JsonObject?> Wheel(JsonObject request, DriverContext context)
-    {
-        var notches = request["notches"]?.GetValue<int>() ?? throw new DriverException("the request has no \"notches\"");
-        var (x, y, _) = Target(request, context);
-
-        //a wheel event takes the cursor position, so the pointer moves there first
-        InputBuffer.SetPointerOverride(x, y);
-
-        yield return null;
-
-        SdlInput.PushWheel(context.WindowId, notches);
-
-        yield return null;
-
-        yield return new JsonObject();
-    }
-
     //the whole window, UI included, through the client's frame capture; the F12 screenshot has no UI
     private static IEnumerator<JsonObject?> Screenshot(DriverContext context)
     {
@@ -273,7 +253,7 @@ internal static class DriverCommands
         {
             var element = UiLocator.Find(context.Host.Screens.ActiveScreen?.Root, path) ?? throw new DriverException($"no control \"{path}\"");
 
-            if (!UiLocator.IsShown(element))
+            if (!element.IsEffectivelyVisible)
                 throw new DriverException($"the control \"{path}\" is not shown");
 
             return (element.ScreenX + element.Width / 2, element.ScreenY + element.Height / 2, UiLocator.PathOf(element));

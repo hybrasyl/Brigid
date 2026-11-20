@@ -43,7 +43,7 @@ public static class ClientSettings
     //legacy in-game-folder location, read once on first run when the new file doesn't exist yet; never for a temporary app
     //folder (BRIGID_APP_ROOT), which starts with only what the test put in it
     private static string? LegacyFilePath =>
-        string.IsNullOrEmpty(GlobalSettings.DataPath) || AppPaths.IsAppRootOverridden ? null : Path.Combine(GlobalSettings.DataPath, LEGACY_FILE_NAME);
+        AppPaths.LegacySource(GlobalSettings.DataPath) is { } dataPath ? Path.Combine(dataPath, LEGACY_FILE_NAME) : null;
 
     /// <summary>
     ///     Replaces the saved settings with the choices made in the launcher, and saves. Call it after <see cref="Load" />,

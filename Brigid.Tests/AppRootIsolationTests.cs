@@ -67,6 +67,19 @@ public sealed class AppRootIsolationTests : IDisposable
         Assert.Equal([$"[paths] {AppPaths.APP_ROOT_VARIABLE} is set: the app folder is {AppRoot}, and no folder migration runs"], lines);
     }
 
+    //each migration into the app folder takes its source through LegacySource, so one rule keeps a test run off the
+    //developer's files
+    [Fact]
+    public void AMigrationHasNoLegacySource()
+    {
+        Assert.Null(AppPaths.LegacySource(DataFolder));
+
+        AppPaths.ResetAppRootOverrideForTests();
+
+        Assert.Equal(DataFolder, AppPaths.LegacySource(DataFolder));
+        Assert.Null(AppPaths.LegacySource(string.Empty));
+    }
+
     [Fact]
     public void TheKeybindsOfTheDataFolderStayThere()
     {
