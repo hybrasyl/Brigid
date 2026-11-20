@@ -482,10 +482,8 @@ public sealed partial class WorldScreen
                     spellSlot.Chants[i] = chantLines[i];
             }
 
-            //the reload reads the file that the save wrote. After a save that did not go through, the slots keep their
-            //chants: a read of a locked file gives no chants, and the reload would clear every slot
-            if (SaveSpellChants() == SaveResult.Saved)
-                WorldState.ReloadChants();
+            var entries = SpellChantEntries();
+            WorldState.SpellChantsSaved(entries, DataContext.LocalPlayerSettings.SaveSpellChants(entries));
         } else
         {
             foreach (var panel in new[]
@@ -500,8 +498,8 @@ public sealed partial class WorldScreen
                 skillSlot?.Chant = chantLines.Length > 0 ? chantLines[0] : string.Empty;
             }
 
-            if (SaveSkillChants() == SaveResult.Saved)
-                WorldState.ReloadChants();
+            var entries = SkillChantEntries();
+            WorldState.SkillChantsSaved(entries, DataContext.LocalPlayerSettings.SaveSkillChants(entries));
         }
     }
 
@@ -571,7 +569,8 @@ public sealed partial class WorldScreen
         OptionsModal.SetMacros(macros);
     }
 
-    private SaveResult SaveSkillChants()
+    //the chants of the occupied skill slots, as the save writes them
+    private List<SkillChantEntry> SkillChantEntries()
     {
         var entries = new List<SkillChantEntry>();
 
@@ -592,10 +591,10 @@ public sealed partial class WorldScreen
                 });
         }
 
-        return DataContext.LocalPlayerSettings.SaveSkillChants(entries);
+        return entries;
     }
 
-    private SaveResult SaveSpellChants()
+    private List<SpellChantEntry> SpellChantEntries()
     {
         var entries = new List<SpellChantEntry>();
 
@@ -616,7 +615,7 @@ public sealed partial class WorldScreen
             entries.Add(entry);
         }
 
-        return DataContext.LocalPlayerSettings.SaveSpellChants(entries);
+        return entries;
     }
     #endregion
 

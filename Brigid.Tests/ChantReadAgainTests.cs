@@ -1,5 +1,6 @@
 using Brigid.Collections;
 using Brigid.Data;
+using Brigid.Data.Models;
 using Brigid.Data.Repositories;
 using DALib.Networking.Packets.Server;
 using Xunit;
@@ -36,6 +37,9 @@ public sealed class ChantReadAgainTests : IDisposable
         return path;
     }
 
+    //the world screen opens the character folder at the first display of the player
+    private static void EnterWorld() => WorldState.ReloadChants();
+
     private static void AddSkill(byte slot, string name) => WorldState.AddSkill(new AddSkillPacket { Slot = slot, Icon = 1, Name = name });
 
     private static void AddSpell(byte slot, string name)
@@ -48,6 +52,7 @@ public sealed class ChantReadAgainTests : IDisposable
 
         using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
         {
+            EnterWorld();
             AddSkill(1, "Assail");
             AddSkill(2, "Kick");
         }
@@ -65,6 +70,7 @@ public sealed class ChantReadAgainTests : IDisposable
     {
         var skills = WriteFile("SkillBook.cfg", "SkillbookUsed\nAssail\nSkill:hya\n");
         var spells = WriteFile("SpellBook.cfg", "SpellbookUsed\n" + SpellEntry("Armachd"));
+        EnterWorld();
         AddSkill(1, "Assail");
         AddSpell(1, "Armachd");
 
@@ -74,6 +80,63 @@ public sealed class ChantReadAgainTests : IDisposable
 
         Assert.Equal("hya", WorldState.SkillBook.GetSlot(1).Chant);
         Assert.Equal("Armachd", WorldState.SpellBook.GetSlot(1).Chants?[0]);
+    }
+
+    //at a relog to another character the add packets come before the new character's folder opens; a read then gave the
+    //last character's chants, and a new character whose file could not be read kept them
+    [Fact]
+    public void ASlotGetsNoChantBeforeTheFolderOpens()
+    {
+        WriteFile("SkillBook.cfg", "SkillbookUsed\nAssail\nSkill:hya\n");
+
+        AddSkill(1, "Assail");
+
+        Assert.True(string.IsNullOrEmpty(WorldState.SkillBook.GetSlot(1).Chant));
+
+        EnterWorld();
+
+        Assert.Equal("hya", WorldState.SkillBook.GetSlot(1).Chant);
+    }
+
+    //a save whose write failed left the old file in the cache, so the next add of the ability put the old chant back, and
+    //the next save wrote it over the typed one
+    [Fact]
+    public void AFailedSaveKeepsTheTypedChantForTheNextAdd()
+    {
+        WriteFile("SkillBook.cfg", "SkillbookUsed\nAssail\nSkill:hya\n");
+        EnterWorld();
+
+        WorldState.SkillChantsSaved([new SkillChantEntry { Name = "Assail", Chant = "typed" }], SaveResult.Failed);
+        AddSkill(2, "Assail");
+
+        Assert.Equal("typed", WorldState.SkillBook.GetSlot(2).Chant);
+    }
+
+    [Fact]
+    public void AFailedSpellSaveKeepsTheTypedChantsForTheNextAdd()
+    {
+        WriteFile("SpellBook.cfg", "SpellbookUsed\n" + SpellEntry("Armachd"));
+        EnterWorld();
+        var typed = new SpellChantEntry { Name = "Armachd" };
+        typed.Chants[0] = "typed";
+
+        WorldState.SpellChantsSaved([typed], SaveResult.Failed);
+        AddSpell(2, "Armachd");
+
+        Assert.Equal("typed", WorldState.SpellBook.GetSlot(2).Chants?[0]);
+    }
+
+    //a save that was refused because the file could not be read changes no cache: the file wins at its next read
+    [Fact]
+    public void ARefusedSaveLeavesTheFileToWin()
+    {
+        WriteFile("SkillBook.cfg", "SkillbookUsed\nAssail\nSkill:hya\n");
+        EnterWorld();
+
+        WorldState.SkillChantsSaved([new SkillChantEntry { Name = "Assail", Chant = "typed" }], SaveResult.Unreadable);
+        AddSkill(2, "Assail");
+
+        Assert.Equal("hya", WorldState.SkillBook.GetSlot(2).Chant);
     }
 
     //a spell name and its ten chant lines
@@ -86,6 +149,7 @@ public sealed class ChantReadAgainTests : IDisposable
 
         using (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
         {
+            EnterWorld();
             AddSpell(1, "Armachd");
             AddSpell(2, "Puinsein");
         }

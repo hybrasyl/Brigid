@@ -111,6 +111,16 @@ public sealed class ExitRedirectTests
         Assert.Equal((int)ConnectionEvent.None, pending);
     }
 
+    //a close that waits for its packets can hold the logout Redirect; a grace time that ended in that frame cleared the
+    //exit confirm, and the logout went back to the world
+    [Theory]
+    [InlineData(false, WorldScreen.ConnectionOutcome.None, false)]
+    [InlineData(true, WorldScreen.ConnectionOutcome.None, true)]
+    [InlineData(false, WorldScreen.ConnectionOutcome.DecideNextFrame, true)]
+    [InlineData(false, WorldScreen.ConnectionOutcome.ConnectionLost, false)]
+    public void TheExitGraceTimeWaitsForARedirectAndForAClosesPackets(bool redirectInProgress, object outcome, bool waits)
+        => Assert.Equal(waits, WorldScreen.ExitGraceWaits(redirectInProgress, (WorldScreen.ConnectionOutcome)outcome));
+
     //the network thread can record a logout between the take and the put back; the logout stays
     [Fact]
     public void ALogoutRecordedSinceTheTakeStays()

@@ -33,6 +33,10 @@ public static class WorldState
     private static List<SkillChantEntry>? CachedSkillChants;
     private static List<SpellChantEntry>? CachedSpellChants;
 
+    //true after ReloadChants opened the chants of this character. At a relog to another character the add packets come
+    //before the world screen opens the new character's folder, and a read then took the last character's chants
+    private static bool ChantsReady;
+
     /// <summary>
     ///     The player's entity ID, assigned by the server.
     /// </summary>
@@ -322,6 +326,7 @@ public static class WorldState
     {
         Clear();
         InvalidateChantCache();
+        ChantsReady = false;
         PlayerEntityId = 0;
         PlayerName = string.Empty;
         Inventory.Clear();
@@ -535,13 +540,35 @@ public static class WorldState
         CachedSpellChants = null;
     }
 
+    /// <summary>
+    ///     After a save of the skill chants: a save that went through reads the file again; the chants of a write that
+    ///     failed stay in the cache, so a slot that the server fills again keeps the chant that the player typed, and the
+    ///     next save writes it. After a refused save (the file could not be read) the file wins at its next read.
+    /// </summary>
+    public static void SkillChantsSaved(List<SkillChantEntry> entries, SaveResult result)
+    {
+        if (result == SaveResult.Saved)
+            ReloadChants();
+        else if ((result == SaveResult.Failed) && ChantsReady)
+            CachedSkillChants = entries;
+    }
+
+    /// <summary>After a save of the spell chants, as <see cref="SkillChantsSaved" /> does.</summary>
+    public static void SpellChantsSaved(List<SpellChantEntry> entries, SaveResult result)
+    {
+        if (result == SaveResult.Saved)
+            ReloadChants();
+        else if ((result == SaveResult.Failed) && ChantsReady)
+            CachedSpellChants = entries;
+    }
+
     private static bool IsBlockingEntity(WorldEntity entity)
         => (entity.Type == ClientEntityType.Aisling)
            || ((entity.Type == ClientEntityType.Creature) && (entity.CreatureType != CreatureType.WalkThrough));
 
     private static string? LookupSkillChant(string? name)
     {
-        if (string.IsNullOrEmpty(name) || !DataContext.LocalPlayerSettings.IsInitialized)
+        if (string.IsNullOrEmpty(name) || !ChantsReady)
             return null;
 
         if (SkillChants() is not { } chants)
@@ -588,7 +615,7 @@ public static class WorldState
 
     private static string[]? LookupSpellChants(string? name)
     {
-        if (string.IsNullOrEmpty(name) || !DataContext.LocalPlayerSettings.IsInitialized)
+        if (string.IsNullOrEmpty(name) || !ChantsReady)
             return null;
 
         if (SpellChants() is not { } chants)
@@ -608,15 +635,16 @@ public static class WorldState
     public static void MarkSortDirty() => SortVersion++;
 
     /// <summary>
-    ///     Re-applies chant data to all occupied skill/spell slots. Call after PlayerData becomes available (first
-    ///     DisplayAisling for the player). A chant file that cannot be read changes no slot: a failed read gives no chants,
-    ///     and the slots keep the chants they have.
+    ///     Re-applies chant data to all occupied skill/spell slots. Call after the world screen opens the character folder
+    ///     (first DisplayAisling for the player); until then a slot gets no chant. A chant file that cannot be read changes
+    ///     no slot: a failed read gives no chants, and the slots keep the chants they have.
     /// </summary>
     public static void ReloadChants()
     {
         InvalidateChantCache();
+        ChantsReady = DataContext.LocalPlayerSettings.IsInitialized;
 
-        if (!DataContext.LocalPlayerSettings.IsInitialized)
+        if (!ChantsReady)
             return;
 
         //a read that succeeds gives every slot its chants

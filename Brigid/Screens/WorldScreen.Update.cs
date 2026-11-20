@@ -52,9 +52,19 @@ public sealed partial class WorldScreen
         return outcome;
     }
 
+    /// <summary>
+    ///     True when the exit grace time waits this frame: while a redirect connects, and while a close waits for the
+    ///     packets before it, which can hold the logout Redirect. A grace time that ended then cleared the exit confirm, and
+    ///     the logout went back to the world.
+    /// </summary>
+    internal static bool ExitGraceWaits(bool redirectInProgress, ConnectionOutcome outcome)
+        => redirectInProgress || (outcome == ConnectionOutcome.DecideNextFrame);
+
     public void Update(GameTime gameTime)
     {
-        switch (TakeConnectionOutcome(ref PendingConnectionEvent, RedirectInProgress, ExitFlow.IsAwaitingLogout, Game.Connection.Client.HasQueuedPackets))
+        var outcome = TakeConnectionOutcome(ref PendingConnectionEvent, RedirectInProgress, ExitFlow.IsAwaitingLogout, Game.Connection.Client.HasQueuedPackets);
+
+        switch (outcome)
         {
             case ConnectionOutcome.EndLogout:
                 EndLogout();
@@ -85,7 +95,7 @@ public sealed partial class WorldScreen
         //the confirmation confirms by itself when its time ends. After the confirm, a logout goes through
         //HandleStateChanged; when the grace time ends with no logout, Exit to Menu leaves the player in the world, and
         //Exit Game closes the client
-        switch (ExitFlow.Tick(elapsedMs / 1000f, RedirectInProgress))
+        switch (ExitFlow.Tick(elapsedMs / 1000f, ExitGraceWaits(RedirectInProgress, outcome)))
         {
             case ExitStep.Confirm:
                 ConfirmExit();

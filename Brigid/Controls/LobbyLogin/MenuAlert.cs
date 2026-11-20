@@ -101,9 +101,9 @@ public static class MenuAlerts
     //a failed write is tried again at the next change. After a failed read, the client reads a character file again at
     //the next login, and a settings file at the next start
     private static string NextStepFor(GuardedFile file, SaveResult result)
-        => result != SaveResult.Unreadable ? "Close the program that holds it, then change it again."
-            : file.ReadAgainAtLogin ? "Close the program that holds it, then log in again."
-            : "Close the program that holds it, then start Brigid again.";
+        => result != SaveResult.Unreadable ? "Close the program that holds it, or let Brigid write to its folder, then change it again."
+            : file.ReadAgainAtLogin ? "Close the program that holds it, or let Brigid read its folder, then log in again."
+            : "Close the program that holds it, or let Brigid read its folder, then start Brigid again.";
 
     /// <summary>
     ///     Offers to import the character settings of the legacy Dark Ages client. The alert does not record a decision when
