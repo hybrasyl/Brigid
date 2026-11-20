@@ -128,6 +128,9 @@ public sealed class ConnectionManager : IDisposable
     /// </summary>
     public GameClient Client { get; }
 
+    //the inventory slots of the swaps that the server has not answered; no request names one of them
+    private readonly InventorySwaps Swaps = new();
+
     public ConnectionManager()
     {
         Client = new GameClient();
@@ -340,7 +343,11 @@ public sealed class ConnectionManager : IDisposable
         int x,
         int y,
         int count = 1)
-        => SendIfWorld(
+    {
+        if (Swaps.Holds(sourceSlot))
+            return;
+
+        SendIfWorld(
             new Cli.DropItemPacket
             {
                 Slot = sourceSlot,
@@ -348,18 +355,24 @@ public sealed class ConnectionManager : IDisposable
                 Y = (ushort)y,
                 Count = (uint)count
             });
+    }
 
     /// <summary>
     ///     Sends an item give request to a creature/NPC.
     /// </summary>
     public void DropItemOnCreature(byte sourceSlot, uint targetId, byte count = 1)
-        => SendIfWorld(
+    {
+        if (Swaps.Holds(sourceSlot))
+            return;
+
+        SendIfWorld(
             new Cli.DropItemOnCreaturePacket
             {
                 Slot = sourceSlot,
                 TargetId = targetId,
                 Count = count
             });
+    }
 
     /// <summary>
     ///     Follows a pending redirect onto the next hop. Async because login and world are
@@ -814,13 +827,18 @@ public sealed class ConnectionManager : IDisposable
     ///     Sends a pickup request from a tile.
     /// </summary>
     public void PickupItem(int x, int y, byte destinationSlot)
-        => SendIfWorld(
+    {
+        if (Swaps.Holds(destinationSlot))
+            return;
+
+        SendIfWorld(
             new Cli.PickupItemPacket
             {
                 Slot = destinationSlot,
                 X = (ushort)x,
                 Y = (ushort)y
             });
+    }
 
     /// <summary>
     ///     Processes queued inbound packets, driving state transitions. Call this from the game loop's Update method.
@@ -1175,6 +1193,9 @@ public sealed class ConnectionManager : IDisposable
             return;
         }
 
+        if (sourceSlot is { } slot && Swaps.Holds(slot))
+            return;
+
         SendIfWorld(packet);
     }
 
@@ -1335,13 +1356,23 @@ public sealed class ConnectionManager : IDisposable
     ///     Sends a swap slot request between two panel positions.
     /// </summary>
     public void SwapSlot(PanelType panelType, byte slot1, byte slot2)
-        => SendIfWorld(
+    {
+        if (panelType == PanelType.Inventory)
+        {
+            if (Swaps.Holds(slot1) || Swaps.Holds(slot2) || (State != ConnectionState.World))
+                return;
+
+            Swaps.Sent(slot1, slot2);
+        }
+
+        SendIfWorld(
             new Cli.SwapSlotPacket
             {
                 Window = (byte)panelType,
                 Slot1 = slot1,
                 Slot2 = slot2
             });
+    }
 
     /// <summary>
     ///     Toggles group membership (join/leave the current group).
@@ -1361,7 +1392,13 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Sends an item use request (equip, consume).
     /// </summary>
-    public void UseItem(byte slot) => SendIfWorld(new Cli.UseItemPacket { Slot = slot });
+    public void UseItem(byte slot)
+    {
+        if (Swaps.Holds(slot))
+            return;
+
+        SendIfWorld(new Cli.UseItemPacket { Slot = slot });
+    }
 
     /// <summary>
     ///     Sends a skill use request.
@@ -1727,9 +1764,19 @@ public sealed class ConnectionManager : IDisposable
 
     //--- inventory ---
 
-    private void HandleAddItemToPane(IServerPacket p) => OnAddItemToPane?.Invoke((Server.AddItemPacket)p);
+    private void HandleAddItemToPane(IServerPacket p)
+    {
+        var packet = (Server.AddItemPacket)p;
+        Swaps.Answered(packet.Slot);
+        OnAddItemToPane?.Invoke(packet);
+    }
 
-    private void HandleRemoveItemFromPane(IServerPacket p) => OnRemoveItemFromPane?.Invoke((Server.RemoveItemPacket)p);
+    private void HandleRemoveItemFromPane(IServerPacket p)
+    {
+        var packet = (Server.RemoveItemPacket)p;
+        Swaps.Answered(packet.Slot);
+        OnRemoveItemFromPane?.Invoke(packet);
+    }
 
     //--- skills / spells ---
 

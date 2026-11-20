@@ -16,8 +16,8 @@ namespace Brigid.Controls.World.Hud.Main.Windows;
 ///     the first line, a grid of 9 by 8 slots, slot 1 at the top left and the numbers across each row, and a last line
 ///     with Q, the weight, the gold and the gold bag, and the coin button. The slots past the inventory size of today
 ///     (<see cref="Inventory.MAX_SLOTS" />) show dimmed. C compacts the items to the first slots, and a right click to
-///     the last slots, with one swap for each move (<see cref="InventoryCompact" />); a compact waits until the
-///     inventory shows the moves of the compact before it. H and E go to the first and the last row or page; the grid
+///     the last slots, with one swap for each move (<see cref="InventoryCompact" />). It sends one move at a time,
+///     and plans the next move from the slots that the inventory shows when the server answered the move before it. H and E go to the first and the last row or page; the grid
 ///     shows every slot of today, so they stay disabled until the inventory grows past 72. Q and the coin button ask
 ///     for the Quest Items and the Currency lists (<see cref="InventoryListModal" />). The window lays out from the size of its
 ///     content (<see cref="MainHudLayout.InventoryIn" />). A slot shows again when the
@@ -28,7 +28,7 @@ internal sealed class InventoryWindowControl : HudWindowContent
     /// <summary>The slots of the grid.</summary>
     public const int SLOTS = MainHudLayout.INVENTORY_COLUMNS * MainHudLayout.INVENTORY_ROWS;
 
-    //the longest wait for the slots of a compact: the server can refuse a move and send nothing for it
+    //the longest wait for the slots of a compact move: the server can refuse a move and send nothing for it
     private const long COMPACT_WAIT_MS = 2000;
 
     private readonly Inventory Items;
@@ -41,6 +41,7 @@ internal sealed class InventoryWindowControl : HudWindowContent
     private readonly Func<object?> ActiveDrag;
     private readonly HashSet<byte> CompactSlots = [];
     private long CompactSentAt;
+    private bool? CompactToEnd;
 
     /// <param name="items">The inventory.</param>
     /// <param name="attributes">The player's attributes, which hold the weight and the gold.</param>
@@ -145,13 +146,29 @@ internal sealed class InventoryWindowControl : HudWindowContent
 
     /// <summary>
     ///     Moves the items to the first slots (<paramref name="toEnd" /> false) or to the last slots of the inventory, in
-    ///     their order, with one swap for each move. It does not merge stacks. The local inventory changes only when the
-    ///     server answers, so a compact does nothing while the inventory has not shown each slot of the compact before it,
-    ///     for <see cref="COMPACT_WAIT_MS" /> at most: a second batch from the old slots puts the items out of order.
+    ///     their order, with one swap for each move. It does not merge stacks. The server holds the new layout at once, and
+    ///     the local inventory shows it only when the server answers, so the compact sends one move at a time: a batch
+    ///     planned from the old slots, or a second press, moved items that the player did not see there. A press does
+    ///     nothing while a move waits, for <see cref="COMPACT_WAIT_MS" /> at most.
     /// </summary>
     public void Compact(bool toEnd)
     {
-        if ((CompactSlots.Count > 0) && (Clock() - CompactSentAt < COMPACT_WAIT_MS))
+        if (CompactWaits)
+            return;
+
+        CompactToEnd = toEnd;
+        SendNextCompactMove();
+    }
+
+    /// <summary>True while a move of a compact waits for the inventory to show its slots.</summary>
+    internal bool CompactWaits => (CompactToEnd is not null) && (Clock() - CompactSentAt < COMPACT_WAIT_MS);
+
+    //the first move from the slots that the inventory shows now; the compact ends when no move is left
+    private void SendNextCompactMove()
+    {
+        CompactSlots.Clear();
+
+        if (CompactToEnd is not { } toEnd)
             return;
 
         var occupied = new bool[Inventory.MAX_SLOTS];
@@ -160,19 +177,20 @@ internal sealed class InventoryWindowControl : HudWindowContent
             occupied[i] = Items.GetSlot((byte)(i + 1)).IsOccupied;
 
         var moves = InventoryCompact.Moves(occupied, toEnd);
-        CompactSlots.Clear();
-        CompactSentAt = Clock();
 
-        foreach (var (from, to) in moves)
+        if (moves.Count == 0)
         {
-            CompactSlots.Add(from);
-            CompactSlots.Add(to);
-            SwapRequested?.Invoke(from, to);
-        }
-    }
+            CompactToEnd = null;
 
-    /// <summary>True while a compact waits for the inventory to show its slots.</summary>
-    internal bool CompactWaits => (CompactSlots.Count > 0) && (Clock() - CompactSentAt < COMPACT_WAIT_MS);
+            return;
+        }
+
+        var (from, to) = moves[0];
+        CompactSentAt = Clock();
+        CompactSlots.Add(from);
+        CompactSlots.Add(to);
+        SwapRequested?.Invoke(from, to);
+    }
 
     /// <summary>The pointer is no longer on a slot: the window closed under it.</summary>
     public void ClearHover()
@@ -242,7 +260,9 @@ internal sealed class InventoryWindowControl : HudWindowContent
             return;
 
         ShowSlot(slot);
-        CompactSlots.Remove(slot);
+
+        if (CompactSlots.Remove(slot) && (CompactSlots.Count == 0))
+            SendNextCompactMove();
 
         //the tooltip follows the item under the pointer: a used or a new item changes it
         if (slot == HoveredSlot)
@@ -255,6 +275,7 @@ internal sealed class InventoryWindowControl : HudWindowContent
             ShowSlot(slot);
 
         CompactSlots.Clear();
+        CompactToEnd = null;
 
         if (HoveredSlot is not null)
             RaiseHover();

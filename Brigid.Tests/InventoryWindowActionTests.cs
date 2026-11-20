@@ -104,37 +104,70 @@ public class InventoryWindowActionTests : IDisposable
         return (window, items);
     }
 
-    [Fact]
-    public void CSwapsTheItemsToTheFirstSlots()
+    //the server's answer to a swap, as Hybrasyl gives it: each slot takes the item of the other, and an empty slot clears
+    private static void Answer(Inventory items, byte from, byte to)
     {
-        var (window, _) = NewWindow();
+        var moved = items.GetSlot(from);
+        var other = items.GetSlot(to);
+        Put(items, to, moved);
+        Put(items, from, other);
+    }
+
+    private static void Put(Inventory items, byte slot, Inventory.InventorySlotData data)
+    {
+        if (data.IsOccupied)
+            items.SetSlot(slot, data.Sprite, data.Color, data.Name, data.Stackable, data.Count, data.MaxDurability, data.CurrentDurability);
+        else
+            items.ClearSlot(slot);
+    }
+
+    //each move waits for the server's answer, and the next move is planned from the slots that the answer shows
+    [Fact]
+    public void CSwapsTheItemsToTheFirstSlotsOneMoveAtATime()
+    {
+        var (window, items) = NewWindow();
         var swaps = new List<(byte, byte)>();
         window.SwapRequested += (from, to) => swaps.Add((from, to));
 
         var click = new ClickEvent { Button = MouseButton.Left };
         window.CompactButton.OnClick(click);
 
-        Assert.Equal([((byte)2, (byte)1), ((byte)5, (byte)2)], swaps);
+        Assert.Equal([((byte)2, (byte)1)], swaps);
         Assert.True(click.Handled);
+        Assert.True(window.CompactWaits);
+
+        Answer(items, 2, 1);
+        Assert.Equal([((byte)2, (byte)1), ((byte)5, (byte)2)], swaps);
+
+        Answer(items, 5, 2);
+        Assert.Equal(2, swaps.Count);
+        Assert.False(window.CompactWaits);
+        Assert.Equal("Apple", items.GetSlot(1).Name);
+        Assert.Equal("Sword", items.GetSlot(2).Name);
     }
 
     [Fact]
     public void ARightClickOnCSwapsTheItemsToTheLastSlotsOfTheInventory()
     {
-        var (window, _) = NewWindow();
+        var (window, items) = NewWindow();
         var swaps = new List<(byte, byte)>();
-        window.SwapRequested += (from, to) => swaps.Add((from, to));
+        window.SwapRequested += (from, to) =>
+        {
+            swaps.Add((from, to));
+            Answer(items, from, to);
+        };
 
         var click = new ClickEvent { Button = MouseButton.Right };
         window.CompactButton.OnClick(click);
 
         Assert.Equal([((byte)5, (byte)Inventory.MAX_SLOTS), ((byte)2, (byte)(Inventory.MAX_SLOTS - 1))], swaps);
         Assert.True(click.Handled);
+        Assert.False(window.CompactWaits);
     }
 
-    //the server changes the inventory after the moves: a second batch from the old slots puts the items out of order
+    //the server holds the new layout at once: a batch from the old slots, or a second press, moved items that the player did not see there
     [Fact]
-    public void ACompactWaitsUntilTheInventoryShowsTheCompactBefore()
+    public void APressWhileAMoveWaitsSendsNothing()
     {
         var (window, items) = NewWindow();
         var swaps = new List<(byte, byte)>();
@@ -143,17 +176,14 @@ public class InventoryWindowActionTests : IDisposable
         window.Compact(false);
         window.Compact(false);
         window.Compact(true);
-        Assert.Equal(2, swaps.Count);
-        Assert.True(window.CompactWaits);
+        Assert.Equal([((byte)2, (byte)1)], swaps);
 
-        //the server's answer: slot 1 and slot 2 hold the items, slot 5 is empty
-        items.SetSlot(1, 100, DisplayColor.Default, "Apple", true, 3, 0, 0);
-        items.SetSlot(2, 200, DisplayColor.Default, "Sword", false, 1, 1000, 900);
-        items.ClearSlot(5);
+        Answer(items, 2, 1);
+        Answer(items, 5, 2);
         Assert.False(window.CompactWaits);
 
         window.Compact(true);
-        Assert.Equal([((byte)2, (byte)1), ((byte)5, (byte)2), ((byte)2, (byte)Inventory.MAX_SLOTS), ((byte)1, (byte)(Inventory.MAX_SLOTS - 1))], swaps);
+        Assert.Equal([((byte)2, (byte)1), ((byte)5, (byte)2), ((byte)2, (byte)Inventory.MAX_SLOTS)], swaps);
     }
 
     [Fact]
@@ -166,11 +196,11 @@ public class InventoryWindowActionTests : IDisposable
         window.Compact(false);
         Now += 1999;
         window.Compact(false);
-        Assert.Equal(2, swaps);
+        Assert.Equal(1, swaps);
 
         Now += 1;
         window.Compact(false);
-        Assert.Equal(4, swaps);
+        Assert.Equal(2, swaps);
     }
 
     [Fact]
