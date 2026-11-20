@@ -1,7 +1,7 @@
-using System.IO.Compression;
 using Brigid.Data;
 using DALib.Cryptography;
 using Xunit;
+using static Brigid.Tests.MetaFileTestData;
 
 namespace Brigid.Tests;
 
@@ -21,16 +21,6 @@ public sealed class MetaFileCacheTests : IDisposable
     private void Touch(string name) => File.WriteAllBytes(Path.Combine(Root, name), [1]);
 
     private string[] OnDisk() => Directory.GetFiles(Root).Select(path => Path.GetFileName(path)).Order().ToArray();
-
-    private static byte[] Compress(byte[] data)
-    {
-        using var output = new MemoryStream();
-
-        using (var zlib = new ZLibStream(output, CompressionLevel.Optimal, true))
-            zlib.Write(data);
-
-        return output.ToArray();
-    }
 
     [Fact]
     public void GetChecksum_IsTheCrcOfTheDecompressedFile()
@@ -135,9 +125,12 @@ public sealed class MetaFileCacheTests : IDisposable
     }
 
     //the write went straight over the cache file, so a write that failed part way (a full disk) left a cut file in place
-    //of the old copy
-    [Fact]
-    public void TryWrite_AWriteThatFailsPartWayKeepsTheOldCopy()
+    //of the old copy. On Linux a write over the file-size limit (EFBIG) arrives as ArgumentOutOfRangeException; it
+    //escaped OnData before the sync counted the failure
+    [Theory]
+    [InlineData(typeof(IOException))]
+    [InlineData(typeof(ArgumentOutOfRangeException))]
+    public void TryWrite_AWriteThatFailsPartWayKeepsTheOldCopy(Type failure)
     {
         File.WriteAllBytes(Path.Combine(Root, "Light"), [1, 2, 3]);
 
@@ -145,26 +138,7 @@ public sealed class MetaFileCacheTests : IDisposable
         {
             File.WriteAllBytes(path, data[..2]);
 
-            throw new IOException("There is not enough space on the disk.");
-        });
-
-        Assert.False(written);
-        Assert.Equal([1, 2, 3], File.ReadAllBytes(Path.Combine(Root, "Light")));
-        Assert.Equal(["Light"], OnDisk());
-    }
-
-    //on Linux a write over the file-size limit (EFBIG) arrives as ArgumentOutOfRangeException; it escaped OnData before
-    //the sync counted the failure
-    [Fact]
-    public void TryWrite_AWriteOverTheSizeLimitReturnsFalse()
-    {
-        File.WriteAllBytes(Path.Combine(Root, "Light"), [1, 2, 3]);
-
-        var written = MetaFileCache.TryWrite(Root, "Light", [7, 8], (path, data) =>
-        {
-            File.WriteAllBytes(path, data[..1]);
-
-            throw new ArgumentOutOfRangeException("value", "File too large.");
+            throw (Exception)Activator.CreateInstance(failure)!;
         });
 
         Assert.False(written);

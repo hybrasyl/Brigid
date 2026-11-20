@@ -4,9 +4,10 @@ namespace Brigid.Data;
 ///     The metafile sync (0x6F). The server sends a checksum list; the client deletes the cached files that the list does
 ///     not name, and requests each file whose checksum differs. It writes a file only when it requested the file and the
 ///     CRC-32 of the data matches the checksum in the data packet, as retail does (BRIG-114). When no answer comes for
-///     <see cref="REQUEST_TIMEOUT_SECONDS" />, the oldest file that waits is requested again, and each file that waits
-///     counts the time limit under the same limit as a bad payload (BRIG-165). An answer to any file clears the time limits
-///     that the files that wait counted, because the server answers in order. The sync completes when no request is open. Call its methods on one thread (the game loop).
+///     <see cref="REQUEST_TIMEOUT_SECONDS" />, the oldest file that waits is requested again, and the time limit counts
+///     for each file that waits, under the same limit as a bad payload (BRIG-165). An answer to any file clears the time
+///     limits, because the server answers in order. The sync completes when no request is open. Call its methods on one
+///     thread (the game loop).
 /// </summary>
 public sealed class MetaFileSync
 {
@@ -19,9 +20,9 @@ public sealed class MetaFileSync
     /// <summary>
     ///     The time with no answer to any request before the oldest file that waits is requested again. A server that does
     ///     not know a name sends nothing (Hybrasyl); without a time limit, one such file holds the sync open for the session.
-    ///     The server answers in order, so only the oldest file is requested again, and each answer restarts the time of the
-    ///     files that wait and clears the time limits that they counted: a slow first download of the whole catalog is not
-    ///     cut off, also when answers are more than this time apart, and it sends one request again for each time limit.
+    ///     The server answers in order, so only the oldest file is requested again, and each answer restarts the time and
+    ///     clears the time limits that the files that wait counted: a slow first download of the whole catalog is not cut
+    ///     off, also when answers are more than this time apart, and it sends one request again for each time limit.
     /// </summary>
     public const int REQUEST_TIMEOUT_SECONDS = 10;
 
@@ -34,23 +35,22 @@ public sealed class MetaFileSync
     private readonly Func<string, byte[], bool> Write;
     private readonly TimeProvider Clock;
 
-    //the files that the client requested and has not completed. A file is written under the listed name, the name that
-    //the prune keeps and that the repository reads first
-    private readonly Dictionary<string, Entry> Pending = new(StringComparer.OrdinalIgnoreCase);
+    //the files that the client requested and has not completed, in the order of the checksum list: the server answers in
+    //this order, so the first one is the oldest. A file is written under the listed name, the name that the repository
+    //opens
+    private readonly OrderedDictionary<string, Entry> Pending = new(StringComparer.OrdinalIgnoreCase);
+
+    //the time limits since the last answer to any file, and when the last answer, request list or time limit came. Every
+    //file that waits shares them: an answer restarts the time of each file, and a time limit counts for each file
+    private int Silences;
+    private long WaitStart;
 
     /// <param name="Name">The name as the checksum list gives it.</param>
-    /// <param name="Order">The place of the file in its checksum list; the server answers in this order.</param>
     /// <param name="Failures">The requests again after a bad payload, a failed write or an answer to a replaced list.</param>
-    /// <param name="Silences">The time limits since the last answer to any file.</param>
     /// <param name="Sent">The requests sent for the file, for the log.</param>
     /// <param name="Listed">The checksum in the list.</param>
     /// <param name="Replaced">The checksum in a list that this list replaced while the file was pending, when it differs.</param>
-    /// <param name="SentAt">The clock timestamp of the last request or time limit.</param>
-    private readonly record struct Entry(string Name, int Order, int Failures, int Silences, int Sent, uint Listed, uint? Replaced, long SentAt)
-    {
-        /// <summary>The tries that count toward <see cref="MAX_REQUESTS" />: the first request, the failures and the time limits.</summary>
-        public int Tries => 1 + Failures + Silences;
-    }
+    private readonly record struct Entry(string Name, int Failures, int Sent, uint Listed, uint? Replaced);
 
     /// <param name="directory">The metafile folder. It is read each time, because it depends on the server scope.</param>
     /// <param name="request">Sends the request for one file by name.</param>
@@ -59,13 +59,6 @@ public sealed class MetaFileSync
     ///     Takes the safe names of each checksum list, before the prune, so that the repository reads only those files
     ///     (BRIG-167).
     /// </param>
-    public MetaFileSync(Func<string> directory, Action<string> request, Action complete, Action<IReadOnlyCollection<string>> listed)
-        : this(directory, request, complete, listed, null, null) { }
-
-    /// <param name="directory">The metafile folder.</param>
-    /// <param name="request">Sends the request for one file by name.</param>
-    /// <param name="complete">Called when the sync completes.</param>
-    /// <param name="listed">Takes the safe names of each checksum list.</param>
     /// <param name="write">Writes one file and returns false on a failure; null writes with <see cref="MetaFileCache.TryWrite" />.</param>
     /// <param name="clock">The clock of the time limit; null is the system clock.</param>
     public MetaFileSync(
@@ -73,8 +66,8 @@ public sealed class MetaFileSync
         Action<string> request,
         Action complete,
         Action<IReadOnlyCollection<string>> listed,
-        Func<string, byte[], bool>? write,
-        TimeProvider? clock)
+        Func<string, byte[], bool>? write = null,
+        TimeProvider? clock = null)
     {
         DirectoryOf = directory;
         Request = request;
@@ -87,6 +80,9 @@ public sealed class MetaFileSync
     /// <summary>The number of files that the client requested and has not completed.</summary>
     internal int PendingCount => Pending.Count;
 
+    //the tries that count toward MAX_REQUESTS: the first request, the failures and the time limits since the last answer
+    private int TriesOf(Entry entry) => 1 + entry.Failures + Silences;
+
     /// <summary>
     ///     Starts a sync from the server's checksum list, in place of a sync that is open. A null list ends a sync that is
     ///     open and completes at once, with no change to the cache.
@@ -96,6 +92,7 @@ public sealed class MetaFileSync
         //an answer to a list that this list replaces can still arrive, and it carries no mark of its list
         var replaced = Pending.Values.ToDictionary(entry => entry.Name, entry => entry.Listed, StringComparer.OrdinalIgnoreCase);
         Pending.Clear();
+        RestartWait();
 
         if (entries is null)
         {
@@ -115,21 +112,19 @@ public sealed class MetaFileSync
                 Log($"Ignored a metafile checksum with an unsafe name: \"{entry.Name}\".");
         }
 
+        string[] names = [.. listed.Select(entry => entry.Name)];
+
         //the repository reads only the listed files, so a stale file that the prune cannot delete is not read
-        GiveListedNames([.. listed.Select(entry => entry.Name)]);
+        GiveListedNames(names);
 
         //the list is the server's whole catalog, so a local file that it does not name is stale. An empty list empties
         //the cache. Retail clears only its store in memory, but a file left on disk stays on disk.
-        foreach (var name in MetaFileCache.PruneUnlisted(directory, listed.Select(entry => entry.Name)))
+        foreach (var name in MetaFileCache.PruneUnlisted(directory, names))
             Log($"Deleted a metafile that the server no longer lists: {name}.");
-
-        var now = Clock.GetTimestamp();
-
-        var order = 0;
 
         foreach (var (name, checksum) in listed)
             if (MetaFileCache.GetChecksum(directory, name) != checksum)
-                Pending[name] = new Entry(name, order++, 0, 0, 1, checksum, replaced.TryGetValue(name, out var old) && (old != checksum) ? old : null, now);
+                Pending[name] = new Entry(name, 0, 1, checksum, replaced.TryGetValue(name, out var old) && (old != checksum) ? old : null);
 
         foreach (var name in Pending.Keys)
             Request(name);
@@ -163,33 +158,30 @@ public sealed class MetaFileSync
             return;
         }
 
-        var (listedName, _, _, _, _, listedChecksum, replacedChecksum, _) = pending;
-        var valid = MetaFileCache.IsValidPayload(data, checksum);
+        //an answer shows that the server works through the requests, so the time limits that the files counted do not
+        //count, and a server that answers more slowly than the time limit completes
+        RestartWait();
 
-        RestartWaitTimes();
-        pending = Pending[name];
+        var valid = MetaFileCache.IsValidPayload(data, checksum);
 
         //a late answer to the replaced list matches the replaced checksum: drop it once and request the file again. After
         //that the checksum in the data packet decides, so a server whose list and data disagree for good still completes
-        if (valid && (checksum == replacedChecksum) && (checksum != listedChecksum))
+        if (valid && (checksum == pending.Replaced) && (checksum != pending.Listed))
         {
-            Log($"{listedName} answers a checksum list that a later list replaced. Requesting it again.");
-            Pending[name] = pending with { Failures = pending.Failures + 1, Sent = pending.Sent + 1, Replaced = null, SentAt = Clock.GetTimestamp() };
-            Request(listedName);
+            RequestAgain(pending with { Failures = pending.Failures + 1, Replaced = null }, "answers a checksum list that a later list replaced");
 
             return;
         }
 
-        if (!valid || !Write(listedName, data))
-        {
-            var problem = valid ? "could not be written" : "does not match its checksum";
-
-            //a failed write is requested again too: the round trip gives a short lock (a virus scanner, for example) time
-            //to clear, and it uses the same limit, so a disk that cannot be written does not hold the sync open
-            if (!RequestAgainOrStop(pending, problem, silence: false, send: true))
-                return;
-        } else
+        if (valid && Write(pending.Name, data))
             Pending.Remove(name);
+
+        //a failed write is requested again too: the round trip gives a short lock (a virus scanner, for example) time to
+        //clear, and it uses the same limit, so a disk that cannot be written does not hold the sync open
+        else if (TriesOf(pending) < MAX_REQUESTS)
+            RequestAgain(pending with { Failures = pending.Failures + 1 }, valid ? "could not be written" : "does not match its checksum", TriesOf(pending) + 1);
+        else
+            Stop(pending, valid ? "could not be written" : "does not match its checksum");
 
         if (Pending.Count == 0)
             Complete();
@@ -197,67 +189,54 @@ public sealed class MetaFileSync
 
     /// <summary>
     ///     When no answer came for <see cref="REQUEST_TIMEOUT_SECONDS" />, requests the oldest file that waits again, and
-    ///     counts the time limit for each file that waits. At <see cref="MAX_REQUESTS" /> tries (the first request, the
+    ///     counts the time limit for each file that waits. Past <see cref="MAX_REQUESTS" /> tries (the first request, the
     ///     failures, and the time limits since the last answer to any file), the cache keeps its old copy and the entry
     ///     completes, so a file that the server never sends holds the sync for 30 s after the last answer at most. Call it
     ///     once each frame while the connection is in World.
     /// </summary>
     public void Tick()
     {
-        List<Entry>? due = null;
-
-        foreach (var entry in Pending.Values)
-            if (Clock.GetElapsedTime(entry.SentAt) >= RequestTimeout)
-                (due ??= []).Add(entry);
-
-        if (due is null)
+        if ((Pending.Count == 0) || (Clock.GetElapsedTime(WaitStart) < RequestTimeout))
             return;
+
+        Silences++;
+        WaitStart = Clock.GetTimestamp();
 
         //the server answers in order, so the oldest file is the one it is on; a request again for each file that waits
         //gave a slow server one request for each file at each time limit
-        var oldest = Pending.Values.Min(entry => entry.Order);
-        var stopped = false;
+        var oldest = Pending.GetAt(0).Key;
 
-        foreach (var entry in due)
-            stopped |= RequestAgainOrStop(entry, "has no answer", silence: true, send: entry.Order == oldest);
+        foreach (var entry in Pending.Values.ToArray())
+            if (TriesOf(entry) > MAX_REQUESTS)
+                Stop(entry, "has no answer");
+            else if (entry.Name == oldest)
+                RequestAgain(entry, "has no answer", TriesOf(entry));
 
-        if (stopped && (Pending.Count == 0))
+        if (Pending.Count == 0)
             Complete();
     }
 
-    //counts a try and requests the file again when send is true, or, at MAX_REQUESTS tries, stops: the cache keeps its old
-    //copy, and the entry leaves the pending set. A silence is a time limit. Returns true when it stopped
-    private bool RequestAgainOrStop(Entry entry, string problem, bool silence, bool send)
+    //sends the request again and counts it, for the log
+    private void RequestAgain(Entry next, string problem, int? tries = null)
     {
-        if (entry.Tries < MAX_REQUESTS)
-        {
-            var next = silence ? entry with { Silences = entry.Silences + 1 } : entry with { Failures = entry.Failures + 1 };
-
-            if (send)
-            {
-                Log($"{entry.Name} {problem}. Requesting it again (try {entry.Tries + 1} of {MAX_REQUESTS}, request {entry.Sent + 1}).");
-                Pending[entry.Name] = next with { Sent = entry.Sent + 1, SentAt = Clock.GetTimestamp() };
-                Request(entry.Name);
-            } else
-                Pending[entry.Name] = next with { SentAt = Clock.GetTimestamp() };
-
-            return false;
-        }
-
-        Log($"{entry.Name} {problem} after {MAX_REQUESTS} tries ({entry.Sent} requests). The cache keeps its old copy, if it has one.");
-        Pending.Remove(entry.Name);
-
-        return true;
+        Log(tries is { } count
+            ? $"{next.Name} {problem}. Requesting it again (try {count} of {MAX_REQUESTS}, request {next.Sent + 1})."
+            : $"{next.Name} {problem}. Requesting it again.");
+        Pending[next.Name] = next with { Sent = next.Sent + 1 };
+        Request(next.Name);
     }
 
-    //an answer shows that the server works through the requests, so the files that wait get a new time limit, and the
-    //time limits that they counted do not count. A server that answers more slowly than the time limit then completes
-    private void RestartWaitTimes()
+    //the cache keeps its old copy, and the entry leaves the pending set
+    private void Stop(Entry entry, string problem)
     {
-        var now = Clock.GetTimestamp();
+        Log($"{entry.Name} {problem} after {MAX_REQUESTS} tries ({entry.Sent} requests). The cache keeps its old copy, if it has one.");
+        Pending.Remove(entry.Name);
+    }
 
-        foreach (var entry in Pending.Values.ToArray())
-            Pending[entry.Name] = entry with { Silences = 0, SentAt = now };
+    private void RestartWait()
+    {
+        Silences = 0;
+        WaitStart = Clock.GetTimestamp();
     }
 
     /// <summary>

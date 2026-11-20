@@ -100,24 +100,18 @@ public static class MetaFileCache
         var path = Path.Combine(directory, name);
         var temp = path + TEMP_SUFFIX;
 
-        try
-        {
-            Directory.CreateDirectory(directory);
-            writeFile(temp, data);
-            File.Move(temp, path, true);
-
+        if (DataDiagnostics.Try(
+                () =>
+                {
+                    Directory.CreateDirectory(directory);
+                    writeFile(temp, data);
+                    File.Move(temp, path, true);
+                }, $"write metafile {name}"))
             return true;
-        }
-        //rule 6 exemption: a write that fails is requested again, and the sync counts it. On Linux a write over the
-        //file-size limit (EFBIG) arrives as ArgumentOutOfRangeException; out of OnData, it escaped the failure count
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException
-                                       or ArgumentOutOfRangeException)
-        {
-            DataDiagnostics.Log?.Invoke($"[data] IO failed (write metafile {name}): {ex.GetType().Name}: {ex.Message}");
-            DataDiagnostics.Try(() => File.Delete(temp), $"delete temporary metafile {name}{TEMP_SUFFIX}");
 
-            return false;
-        }
+        DataDiagnostics.Try(() => File.Delete(temp), $"delete temporary metafile {name}{TEMP_SUFFIX}");
+
+        return false;
     }
 
     /// <summary>
@@ -130,8 +124,8 @@ public static class MetaFileCache
     ///     across <c>ItemInfoN</c> files and the split moves when items change, so an old file can give an item its old
     ///     class or level. The comparison here is ordinal, but the client's pending set ignores case. So on a
     ///     case-insensitive file system, this method deletes a file whose name changed case, and the sync downloads it
-    ///     again. A file that it cannot delete keeps the old case; the repository reads it under the listed name (see
-    ///     <see cref="Repositories.MetaFileRepository.ListedIn" />). It also deletes a temporary file that a write left.
+    ///     again. A file that it cannot delete keeps the old case; the repository opens a listed file by its listed name, so
+    ///     the file system finds it, as <see cref="GetChecksum" /> does. It also deletes a temporary file that a write left.
     /// </remarks>
     public static IReadOnlyList<string> PruneUnlisted(string directory, IEnumerable<string> listedNames)
     {

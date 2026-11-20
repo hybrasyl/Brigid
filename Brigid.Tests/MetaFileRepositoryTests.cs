@@ -1,6 +1,7 @@
 using Brigid.Data.Repositories;
 using DALib.Data;
 using Xunit;
+using static Brigid.Tests.MetaFileTestData;
 
 namespace Brigid.Tests;
 
@@ -19,24 +20,14 @@ public sealed class MetaFileRepositoryTests : IDisposable
 
         //an item in a listed file and one in a stale file; the five properties are level, class, weight, category and
         //description
-        WriteMetaFile("ItemInfo0", new MetaFileEntry("Stick", ["1", "0", "1", "Weapon", "A stick."]));
-        WriteMetaFile("ItemInfo1", new MetaFileEntry("Old Sword", ["99", "1", "5", "Weapon", "Gone from the server."]));
-        WriteMetaFile("SEvent1", new MetaFileEntry("Listed event"));
-        WriteMetaFile("SEvent2", new MetaFileEntry("Stale event"));
-        WriteMetaFile("NationDesc", new MetaFileEntry("Stale nation"));
+        WriteMetaFile(Root, "ItemInfo0", new MetaFileEntry("Stick", ["1", "0", "1", "Weapon", "A stick."]));
+        WriteMetaFile(Root, "ItemInfo1", new MetaFileEntry("Old Sword", ["99", "1", "5", "Weapon", "Gone from the server."]));
+        WriteMetaFile(Root, "SEvent1", new MetaFileEntry("Listed event"));
+        WriteMetaFile(Root, "SEvent2", new MetaFileEntry("Stale event"));
+        WriteMetaFile(Root, "NationDesc", new MetaFileEntry("Stale nation"));
     }
 
     public void Dispose() => Directory.Delete(Root, true);
-
-    private void WriteMetaFile(string name, params MetaFileEntry[] entries)
-    {
-        var file = new MetaFile();
-
-        foreach (var entry in entries)
-            file.Add(entry);
-
-        file.Save(Path.Combine(Root, name));
-    }
 
     private void ListOnly(params string[] names) => Repository.SetListedNames(names);
 
@@ -91,15 +82,16 @@ public sealed class MetaFileRepositoryTests : IDisposable
     [Fact]
     public void AFixedNameFindsTheListedFileInAnyCase()
     {
-        WriteMetaFile("npcillust", new MetaFileEntry("Listed in lower case"));
+        WriteMetaFile(Root, "npcillust", new MetaFileEntry("Listed in lower case"));
         ListOnly("npcillust");
 
         Assert.NotNull(Repository.Get("NPCIllust"));
     }
 
     //a file whose name changed case stays when the prune cannot delete it, and on Windows the sync finds it under the
-    //listed name and does not download it. An exact match hid it: the index was empty
-    [Fact]
+    //listed name and does not download it. A scan that matched the folder's names exactly hid it: the index was empty.
+    //The repository opens the listed name, and the file system finds the file, as the sync's check does
+    [CaseInsensitiveFileSystemFact]
     public void AScanReadsAListedFileWhoseNameChangedCase()
     {
         ListOnly("iteminfo0", "sevent1");
@@ -109,19 +101,16 @@ public sealed class MetaFileRepositoryTests : IDisposable
         Assert.Equal(["Stick"], Repository.GetItemMetadata("Stick", "Old Sword").Keys);
     }
 
-    //on Linux the sync writes the listed name beside an old file that the prune cannot delete, and the exact name wins
+    //on Linux the sync writes the listed name beside an old file that the prune cannot delete; the scan opens the listed
+    //name. On Windows the two names are one file
     [Fact]
-    public void AScanPrefersTheExactListedName()
+    public void AScanOpensTheListedName()
     {
+        WriteMetaFile(Root, "sevent1", new MetaFileEntry("Lower-case event"));
         ListOnly("sevent1");
 
-        Assert.Equal(["sevent1"], Repository.ListedIn(["SEvent1", "sevent1", "SEvent2"]));
-        Assert.Equal(["SEvent1"], Repository.ListedIn(["SEvent1", "SEvent2"]));
+        Assert.Equal("Lower-case event", Repository.GetAll("SEvent").Single().Single().Key);
     }
-
-    [Fact]
-    public void WithNoListAScanReadsEveryName()
-        => Assert.Equal(["SEvent1", "sevent1"], Repository.ListedIn(["SEvent1", "sevent1"]));
 
     //a world transfer gives a new list before its sync completes and builds the index again
     [Fact]

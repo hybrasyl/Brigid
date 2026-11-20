@@ -30,7 +30,7 @@ public sealed class MetaFileSession
         TimeProvider? clock = null)
     {
         Repository = repository;
-        Sync = new MetaFileSync(directory, request, complete, names => Repository().SetListedNames(names), null, clock);
+        Sync = new MetaFileSync(directory, request, complete, names => Repository().SetListedNames(names), clock: clock);
     }
 
     /// <summary>

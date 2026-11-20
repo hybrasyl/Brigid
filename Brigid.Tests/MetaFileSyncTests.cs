@@ -3,6 +3,7 @@ using System.Text;
 using Brigid.Data;
 using DALib.Cryptography;
 using Xunit;
+using static Brigid.Tests.MetaFileTestData;
 
 namespace Brigid.Tests;
 
@@ -23,8 +24,6 @@ public sealed class MetaFileSyncTests : IDisposable
     private readonly List<IReadOnlyCollection<string>> ListedNames = [];
     private readonly ManualClock Clock = new();
 
-    private const long TIMEOUT_MS = MetaFileSync.REQUEST_TIMEOUT_SECONDS * 1000;
-
     public MetaFileSyncTests()
     {
         Directory.CreateDirectory(Root);
@@ -35,16 +34,6 @@ public sealed class MetaFileSyncTests : IDisposable
     {
         DataDiagnostics.Log = OriginalLog;
         Directory.Delete(Root, true);
-    }
-
-    private static byte[] Compress(byte[] data)
-    {
-        using var output = new MemoryStream();
-
-        using (var zlib = new ZLibStream(output, CompressionLevel.Optimal, true))
-            zlib.Write(data);
-
-        return output.ToArray();
     }
 
     private MetaFileSync NewSync(Func<string, byte[], bool>? write = null) => new(() => Root, Requests.Add, () => Completions++, ListedNames.Add, write, Clock);

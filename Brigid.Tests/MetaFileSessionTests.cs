@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Text;
 using Brigid.Data;
 using Brigid.Data.Repositories;
@@ -7,6 +6,7 @@ using Brigid.Systems;
 using DALib.Cryptography;
 using DALib.Data;
 using Xunit;
+using static Brigid.Tests.MetaFileTestData;
 
 namespace Brigid.Tests;
 
@@ -17,8 +17,6 @@ public sealed class MetaFileSessionTests : IDisposable
 {
     private static readonly byte[] Content = Encoding.ASCII.GetBytes("Light content");
     private static readonly uint ContentChecksum = CRC32.Calculate(Content);
-
-    private const long TIMEOUT_MS = MetaFileSync.REQUEST_TIMEOUT_SECONDS * 1000;
 
     private readonly string Root = Path.Combine(Path.GetTempPath(), "brigid-metasession-" + Guid.NewGuid().ToString("N"));
     private readonly MetaFileRepository Repository;
@@ -31,32 +29,12 @@ public sealed class MetaFileSessionTests : IDisposable
         Directory.CreateDirectory(Root);
         Repository = new MetaFileRepository(Root);
 
-        WriteMetaFile("ItemInfo0", new MetaFileEntry("Stick", ["1", "0", "1", "Weapon", "A stick."]));
-        WriteMetaFile("SEvent1", new MetaFileEntry("Listed event"));
-        WriteMetaFile("SEvent2", new MetaFileEntry("Other event"));
+        WriteMetaFile(Root, "ItemInfo0", new MetaFileEntry("Stick", ["1", "0", "1", "Weapon", "A stick."]));
+        WriteMetaFile(Root, "SEvent1", new MetaFileEntry("Listed event"));
+        WriteMetaFile(Root, "SEvent2", new MetaFileEntry("Other event"));
     }
 
     public void Dispose() => Directory.Delete(Root, true);
-
-    private void WriteMetaFile(string name, params MetaFileEntry[] entries)
-    {
-        var file = new MetaFile();
-
-        foreach (var entry in entries)
-            file.Add(entry);
-
-        file.Save(Path.Combine(Root, name));
-    }
-
-    private static byte[] Compress(byte[] data)
-    {
-        using var output = new MemoryStream();
-
-        using (var zlib = new ZLibStream(output, CompressionLevel.Optimal, true))
-            zlib.Write(data);
-
-        return output.ToArray();
-    }
 
     private MetaFileSession NewSession(Action? complete = null)
         => new(() => Root, Requests.Add, complete ?? (() => Completions++), () => Repository, Clock);
@@ -68,8 +46,6 @@ public sealed class MetaFileSessionTests : IDisposable
 
     private bool OnDisk(string name) => File.Exists(Path.Combine(Root, name));
 
-    private string[] Read(params string[] names) => [.. Repository.ListedIn(names)];
-
     [Fact]
     public void AListInWorldGivesTheRepositoryItsNames()
     {
@@ -77,7 +53,7 @@ public sealed class MetaFileSessionTests : IDisposable
 
         session.OnChecksums(ConnectionState.World, [Current("SEvent1")]);
 
-        Assert.Equal(["SEvent1"], Read("SEvent1", "SEvent2"));
+        Assert.Equal(["SEvent1"], Repository.ListedNamesForTests);
         Assert.Equal(1, Completions);
     }
 
@@ -91,7 +67,7 @@ public sealed class MetaFileSessionTests : IDisposable
         Assert.Empty(Requests);
         Assert.Equal(0, Completions);
         Assert.True(OnDisk("SEvent2"));
-        Assert.Equal(["SEvent1", "SEvent2"], Read("SEvent1", "SEvent2"));
+        Assert.Null(Repository.ListedNamesForTests);
     }
 
     [Fact]
@@ -167,7 +143,7 @@ public sealed class MetaFileSessionTests : IDisposable
 
         session.ServerChanged();
 
-        Assert.Equal(["SEvent1", "SEvent2"], Read("SEvent1", "SEvent2"));
+        Assert.Null(Repository.ListedNamesForTests);
     }
 
     [Fact]

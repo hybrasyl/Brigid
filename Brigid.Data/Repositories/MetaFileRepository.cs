@@ -30,16 +30,12 @@ public sealed class MetaFileRepository
     private readonly Func<string> DirectoryOf;
     private string MetaFileDirectory => DirectoryOf();
     //item name (any case) to the name of the ItemInfo file that holds it
-    private FrozenDictionary<string, string>? ItemIndex;
+    private Dictionary<string, string>? ItemIndex;
     private NpcIllustrationMetadata? NpcIllustrationMetadataCache;
 
-    //the names of the last checksum list, or null before the first list of a server
-    private volatile ListedFiles? Listed;
-
-    //a scan of the folder reads the files that the prune keeps, and a listed file whose name changed case (ListedIn). A
-    //lookup by a fixed name (Light, SClass1) finds the listed name in any case, and reads the file under the listed name,
-    //which is the name that the sync writes
-    private sealed record ListedFiles(FrozenSet<string> Exact, FrozenDictionary<string, string> AnyCase);
+    //the names of the last checksum list (any case), or null before the first list of a server. The repository opens a
+    //listed file by its listed name, so the file system matches the case, as the sync's checksum read does
+    private volatile FrozenSet<string>? Listed;
 
     public MetaFileRepository() : this(() => AppPaths.MetaFileDir) { }
 
@@ -52,11 +48,7 @@ public sealed class MetaFileRepository
     ///     Sets the names of the server's last checksum list. The repository then reads only those files, so a stale file
     ///     that the sync could not delete is not read (BRIG-167).
     /// </summary>
-    public void SetListedNames(IReadOnlyCollection<string> names)
-        => Listed = new ListedFiles(
-            names.ToFrozenSet(StringComparer.Ordinal),
-            names.DistinctBy(name => name, StringComparer.OrdinalIgnoreCase)
-                 .ToFrozenDictionary(name => name, name => name, StringComparer.OrdinalIgnoreCase));
+    public void SetListedNames(IReadOnlyCollection<string> names) => Listed = names.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     ///     Forgets the names of the last checksum list, so the repository reads every file in the folder, as before the
@@ -64,36 +56,39 @@ public sealed class MetaFileRepository
     /// </summary>
     public void ForgetListedNames() => Listed = null;
 
-    /// <summary>
-    ///     The names in a scan of the folder that the repository reads. With no list, every name. With a list, each listed
-    ///     name, and a name that differs from a listed name only in case when the scan has no file with the listed name.
-    /// </summary>
-    /// <remarks>
-    ///     The prune deletes a file whose name changed case, but it cannot delete a read-only file or one that another
-    ///     program holds. On Windows the sync then finds that file under the listed name, its checksum matches, and the
-    ///     sync does not download it, so an exact match hid the file. On Linux the sync writes the listed name beside the
-    ///     old file, and the exact name wins.
-    /// </remarks>
-    internal IEnumerable<string> ListedIn(IReadOnlyCollection<string> fileNames)
-    {
-        if (Listed is not { } listed)
-            return fileNames;
-
-        var present = fileNames.ToHashSet(StringComparer.Ordinal);
-
-        return fileNames.Where(
-            name => listed.Exact.Contains(name)
-                    || (listed.AnyCase.TryGetValue(name, out var listedName) && !present.Contains(listedName)));
-    }
-
-    //for a file name from the item index, which was built from a scan
-    private bool IsListedInAnyCase(string fileName) => Listed is not { } listed || listed.AnyCase.ContainsKey(fileName);
+    /// <summary>The names of the last checksum list, or null before the first list, for the tests.</summary>
+    internal IReadOnlyCollection<string>? ListedNamesForTests => Listed;
 
     //for a lookup by name: the name of the file to read, or null when the list does not name it
     private string? ListedNameFor(string name)
         => Listed is not { } listed ? name
-            : listed.AnyCase.TryGetValue(name, out var listedName) ? listedName
+            : listed.TryGetValue(name, out var listedName) ? listedName
             : null;
+
+    //the files whose names start with the prefix. With a list, the listed files that are there, each opened by its listed
+    //name: a stale file that the prune could not delete is never opened, and a listed file whose name changed case is
+    //found where the file system finds it (the prune cannot delete such a file on Windows either, and the sync then finds
+    //it under the listed name). With no list, every file in the folder; a folder that cannot be listed gives none
+    private (string Path, string Name)[] ScanFiles(string prefix)
+    {
+        var directory = MetaFileDirectory;
+
+        if (Listed is { } listed)
+            return
+            [
+                .. listed.Where(name => name.StartsWithI(prefix))
+                         .Select(name => (Path: Path.Combine(directory, name), Name: name))
+                         .Where(file => File.Exists(file.Path))
+            ];
+
+        string[] paths = [];
+
+        //the sync completion builds the item index from the game loop, outside the packet handler's catch
+        if (!Directory.Exists(directory) || !DataDiagnostics.Try(() => paths = Directory.GetFiles(directory), $"list the {prefix} metafiles"))
+            return [];
+
+        return [.. paths.Select(path => (Path: path, Name: Path.GetFileName(path))).Where(file => file.Name.StartsWithI(prefix))];
+    }
 
     /// <summary>
     ///     Builds the item name-to-file index for fast lookups. Must be called once after metadata files are synced to disk.
@@ -101,29 +96,7 @@ public sealed class MetaFileRepository
     public void BuildItemIndex()
     {
         var index = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        if (!Directory.Exists(MetaFileDirectory))
-        {
-            ItemIndex = index.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-
-            return;
-        }
-
-        string[] paths = [];
-
-        //a folder that cannot be listed gives an empty index, as a missing folder does. The sync completion calls this
-        //from the game loop, outside the packet handler's catch
-        if (!DataDiagnostics.Try(() => paths = Directory.GetFiles(MetaFileDirectory), "list metafiles for the item index"))
-        {
-            ItemIndex = index.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
-
-            return;
-        }
-
-        var files = ListedIn([.. paths.Select(path => Path.GetFileName(path))])
-                    .Where(name => name.StartsWithI("ItemInfo") && ushort.TryParse(name.AsSpan("ItemInfo".Length), out _))
-                    .Select(name => (Path: Path.Combine(MetaFileDirectory, name), Name: name))
-                    .ToArray();
+        var files = ScanFiles("ItemInfo").Where(file => ushort.TryParse(file.Name.AsSpan("ItemInfo".Length), out _));
 
         Parallel.ForEach(
             files,
@@ -136,7 +109,7 @@ public sealed class MetaFileRepository
                     index.TryAdd(entry.Key, file.Name);
             });
 
-        ItemIndex = index.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
+        ItemIndex = new Dictionary<string, string>(index, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -191,21 +164,11 @@ public sealed class MetaFileRepository
     /// </summary>
     public IReadOnlyList<MetaFile> GetAll(string prefix)
     {
-        if (!Directory.Exists(MetaFileDirectory))
-            return [];
-
         var results = new List<MetaFile>();
 
-        foreach (var fileName in ListedIn([.. Directory.GetFiles(MetaFileDirectory).Select(path => Path.GetFileName(path))]))
-        {
-            if (!fileName.StartsWithI(prefix))
-                continue;
-
-            if (!TryLoadMetaFile(Path.Combine(MetaFileDirectory, fileName), out var metaFile))
-                continue;
-
-            results.Add(metaFile);
-        }
+        foreach (var file in ScanFiles(prefix))
+            if (TryLoadMetaFile(file.Path, out var metaFile))
+                results.Add(metaFile);
 
         return results;
     }
@@ -230,7 +193,7 @@ public sealed class MetaFileRepository
 
         foreach (var name in itemNames)
         {
-            if (!ItemIndex.TryGetValue(name, out var fileName) || !IsListedInAnyCase(fileName))
+            if (!ItemIndex.TryGetValue(name, out var fileName) || ListedNameFor(fileName) is null)
                 continue;
 
             if (!fileGroups.TryGetValue(fileName, out var names))

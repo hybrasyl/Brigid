@@ -15,6 +15,10 @@ public static class DataDiagnostics
     ///     Runs a file operation, catching (and logging) only IO/permission failures so the caller never crashes on a
     ///     denied/locked/full write. Non-IO exceptions propagate. Returns true on success.
     /// </summary>
+    /// <remarks>
+    ///     On Linux a write over the file-size limit (EFBIG) arrives as <see cref="ArgumentOutOfRangeException" />, so it
+    ///     is an IO failure here too; keep other work that can throw it out of <paramref name="io" />.
+    /// </remarks>
     public static bool Try(Action io, string what)
     {
         try
@@ -22,7 +26,8 @@ public static class DataDiagnostics
             io();
 
             return true;
-        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException
+                                       or ArgumentOutOfRangeException)
         {
             Log?.Invoke($"[data] IO failed ({what}): {ex.GetType().Name}: {ex.Message}");
 
