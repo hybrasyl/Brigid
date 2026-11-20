@@ -43,31 +43,31 @@ public static class Keybinds
     {
         // ── TextEditing (UITextBox) ── primary-modifier actions bind to Meta (Ctrl on Win/Linux, Cmd on
         // macOS). On Windows Meta≡Ctrl, so these are byte-for-byte the current chords.
-        [CommandId.Editor_Copy]      = new(new KeyChord(Keys.C, ChordMods.Meta), KeybindContext.TextEditing),
-        [CommandId.Editor_Cut]       = new(new KeyChord(Keys.X, ChordMods.Meta), KeybindContext.TextEditing),
-        [CommandId.Editor_Paste]     = new(new KeyChord(Keys.V, ChordMods.Meta), KeybindContext.TextEditing),
-        [CommandId.Editor_Undo]      = new(new KeyChord(Keys.Z, ChordMods.Meta), KeybindContext.TextEditing),
+        [CommandId.Editor_Copy]      = new(new KeyChord(Keys.C, ChordMods.Meta), KeybindContext.TextEditing, repeats: true),
+        [CommandId.Editor_Cut]       = new(new KeyChord(Keys.X, ChordMods.Meta), KeybindContext.TextEditing, repeats: true),
+        [CommandId.Editor_Paste]     = new(new KeyChord(Keys.V, ChordMods.Meta), KeybindContext.TextEditing, repeats: true),
+        [CommandId.Editor_Undo]      = new(new KeyChord(Keys.Z, ChordMods.Meta), KeybindContext.TextEditing, repeats: true),
 
         //redo has two historical chords on the same OS: Ctrl+Shift+Z (primary, → Cmd+Shift+Z on macOS) and
         //literal Ctrl+Y (secondary). Both must resolve to redo for parity with the live editor handler.
-        [CommandId.Editor_Redo]      = new(new KeyChord(Keys.Z, ChordMods.Meta | ChordMods.Shift), new KeyChord(Keys.Y, ChordMods.Ctrl), KeybindContext.TextEditing),
+        [CommandId.Editor_Redo]      = new(new KeyChord(Keys.Z, ChordMods.Meta | ChordMods.Shift), new KeyChord(Keys.Y, ChordMods.Ctrl), KeybindContext.TextEditing, repeats: true),
 
         //select-all is Meta+A: on Windows that is Ctrl+A, the universal Select-All convention. Line-start is no
         //longer bound to Ctrl+A (see below), so there is nothing to collide with — we favour the average user's
         //expectation over the readline carve-out this used to preserve.
-        [CommandId.Editor_SelectAll] = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.TextEditing),
+        [CommandId.Editor_SelectAll] = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.TextEditing, repeats: true),
 
         //readline line-start/end kept as remappable commands, but defaulted OFF Ctrl+A/Ctrl+E onto Alt+Left/Right
         //so Ctrl+A is free for select-all above. Alt is unread by the literal text handlers, so these are
         //collision-free with the Ctrl/Ctrl+Shift+arrow word nav and word-selection. Home/End still do line
         //start/end for everyone; power users who want emacs bindings can rebind these back to Ctrl+A/Ctrl+E.
-        [CommandId.Editor_LineStart] = new(new KeyChord(Keys.Left, ChordMods.Alt), KeybindContext.TextEditing),
-        [CommandId.Editor_LineEnd]   = new(new KeyChord(Keys.Right, ChordMods.Alt), KeybindContext.TextEditing),
+        [CommandId.Editor_LineStart] = new(new KeyChord(Keys.Left, ChordMods.Alt), KeybindContext.TextEditing, repeats: true),
+        [CommandId.Editor_LineEnd]   = new(new KeyChord(Keys.Right, ChordMods.Alt), KeybindContext.TextEditing, repeats: true),
 
         // ── ReadView (UILabel, read-only) ── select-all is Meta+A (Ctrl+A), matching the editor for average-user
         // consistency. NOTE: this deliberately changes the old live UILabel handler, which was Ctrl+Shift+A.
-        [CommandId.Read_Copy]        = new(new KeyChord(Keys.C, ChordMods.Meta), KeybindContext.ReadView),
-        [CommandId.Read_SelectAll]   = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.ReadView),
+        [CommandId.Read_Copy]        = new(new KeyChord(Keys.C, ChordMods.Meta), KeybindContext.ReadView, repeats: true),
+        [CommandId.Read_SelectAll]   = new(new KeyChord(Keys.A, ChordMods.Meta), KeybindContext.ReadView, repeats: true),
 
         // ── WorldHud (WorldScreen.OnRootKeyDown) ── plain physical chords (no primary modifier unless the
         // live handler already required one). These bind byte-for-byte to the current hotkeys; the handler
@@ -79,12 +79,12 @@ public static class Keybinds
         [CommandId.World_ToggleBoard]         = new(new KeyChord(Keys.W), KeybindContext.WorldHud),
         [CommandId.World_ToggleWorldList]     = new(new KeyChord(Keys.E), KeybindContext.WorldHud),
         [CommandId.World_ToggleSocialStatus]  = new(new KeyChord(Keys.R), KeybindContext.WorldHud),
-        [CommandId.World_Assail]              = new(new KeyChord(Keys.Space), KeybindContext.WorldHud),
+        [CommandId.World_Assail]              = new(new KeyChord(Keys.Space), KeybindContext.WorldHud, repeats: true),
         [CommandId.World_Shout]               = new(new KeyChord(Keys.D1, ChordMods.Shift), KeybindContext.WorldHud),
         [CommandId.World_Whisper]             = new(new KeyChord(Keys.OemQuotes, ChordMods.Shift), KeybindContext.WorldHud),
         [CommandId.World_ToggleTabMap]        = new(new KeyChord(Keys.Tab), KeybindContext.WorldHud),
-        [CommandId.World_TabMapZoomIn]        = new(new KeyChord(Keys.PageUp), KeybindContext.WorldHud),
-        [CommandId.World_TabMapZoomOut]       = new(new KeyChord(Keys.PageDown), KeybindContext.WorldHud),
+        [CommandId.World_TabMapZoomIn]        = new(new KeyChord(Keys.PageUp), KeybindContext.WorldHud, repeats: true),
+        [CommandId.World_TabMapZoomOut]       = new(new KeyChord(Keys.PageDown), KeybindContext.WorldHud, repeats: true),
         [CommandId.World_HelpMerchant]        = new(new KeyChord(Keys.F1), KeybindContext.WorldHud),
         [CommandId.World_MacroMenu]           = new(new KeyChord(Keys.F3), KeybindContext.WorldHud),
         [CommandId.World_Settings]            = new(new KeyChord(Keys.F4), KeybindContext.WorldHud),
@@ -97,7 +97,7 @@ public static class Keybinds
         [CommandId.World_ToggleMainHud]       = new(new KeyChord(Keys.OemQuestion, ChordMods.Shift), KeybindContext.WorldHud),
         [CommandId.World_UnequipWeaponShield] = new(new KeyChord(Keys.OemTilde), KeybindContext.WorldHud),
         [CommandId.World_GroupHighlight]      = new(new KeyChord(Keys.J), KeybindContext.WorldHud),
-        [CommandId.World_PickupItem]          = new(new KeyChord(Keys.B), KeybindContext.WorldHud),
+        [CommandId.World_PickupItem]          = new(new KeyChord(Keys.B), KeybindContext.WorldHud, repeats: true),
         [CommandId.World_TownMap]             = new(new KeyChord(Keys.T), KeybindContext.WorldHud),
         [CommandId.World_GroupPanel]          = new(new KeyChord(Keys.Y), KeybindContext.WorldHud),
         // HUD tab panels — bare key switches to the tab; the Shift-variant selects the alternate panel (or
@@ -116,16 +116,16 @@ public static class Keybinds
         [CommandId.World_TabStatsExtended]    = new(new KeyChord(Keys.G, ChordMods.Shift), KeybindContext.WorldHud),
         [CommandId.World_TabTools]            = new(new KeyChord(Keys.H), KeybindContext.WorldHud),
 
-        [CommandId.World_ChatScrollUp]        = new(new KeyChord(Keys.Up, ChordMods.Shift), KeybindContext.WorldHud),
-        [CommandId.World_ChatScrollDown]      = new(new KeyChord(Keys.Down, ChordMods.Shift), KeybindContext.WorldHud),
+        [CommandId.World_ChatScrollUp]        = new(new KeyChord(Keys.Up, ChordMods.Shift), KeybindContext.WorldHud, repeats: true),
+        [CommandId.World_ChatScrollDown]      = new(new KeyChord(Keys.Down, ChordMods.Shift), KeybindContext.WorldHud, repeats: true),
 
         // ── Movement ── arrow (primary) + Z/X/C/V (secondary), both bare — byte-for-byte the old direction
         // switch (Up/C, Right/V, Down/X, Left/Z), now exact-chord and rebindable. The bare arrows carry no
         // Shift, so they never collide with the Shift-arrow chat-scroll chords above.
-        [CommandId.Move_Up]    = new(new KeyChord(Keys.Up), new KeyChord(Keys.C), KeybindContext.WorldHud),
-        [CommandId.Move_Right] = new(new KeyChord(Keys.Right), new KeyChord(Keys.V), KeybindContext.WorldHud),
-        [CommandId.Move_Down]  = new(new KeyChord(Keys.Down), new KeyChord(Keys.X), KeybindContext.WorldHud),
-        [CommandId.Move_Left]  = new(new KeyChord(Keys.Left), new KeyChord(Keys.Z), KeybindContext.WorldHud)
+        [CommandId.Move_Up]    = new(new KeyChord(Keys.Up), new KeyChord(Keys.C), KeybindContext.WorldHud, repeats: true),
+        [CommandId.Move_Right] = new(new KeyChord(Keys.Right), new KeyChord(Keys.V), KeybindContext.WorldHud, repeats: true),
+        [CommandId.Move_Down]  = new(new KeyChord(Keys.Down), new KeyChord(Keys.X), KeybindContext.WorldHud, repeats: true),
+        [CommandId.Move_Left]  = new(new KeyChord(Keys.Left), new KeyChord(Keys.Z), KeybindContext.WorldHud, repeats: true)
     }.ToFrozenDictionary();
 
     /// <summary>
@@ -171,9 +171,15 @@ public static class Keybinds
         return Overrides.TryGetValue(id, out var binding) ? binding : EffectiveDefault(id);
     }
 
-    /// <summary>True if <paramref name="e" /> hits either chord of the binding for <paramref name="id" />.</summary>
+    /// <summary>
+    ///     True if <paramref name="e" /> hits either chord of the binding for <paramref name="id" />. A key repeat of the OS
+    ///     matches only a command that repeats (<see cref="KeybindDefault.Repeats" />).
+    /// </summary>
     public static bool Matches(KeyEvent e, CommandId id)
     {
+        if (e.IsRepeat && !Defaults[id].Repeats)
+            return false;
+
         var binding = Effective(id);
 
         return ChordMatches(binding.Primary, e) || (binding.Secondary is { } secondary && ChordMatches(secondary, e));
@@ -494,13 +500,18 @@ public static class Keybinds
     }
 }
 
-/// <summary>A command's out-of-box binding and the context it resolves in.</summary>
-public readonly record struct KeybindDefault(KeyBinding Binding, KeybindContext Context)
+/// <summary>
+///     A command's out-of-box binding, the context it resolves in, and whether a key repeat of the OS fires it again
+///     (<see cref="Repeats" />). A toggle or a one-shot action does not repeat: a held key opens a window one time, and
+///     does not open and close it at the repeat rate. Movement, assail, scrolls and the text editing keys repeat.
+/// </summary>
+public readonly record struct KeybindDefault(KeyBinding Binding, KeybindContext Context, bool Repeats = false)
 {
-    public KeybindDefault(KeyChord primary, KeybindContext context) : this(new KeyBinding(primary), context) { }
+    public KeybindDefault(KeyChord primary, KeybindContext context, bool repeats = false)
+        : this(new KeyBinding(primary), context, repeats) { }
 
-    public KeybindDefault(KeyChord primary, KeyChord secondary, KeybindContext context)
-        : this(new KeyBinding(primary, secondary), context) { }
+    public KeybindDefault(KeyChord primary, KeyChord secondary, KeybindContext context, bool repeats = false)
+        : this(new KeyBinding(primary, secondary), context, repeats) { }
 
     /// <summary>The primary default chord (convenience for callers that don't care about the secondary).</summary>
     public KeyChord Chord => Binding.Primary;
