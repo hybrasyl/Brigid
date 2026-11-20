@@ -267,7 +267,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         TopBar.SetMail(attrs.HasMail, attrs.HasParcel);
         ShowMeter(HealthBar, attrs.CurrentHp, attrs.MaxHp);
         ShowMeter(ManaBar, attrs.CurrentMp, attrs.MaxMp);
-        Plate.SetLevel(attrs.Level);
+
+        if (attrs.HasPrimary)
+            Plate.SetLevel(attrs.Level);
 
         var experience = HudExperience.Fill(attrs, ConvertsExperiencePastCap);
         ExperienceBar.SetFill(experience.Fraction);

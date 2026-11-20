@@ -81,6 +81,32 @@ public class MainHudControlTests : IDisposable
         Assert.Empty(hud.LateDraws);
     }
 
+    //after a character switch a packet with no primary or current block showed the level, health and mana of the character before
+    [Fact]
+    public void AfterAClearAPartialPacketShowsNothingOfTheCharacterBefore()
+    {
+        var attributes = new PlayerAttributes();
+        var hud = new MainHudControl(DispatchProxy.Create<IWorldHud, RecordingHud>(), attributes: attributes, chat: new Chat());
+        Huds.Add(hud);
+
+        attributes.Update(new DALib.Networking.Packets.Server.AttributesPacket
+        {
+            Primary = new DALib.Networking.Packets.Server.PrimaryAttributes { Level = 41, MaxHp = 1500, MaxMp = 900 },
+            Current = new DALib.Networking.Packets.Server.CurrentAttributes { Hp = 1240, Mp = 800 }
+        });
+        Assert.Contains("41", hud.Plate.Detail);
+
+        attributes.Clear();
+        var next = new MainHudControl(DispatchProxy.Create<IWorldHud, RecordingHud>(), attributes: attributes, chat: new Chat());
+        Huds.Add(next);
+        attributes.Update(new DALib.Networking.Packets.Server.AttributesPacket { Experience = new DALib.Networking.Packets.Server.ExperienceAttributes { Experience = 10 } });
+
+        //the plate waits for the primary block of the next character
+        Assert.Equal(string.Empty, next.Plate.Detail);
+        Assert.DoesNotContain("1,240", next.HealthBar.Value);
+        Assert.DoesNotContain("800", next.ManaBar.Value);
+    }
+
     [Fact]
     public void TheWorldAreaIsTheViewportAndPassesTheMouseOn()
     {

@@ -108,27 +108,57 @@ public sealed class PlayerAttributes
     public event ChangedHandler? SpanLearned;
 
     /// <summary>
-    ///     True after the first primary block of the character. The spans and the activity log read the level from the
-    ///     primary block, so they wait for it: a clear keeps the level of the character before.
+    ///     True after the first primary block of the character. The spans, the activity log and the plate read the level
+    ///     from the primary block, so they wait for it: after a clear the level is 0 until that block.
     /// </summary>
     public bool HasPrimary { get; private set; }
 
     /// <summary>
-    ///     Clears the stored attributes. The mail and parcel state clears too, because the flag alone keeps it (see
-    ///     <see cref="DecodeMail" />), and the next character must not show the state of the one before.
+    ///     Clears every stored attribute. A packet can carry some blocks only, and the views read the flat fields, so a
+    ///     field that a clear keeps shows the character before (and the Details window could raise its stat). The mail and
+    ///     parcel state clears too, because the flag alone keeps it (see <see cref="DecodeMail" />).
     /// </summary>
     public void Clear()
     {
         HasData = false;
-        HasMail = false;
-        HasParcel = false;
         HasPrimary = false;
 
-        //the next character's first level block must not read this character's experience
+        Level = 0;
+        Ability = 0;
+        MaxHp = 0;
+        MaxMp = 0;
+        Str = 0;
+        Int = 0;
+        Wis = 0;
+        Con = 0;
+        Dex = 0;
+        UnspentPoints = 0;
+        MaxWeight = 0;
+        CurrentWeight = 0;
+
+        CurrentHp = 0;
+        CurrentMp = 0;
+
         TotalExp = 0;
         ToNextLevel = 0;
         TotalAbility = 0;
         ToNextAbility = 0;
+        GamePoints = 0;
+        Gold = 0;
+
+        Ac = 0;
+        Dmg = 0;
+        Hit = 0;
+        MagicResistance = 0;
+        OffenseElement = default;
+        DefenseElement = default;
+        Blind = false;
+
+        HasUnreadMail = false;
+        HasMail = false;
+        HasParcel = false;
+        IsGameMaster = false;
+
         LevelSpan.Reset();
         AbilitySpan.Reset();
     }

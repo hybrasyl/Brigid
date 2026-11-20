@@ -384,6 +384,27 @@ public class DetailsWindowTests : IDisposable
         Assert.Empty(activity.Entries);
     }
 
+    //after a character switch the window showed the character before's stats and could raise one with its points
+    [Fact]
+    public void AfterAClearThePacketsOfTheNextCharacterShowNoOldStatOrPoint()
+    {
+        var (window, _, attributes, activity) = NewWindow(unspent: 1);
+        var raised = new List<Stat>();
+        window.RaiseRequested += raised.Add;
+
+        attributes.Clear();
+        activity.Clear();
+        attributes.Update(new AttributesPacket { Experience = new ExperienceAttributes { Gold = 5 } });
+
+        Assert.Equal("0", window.StatShown(0));
+        Assert.Equal("Points 0", window.RemainingShown);
+        Assert.All(window.RaiseControls, raise => Assert.False(raise.Enabled));
+
+        Click(window.RaiseControls[0]);
+        Click(window.ConfirmButton);
+        Assert.Empty(raised);
+    }
+
     //a long line was squeezed until its glyphs overlapped; it ends in an ellipsis now, and its tooltip shows the full text
     [Fact]
     public void ALongActivityLineEndsInAnEllipsisAndKeepsItsFullText()
