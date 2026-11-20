@@ -50,6 +50,16 @@ public sealed class MetaFileRepositoryTests : IDisposable
         Assert.Equal(2, Repository.GetItemMetadata("Stick", "Old Sword").Count);
     }
 
+    //the index held a hash of each name, so two names with one hash gave one of the two items; it holds the names now,
+    //and a lookup ignores case as before
+    [Fact]
+    public void TheItemIndexFindsANameInAnyCase()
+    {
+        Repository.BuildItemIndex();
+
+        Assert.Equal(["Stick"], Repository.GetItemMetadata("stick").Keys);
+    }
+
     [Fact]
     public void GetAllReadsOnlyTheListedFiles()
     {
@@ -87,14 +97,31 @@ public sealed class MetaFileRepositoryTests : IDisposable
         Assert.NotNull(Repository.Get("NPCIllust"));
     }
 
-    //the prune compares names exactly, so a scan does too: on Linux a stale SEvent1 beside a listed sevent1 is not read
+    //a file whose name changed case stays when the prune cannot delete it, and on Windows the sync finds it under the
+    //listed name and does not download it. An exact match hid it: the index was empty
     [Fact]
-    public void AScanComparesNamesExactly()
+    public void AScanReadsAListedFileWhoseNameChangedCase()
+    {
+        ListOnly("iteminfo0", "sevent1");
+        Repository.BuildItemIndex();
+
+        Assert.Equal("Listed event", Repository.GetAll("SEvent").Single().Single().Key);
+        Assert.Equal(["Stick"], Repository.GetItemMetadata("Stick", "Old Sword").Keys);
+    }
+
+    //on Linux the sync writes the listed name beside an old file that the prune cannot delete, and the exact name wins
+    [Fact]
+    public void AScanPrefersTheExactListedName()
     {
         ListOnly("sevent1");
 
-        Assert.Empty(Repository.GetAll("SEvent"));
+        Assert.Equal(["sevent1"], Repository.ListedIn(["SEvent1", "sevent1", "SEvent2"]));
+        Assert.Equal(["SEvent1"], Repository.ListedIn(["SEvent1", "SEvent2"]));
     }
+
+    [Fact]
+    public void WithNoListAScanReadsEveryName()
+        => Assert.Equal(["SEvent1", "sevent1"], Repository.ListedIn(["SEvent1", "sevent1"]));
 
     //a world transfer gives a new list before its sync completes and builds the index again
     [Fact]
@@ -119,73 +146,14 @@ public sealed class MetaFileRepositoryTests : IDisposable
 
     //the sync completion builds the index from the game loop, outside the packet handler's catch: a folder that cannot
     //be listed gives an empty index and does not throw
-    [Fact]
+    [ListingDenialFact]
     public void AFolderThatCannotBeListedGivesAnEmptyIndex()
     {
-        using var denied = DenyListing(Root);
-
-        if (!denied.Works)
-            return;
+        using var denied = new ListingDenied(Root);
+        Assert.True(denied.Works);
 
         Repository.BuildItemIndex();
 
         Assert.Empty(Repository.GetItemMetadata("Stick"));
-    }
-
-    private static ListingDenied DenyListing(string directory) => new(directory);
-
-    //refuses the listing of a folder to this process; Works is false when the OS still lists it (a root user)
-    private sealed class ListingDenied : IDisposable
-    {
-        private readonly string Directory;
-        private readonly System.Security.AccessControl.FileSystemAccessRule? Rule;
-
-        public bool Works { get; }
-
-        public ListingDenied(string directory)
-        {
-            Directory = directory;
-
-            if (OperatingSystem.IsWindows())
-            {
-                var user = System.Security.Principal.WindowsIdentity.GetCurrent().User!;
-                Rule = new System.Security.AccessControl.FileSystemAccessRule(
-                    user,
-                    System.Security.AccessControl.FileSystemRights.ListDirectory,
-                    System.Security.AccessControl.AccessControlType.Deny);
-                var info = new DirectoryInfo(directory);
-                var security = info.GetAccessControl();
-                security.AddAccessRule(Rule);
-                info.SetAccessControl(security);
-            } else
-                File.SetUnixFileMode(directory, UnixFileMode.UserExecute);
-
-            Works = !CanList(directory);
-        }
-
-        private static bool CanList(string directory)
-        {
-            try
-            {
-                System.IO.Directory.GetFiles(directory);
-
-                return true;
-            } catch (UnauthorizedAccessException)
-            {
-                return false;
-            }
-        }
-
-        public void Dispose()
-        {
-            if (OperatingSystem.IsWindows())
-            {
-                var info = new DirectoryInfo(Directory);
-                var security = info.GetAccessControl();
-                security.RemoveAccessRule(Rule!);
-                info.SetAccessControl(security);
-            } else
-                File.SetUnixFileMode(Directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
     }
 }

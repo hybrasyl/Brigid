@@ -123,6 +123,66 @@ public sealed class MetaFileCacheTests : IDisposable
         Assert.Equal([7, 8], File.ReadAllBytes(Path.Combine(Root, "Light")));
     }
 
+    [Fact]
+    public void TryWrite_ReplacesTheOldCopyAndLeavesNoTemporaryFile()
+    {
+        File.WriteAllBytes(Path.Combine(Root, "Light"), [1, 2, 3]);
+
+        Assert.True(MetaFileCache.TryWrite(Root, "Light", [7, 8]));
+
+        Assert.Equal([7, 8], File.ReadAllBytes(Path.Combine(Root, "Light")));
+        Assert.Equal(["Light"], OnDisk());
+    }
+
+    //the write went straight over the cache file, so a write that failed part way (a full disk) left a cut file in place
+    //of the old copy
+    [Fact]
+    public void TryWrite_AWriteThatFailsPartWayKeepsTheOldCopy()
+    {
+        File.WriteAllBytes(Path.Combine(Root, "Light"), [1, 2, 3]);
+
+        var written = MetaFileCache.TryWrite(Root, "Light", [7, 8, 9, 10], (path, data) =>
+        {
+            File.WriteAllBytes(path, data[..2]);
+
+            throw new IOException("There is not enough space on the disk.");
+        });
+
+        Assert.False(written);
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(Path.Combine(Root, "Light")));
+        Assert.Equal(["Light"], OnDisk());
+    }
+
+    //on Linux a write over the file-size limit (EFBIG) arrives as ArgumentOutOfRangeException; it escaped OnData before
+    //the sync counted the failure
+    [Fact]
+    public void TryWrite_AWriteOverTheSizeLimitReturnsFalse()
+    {
+        File.WriteAllBytes(Path.Combine(Root, "Light"), [1, 2, 3]);
+
+        var written = MetaFileCache.TryWrite(Root, "Light", [7, 8], (path, data) =>
+        {
+            File.WriteAllBytes(path, data[..1]);
+
+            throw new ArgumentOutOfRangeException("value", "File too large.");
+        });
+
+        Assert.False(written);
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(Path.Combine(Root, "Light")));
+        Assert.Equal(["Light"], OnDisk());
+    }
+
+    [Fact]
+    public void PruneUnlisted_DeletesATemporaryFileThatAWriteLeft()
+    {
+        Touch("Light");
+        Touch("Light" + MetaFileCache.TEMP_SUFFIX);
+
+        MetaFileCache.PruneUnlisted(Root, ["Light"]);
+
+        Assert.Equal(["Light"], OnDisk());
+    }
+
     [Theory]
     [InlineData("../escaped")]
     [InlineData(@"..\escaped")]

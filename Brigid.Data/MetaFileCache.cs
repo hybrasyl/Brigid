@@ -78,15 +78,47 @@ public static class MetaFileCache
         return data.Length > 0 ? CRC32.Calculate(data.ToArray()) : null;
     }
 
-    /// <summary>Writes a metafile, and makes the directory when it is not there. Returns false when the name is refused or the write fails.</summary>
-    public static bool TryWrite(string directory, string name, byte[] data)
-        => FileNames.IsSafeName(name)
-           && DataDiagnostics.Try(
-               () =>
-               {
-                   Directory.CreateDirectory(directory);
-                   File.WriteAllBytes(Path.Combine(directory, name), data);
-               }, $"write metafile {name}");
+    /// <summary>The suffix of the temporary file that a write fills before it replaces the metafile.</summary>
+    public const string TEMP_SUFFIX = ".tmp";
+
+    /// <summary>
+    ///     Writes a metafile, and makes the directory when it is not there. Returns false when the name is refused or the
+    ///     write fails. The data goes to a temporary file that then replaces the metafile, so a write that fails part way
+    ///     keeps the old copy.
+    /// </summary>
+    public static bool TryWrite(string directory, string name, byte[] data) => TryWrite(directory, name, data, File.WriteAllBytes);
+
+    /// <param name="directory">The metafile folder.</param>
+    /// <param name="name">The listed name of the metafile.</param>
+    /// <param name="data">The compressed metafile.</param>
+    /// <param name="writeFile">Writes the bytes to a path; the tests give a write that fails part way.</param>
+    internal static bool TryWrite(string directory, string name, byte[] data, Action<string, byte[]> writeFile)
+    {
+        if (!FileNames.IsSafeName(name))
+            return false;
+
+        var path = Path.Combine(directory, name);
+        var temp = path + TEMP_SUFFIX;
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+            writeFile(temp, data);
+            File.Move(temp, path, true);
+
+            return true;
+        }
+        //rule 6 exemption: a write that fails is requested again, and the sync counts it. On Linux a write over the
+        //file-size limit (EFBIG) arrives as ArgumentOutOfRangeException; out of OnData, it escaped the failure count
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException
+                                       or ArgumentOutOfRangeException)
+        {
+            DataDiagnostics.Log?.Invoke($"[data] IO failed (write metafile {name}): {ex.GetType().Name}: {ex.Message}");
+            DataDiagnostics.Try(() => File.Delete(temp), $"delete temporary metafile {name}{TEMP_SUFFIX}");
+
+            return false;
+        }
+    }
 
     /// <summary>
     ///     Deletes each file in <paramref name="directory" /> whose name is not in <paramref name="listedNames" />, and
@@ -98,7 +130,8 @@ public static class MetaFileCache
     ///     across <c>ItemInfoN</c> files and the split moves when items change, so an old file can give an item its old
     ///     class or level. The comparison here is ordinal, but the client's pending set ignores case. So on a
     ///     case-insensitive file system, this method deletes a file whose name changed case, and the sync downloads it
-    ///     again.
+    ///     again. A file that it cannot delete keeps the old case; the repository reads it under the listed name (see
+    ///     <see cref="Repositories.MetaFileRepository.ListedIn" />). It also deletes a temporary file that a write left.
     /// </remarks>
     public static IReadOnlyList<string> PruneUnlisted(string directory, IEnumerable<string> listedNames)
     {

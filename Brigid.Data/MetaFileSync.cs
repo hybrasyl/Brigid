@@ -34,8 +34,8 @@ public sealed class MetaFileSync
     private readonly Func<string, byte[], bool> Write;
     private readonly TimeProvider Clock;
 
-    //the files that the client requested and has not completed. A file is written under the listed name, because the
-    //repository and the prune match names exactly
+    //the files that the client requested and has not completed. A file is written under the listed name, the name that
+    //the prune keeps and that the repository reads first
     private readonly Dictionary<string, Entry> Pending = new(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="Name">The name as the checksum list gives it.</param>
@@ -68,7 +68,7 @@ public sealed class MetaFileSync
     /// <param name="listed">Takes the safe names of each checksum list.</param>
     /// <param name="write">Writes one file and returns false on a failure; null writes with <see cref="MetaFileCache.TryWrite" />.</param>
     /// <param name="clock">The clock of the time limit; null is the system clock.</param>
-    internal MetaFileSync(
+    public MetaFileSync(
         Func<string> directory,
         Action<string> request,
         Action complete,

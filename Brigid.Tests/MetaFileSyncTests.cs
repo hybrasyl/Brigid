@@ -151,7 +151,8 @@ public sealed class MetaFileSyncTests : IDisposable
         Assert.Equal(1, Completions);
     }
 
-    //the repository and the prune match names exactly, so the file takes the name from the list, not from the answer
+    //the prune keeps the listed name and the repository reads it first, so the file takes the name from the list, not
+    //from the answer
     [Fact]
     public void OnData_MatchesARequestedNameWhateverItsCase_AndWritesItUnderTheListedName()
     {
@@ -559,6 +560,23 @@ public sealed class MetaFileSyncTests : IDisposable
         Assert.Equal(MetaFileSync.MAX_REQUESTS, Requests.Count(name => name == "ItemInfo0"));
         Assert.Equal(1, Completions);
         Assert.False(OnDisk("ItemInfo0"));
+    }
+
+    //an answer clears the time limits before its own payload counts: a bad payload after two time limits is requested
+    //again, and the file is not given up
+    [Fact]
+    public void OnData_ABadPayloadAfterTwoTimeLimitsIsRequestedAgain()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0"));
+        Wait(sync, TIMEOUT_MS);
+        Wait(sync, TIMEOUT_MS);
+
+        sync.OnData("ItemInfo0", ContentChecksum, Compress([9, 9]));
+
+        Assert.Equal(4, Requests.Count);
+        Assert.Equal(1, sync.PendingCount);
+        Assert.Equal(0, Completions);
     }
 
     //the cache keeps its old copy of a file that has no answer
