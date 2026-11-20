@@ -303,9 +303,7 @@ public sealed class UiRenderer : IDisposable
             //2x2 box filter samples the top-left (HALF_ICON_SIZE*2)x(HALF_ICON_SIZE*2) of the source.
             //legacy 31x31 EPF drops 1px edge; modern 32x32 .datf drops 2px — imperceptible at 15x15.
             //the filter reads a block of (HALF_ICON_SIZE*2) px on each side: a smaller pack icon is first scaled up to it
-            using var sourceBitmap = ToDownsampleSource(sourceImage, HALF_ICON_SIZE * 2);
-            var srcPixels = sourceBitmap.Pixels;
-            var halvedPixels = ImageUtil.DownsampleIcon(srcPixels, sourceBitmap.Width, HALF_ICON_SIZE, HALF_ICON_SIZE);
+            var halvedPixels = HalfSizePixels(sourceImage, HALF_ICON_SIZE);
 
             using var halfBitmap = new SKBitmap(
                 new SKImageInfo(
@@ -326,6 +324,14 @@ public sealed class UiRenderer : IDisposable
             if (ownedSource)
                 sourceImage.Dispose();
         }
+    }
+
+    //the pixels of the half-size icon of an image: side x side, from a block of side * 2 px on each side
+    internal static SKColor[] HalfSizePixels(SKImage image, int side)
+    {
+        using var source = ToDownsampleSource(image, side * 2);
+
+        return ImageUtil.DownsampleIcon(source.Pixels, source.Width, side, side);
     }
 
     //the bitmap of an image, scaled up to side size when it is smaller than that on an axis

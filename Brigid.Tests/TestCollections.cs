@@ -32,6 +32,10 @@ public sealed class FontEngineCollection;
 [CollectionDefinition("GameClientTimeouts")]
 public sealed class GameClientTimeoutsCollection;
 
+// InputBuffer is static: its held keys and its buffered events. The tests that give it an SDL event run alone.
+[CollectionDefinition("InputBuffer", DisableParallelization = true)]
+public sealed class InputBufferCollection;
+
 // UITextBox keeps one static FocusedTextBox, and a focused box removes the focus from any other.
 // InputDispatcher.Instance is static too, and an open DropDown writes to it. The tests that focus a text box or use the
 // dispatcher run alone.

@@ -26,9 +26,12 @@ public class MainHudControlTests : IDisposable
     {
         public List<string> Calls { get; } = [];
 
+        public List<object?[]> Arguments { get; } = [];
+
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
         {
             Calls.Add(targetMethod!.Name);
+            Arguments.Add(args ?? []);
 
             var type = targetMethod.ReturnType;
 
@@ -172,6 +175,25 @@ public class MainHudControlTests : IDisposable
         Assert.Equal(
             ["get_Inventory", "get_ActiveTab", "ShowTab", "HandleTabActivation", "CollapseExpanded"],
             classic.Calls);
+    }
+
+    //BRIG-149: S, D and H reach the classic HUD with their own tab, and open the Abilities window; a forward of the
+    //Inventory tab for them kept every test green
+    [Theory]
+    [InlineData(HudTab.Skills, false)]
+    [InlineData(HudTab.Skills, true)]
+    [InlineData(HudTab.Spells, false)]
+    [InlineData(HudTab.Spells, true)]
+    [InlineData(HudTab.Tools, false)]
+    public void TheAbilityKeysForwardTheirOwnTabAndOpenTheAbilitiesWindow(HudTab tab, bool shift)
+    {
+        var (hud, classic) = NewHud();
+
+        hud.HandleTabActivation(tab, shift);
+
+        Assert.Equal(["HandleTabActivation"], classic.Calls);
+        Assert.Equal([tab, shift], classic.Arguments.Single());
+        Assert.True(hud.Windows.PanelFor(HudWindows.Abilities).Visible);
     }
 
     //BRIG-145: a drop or a click on the chat box does not reach the world; while hidden, only its tab row takes the mouse

@@ -378,4 +378,56 @@ public class AbilitiesWindowTests : IDisposable
 
         Assert.Empty(window.Entries);
     }
+
+    [Fact]
+    public void TheWindowStopsListeningToTheSpellBookWhenItIsDisposed()
+    {
+        var spells = new SpellBook();
+        var window = new AbilitiesWindowControl(new SkillBook(), spells, new PlayerAttributes(), () => null, _ => null, Locked);
+        window.Refresh();
+        window.Dispose();
+
+        spells.SetSlot(1, 1, "beag ioc");
+        window.Refresh();
+
+        Assert.Empty(window.Entries);
+    }
+
+    //a row reads the icon again only for another ability: after a page turn it shows the icon of its new ability, and a
+    //list that builds again with the same abilities reads no icon
+    [Fact]
+    public void ARowReadsTheIconOnlyForAnotherAbility()
+    {
+        var reads = 0;
+        var skills = Skills(17);
+        var window = new AbilitiesWindowControl(
+            skills,
+            new SpellBook(),
+            new PlayerAttributes(),
+            () => null,
+            row =>
+            {
+                reads++;
+
+                return new IconTexture(null!, row.Slot!.Value, 0);
+            },
+            Locked);
+        window.SetBounds(FlatContent);
+        Windows.Add(window);
+        window.Refresh();
+
+        Assert.Equal(1, window.RowControls[0].IconShown!.Value.OffsetX);
+        Assert.Equal(AbilityList.PAGE, reads);
+
+        skills.SetSlot(17, 1, "Skill 17");
+        window.Refresh();
+
+        Assert.Equal(17, window.Entries.Count);
+        Assert.Equal(AbilityList.PAGE, reads);
+
+        window.TurnPage(1);
+
+        Assert.Equal(17, window.RowControls[0].IconShown!.Value.OffsetX);
+        Assert.Equal(AbilityList.PAGE + 1, reads);
+    }
 }

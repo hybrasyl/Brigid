@@ -401,6 +401,22 @@ public class InventoryWindowActionTests : IDisposable
         Assert.Equal(10, modal.Rows.Count());
     }
 
+    //the world screen hides the item tooltip of the window under the list while a modal is the top modal
+    [Fact]
+    public void TheOpenListIsTheTopModal()
+    {
+        using var dispatcher = new InputDispatcher();
+        var modal = NewModal();
+
+        modal.Open(InventoryListKind.Currency, [], InventoryPanel);
+
+        Assert.Same(modal, dispatcher.TopModal);
+
+        modal.Hide();
+
+        Assert.Null(dispatcher.TopModal);
+    }
+
     [Fact]
     public void AListWithEntriesHasNoEmptyLine()
     {

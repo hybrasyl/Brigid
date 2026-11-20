@@ -422,6 +422,21 @@ public sealed class ChatBoxControlTests : IDisposable
         pane.Dispose();
     }
 
+    //a clear kept the count of the old messages, so the next message showed under their lines
+    [Fact]
+    public void AMessageAfterAClearShowsAlone()
+    {
+        var pane = new SystemMessagePaneControl(MainHudLayout.World);
+        pane.AddMessage("old whisper");
+        pane.AddMessage("old shout");
+
+        pane.Clear();
+        pane.AddMessage("new whisper");
+
+        Assert.Equal(["new whisper"], pane.Children.OfType<UILabel>().Where(line => line.Visible).Select(line => line.Text));
+        pane.Dispose();
+    }
+
     //the bottom line of the scrollback
     private string Shown()
     {

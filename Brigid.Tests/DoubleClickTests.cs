@@ -8,8 +8,16 @@ namespace Brigid.Tests;
 // gave a left double click before, so a right click on a slot of the Equipment window and a quick left click took the
 // item off.
 [Collection("UITextBoxFocus")]
-public class DoubleClickTests
+public class DoubleClickTests : IDisposable
 {
+    private readonly List<InputDispatcher> Dispatchers = [];
+
+    public void Dispose()
+    {
+        foreach (var dispatcher in Dispatchers)
+            dispatcher.Dispose();
+    }
+
     private sealed class Panel : UIPanel
     {
         public readonly List<MouseButton> DoubleClicks = [];
@@ -42,8 +50,13 @@ public class DoubleClickTests
         dispatcher.DispatchMouseButton(root, 10, 10, ms, KeyModifiers.None, button, isPress: false);
     }
 
-    private static (InputDispatcher Dispatcher, Panel Root) NewRoot()
-        => (new InputDispatcher(registerAsInstance: false), new Panel().Laid());
+    private (InputDispatcher Dispatcher, Panel Root) NewRoot()
+    {
+        var dispatcher = new InputDispatcher(registerAsInstance: false);
+        Dispatchers.Add(dispatcher);
+
+        return (dispatcher, new Panel().Laid());
+    }
 
     [Fact]
     public void TwoLeftClicksAreADoubleClick()

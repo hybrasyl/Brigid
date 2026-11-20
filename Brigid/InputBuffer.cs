@@ -272,6 +272,9 @@ public static class InputBuffer
     /// </summary>
     public static void DiscardPending() => PendingEvents.Clear();
 
+    /// <summary>The events that the watcher buffered and <see cref="Update" /> has not frozen yet, for the tests.</summary>
+    internal static IReadOnlyList<BufferedInputEvent> PendingForTests => PendingEvents;
+
     //─────────────────────────────────────────────────────────────────────────────
     //  SDL event watcher
     //─────────────────────────────────────────────────────────────────────────────
@@ -313,7 +316,7 @@ public static class InputBuffer
         return 1;
     }
 
-    private static void HandleKeyEvent(nint sdlEvent, bool isDown)
+    internal static void HandleKeyEvent(nint sdlEvent, bool isDown)
     {
         var scancode = Marshal.ReadInt32(sdlEvent, Sdl.KEYBOARDEVENT_SCANCODE_OFFSET);
         var key = TranslateScancode(scancode);

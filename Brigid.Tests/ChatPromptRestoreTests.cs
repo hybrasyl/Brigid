@@ -39,6 +39,23 @@ public class ChatPromptRestoreTests
         Assert.Null(box.BackgroundColor);
     }
 
+    //each HUD makes a chat input, and the last one made took the registration; a prompt on the other one left popups
+    //free to take the focus from the box that the player types in
+    [Fact]
+    public void APromptClaimsTheChatRegistration()
+    {
+        using var dispatcher = new InputDispatcher();
+        var first = new ChatInputControl(new ControlPrefabSet("_test"));
+        var second = new ChatInputControl(new ControlPrefabSet("_test"));
+
+        Assert.Same(second.FindChild<UITextBox>("chat_text_box"), dispatcher.ChatInputTextBox);
+
+        first.ShowPrompt(string.Empty, PROMPT_MAX_LENGTH, _ => { });
+
+        Assert.Same(first.FindChild<UITextBox>("chat_text_box"), dispatcher.ChatInputTextBox);
+        first.Unfocus();
+    }
+
     [Fact]
     public void Unfocus_RestoresTheChatBoxWhenAPromptIsOpen()
     {

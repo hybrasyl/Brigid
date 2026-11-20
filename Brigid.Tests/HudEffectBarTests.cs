@@ -204,6 +204,29 @@ public class HudEffectBarTests : IDisposable
         Assert.Equal((expectedWidth, expectedHeight), (source.Width, source.Height));
     }
 
+    //the half-size icon read a 20 px pack icon at its own size, and a scale-up that drew nothing gave a clear icon
+    [Fact]
+    public void ASmallIconGivesAHalfSizeIconOfItsColour()
+    {
+        var colour = new SKColor(200, 40, 40);
+        using var bitmap = new SKBitmap(new SKImageInfo(20, 20, SKColorType.Rgba8888, SKAlphaType.Premul));
+        bitmap.Erase(colour);
+        using var image = SKImage.FromBitmap(bitmap);
+
+        var pixels = UiRenderer.HalfSizePixels(image, UiRenderer.HALF_SPELL_ICON);
+
+        Assert.Equal(UiRenderer.HALF_SPELL_ICON * UiRenderer.HALF_SPELL_ICON, pixels.Length);
+        Assert.All(
+            pixels,
+            pixel =>
+            {
+                Assert.InRange(pixel.Alpha, (byte)240, (byte)255);
+                Assert.InRange(pixel.Red, (byte)192, (byte)208);
+                Assert.InRange(pixel.Green, (byte)32, (byte)48);
+                Assert.InRange(pixel.Blue, (byte)32, (byte)48);
+            });
+    }
+
     //the pixels at 12, 3, 6 and 9 o'clock of a 15 px icon: the wedge goes clockwise from 12 o'clock, and a pixel on its
     //edge (3 o'clock at a quarter) is out of it
     [Theory]
