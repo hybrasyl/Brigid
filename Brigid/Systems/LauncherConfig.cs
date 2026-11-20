@@ -101,17 +101,7 @@ public static class LauncherConfig
     /// <summary>Loads the config file at <paramref name="path" />, with no legacy migration. Internal for the tests.</summary>
     internal static void Load(string path)
     {
-        var file = GuardedFile.ForSession(path, FILE_DESCRIPTION);
-        Model? model = null;
-
-        if (file.Read(File.ReadAllText, (string?)null) is { } text)
-            try
-            {
-                model = JsonSerializer.Deserialize<Model>(text, SerializerOptions);
-            } catch (JsonException ex)
-            {
-                file.MarkCorrupt(ex.Message);
-            }
+        var model = GuardedFile.ForSession(path, FILE_DESCRIPTION).ReadJson<Model>(SerializerOptions);
 
         //a hand edit can leave a null entry, an entry with no host or a port out of range; such an entry has no server to
         //connect to
@@ -138,24 +128,44 @@ public static class LauncherConfig
     ///     once the new file exists or when there is nothing to migrate. Never throws — a failed migration just falls
     ///     through to default config on first launch.
     /// </summary>
-    private static void TryMigrateLegacyConfig()
+    private static void TryMigrateLegacyConfig() => TryMigrateLegacyConfig(LegacyFilePath, FilePath);
+
+    /// <summary>Copies the legacy config at <paramref name="legacyPath" /> to <paramref name="path" /> when <see cref="TakesLegacyConfig" />. Internal for the tests.</summary>
+    internal static void TryMigrateLegacyConfig(string legacyPath, string path)
+    {
+        if (!TakesLegacyConfig(path))
+            return;
+
+        //best effort: a missing or locked legacy file gives the default config
+        DataDiagnostics.Try(
+            () =>
+            {
+                if (!File.Exists(legacyPath))
+                    return;
+
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.Copy(legacyPath, path, true);
+            }, "copy the legacy launcher config");
+    }
+
+    /// <summary>
+    ///     True when the config at <paramref name="path" /> is not found, or is empty (a crash during the first save of an
+    ///     older client). A file that cannot be read is not replaced: <see cref="File.Exists" /> is also false when the check
+    ///     fails, so the legacy config was copied over a file that a check could not see.
+    /// </summary>
+    internal static bool TakesLegacyConfig(string path)
     {
         try
         {
-            if (!File.Exists(LegacyFilePath))
-                return;
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
-            //migrate when the new config is absent OR a 0-byte artifact of a crashed first Save (File.WriteAllText
-            //truncates before writing, so a mid-write crash leaves an empty file). A present, non-empty file is
-            //authoritative and left untouched — the overwrite below only ever replaces the empty placeholder.
-            if (File.Exists(FilePath) && (new FileInfo(FilePath).Length > 0))
-                return;
-
-            Directory.CreateDirectory(ConfigDirectory);
-            File.Copy(LegacyFilePath, FilePath, true);
-        } catch
+            return stream.Length == 0;
+        } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
-            //best effort — a missing/locked legacy file just means a fresh default config
+            return true;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
@@ -174,13 +184,7 @@ public static class LauncherConfig
             SuppressLauncher = SuppressLauncher
         };
 
-        return GuardedFile.ForSession(path, FILE_DESCRIPTION)
-                          .Save(
-                              p =>
-                              {
-                                  Directory.CreateDirectory(Path.GetDirectoryName(p)!);
-                                  File.WriteAllText(p, JsonSerializer.Serialize(model, SerializerOptions));
-                              });
+        return GuardedFile.ForSession(path, FILE_DESCRIPTION).SaveJson(model, SerializerOptions);
     }
 
     /// <summary>Returns the currently-selected server, falling back to the first entry (or null if the list is empty).</summary>

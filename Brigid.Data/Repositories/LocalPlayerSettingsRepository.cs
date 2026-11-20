@@ -95,7 +95,10 @@ public sealed class LocalPlayerSettingsRepository
         Files.Clear();
 
         foreach (var file in Enum.GetValues<CharacterFile>())
-            Files[file] = new GuardedFile(Path.Combine(directory, FileNameOf(file)), DescriptionOf(file));
+        {
+            var (name, description) = NameAndDescriptionOf(file);
+            Files[file] = new GuardedFile(Path.Combine(directory, name), description);
+        }
 
         DataDiagnostics.Try(() => Directory.CreateDirectory(PlayerDirectory), "create profile dir");
     }
@@ -103,27 +106,16 @@ public sealed class LocalPlayerSettingsRepository
     /// <summary>Opens the repository on a folder, with no legacy import and no default files, for the tests.</summary>
     internal void OpenForTests(string directory) => Open(directory);
 
-    private static string FileNameOf(CharacterFile file)
+    //the file name, and what the file holds in the words of the player
+    private static (string Name, string Description) NameAndDescriptionOf(CharacterFile file)
         => file switch
         {
-            CharacterFile.FamilyList  => FAMILY_LIST_FILE,
-            CharacterFile.FriendList  => FRIEND_LIST_FILE,
-            CharacterFile.Macros      => MACRO_FILE,
-            CharacterFile.SkillChants => SKILL_BOOK_FILE,
-            CharacterFile.SpellChants => SPELL_BOOK_FILE,
-            CharacterFile.ProfileText => PROFILE_TEXT_FILE,
-            _                         => throw new ArgumentOutOfRangeException(nameof(file), file, null)
-        };
-
-    private static string DescriptionOf(CharacterFile file)
-        => file switch
-        {
-            CharacterFile.FamilyList  => "family list",
-            CharacterFile.FriendList  => "friend list",
-            CharacterFile.Macros      => "macros",
-            CharacterFile.SkillChants => "skill chants",
-            CharacterFile.SpellChants => "spell chants",
-            CharacterFile.ProfileText => "profile text",
+            CharacterFile.FamilyList  => (FAMILY_LIST_FILE, "family list"),
+            CharacterFile.FriendList  => (FRIEND_LIST_FILE, "friend list"),
+            CharacterFile.Macros      => (MACRO_FILE, "macros"),
+            CharacterFile.SkillChants => (SKILL_BOOK_FILE, "skill chants"),
+            CharacterFile.SpellChants => (SPELL_BOOK_FILE, "spell chants"),
+            CharacterFile.ProfileText => (PROFILE_TEXT_FILE, "profile text"),
             _                         => throw new ArgumentOutOfRangeException(nameof(file), file, null)
         };
 
@@ -508,9 +500,11 @@ public sealed class LocalPlayerSettingsRepository
             if (!TryGetFilePath(fileName, out var path))
                 continue;
 
-            byte[]? bytes = null;
+            //the read opens the file: File.Exists is also false when the check fails, and the portrait was then cleared
+            var file = new GuardedFile(path, "portrait");
+            var bytes = file.Read(File.ReadAllBytes, (byte[]?)null);
 
-            if (!DataDiagnostics.Try(() => bytes = File.Exists(path) ? File.ReadAllBytes(path) : null, $"read {fileName}"))
+            if (file.IsUnreadable)
                 return false;
 
             if (bytes is not null)

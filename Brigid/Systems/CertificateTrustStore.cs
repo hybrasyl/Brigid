@@ -208,21 +208,7 @@ public static class CertificateTrustStore
 
     //a corrupt or unreadable store must not block connecting: fall back to pre-pins only, which costs the user a re-prompt
     //rather than a client that cannot connect
-    private static Model? ReadModel(GuardedFile file)
-    {
-        if (file.Read(File.ReadAllText, (string?)null) is not { } text)
-            return null;
-
-        try
-        {
-            return JsonSerializer.Deserialize<Model>(text, SerializerOptions);
-        } catch (JsonException ex)
-        {
-            file.MarkCorrupt(ex.Message);
-
-            return null;
-        }
-    }
+    private static Model? ReadModel(GuardedFile file) => file.ReadJson<Model>(SerializerOptions);
 
     /// <summary>
     ///     Writes pins to disk. Best effort — a failure costs a re-prompt, not a connection. A file whose read failed is
@@ -242,13 +228,7 @@ public static class CertificateTrustStore
                 Servers = new Dictionary<string, TrustEntry>(Entries, StringComparer.OrdinalIgnoreCase)
             };
 
-        return GuardedFile.ForSession(path, FILE_DESCRIPTION)
-                          .Save(
-                              p =>
-                              {
-                                  Directory.CreateDirectory(Path.GetDirectoryName(p)!);
-                                  File.WriteAllText(p, JsonSerializer.Serialize(model, SerializerOptions));
-                              });
+        return GuardedFile.ForSession(path, FILE_DESCRIPTION).SaveJson(model, SerializerOptions);
     }
 
     /// <summary>

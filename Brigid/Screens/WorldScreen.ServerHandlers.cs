@@ -808,8 +808,6 @@ public sealed partial class WorldScreen
         StatusBook.SetProfileText(DataContext.LocalPlayerSettings.LoadProfileText());
     }
 
-    private void SaveProfileText(string text) => DataContext.LocalPlayerSettings.SaveProfileText(text);
-
     private void HandleSelfProfile(SelfProfilePacket args)
     {
         //DALib's self-profile carries no master-quest flag; default off.

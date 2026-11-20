@@ -197,6 +197,17 @@ public sealed class GuardedFileTests : IDisposable
         Assert.False(File.Exists(file.Path));
     }
 
+    //the JSON settings files save into the app folder, which a first start has not made yet
+    [Fact]
+    public void AJsonSaveMakesItsFolderAndReadsBack()
+    {
+        var file = new GuardedFile(Path.Combine(Folder, "new", "launcher.json"), "launcher settings");
+        var options = new System.Text.Json.JsonSerializerOptions();
+
+        Assert.Equal(SaveResult.Saved, file.SaveJson(new Dictionary<string, int> { ["port"] = 2610 }, options));
+        Assert.Equal(2610, file.ReadJson<Dictionary<string, int>>(options)?["port"]);
+    }
+
     [Fact]
     public void ASaveReplacesTheFileAndLeavesNoTemporaryFile()
     {

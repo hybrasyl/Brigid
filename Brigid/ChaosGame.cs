@@ -917,7 +917,6 @@ public sealed class ChaosGame : Game
         base.Update(gameTime);
     }
 
-
     #region Metadata Sync
     private void HandleMetaData(ServerPackets.MetafilePacket pkt)
     {

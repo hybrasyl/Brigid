@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 
 namespace Brigid.Data;
 
@@ -72,11 +73,7 @@ public sealed class GuardedFile
     ///     True while the last read of the file failed. A save is refused while it is true. A file can be read on one
     ///     thread and saved on another (the trust store saves on the handshake thread), so the flag is volatile.
     /// </summary>
-    public bool IsUnreadable
-    {
-        get => UnreadableFlag;
-        private set => UnreadableFlag = value;
-    }
+    public bool IsUnreadable => UnreadableFlag;
 
     private volatile bool UnreadableFlag;
 
@@ -121,11 +118,40 @@ public sealed class GuardedFile
                 }
             }, $"read {FileName}");
 
-        IsUnreadable = !ok;
+        UnreadableFlag = !ok;
         WasMissing = ok && missing;
 
-        return ok && !missing ? value : empty;
+        return value;
     }
+
+    /// <summary>
+    ///     Reads the file as JSON. A missing file and a file that cannot be read give null, as <see cref="Read{T}" /> does.
+    ///     JSON that does not parse gives null, and the file is copied to <c>&lt;name&gt;.bad</c> (<see cref="MarkCorrupt" />).
+    /// </summary>
+    public T? ReadJson<T>(JsonSerializerOptions options) where T : class
+    {
+        if (Read(File.ReadAllText, (string?)null) is not { } text)
+            return null;
+
+        try
+        {
+            return JsonSerializer.Deserialize<T>(text, options);
+        } catch (JsonException ex)
+        {
+            MarkCorrupt(ex.Message);
+
+            return null;
+        }
+    }
+
+    /// <summary>Saves <paramref name="value" /> as JSON (<see cref="Save(Action{string})" />), and makes the folder when it is not there.</summary>
+    public SaveResult SaveJson<T>(T value, JsonSerializerOptions options)
+        => Save(
+            path =>
+            {
+                Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, JsonSerializer.Serialize(value, options));
+            });
 
     /// <summary>
     ///     Refuses each save of the file, as a failed read does: the file is missing, and the file that it takes the place
@@ -134,7 +160,7 @@ public sealed class GuardedFile
     /// </summary>
     public void RefuseSavesUntilRead(string reason)
     {
-        IsUnreadable = true;
+        UnreadableFlag = true;
         DataDiagnostics.Log?.Invoke($"[data] {FileName} is not saved this session: {reason}");
     }
 
@@ -151,7 +177,7 @@ public sealed class GuardedFile
             DataDiagnostics.Log?.Invoke($"[data] {FileName} could not be parsed ({reason}); the defaults load, and {FileName}.bad holds the file");
         else
         {
-            IsUnreadable = true;
+            UnreadableFlag = true;
             DataDiagnostics.Log?.Invoke($"[data] {FileName} could not be parsed ({reason}), and no copy could be made; its save is refused");
         }
     }

@@ -574,7 +574,7 @@ public sealed partial class WorldScreen : IScreen, ISaveNoticeHost
         SelfProfileTextEditor.OnSave += text =>
         {
             StatusBook.SetProfileText(text);
-            SaveProfileText(text);
+            DataContext.LocalPlayerSettings.SaveProfileText(text);
         };
 
         AbilityMetadataDetails = new AbilityMetadataDetailsControl

@@ -126,6 +126,40 @@ public sealed class SystemTextPainter : IDisposable
 
     public float TextHeight(float size) => SystemFontText.LineHeight(size * ScaleY) / ScaleY;
 
+    /// <summary>
+    ///     Breaks <paramref name="text" /> into lines at spaces, so that each line fits <paramref name="width" /> at
+    ///     <paramref name="size" />. The lines depend on the native scale, so a caller that keeps them keys them on it
+    ///     (<see cref="TextHeight" /> changes with it).
+    /// </summary>
+    public List<string> Wrap(string text, float width, float size) => WrapWords(text, width, line => Measure(line, size));
+
+    /// <summary>
+    ///     Breaks <paramref name="text" /> into lines at spaces, so that each line fits <paramref name="width" /> by
+    ///     <paramref name="measure" />. A word wider than the width has a line of its own.
+    /// </summary>
+    internal static List<string> WrapWords(string text, float width, Func<string, float> measure)
+    {
+        var lines = new List<string>();
+        var line = string.Empty;
+
+        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var joined = line.Length == 0 ? word : $"{line} {word}";
+
+            if ((line.Length > 0) && (measure(joined) > width))
+            {
+                lines.Add(line);
+                line = word;
+            } else
+                line = joined;
+        }
+
+        if (line.Length > 0)
+            lines.Add(line);
+
+        return lines;
+    }
+
     /// <summary>The top of one line of text, centred vertically in <paramref name="box" />.</summary>
     public float TextTop(Rectangle box, float size) => box.Y + (box.Height - TextHeight(size)) / 2f;
 

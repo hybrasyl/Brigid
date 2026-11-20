@@ -199,6 +199,16 @@ public sealed class CharacterFileSafetyTests : IDisposable
         Assert.Equal([1, 2, 3], portrait);
     }
 
+    //File.Exists is false when the check fails, and the portrait loaded as no portrait, so the caller cleared it. A folder
+    //in the place of the file is a path that a check cannot see and a read cannot open
+    [Fact]
+    public void APortraitThatACheckCannotSeeIsAFailedRead()
+    {
+        Directory.CreateDirectory(Path.Combine(Folder, "Angelique.jpg"));
+
+        Assert.False(Settings.TryLoadPortrait("Angelique", out _));
+    }
+
     [Fact]
     public void NoPortraitIsASuccessWithNoBytes()
     {

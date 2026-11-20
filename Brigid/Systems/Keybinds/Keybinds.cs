@@ -433,25 +433,8 @@ public static class Keybinds
     /// <summary>Loads the overrides from the file at <paramref name="path" />. Internal for the tests.</summary>
     internal static void Load(string path)
     {
-        var file = GuardedFile.ForSession(path, FILE_DESCRIPTION);
-
-        if (file.Read(File.ReadAllText, (string?)null) is not { } text)
-            return;
-
         //string keys so an unknown command name can't fault the whole deserialize.
-        Dictionary<string, KeyBinding>? loaded;
-
-        try
-        {
-            loaded = JsonSerializer.Deserialize<Dictionary<string, KeyBinding>>(text, JsonOptions);
-        } catch (JsonException ex)
-        {
-            file.MarkCorrupt(ex.Message);
-
-            return;
-        }
-
-        if (loaded is null)
+        if (GuardedFile.ForSession(path, FILE_DESCRIPTION).ReadJson<Dictionary<string, KeyBinding>>(JsonOptions) is not { } loaded)
             return;
 
         var skipped = 0;
@@ -485,8 +468,7 @@ public static class Keybinds
         using (Gate.EnterScope())
             snapshot = new Dictionary<CommandId, KeyBinding>(Overrides);
 
-        return GuardedFile.ForSession(path, FILE_DESCRIPTION)
-                          .Save(p => File.WriteAllText(p, JsonSerializer.Serialize(snapshot, JsonOptions)));
+        return GuardedFile.ForSession(path, FILE_DESCRIPTION).SaveJson(snapshot, JsonOptions);
     }
 }
 

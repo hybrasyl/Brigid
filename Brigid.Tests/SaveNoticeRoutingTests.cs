@@ -2,6 +2,7 @@ using Brigid.Controls.Components;
 using Brigid.Controls.World.Hud;
 using Brigid.Data;
 using Brigid.Data.Models;
+using Brigid.Rendering;
 using Brigid.Screens;
 using Brigid.Systems;
 using Xunit;
@@ -96,7 +97,7 @@ public sealed class SaveNoticeRoutingTests : IDisposable
     [InlineData("averylongword ab", 4, new[] { "averylongword", "ab" })]
     [InlineData("", 10, new string[0])]
     public void TheLauncherBreaksANoticeAtSpaces(string text, float width, string[] expected)
-        => Assert.Equal(expected, LauncherScreen.WrapWords(text, width, line => line.Length));
+        => Assert.Equal(expected, SystemTextPainter.WrapWords(text, width, line => line.Length));
 }
 
 // The chat box registers with the dispatcher, which lives for the run (the UITextBoxFocus collection holds the

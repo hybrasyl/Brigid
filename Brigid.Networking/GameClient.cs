@@ -75,9 +75,8 @@ public sealed class GameClient : IDisposable
     //ends the pump set tears it down
     private PumpSet? Pumps;
 
-    //the number of the last pump set that started, and the last number given
+    //the number of the last pump set that started; only StartPumps writes it, under ConnectLock
     private int CurrentConnectionField;
-    private int LastConnectionNumber;
 
     private Socket? Socket;
 
@@ -949,14 +948,12 @@ public sealed class GameClient : IDisposable
                 SingleWriter = false
             });
 
-        var pumps = new PumpSet(Interlocked.Increment(ref LastConnectionNumber), Socket, Transport!, buffer, new CancellationTokenSource(), sendQueue)
+        //the number goes out before the pumps start: a state that this connection's packets set comes after the number
+        var pumps = new PumpSet(Interlocked.Increment(ref CurrentConnectionField), Socket, Transport!, buffer, new CancellationTokenSource(), sendQueue)
         {
             ReceiveCount = carryOver.Length
         };
         Pumps = pumps;
-
-        //before the pumps start: a state that this connection's packets set comes after the number
-        Volatile.Write(ref CurrentConnectionField, pumps.Number);
         var token = pumps.Cts.Token;
 
         //release the greeting now that a reply can actually be sent: IsAlive and the send queue are both

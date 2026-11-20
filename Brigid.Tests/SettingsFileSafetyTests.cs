@@ -40,33 +40,6 @@ public sealed class SettingsFileSafetyTests : IDisposable
         return save(path);
     }
 
-    [Fact]
-    public void ALockedKeybindsFileKeepsTheSavedKeys()
-    {
-        var path = WriteFile("keybinds.json", GOOD_KEYBINDS);
-
-        Assert.Equal(SaveResult.Unreadable, LoadLockedThenSave(path, Keybinds.Load, Keybinds.Save));
-        Assert.Equal(GOOD_KEYBINDS, File.ReadAllText(path));
-    }
-
-    [Fact]
-    public void ALockedSettingsFileKeepsTheSavedSettings()
-    {
-        var path = WriteFile("brigid.cfg", GOOD_SETTINGS);
-
-        Assert.Equal(SaveResult.Unreadable, LoadLockedThenSave(path, p => Assert.False(ClientSettings.Load(p)), ClientSettings.Save));
-        Assert.Equal(GOOD_SETTINGS, File.ReadAllText(path));
-    }
-
-    [Fact]
-    public void ALockedLauncherConfigKeepsTheSavedServers()
-    {
-        var path = WriteFile("launcher.json", GOOD_LAUNCHER);
-
-        Assert.Equal(SaveResult.Unreadable, LoadLockedThenSave(path, LauncherConfig.Load, LauncherConfig.Save));
-        Assert.Equal(GOOD_LAUNCHER, File.ReadAllText(path));
-    }
-
     //a null entry in the server list threw at the start
     [Fact]
     public void ALauncherConfigDropsANullServerAndAServerWithNoHost()
@@ -161,13 +134,58 @@ public sealed class SettingsFileSafetyTests : IDisposable
         }
     }
 
-    [Fact]
-    public void ALockedTrustStoreKeepsTheAcceptedServers()
-    {
-        var path = WriteFile("known-servers.json", GOOD_TRUST);
+    //the load and the save of each settings file, by its name
+    private static (Action<string> Load, Func<string, SaveResult> Save) LoadAndSaveOf(string name)
+        => name switch
+        {
+            "keybinds.json" => (Keybinds.Load, Keybinds.Save),
+            "brigid.cfg"    => (p => Assert.False(ClientSettings.Load(p)), ClientSettings.Save),
+            "launcher.json" => (LauncherConfig.Load, LauncherConfig.Save),
+            _               => (CertificateTrustStore.Load, CertificateTrustStore.Save)
+        };
 
-        Assert.Equal(SaveResult.Unreadable, LoadLockedThenSave(path, CertificateTrustStore.Load, CertificateTrustStore.Save));
-        Assert.Equal(GOOD_TRUST, File.ReadAllText(path));
+    public static TheoryData<string, string> SettingsFiles => new()
+    {
+        { "keybinds.json", GOOD_KEYBINDS },
+        { "brigid.cfg", GOOD_SETTINGS },
+        { "launcher.json", GOOD_LAUNCHER },
+        { "known-servers.json", GOOD_TRUST }
+    };
+
+    [Theory]
+    [MemberData(nameof(SettingsFiles))]
+    public void ALockedSettingsFileKeepsItsContents(string name, string contents)
+    {
+        var path = WriteFile(name, contents);
+        var (load, save) = LoadAndSaveOf(name);
+
+        Assert.Equal(SaveResult.Unreadable, LoadLockedThenSave(path, load, save));
+        Assert.Equal(contents, File.ReadAllText(path));
+    }
+
+    //File.Exists is false when the check fails, and the legacy launcher config was copied over a file that a check could
+    //not see. A folder in the place of the file is such a path; a missing or empty file still takes the legacy config
+    [Fact]
+    public void TheLegacyLauncherConfigReplacesOnlyAMissingOrEmptyFile()
+    {
+        var unseen = Path.Combine(Folder, "unseen.json");
+        Directory.CreateDirectory(unseen);
+
+        Assert.False(LauncherConfig.TakesLegacyConfig(unseen));
+        Assert.False(LauncherConfig.TakesLegacyConfig(WriteFile("full.json", GOOD_LAUNCHER)));
+        Assert.True(LauncherConfig.TakesLegacyConfig(WriteFile("empty.json", string.Empty)));
+        Assert.True(LauncherConfig.TakesLegacyConfig(Path.Combine(Folder, "missing.json")));
+    }
+
+    [Fact]
+    public void TheLegacyLauncherConfigIsCopiedToAMissingFile()
+    {
+        var legacy = WriteFile("legacy.json", GOOD_LAUNCHER);
+        var path = Path.Combine(Folder, "new", "launcher.json");
+
+        LauncherConfig.TryMigrateLegacyConfig(legacy, path);
+
+        Assert.Equal(GOOD_LAUNCHER, File.ReadAllText(path));
     }
 
     public static TheoryData<string> JsonFiles => new("keybinds.json", "launcher.json", "known-servers.json");
@@ -179,12 +197,7 @@ public sealed class SettingsFileSafetyTests : IDisposable
     {
         var path = WriteFile(name, "{ broken");
 
-        (Action<string> load, Func<string, SaveResult> save) = name switch
-        {
-            "keybinds.json" => ((Action<string>)Keybinds.Load, (Func<string, SaveResult>)Keybinds.Save),
-            "launcher.json" => (LauncherConfig.Load, LauncherConfig.Save),
-            _               => (CertificateTrustStore.Load, CertificateTrustStore.Save)
-        };
+        var (load, save) = LoadAndSaveOf(name);
 
         load(path);
 

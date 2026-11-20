@@ -73,6 +73,8 @@ public sealed class LauncherScreen : IScreen, ISaveNoticeHost
     //the saves that did not go through while the launcher shows, one line for each; a player who quits from the launcher
     //saw none of them before
     private readonly List<string> Notices = [];
+    private List<string> NoticeLines = [];
+    private (int Count, float LineHeight) NoticeLinesKey;
 
     private const int NOTICE_TOP_GAP = 8;
     private const int NOTICE_BOTTOM_MARGIN = 4;
@@ -210,48 +212,31 @@ public sealed class LauncherScreen : IScreen, ISaveNoticeHost
     /// <summary>The notices that the launcher shows, for the tests.</summary>
     internal IReadOnlyList<string> NoticesForTests => Notices;
 
-    /// <summary>
-    ///     Breaks <paramref name="text" /> into lines at spaces, so that each line fits <paramref name="width" /> by
-    ///     <paramref name="measure" />. A word wider than the width has a line of its own.
-    /// </summary>
-    internal static List<string> WrapWords(string text, float width, Func<string, float> measure)
-    {
-        var lines = new List<string>();
-        var line = string.Empty;
-
-        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var joined = line.Length == 0 ? word : $"{line} {word}";
-
-            if ((line.Length > 0) && (measure(joined) > width))
-            {
-                lines.Add(line);
-                line = word;
-            } else
-                line = joined;
-        }
-
-        if (line.Length > 0)
-            lines.Add(line);
-
-        return lines;
-    }
-
-    //below the panel, the newest last; the lines that do not fit above the bottom of the screen are not drawn
+    //below the panel, the newest last; the lines that do not fit above the bottom of the screen are not drawn. The lines
+    //are wrapped again only when a notice comes or the native scale changes
     private void DrawNotices()
     {
-        var y = (float)(Panel.Bottom + NOTICE_TOP_GAP);
+        if (Notices.Count == 0)
+            return;
+
         var lineHeight = Painter.TextHeight(HINT_SIZE);
 
-        foreach (var notice in Notices)
-            foreach (var line in WrapWords(notice, Panel.Width, text => Painter.Measure(text, HINT_SIZE)))
-            {
-                if (y + lineHeight > ChaosGame.VIRTUAL_HEIGHT - NOTICE_BOTTOM_MARGIN)
-                    return;
+        if ((NoticeLinesKey.Count != Notices.Count) || (NoticeLinesKey.LineHeight != lineHeight))
+        {
+            NoticeLines = [.. Notices.SelectMany(notice => Painter.Wrap(notice, Panel.Width, HINT_SIZE))];
+            NoticeLinesKey = (Notices.Count, lineHeight);
+        }
 
-                Painter.DrawText(line, new Vector2(Panel.X, y), BadColor, HINT_SIZE);
-                y += lineHeight;
-            }
+        var y = (float)(Panel.Bottom + NOTICE_TOP_GAP);
+
+        foreach (var line in NoticeLines)
+        {
+            if (y + lineHeight > ChaosGame.VIRTUAL_HEIGHT - NOTICE_BOTTOM_MARGIN)
+                return;
+
+            Painter.DrawText(line, new Vector2(Panel.X, y), BadColor, HINT_SIZE);
+            y += lineHeight;
+        }
     }
 
     public void UnloadContent() => Painter.Dispose();
