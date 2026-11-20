@@ -312,22 +312,27 @@ public static class TextRenderer
         if (string.IsNullOrEmpty(text) || (measure(text) <= width))
             return text;
 
-        var length = text.Length - 1;
+        //the width grows with the length, so a binary search finds the longest cut that fits; a cut does not split a
+        //surrogate pair
+        var best = "…";
+        var low = 0;
+        var high = text.Length - 1;
 
-        while (length > 0)
+        while (low <= high)
         {
-            if (char.IsLowSurrogate(text[length]))
-                length--;
-
-            var candidate = text[..length].TrimEnd() + "…";
+            var length = (low + high) / 2;
+            var cut = (length > 0) && char.IsLowSurrogate(text[length]) ? length - 1 : length;
+            var candidate = text[..cut].TrimEnd() + "…";
 
             if (measure(candidate) <= width)
-                return candidate;
-
-            length--;
+            {
+                best = candidate;
+                low = length + 1;
+            } else
+                high = length - 1;
         }
 
-        return "…";
+        return best;
     }
 
     /// <summary>

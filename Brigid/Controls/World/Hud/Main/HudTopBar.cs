@@ -36,8 +36,9 @@ internal sealed class HudTopBar : HudBarPanel
     private int TileX;
     private int TileY;
 
-    //the minute that the clock shows, so it changes once each minute
-    private DateTime ShownMinute;
+    //the time, in UTC, at which the minute that the clock shows ends: the update reads the cheap UTC time each frame and
+    //converts to the local time only at a new minute
+    private DateTimeOffset ShownMinuteEnd;
     private bool ShowsGameTime;
 
     /// <param name="clock">The source of the local time; the tests give a fixed one.</param>
@@ -151,18 +152,23 @@ internal sealed class HudTopBar : HudBarPanel
         if (latency != LatencyMs)
             ShowLatency(latency);
 
-        if (!ShowsGameTime && (Minute(Clock.GetLocalNow().DateTime) != ShownMinute))
-            ShowClock();
+        //the clock changes once each minute; a clock that goes back before the shown minute shows the new time too
+        if (!ShowsGameTime)
+        {
+            var utc = Clock.GetUtcNow();
+
+            if ((utc >= ShownMinuteEnd) || (utc < ShownMinuteEnd.AddMinutes(-1)))
+                ShowClock();
+        }
 
         base.Update(gameTime);
     }
 
-    private static DateTime Minute(DateTime time) => new(time.Year, time.Month, time.Day, time.Hour, time.Minute, 0);
-
     private void ShowClock()
     {
-        var now = Clock.GetLocalNow().DateTime;
-        ShownMinute = Minute(now);
+        var utc = Clock.GetUtcNow();
+        var now = TimeZoneInfo.ConvertTime(utc, Clock.LocalTimeZone).DateTime;
+        ShownMinuteEnd = new DateTimeOffset(utc.UtcTicks - utc.UtcTicks % TimeSpan.TicksPerMinute, TimeSpan.Zero).AddMinutes(1);
         ClockLabel.Text = HudFormat.Clock(now, CultureInfo.CurrentCulture);
     }
 

@@ -221,7 +221,10 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     ///     The children that the HUD draws after the others, in order: while the chat input draws on top, the input and then
     ///     the tooltip, so that the input draws once and the tooltip stays over it.
     /// </summary>
-    internal IReadOnlyList<UIElement> LateDraws => DrawsChatInputOnTop ? [ChatBox.Input, Tooltip] : [];
+    internal IReadOnlyList<UIElement> LateDraws => DrawsChatInputOnTop ? LateDrawOrder : [];
+
+    //the order of the late draws, made once, so a draw makes no array
+    private UIElement[] LateDrawOrder => field ??= [ChatBox.Input, Tooltip];
 
     public override void Draw(Microsoft.Xna.Framework.Graphics.SpriteBatch spriteBatch)
     {
@@ -238,7 +241,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         ChatBox.Input.HoldDraw = false;
         Tooltip.HoldDraw = false;
 
-        foreach (var late in LateDraws)
+        foreach (var late in LateDrawOrder)
             late.Draw(spriteBatch);
     }
 

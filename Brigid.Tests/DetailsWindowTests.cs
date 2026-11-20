@@ -428,6 +428,8 @@ public class DetailsWindowTests : IDisposable
     [InlineData("abcdef", 30, "abcd…")]
     [InlineData("ab cdef", 24, "ab…")]
     [InlineData("abcdef", 3, "…")]
+    [InlineData("ab\uD83D\uDE00cd", 24, "ab…")]
+    [InlineData("ab\uD83D\uDE00cd", 30, "ab\uD83D\uDE00…")]
     public void FitWithEllipsisKeepsTheLongestStartThatFits(string text, int width, string expected)
         => Assert.Equal(expected, TextRenderer.FitWithEllipsis(text, width, value => value.Length * 6));
 

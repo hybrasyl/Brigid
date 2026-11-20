@@ -40,6 +40,9 @@ public sealed class ChatTabEditorControl : CenteredModalPanel
     private readonly Func<string, ChatTab?, bool> IsNameFree;
     private ChatTab? Editing;
 
+    //the name that OK last read
+    private string? CheckedName;
+
     /// <param name="isNameFree">True when a name is free for the edited tab (null for a new tab): the chat box's rule.</param>
     public ChatTabEditorControl(Func<string, ChatTab?, bool> isNameFree)
         //SetContentHeight sets the height
@@ -77,6 +80,7 @@ public sealed class ChatTabEditorControl : CenteredModalPanel
         {
             var id = channel.ToString().ToLowerInvariant();
             var box = new CheckBox { Name = $"{id}_box" };
+            box.CheckedChanged += _ => RefreshOk();
             var label = NewLabel($"{id}_label", LabelOf(channel));
 
             AddChild(box);
@@ -123,7 +127,7 @@ public sealed class ChatTabEditorControl : CenteredModalPanel
         foreach (var (channel, box, _) in Channels)
             box.Checked = tab?.Channels.Contains(channel) ?? false;
 
-        OkButton.SetEnabled(CanConfirm);
+        RefreshOk();
         base.Show();
         NameBox.IsFocused = true;
     }
@@ -139,8 +143,10 @@ public sealed class ChatTabEditorControl : CenteredModalPanel
 
     public override void Update(GameTime gameTime)
     {
-        if (Visible && (OkButton.Enabled != CanConfirm))
-            OkButton.SetEnabled(CanConfirm);
+        //the text box raises no change, so the update compares the text that OK last read; a change of the text makes a
+        //new string
+        if (Visible && !ReferenceEquals(NameBox.Text, CheckedName))
+            RefreshOk();
 
         base.Update(gameTime);
     }
@@ -191,6 +197,16 @@ public sealed class ChatTabEditorControl : CenteredModalPanel
             box.Y = rowY + (ROW_H - CheckBox.DEFAULT_SIZE) / 2;
             label.SetBounds(new Rectangle(x + CheckBox.DEFAULT_SIZE + 4, rowY, columnWidth - CheckBox.DEFAULT_SIZE - 4, ROW_H));
         }
+    }
+
+    //OK follows the name and the check boxes; the editor reads the rule only when one of them changes
+    private void RefreshOk()
+    {
+        CheckedName = NameBox.Text;
+        var canConfirm = CanConfirm;
+
+        if (OkButton.Enabled != canConfirm)
+            OkButton.SetEnabled(canConfirm);
     }
 
     private void Confirm()
