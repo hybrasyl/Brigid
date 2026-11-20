@@ -3,7 +3,6 @@ using Brigid.Collections;
 using Brigid.Controls.Generic;
 using Brigid.Data.Models;
 using Brigid.ViewModel;
-using Chaos.Extensions.Common;
 using Microsoft.Xna.Framework;
 #endregion
 
@@ -32,23 +31,8 @@ internal static class AbilityRequirements
         if (name is null)
             return true;
 
-        for (byte i = 1; i <= SpellBook.MAX_SLOTS; i++)
-        {
-            ref readonly var slot = ref WorldState.SpellBook.GetSlot(i);
-
-            if (slot.IsOccupied && (slot.AbilityName?.EqualsI(name) == true) && (slot.CurrentLevel >= requiredLevel))
-                return true;
-        }
-
-        for (byte i = 1; i <= SkillBook.MAX_SLOTS; i++)
-        {
-            ref readonly var slot = ref WorldState.SkillBook.GetSlot(i);
-
-            if (slot.IsOccupied && (slot.AbilityName?.EqualsI(name) == true) && (slot.CurrentLevel >= requiredLevel))
-                return true;
-        }
-
-        return false;
+        return (WorldState.SpellBook.FindSlot(name) is { } spell && (WorldState.SpellBook.GetSlot(spell).CurrentLevel >= requiredLevel))
+               || (WorldState.SkillBook.FindSlot(name) is { } skill && (WorldState.SkillBook.GetSlot(skill).CurrentLevel >= requiredLevel));
     }
 
     /// <summary>The ability's icon, duotone-tinted when it is not already known (blue = learnable, grey = locked).</summary>
@@ -76,24 +60,18 @@ internal static class AbilityRequirements
     /// <summary>Whether the ability is already known, currently learnable, or gated by an unmet requirement.</summary>
     public static AbilityIconState ResolveIconState(AbilityMetadataEntry entry)
     {
-        if (entry.IsSpell)
-        {
-            for (byte i = 1; i <= SpellBook.MAX_SLOTS; i++)
-            {
-                ref readonly var slot = ref WorldState.SpellBook.GetSlot(i);
+        var known = entry.IsSpell ? WorldState.SpellBook.FindSlot(entry.Name) : WorldState.SkillBook.FindSlot(entry.Name);
 
-                if (slot.IsOccupied && (slot.AbilityName?.EqualsI(entry.Name) == true))
-                    return AbilityIconState.Known;
-            }
-        } else
-            for (byte i = 1; i <= SkillBook.MAX_SLOTS; i++)
-            {
-                ref readonly var slot = ref WorldState.SkillBook.GetSlot(i);
+        return known is null ? UnlearnedIconState(entry) : AbilityIconState.Known;
+    }
 
-                if (slot.IsOccupied && (slot.AbilityName?.EqualsI(entry.Name) == true))
-                    return AbilityIconState.Known;
-            }
-
+    /// <summary>
+    ///     Whether an ability that the player does not know is learnable or gated by an unmet requirement. A caller that
+    ///     already knows that the book does not have the ability (the Abilities window) uses it in place of
+    ///     <see cref="ResolveIconState" />, so it does not search the book again.
+    /// </summary>
+    public static AbilityIconState UnlearnedIconState(AbilityMetadataEntry entry)
+    {
         if (WorldState.Attributes.Current is not { } attrs)
             return AbilityIconState.Locked;
 

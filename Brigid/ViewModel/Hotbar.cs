@@ -85,10 +85,8 @@ public sealed class Hotbar
     private const string PAGE_KEY = "page";
     private const string SERVER_KEY = "server";
 
-    private readonly HotbarEntry?[,] Entries = new HotbarEntry?[PAGES, SLOTS];
-
-    //the server of the session that put each entry in its slot, or null when that server was not known
-    private readonly string?[,] Owners = new string?[PAGES, SLOTS];
+    //each entry, with the server of the session that put it in its slot (null when that server was not known)
+    private readonly HotbarCell?[,] Cells = new HotbarCell?[PAGES, SLOTS];
     private readonly SkillBook Skills;
     private readonly SpellBook Spells;
     private readonly Inventory Items;
@@ -101,6 +99,10 @@ public sealed class Hotbar
 
     //the abilities that left a slot, and when; the entries empty when the ability is still gone after the wait
     private readonly Dictionary<(HotbarKind Kind, string Name), long> Removals = [];
+
+    //the slot and the count of each entry key, as a lookup found them; a change of a book or the inventory clears it, so
+    //the hotbar does not search the books by name at each frame
+    private readonly Dictionary<(HotbarKind Kind, string Name), (byte? Slot, uint Count)> Found = new(KeyComparer.Instance);
 
     private long? LoadedAt;
 
@@ -116,10 +118,32 @@ public sealed class Hotbar
         Worn = worn;
         Clock = clock ?? (() => Environment.TickCount64);
 
-        Skills.SlotChanged += slot => ObserveAbility(HotbarKind.Skill, SkillNames, slot, Skills.GetSlot(slot).AbilityName);
-        Spells.SlotChanged += slot => ObserveAbility(HotbarKind.Spell, SpellNames, slot, Spells.GetSlot(slot).AbilityName);
-        Skills.Cleared += () => ForgetAbilities(HotbarKind.Skill, SkillNames);
-        Spells.Cleared += () => ForgetAbilities(HotbarKind.Spell, SpellNames);
+        Skills.SlotChanged += slot =>
+        {
+            Found.Clear();
+            ObserveAbility(HotbarKind.Skill, SkillNames, slot, Skills.GetSlot(slot).AbilityName);
+        };
+
+        Spells.SlotChanged += slot =>
+        {
+            Found.Clear();
+            ObserveAbility(HotbarKind.Spell, SpellNames, slot, Spells.GetSlot(slot).AbilityName);
+        };
+
+        Skills.Cleared += () =>
+        {
+            Found.Clear();
+            ForgetAbilities(HotbarKind.Skill, SkillNames);
+        };
+
+        Spells.Cleared += () =>
+        {
+            Found.Clear();
+            ForgetAbilities(HotbarKind.Spell, SpellNames);
+        };
+
+        Items.SlotChanged += _ => Found.Clear();
+        Items.Cleared += Found.Clear;
     }
 
     /// <summary>The page that shows, from 0.</summary>
@@ -129,7 +153,7 @@ public sealed class Hotbar
     public event Action? Changed;
 
     /// <summary>The entry at <paramref name="index" /> of <paramref name="page" />, or null.</summary>
-    public HotbarEntry? Get(int page, int index) => InRange(page, index) ? Entries[page, index] : null;
+    public HotbarEntry? Get(int page, int index) => InRange(page, index) ? Cells[page, index]?.Entry : null;
 
     /// <summary>The entry at <paramref name="index" /> of the page that shows, or null.</summary>
     public HotbarEntry? Get(int index) => Get(Page, index);
@@ -140,22 +164,20 @@ public sealed class Hotbar
         //the same entry again takes this server: a file of version 1 gave every entry the server that saved it last
         if (!InRange(page, index)
             || string.IsNullOrWhiteSpace(entry.Name)
-            || ((Entries[page, index] == entry) && string.Equals(Owners[page, index], Server, StringComparison.OrdinalIgnoreCase)))
+            || ((Cells[page, index] is { } cell) && (cell.Entry == entry) && string.Equals(cell.Owner, Server, StringComparison.OrdinalIgnoreCase)))
             return;
 
-        Entries[page, index] = entry;
-        Owners[page, index] = Server;
+        Cells[page, index] = new HotbarCell(entry, Server);
         Changed?.Invoke();
     }
 
     /// <summary>Empties <paramref name="index" /> of <paramref name="page" />.</summary>
     public void Clear(int page, int index)
     {
-        if (!InRange(page, index) || (Entries[page, index] is null))
+        if (!InRange(page, index) || (Cells[page, index] is null))
             return;
 
-        Entries[page, index] = null;
-        Owners[page, index] = null;
+        Cells[page, index] = null;
         Changed?.Invoke();
     }
 
@@ -167,8 +189,7 @@ public sealed class Hotbar
         if (!InRange(fromPage, from) || !InRange(toPage, to) || ((fromPage == toPage) && (from == to)))
             return;
 
-        (Entries[fromPage, from], Entries[toPage, to]) = (Entries[toPage, to], Entries[fromPage, from]);
-        (Owners[fromPage, from], Owners[toPage, to]) = (Owners[toPage, to], Owners[fromPage, from]);
+        (Cells[fromPage, from], Cells[toPage, to]) = (Cells[toPage, to], Cells[fromPage, from]);
         Changed?.Invoke();
     }
 
@@ -214,35 +235,26 @@ public sealed class Hotbar
     ///     The book or inventory slot that holds <paramref name="entry" /> now, or null when the book or the inventory does
     ///     not have it. For an item it is the first slot of the item.
     /// </summary>
-    public byte? Resolve(HotbarEntry entry)
+    public byte? Resolve(HotbarEntry entry) => Find(entry).Slot;
+
+    //the slot and the count of an entry: from the lookups since the last change of a book or the inventory, else a search
+    private (byte? Slot, uint Count) Find(HotbarEntry entry)
     {
-        switch (entry.Kind)
+        var key = (entry.Kind, entry.Name);
+
+        if (Found.TryGetValue(key, out var found))
+            return found;
+
+        found = entry.Kind switch
         {
-            case HotbarKind.Skill:
-                for (byte slot = 1; slot <= SkillBook.MAX_SLOTS; slot++)
-                    if (Skills.GetSlot(slot).AbilityName?.EqualsI(entry.Name) == true)
-                        return slot;
+            HotbarKind.Skill => (Skills.FindSlot(entry.Name), 0),
+            HotbarKind.Spell => (Spells.FindSlot(entry.Name), 0),
+            _                => (Items.FindSlot(entry.Name), CountOf(entry.Name))
+        };
 
-                return null;
+        Found[key] = found;
 
-            case HotbarKind.Spell:
-                for (byte slot = 1; slot <= SpellBook.MAX_SLOTS; slot++)
-                    if (Spells.GetSlot(slot).AbilityName?.EqualsI(entry.Name) == true)
-                        return slot;
-
-                return null;
-
-            default:
-                for (byte slot = 1; slot <= Inventory.MAX_SLOTS; slot++)
-                {
-                    ref readonly var item = ref Items.GetSlot(slot);
-
-                    if (item.IsOccupied && (item.Name?.EqualsI(entry.Name) == true))
-                        return slot;
-                }
-
-                return null;
-        }
+        return found;
     }
 
     /// <summary>The number of an item in the inventory: the sum of its stacks, and 1 for each item that does not stack.</summary>
@@ -268,7 +280,9 @@ public sealed class Hotbar
     /// </summary>
     public HotbarEntryState StateOf(HotbarEntry entry)
     {
-        if (Resolve(entry) is not { } slot)
+        var (found, count) = Find(entry);
+
+        if (found is not { } slot)
             return new HotbarEntryState(null, entry.Sprite, entry.Color, 0, 0);
 
         switch (entry.Kind)
@@ -282,7 +296,7 @@ public sealed class Hotbar
             default:
                 ref readonly var item = ref Items.GetSlot(slot);
 
-                return new HotbarEntryState(slot, item.Sprite, item.Color, CountOf(entry.Name), 0);
+                return new HotbarEntryState(slot, item.Sprite, item.Color, count, 0);
         }
     }
 
@@ -300,6 +314,21 @@ public sealed class Hotbar
             return;
 
         var now = Clock();
+
+        //most ticks come before the wait ends: they copy nothing
+        var due = false;
+
+        foreach (var removedAt in Removals.Values)
+            if (now - removedAt >= REMOVAL_WAIT_MS)
+            {
+                due = true;
+
+                break;
+            }
+
+        if (!due)
+            return;
+
         var changed = false;
 
         foreach (var ((kind, name), removedAt) in Removals.ToArray())
@@ -335,15 +364,15 @@ public sealed class Hotbar
     }
 
     /// <summary>The server of the session that put the entry at <paramref name="index" /> of <paramref name="page" />, or null.</summary>
-    internal string? OwnerOf(int page, int index) => InRange(page, index) ? Owners[page, index] : null;
+    internal string? OwnerOf(int page, int index) => InRange(page, index) ? Cells[page, index]?.Owner : null;
 
     /// <summary>Empties every entry and shows the first page, for the next character; raises no change, because nothing saves it.</summary>
     public void Reset()
     {
-        Array.Clear(Entries);
-        Array.Clear(Owners);
+        Array.Clear(Cells);
         Page = 0;
         Removals.Clear();
+        Found.Clear();
         Array.Clear(SkillNames);
         Array.Clear(SpellNames);
         LoadedAt = null;
@@ -362,8 +391,8 @@ public sealed class Hotbar
 
         List<string?> owners = [null];
 
-        foreach (var owner in Owners)
-            if ((owner is not null) && !owners.Contains(owner))
+        foreach (var cell in Cells)
+            if ((cell?.Owner is { } owner) && !owners.Contains(owner))
                 owners.Add(owner);
 
         foreach (var owner in owners)
@@ -385,9 +414,9 @@ public sealed class Hotbar
     {
         for (var page = 0; page < PAGES; page++)
             for (var index = 0; index < SLOTS; index++)
-                if ((Entries[page, index] is { } entry) && (Owners[page, index] == owner))
+                if ((Cells[page, index] is { } cell) && (cell.Owner == owner))
                     yield return FormattableString.Invariant(
-                        $"{page} {index} {entry.Kind.ToString().ToLowerInvariant()} {entry.Sprite} {(byte)entry.Color} {entry.Name}");
+                        $"{page} {index} {cell.Entry.Kind.ToString().ToLowerInvariant()} {cell.Entry.Sprite} {(byte)cell.Entry.Color} {cell.Entry.Name}");
     }
 
     /// <summary>
@@ -400,8 +429,7 @@ public sealed class Hotbar
     /// <param name="server">The server of this session (its host and name), or null when it is not known.</param>
     public bool Load(IEnumerable<string> lines, string? server = null)
     {
-        Array.Clear(Entries);
-        Array.Clear(Owners);
+        Array.Clear(Cells);
         Page = 0;
         LoadedAt = Clock();
         Server = string.IsNullOrWhiteSpace(server) ? null : server.Trim();
@@ -442,10 +470,7 @@ public sealed class Hotbar
                 && TryNumber(parts[3], ushort.MaxValue + 1, out var sprite)
                 && TryNumber(parts[4], byte.MaxValue + 1, out var color)
                 && !string.IsNullOrWhiteSpace(parts[5]))
-            {
-                Entries[page, index] = new HotbarEntry(kind, parts[5], (ushort)sprite, (DisplayColor)color);
-                Owners[page, index] = owner;
-            }
+                Cells[page, index] = new HotbarCell(new HotbarEntry(kind, parts[5], (ushort)sprite, (DisplayColor)color), owner);
         }
 
         return true;
@@ -479,10 +504,9 @@ public sealed class Hotbar
 
         for (var page = 0; page < PAGES; page++)
             for (var index = 0; index < SLOTS; index++)
-                if ((Entries[page, index] is { } entry) && IsOfThisServer(Owners[page, index]) && match(entry))
+                if ((Cells[page, index] is { } cell) && IsOfThisServer(cell.Owner) && match(cell.Entry))
                 {
-                    Entries[page, index] = null;
-                    Owners[page, index] = null;
+                    Cells[page, index] = null;
                     emptied = true;
                 }
 
@@ -511,5 +535,20 @@ public sealed class Hotbar
 
         foreach (var key in Removals.Keys.Where(key => key.Kind == kind).ToArray())
             Removals.Remove(key);
+    }
+
+    //an entry in a slot, and the server of the session that put it there, or null
+    private readonly record struct HotbarCell(HotbarEntry Entry, string? Owner);
+
+    //an entry key: the kind, and the name in any case, as HotbarEntry.SameKey compares them
+    private sealed class KeyComparer : IEqualityComparer<(HotbarKind Kind, string Name)>
+    {
+        public static readonly KeyComparer Instance = new();
+
+        public bool Equals((HotbarKind Kind, string Name) x, (HotbarKind Kind, string Name) y)
+            => (x.Kind == y.Kind) && StringComparer.OrdinalIgnoreCase.Equals(x.Name, y.Name);
+
+        public int GetHashCode((HotbarKind Kind, string Name) key)
+            => HashCode.Combine(key.Kind, StringComparer.OrdinalIgnoreCase.GetHashCode(key.Name));
     }
 }

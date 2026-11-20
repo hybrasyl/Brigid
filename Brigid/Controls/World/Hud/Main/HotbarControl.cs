@@ -36,7 +36,10 @@ internal sealed class HotbarControl : UIPanel
     private readonly HudTooltip Tooltip;
     private readonly Func<HotbarEntry, HotbarEntryState, IconTexture?> IconSource;
     private readonly Func<object?> ActiveDrag;
-    private readonly ClockWedgeCache Wedges = new(MainHudLayout.HOTBAR_SLOT);
+    private readonly ClockWedgeCache Wedges;
+
+    //the masks of the swipe when no owner gives them; the hotbar disposes only these
+    private readonly ClockWedgeCache? OwnedWedges;
     private readonly HotbarSlotControl[] Slots = new HotbarSlotControl[Hotbar.SLOTS];
     private readonly UILabel PageText;
 
@@ -55,13 +58,16 @@ internal sealed class HotbarControl : UIPanel
     /// <param name="tooltip">The tooltip of the HUD.</param>
     /// <param name="iconSource">The icon of an entry in its state; null for the icons of <see cref="UiRenderer" />.</param>
     /// <param name="activeDrag">The payload of the drag in progress; null for the drag of <see cref="InputDispatcher" />.</param>
+    /// <param name="wedges">The masks of the swipe at the size of an ability icon, which the owner disposes; null for masks of its own.</param>
     public HotbarControl(
         Hotbar model,
         HudTooltip tooltip,
         Func<HotbarEntry, HotbarEntryState, IconTexture?>? iconSource = null,
-        Func<object?>? activeDrag = null)
+        Func<object?>? activeDrag = null,
+        ClockWedgeCache? wedges = null)
     {
         Model = model;
+        Wedges = wedges ?? (OwnedWedges = new ClockWedgeCache(MainHudLayout.HOTBAR_SLOT));
         Tooltip = tooltip;
         IconSource = iconSource ?? IconOf;
         ActiveDrag = activeDrag ?? (() => InputDispatcher.Instance?.ActiveDragPayload);
@@ -141,7 +147,7 @@ internal sealed class HotbarControl : UIPanel
 
     public override void Dispose()
     {
-        Wedges.Dispose();
+        OwnedWedges?.Dispose();
         base.Dispose();
     }
 
@@ -389,13 +395,11 @@ internal sealed class HotbarSlotControl : HudItemSlotControl
 
     protected override void OnPointer(bool entered) => PointerChanged?.Invoke(Index, entered);
 
-    //the swipe lies on the icon, which a pack icon moves by its offset
     protected override void DrawOverIcon(SpriteBatch spriteBatch, Rectangle bounds)
     {
         if ((Entry is null) || (State.Cooldown <= 0))
             return;
 
-        var at = Icon is { } shown ? new Vector2(bounds.X + shown.OffsetX, bounds.Y + shown.OffsetY) : new Vector2(bounds.X, bounds.Y);
-        DrawTexture(spriteBatch, Wedges.ForLeft(spriteBatch.GraphicsDevice, State.Cooldown), at, ClockWedgeCache.SwipeColor);
+        DrawTexture(spriteBatch, Wedges.ForLeft(spriteBatch.GraphicsDevice, State.Cooldown), ClockWedgeCache.SwipePosition(bounds, Icon), ClockWedgeCache.SwipeColor);
     }
 }

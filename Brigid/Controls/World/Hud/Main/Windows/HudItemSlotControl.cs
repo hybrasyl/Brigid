@@ -148,7 +148,7 @@ internal abstract class HudItemSlotControl : UIPanel
         DrawSlotBox(spriteBatch, bounds, SlotRole, FallbackSlotRole);
 
         if (Icon is { } icon)
-            DrawTexture(spriteBatch, icon.Texture, new Vector2(bounds.X + icon.OffsetX, bounds.Y + icon.OffsetY), Color.White);
+            DrawTexture(spriteBatch, icon.Texture, icon.PositionIn(bounds), Color.White);
         else
             DrawEmpty(spriteBatch, bounds);
 

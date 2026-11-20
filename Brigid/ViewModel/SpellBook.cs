@@ -1,5 +1,6 @@
 #region
 using Chaos.DarkAges.Definitions;
+using Chaos.Extensions.Common;
 #endregion
 
 namespace Brigid.ViewModel;
@@ -82,6 +83,19 @@ public sealed class SpellBook
             return ref SpellSlotData.Empty;
 
         return ref Slots[index];
+    }
+
+    /// <summary>
+    ///     The 1-based slot of the spell whose name with no level is <paramref name="abilityName" /> (case-insensitive, an
+    ///     exact match), or null when the book does not have it.
+    /// </summary>
+    public byte? FindSlot(string abilityName)
+    {
+        for (var i = 0; i < MAX_SLOTS; i++)
+            if (Slots[i].IsOccupied && (Slots[i].AbilityName?.EqualsI(abilityName) == true))
+                return (byte)(i + 1);
+
+        return null;
     }
 
     /// <summary>

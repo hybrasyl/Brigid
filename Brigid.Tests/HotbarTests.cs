@@ -589,4 +589,43 @@ public class HotbarTests
         Assert.Equal(0, hotbar.Page);
         Assert.Null(hotbar.Get(3, 0));
     }
+
+    //the hotbar keeps the slot and the count that a lookup found, so it does not search the books by name at each frame;
+    //each change of a book or the inventory reads them again, and the cooldown is read at each call. Each step reads the
+    //entries first, so the change of that step alone must clear what the hotbar kept
+    [Fact]
+    public void AChangeOfABookOrTheInventoryReadsTheSlotAndTheCountAgain()
+    {
+        var hotbar = NewHotbar();
+        Skills.SetSlot(3, 7, "Assail");
+        AddPotions(4, 2);
+        Assert.Equal((byte)3, hotbar.StateOf(Assail).Slot);
+        Assert.Equal(2u, hotbar.StateOf(Potion).Count);
+
+        Skills.SetSlot(6, 7, "Assail");
+        Skills.ClearSlot(3);
+        Skills.SetCooldown(6, 10);
+        Assert.Equal(new HotbarEntryState(6, 7, DisplayColor.Default, 0, 1f), hotbar.StateOf(Assail));
+
+        Assert.True(hotbar.StateOf(BeagIoc).IsGone);
+        Spells.SetSlot(2, 2, "beag ioc");
+        Assert.Equal((byte)2, hotbar.Resolve(BeagIoc));
+
+        AddPotions(9, 5);
+        Assert.Equal(7u, hotbar.StateOf(Potion).Count);
+
+        Items.ClearSlot(4);
+        Assert.Equal(new HotbarEntryState(9, 10, DisplayColor.Default, 5, 0), hotbar.StateOf(Potion));
+
+        Items.Clear();
+        Assert.True(hotbar.StateOf(Potion).IsGone);
+
+        Assert.False(hotbar.StateOf(Assail).IsGone);
+        Skills.Clear();
+        Assert.True(hotbar.StateOf(Assail).IsGone);
+
+        Assert.False(hotbar.StateOf(BeagIoc).IsGone);
+        Spells.Clear();
+        Assert.True(hotbar.StateOf(BeagIoc).IsGone);
+    }
 }

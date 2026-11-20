@@ -1,4 +1,5 @@
 #region
+using Brigid.Rendering;
 using Brigid.Rendering.Utility;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -24,6 +25,12 @@ internal sealed class ClockWedgeCache(int size) : IDisposable
 
     private readonly Texture2D?[] GoneMasks = new Texture2D?[STEPS + 1];
     private readonly Texture2D?[] LeftMasks = new Texture2D?[STEPS + 1];
+
+    /// <summary>
+    ///     Where a swipe lies in a slot of <paramref name="bounds" />: on the icon, which a pack icon moves by its offset, or
+    ///     at the top left of the slot when it shows no icon.
+    /// </summary>
+    public static Vector2 SwipePosition(Rectangle bounds, IconTexture? icon) => icon?.PositionIn(bounds) ?? new Vector2(bounds.X, bounds.Y);
 
     /// <summary>The step of <paramref name="part" /> (0 to 1 of a turn), rounded to the nearest.</summary>
     public static int StepOf(float part) => (int)MathF.Round(Math.Clamp(part, 0f, 1f) * STEPS);

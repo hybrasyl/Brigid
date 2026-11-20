@@ -108,6 +108,19 @@ public sealed class SkillBook
     }
 
     /// <summary>
+    ///     The 1-based slot of the skill whose name with no level is <paramref name="abilityName" /> (case-insensitive, an
+    ///     exact match), or null when the book does not have it.
+    /// </summary>
+    public byte? FindSlot(string abilityName)
+    {
+        for (var i = 0; i < MAX_SLOTS; i++)
+            if (Slots[i].IsOccupied && (Slots[i].AbilityName?.EqualsI(abilityName) == true))
+                return (byte)(i + 1);
+
+        return null;
+    }
+
+    /// <summary>
     ///     Returns true if the 1-based slot has an active cooldown.
     /// </summary>
     public bool IsOnCooldown(byte slot)

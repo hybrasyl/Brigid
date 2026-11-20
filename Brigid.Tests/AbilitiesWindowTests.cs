@@ -273,6 +273,33 @@ public class AbilitiesWindowTests : IDisposable
         Assert.Same(before, window.Entries);
     }
 
+    //with the unlearned rows on, only a requirement input of the attributes builds the list again, not the vitals
+    [Fact]
+    public void WithUnlearnedRowsTheVitalsDoNotBuildTheListAgain()
+    {
+        var attributes = new PlayerAttributes();
+        var builds = 0;
+        var window = NewWindow(new SkillBook(), new SpellBook(), Metadata([Entry("Kick", false)], []), attributes, _ =>
+        {
+            builds++;
+
+            return AbilityIconState.Locked;
+        });
+
+        Click(window.UnlearnedFilter);
+        attributes.Update(new DALib.Networking.Packets.Server.AttributesPacket { Primary = new DALib.Networking.Packets.Server.PrimaryAttributes { Level = 10 } });
+        window.Refresh();
+        var before = builds;
+
+        attributes.Update(new DALib.Networking.Packets.Server.AttributesPacket { Current = new DALib.Networking.Packets.Server.CurrentAttributes { Hp = 5 } });
+        window.Refresh();
+        Assert.Equal(before, builds);
+
+        attributes.Update(new DALib.Networking.Packets.Server.AttributesPacket { Primary = new DALib.Networking.Packets.Server.PrimaryAttributes { Level = 10, Str = 3 } });
+        window.Refresh();
+        Assert.Equal(before + 1, builds);
+    }
+
     [Fact]
     public void TheFiltersStartWithTheLearnedRows()
     {

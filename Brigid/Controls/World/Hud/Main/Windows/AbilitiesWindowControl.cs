@@ -2,6 +2,7 @@
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Data.Models;
+using Brigid.Collections;
 using Brigid.Definitions;
 using Brigid.Rendering;
 using Brigid.Systems;
@@ -17,9 +18,9 @@ namespace Brigid.Controls.World.Hud.Main.Windows;
 ///     of 16 rows of <see cref="AbilityList" />. The filters, the arrows and the page number belong to the Abilities tab;
 ///     the Traits tab is a placeholder (D6). The window lays out from the size of its content
 ///     (<see cref="MainHudLayout.AbilitiesIn" />). The list builds again at the next
-///     update after a book slot changes, a filter changes, the metadata arrives, or the attributes change while the
-///     Unlearned filter is on (the attributes decide the blue or grey icon of an ability that the player can learn); it
-///     keeps its page.
+///     update after a book slot changes, a filter changes, the metadata arrives, or a requirement input of the attributes
+///     changes while the Unlearned filter is on (the level, the ability level, the five stats and the master state decide
+///     the blue or grey icon of an ability that the player can learn; the vitals do not); it keeps its page.
 /// </summary>
 internal sealed class AbilitiesWindowControl : HudWindowContent
 {
@@ -38,9 +39,15 @@ internal sealed class AbilitiesWindowControl : HudWindowContent
     private readonly UILabel PageNumber;
     private readonly UILabel TraitsText;
     private readonly AbilityRowControl[] Rows = new AbilityRowControl[AbilityList.PAGE];
-    private readonly ClockWedgeCache Wedges = new(MainHudLayout.ABILITY_ICON);
+    private readonly ClockWedgeCache Wedges;
+
+    //the masks of the swipe when no owner gives them; the window disposes only these
+    private readonly ClockWedgeCache? OwnedWedges;
     private AbilityMetadata? Metadata;
     private bool Dirty = true;
+
+    //the attributes that decide the state of an ability that the player can learn, as the last attributes packet gave them
+    private RequirementInputs Inputs;
 
     /// <param name="skills">The skill book.</param>
     /// <param name="spells">The spell book.</param>
@@ -48,20 +55,23 @@ internal sealed class AbilitiesWindowControl : HudWindowContent
     /// <param name="metadata">The class ability metadata, read at each update, so the list builds again when it arrives.</param>
     /// <param name="iconSource">The icon of a row; null for the icons of <see cref="UiRenderer" />.</param>
     /// <param name="stateOf">The state of an ability that the player can learn; null for <see cref="AbilityRequirements" />.</param>
+    /// <param name="wedges">The masks of the swipe at the size of an ability icon, which the owner disposes; null for masks of its own.</param>
     public AbilitiesWindowControl(
         SkillBook skills,
         SpellBook spells,
         PlayerAttributes attributes,
         Func<AbilityMetadata?> metadata,
         Func<AbilityRow, IconTexture?>? iconSource = null,
-        Func<AbilityMetadataEntry, AbilityIconState>? stateOf = null)
+        Func<AbilityMetadataEntry, AbilityIconState>? stateOf = null,
+        ClockWedgeCache? wedges = null)
     {
+        Wedges = wedges ?? (OwnedWedges = new ClockWedgeCache(MainHudLayout.ABILITY_ICON));
         Name = "abilities_window";
         Skills = skills;
         Spells = spells;
         Attributes = attributes;
         MetadataSource = metadata;
-        StateOf = stateOf ?? AbilityRequirements.ResolveIconState;
+        StateOf = stateOf ?? AbilityRequirements.UnlearnedIconState;
         iconSource ??= IconOf;
 
         Tabs = new TabStrip(["Abilities", "Traits"], MainHudLayout.ABILITY_TAB_WIDTH, MainHudLayout.ABILITY_TAB_HEIGHT) { Name = "tabs" };
@@ -93,6 +103,7 @@ internal sealed class AbilitiesWindowControl : HudWindowContent
         Spells.SlotChanged += OnBookChanged;
         Spells.Cleared += OnChanged;
         Attributes.Changed += OnAttributesChanged;
+        Inputs = RequirementInputs.Of(Attributes);
     }
 
     /// <summary>A left click on a learned ability: the world screen uses it as a click on its book slot.</summary>
@@ -164,7 +175,7 @@ internal sealed class AbilitiesWindowControl : HudWindowContent
         Spells.SlotChanged -= OnBookChanged;
         Spells.Cleared -= OnChanged;
         Attributes.Changed -= OnAttributesChanged;
-        Wedges.Dispose();
+        OwnedWedges?.Dispose();
 
         base.Dispose();
     }
@@ -216,11 +227,28 @@ internal sealed class AbilitiesWindowControl : HudWindowContent
 
     private void OnChanged() => Dirty = true;
 
-    //an attributes packet comes at each change of the vitals; only the unlearned rows read the attributes
+    //an attributes packet comes at each change of the vitals; only the unlearned rows read the attributes, and only the
+    //requirement inputs of them
     private void OnAttributesChanged()
     {
+        var inputs = RequirementInputs.Of(Attributes);
+
+        if (inputs == Inputs)
+            return;
+
+        Inputs = inputs;
+
         if (UnlearnedBox.Checked)
             Dirty = true;
+    }
+
+    //the inputs of the state of an ability that the player can learn (AbilityRequirements.UnlearnedIconState)
+    private readonly record struct RequirementInputs(bool HasData, byte Level, byte Ability, byte Str, byte Int, byte Wis, byte Con, byte Dex, bool IsMaster)
+    {
+        public static RequirementInputs Of(PlayerAttributes attributes)
+            => attributes.Current is { } attrs
+                ? new RequirementInputs(true, attrs.Level, attrs.Ability, attrs.Str, attrs.Int, attrs.Wis, attrs.Con, attrs.Dex, WorldState.IsMaster)
+                : new RequirementInputs(false, 0, 0, 0, 0, 0, 0, 0, WorldState.IsMaster);
     }
 
     private (CheckBox Box, UILabel Label) AddFilter(string name, string text, bool on)

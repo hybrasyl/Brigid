@@ -202,35 +202,39 @@ public static class ThemeArt
         if (pack is null)
             return null;
 
+        //a static make: a draw that finds its texture in the cache makes no closure
         return Textures.GetOrCreate(
             (role, width, height, scaleX, scaleY),
-            () =>
-            {
-                var source = GetSource(pack, role);
+            pack,
+            static (key, themePack) => MakeTexture(themePack, key.Role, key.Width, key.Height, key.ScaleX, key.ScaleY));
+    }
 
-                if (source is null)
-                    return null;
+    private static Texture2D? MakeTexture(UiThemePack pack, string role, int width, int height, float scaleX, float scaleY)
+    {
+        var source = GetSource(pack, role);
 
-                var theme = pack.Theme;
+        if (source is null)
+            return null;
 
-                using var composite = Composite(
-                    source.Part,
-                    source.Image,
-                    width,
-                    height,
-                    scaleX / theme.Density,
-                    scaleY / theme.Density,
-                    source.Part.Filter ?? theme.Filter);
+        var theme = pack.Theme;
 
-                if (composite is null)
-                {
-                    DataDiagnostics.Log?.Invoke($"[asset-pack] ui_theme '{pack.Manifest.PackId}': part '{role}' cannot be drawn at {width}x{height}");
+        using var composite = Composite(
+            source.Part,
+            source.Image,
+            width,
+            height,
+            scaleX / theme.Density,
+            scaleY / theme.Density,
+            source.Part.Filter ?? theme.Filter);
 
-                    return null;
-                }
+        if (composite is null)
+        {
+            DataDiagnostics.Log?.Invoke($"[asset-pack] ui_theme '{pack.Manifest.PackId}': part '{role}' cannot be drawn at {width}x{height}");
 
-                return TextureConverter.ToTexture2D(composite);
-            });
+            return null;
+        }
+
+        return TextureConverter.ToTexture2D(composite);
     }
 
     //the active theme pack, or null. A change of theme empties the caches first

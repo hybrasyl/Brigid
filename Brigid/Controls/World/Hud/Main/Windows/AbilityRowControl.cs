@@ -112,14 +112,10 @@ internal sealed class AbilityRowControl : UIPanel
         base.DrawChrome(spriteBatch, bounds);
 
         if (Icon is { } icon)
-            DrawTexture(spriteBatch, icon.Texture, new Vector2(bounds.X + icon.OffsetX, bounds.Y + icon.OffsetY), Color.White);
+            DrawTexture(spriteBatch, icon.Texture, icon.PositionIn(bounds), Color.White);
 
-        //the swipe lies on the icon, which a pack icon moves by its offset
         if (Row is { IsLearned: true } row)
-        {
-            var at = Icon is { } shown ? new Vector2(bounds.X + shown.OffsetX, bounds.Y + shown.OffsetY) : new Vector2(bounds.X, bounds.Y);
-            DrawTexture(spriteBatch, Wedges.ForLeft(spriteBatch.GraphicsDevice, CooldownOf(row)), at, ClockWedgeCache.SwipeColor);
-        }
+            DrawTexture(spriteBatch, Wedges.ForLeft(spriteBatch.GraphicsDevice, CooldownOf(row)), ClockWedgeCache.SwipePosition(bounds, Icon), ClockWedgeCache.SwipeColor);
     }
 
     private UILabel AddLine(string name, string role)

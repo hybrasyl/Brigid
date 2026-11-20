@@ -19,6 +19,9 @@ public readonly record struct IconTexture(Texture2D Texture, int OffsetX, int Of
     /// <summary>The offset as a vector, for a control's <c>TextureOffset</c>.</summary>
     public Vector2 Offset => new(OffsetX, OffsetY);
 
+    /// <summary>Where the icon draws in a slot of <paramref name="bounds" />: the top left of the slot, moved by the offset.</summary>
+    public Vector2 PositionIn(Rectangle bounds) => new Vector2(bounds.X, bounds.Y) + Offset;
+
     /// <summary>
     ///     The draw offset, on one axis, that centres an icon of <paramref name="size" /> pixels in the legacy 31-pixel
     ///     footprint. A 32-pixel icon gets -1; a smaller icon moves in.

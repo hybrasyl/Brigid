@@ -74,7 +74,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         AddChild(EffectBar);
 
         //the hotbar (BRIG-146)
-        HotbarStrip = new HotbarControl(hotbar ?? WorldState.Hotbar, Tooltip);
+        HotbarStrip = new HotbarControl(hotbar ?? WorldState.Hotbar, Tooltip, wedges: AbilityWedges);
         AddChild(HotbarStrip);
 
         //the meters (BRIG-148)
@@ -247,6 +247,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
         Attributes.Changed -= OnAttributesChanged;
 
         base.Dispose();
+        AbilityWedges.Dispose();
     }
 
     //weight, gold, mail, health and mana come with the attributes, as on the classic HUD
@@ -291,6 +292,9 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     }
 
     public Rectangle ViewportBounds => MainHudLayout.World;
+
+    /// <summary>The masks of the cooldown swipe at the size of an ability icon: the hotbar and the Abilities window share them.</summary>
+    internal ClockWedgeCache AbilityWedges { get; } = new(MainHudLayout.ABILITY_ICON);
 
     public string PlayerName => Plate.PlayerName;
 

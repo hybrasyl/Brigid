@@ -1,5 +1,6 @@
 #region
 using Chaos.DarkAges.Definitions;
+using Chaos.Extensions.Common;
 #endregion
 
 namespace Brigid.ViewModel;
@@ -57,6 +58,19 @@ public sealed class Inventory
                 return (byte)(i + 1);
 
         return 0;
+    }
+
+    /// <summary>
+    ///     The first 1-based slot of an item named <paramref name="name" /> (case-insensitive, an exact match), or null when
+    ///     the inventory does not have it.
+    /// </summary>
+    public byte? FindSlot(string name)
+    {
+        for (var i = 0; i < MAX_SLOTS; i++)
+            if (Slots[i].IsOccupied && (Slots[i].Name?.EqualsI(name) == true))
+                return (byte)(i + 1);
+
+        return null;
     }
 
     /// <summary>
