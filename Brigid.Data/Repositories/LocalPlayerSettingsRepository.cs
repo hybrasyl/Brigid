@@ -207,10 +207,11 @@ public sealed class LocalPlayerSettingsRepository
     }
 
     /// <summary>
-    ///     Loads the level starts from Experience.cfg (BRIG-148), in the folder of this server. A file that is absent, or that
-    ///     cannot be read, gives no starts; a failure is logged.
+    ///     Loads the level starts from Experience.cfg (BRIG-148), in the folder of this server. A file that is absent gives no
+    ///     starts. A file that cannot be read gives null, and the failure is logged: the caller must not write over it.
     /// </summary>
-    public SavedExperience LoadExperience() => ParseExperience(ReadLinesOrNull(ExperiencePath, "LoadExperience") ?? []);
+    public SavedExperience? LoadExperience()
+        => ReadLinesOrNull(ExperiencePath, "LoadExperience") is { } lines ? ParseExperience(lines) : null;
 
     /// <summary>Saves the level starts to Experience.cfg (BRIG-148), in the folder of this server.</summary>
     public void SaveExperience(SavedExperience experience)

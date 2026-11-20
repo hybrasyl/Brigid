@@ -1233,6 +1233,9 @@ public sealed class ConnectionManager : IDisposable
     ///     Sends the answer to a menu of the player's items: the inventory slot of the item that the player selected. A slot
     ///     that a swap holds is refused, as for the other item sends.
     /// </summary>
+    /// <summary>True while a swap of the inventory slot <paramref name="slot" /> waits for its update (<see cref="InventorySwaps" />).</summary>
+    public bool HoldsInventorySlot(byte slot) => Swaps.Holds(slot);
+
     public void SendItemMenuResponse(byte objectType, uint entityId, ushort pursuitId, byte inventorySlot)
     {
         if (Swaps.Holds(inventorySlot))

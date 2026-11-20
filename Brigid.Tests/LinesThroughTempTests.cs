@@ -1,3 +1,4 @@
+using Brigid.Data.Models;
 using Brigid.Data.Repositories;
 using Xunit;
 
@@ -46,7 +47,8 @@ public sealed class LinesThroughTempTests : IDisposable
         Assert.Equal(["Dex"], File.ReadAllLines(settings.PersonalViewPath));
     }
 
-    //a pin file that could not be read loaded as no pins, and the next toggle wrote over it
+    //a pin file that could not be read loaded as no pins, and the next toggle wrote over it; an Experience.cfg that could
+    //not be read loaded as no starts, and the next level gain wrote over it
     [Fact]
     public void AFileThatCannotBeReadLoadsAsNullAndAnAbsentFileAsNoLines()
     {
@@ -57,11 +59,15 @@ public sealed class LinesThroughTempTests : IDisposable
         Assert.Empty(Assert.IsType<string[]>(settings.LoadHotbar()));
 
         //a folder in the place of the file: the read fails on every platform
+        Assert.Equal(new SavedExperience(null, null), settings.LoadExperience());
+
         Directory.CreateDirectory(settings.PersonalViewPath);
         Directory.CreateDirectory(settings.HotbarPath);
+        Directory.CreateDirectory(settings.ExperiencePath);
 
         Assert.Null(settings.LoadPersonalViewPins());
         Assert.Null(settings.LoadHotbar());
+        Assert.Null(settings.LoadExperience());
     }
 
     [Fact]

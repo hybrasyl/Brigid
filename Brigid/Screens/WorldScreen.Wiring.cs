@@ -302,6 +302,10 @@ public sealed partial class WorldScreen
                     args: [name]);
         };
 
+        NpcSession.ListItemBlocked = index => (NpcSession.CurrentMenuType is MenuType.ShowPlayerItems)
+                                              && (NpcSession.GetListEntrySlot(index) is { } held)
+                                              && Game.Connection.HoldsInventorySlot(held);
+
         NpcSession.OnListItemSelected += selectedIndex =>
         {
             if (NpcSession.SourceId is not { } sourceId)

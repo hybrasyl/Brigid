@@ -321,7 +321,7 @@ public sealed class NpcSessionControl : PrefabPanel
 
         MenuList.OnItemSelected += index =>
         {
-            if (BeginResponse())
+            if ((ListItemBlocked?.Invoke(index) != true) && BeginResponse())
                 OnListItemSelected?.Invoke(index);
         };
 
@@ -542,6 +542,12 @@ public sealed class NpcSessionControl : PrefabPanel
     //events — worldscreen.wiring subscribes to these
     public event CloseHandler? OnClose;
     public event ItemSelectedHandler? OnListItemSelected;
+
+    /// <summary>
+    ///     True for a list entry that cannot be sent now (an inventory slot of a swap that the server has not answered). The
+    ///     session does not lock for a response that would not go, and the entry can be picked again.
+    /// </summary>
+    public Func<int, bool>? ListItemBlocked { get; set; }
     public event ItemSelectedHandler? OnMerchantItemSelected;
     public event NextHandler? OnNext;
     public event OptionSelectedHandler? OnOptionSelected;

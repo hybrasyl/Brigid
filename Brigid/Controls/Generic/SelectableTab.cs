@@ -88,6 +88,9 @@ public sealed class SelectableTab : UIPanel
 
     public void SetText(string text) => Label.Text = text;
 
+    /// <summary>The width of <paramref name="text" /> at the size and spacing that the tab draws its label.</summary>
+    internal int MeasureLabel(string text) => Label.MeasureText(text);
+
     /// <summary>The colour that the label draws, for the tests.</summary>
     internal Color LabelColorForTests
     {

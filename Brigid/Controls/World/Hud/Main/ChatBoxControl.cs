@@ -385,7 +385,7 @@ public sealed class ChatBoxControl : UIPanel
         AddButton.Visible = CanAddTab;
         var available = MainHudLayout.ChatTabRowWidth - (CanAddTab ? AddButton.Width + MainHudLayout.CHAT_TAB_GAP : 0);
 
-        var preferred = Tabs.Select(tab => TextRenderer.MeasureWidth(tab.Tab.Name) + MainHudLayout.CHAT_TAB_PAD).ToList();
+        var preferred = Tabs.Select(tab => tab.Control.MeasureLabel(tab.Tab.Name) + MainHudLayout.CHAT_TAB_PAD).ToList();
         var widths = MainHudLayout.FitTabs(preferred, available, MainHudLayout.CHAT_TAB_GAP);
         var x = MainHudLayout.CHAT_ROW_PAD;
         var y = RowRect().Y + MainHudLayout.CHAT_ROW_PAD;

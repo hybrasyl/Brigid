@@ -736,8 +736,15 @@ public sealed partial class WorldScreen
     private void LoadPlayerExperience()
     {
         CharacterFolderReady = true;
-        WorldState.Attributes.RestoreStarts(DataContext.LocalPlayerSettings.LoadExperience());
+        var saved = DataContext.LocalPlayerSettings.LoadExperience();
+        ExperienceSaveBlocked = saved is null;
+
+        if (saved is not null)
+            WorldState.Attributes.RestoreStarts(saved);
     }
+
+    //Experience.cfg could not be read: a save would write only the starts of this session over the player's file
+    private bool ExperienceSaveBlocked;
 
     //the pins of Personal View, once for this screen's character: a display packet of the player comes at each map change,
     //and a load there would put back the pins of a save that failed (BRIG-151)
@@ -799,7 +806,7 @@ public sealed partial class WorldScreen
 
     private void SavePlayerExperience()
     {
-        if (CharacterFolderReady)
+        if (CharacterFolderReady && !ExperienceSaveBlocked)
             DataContext.LocalPlayerSettings.SaveExperience(WorldState.Attributes.SavedStarts());
     }
 
