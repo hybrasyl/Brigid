@@ -1,7 +1,6 @@
 #region
 using Brigid.Collections;
 using Brigid.Controls.Components;
-using Brigid.Controls.Generic;
 using Brigid.Models;
 using Brigid.Networking.Definitions;
 using Brigid.Systems;
@@ -345,23 +344,12 @@ public sealed partial class WorldScreen
 
             if (evt.Button == MouseButton.Right)
             {
-                HideOnPressOutside(AislingContext, evt.X, evt.Y);
-                HideOnPressOutside(DoorContext, evt.X, evt.Y);
-                HideOnPressOutside(ChatTabMenu, evt.X, evt.Y);
-                HideOnPressOutside(AbilityMetadataDetails, evt.X, evt.Y);
-                HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y);
-                HideOnPressOutside(InventoryLists, evt.X, evt.Y);
+                HidePopupsOnPressOutside(evt.X, evt.Y, all: true);
 
                 continue;
             }
 
-            if ((evt.Button == MouseButton.Left)
-                && (HideOnPressOutside(AislingContext, evt.X, evt.Y)
-                    || HideOnPressOutside(DoorContext, evt.X, evt.Y)
-                    || HideOnPressOutside(ChatTabMenu, evt.X, evt.Y)
-                    || HideOnPressOutside(AbilityMetadataDetails, evt.X, evt.Y)
-                    || HideOnPressOutside(EventMetadataDetails, evt.X, evt.Y)
-                    || HideOnPressOutside(InventoryLists, evt.X, evt.Y)))
+            if ((evt.Button == MouseButton.Left) && HidePopupsOnPressOutside(evt.X, evt.Y, all: false))
                 Game.Dispatcher.SwallowPress(i);
         }
 
@@ -373,25 +361,25 @@ public sealed partial class WorldScreen
         Root!.Update(gameTime);
     }
 
-    //hides a visible popup when a press at (x, y) is outside it, and returns true when it did
-    private static bool HideOnPressOutside(PopupMenu popup, int x, int y)
+    //hides the visible popups that a press at (x, y) is outside, in order, and returns true when it hid one. With all false
+    //it stops at the first popup that it hides, as the left press did
+    private bool HidePopupsOnPressOutside(int x, int y, bool all)
     {
-        if (!popup.Visible || popup.ContainsPoint(x, y))
-            return false;
+        var hidden = false;
 
-        popup.Hide();
+        foreach (var (popup, hide) in PressOutsidePopups)
+        {
+            if (!popup.Visible || popup.ContainsPoint(x, y))
+                continue;
 
-        return true;
-    }
+            hide();
+            hidden = true;
 
-    private static bool HideOnPressOutside(CenteredModalPanel popup, int x, int y)
-    {
-        if (!popup.Visible || popup.ContainsPoint(x, y))
-            return false;
+            if (!all)
+                break;
+        }
 
-        popup.Hide();
-
-        return true;
+        return hidden;
     }
 
     /// <summary>

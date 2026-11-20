@@ -254,15 +254,7 @@ internal sealed class DetailsWindowControl : HudWindowContent
     }
 
     private void DrawBox(SpriteBatch spriteBatch, Rectangle bounds, Rectangle box)
-    {
-        var screen = new Rectangle(bounds.X + box.X, bounds.Y + box.Y, box.Width, box.Height);
-
-        if (TryDrawThemePart(spriteBatch, ThemeRoles.HudBox, screen))
-            return;
-
-        DrawRectClipped(spriteBatch, screen, DialogPalette.SlotFill);
-        DrawBorderClipped(spriteBatch, screen, ThemeColor(ThemeRoles.Divider));
-    }
+        => DrawSlotBox(spriteBatch, new Rectangle(bounds.X + box.X, bounds.Y + box.Y, box.Width, box.Height), ThemeRoles.HudBox);
 
     private void ShowProfile()
     {

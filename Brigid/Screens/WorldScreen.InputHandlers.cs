@@ -550,13 +550,8 @@ public sealed partial class WorldScreen
     //a click on a learned ability: as a click on its book slot
     private void UseAbility(AbilityRow row)
     {
-        if (row.Slot is not { } slot)
-            return;
-
-        if (row.IsSpell)
-            HandleSpellSlotClicked(slot);
-        else
-            HandleSkillSlotClicked(slot);
+        if (row.Slot is { } slot)
+            UseBookSlot(row.IsSpell, slot);
     }
 
     //a click or a number key on a hotbar entry: the entry as a click on its book or inventory slot (BRIG-146); a gone
@@ -566,41 +561,42 @@ public sealed partial class WorldScreen
         if (WorldState.Hotbar.Resolve(entry) is not { } slot)
             return;
 
-        switch (entry.Kind)
-        {
-            case HotbarKind.Skill:
-                HandleSkillSlotClicked(slot);
+        if (entry.Kind is HotbarKind.Skill or HotbarKind.Spell)
+            UseBookSlot(entry.Kind == HotbarKind.Spell, slot);
+        else
+            HandleInventorySlotClicked(slot);
+    }
 
-                break;
-
-            case HotbarKind.Spell:
-                HandleSpellSlotClicked(slot);
-
-                break;
-
-            default:
-                HandleInventorySlotClicked(slot);
-
-                break;
-        }
+    //a use of a skill or spell slot, as a click on it
+    private void UseBookSlot(bool isSpell, byte slot)
+    {
+        if (isSpell)
+            HandleSpellSlotClicked(slot);
+        else
+            HandleSkillSlotClicked(slot);
     }
 
     //a right click on a hotbar ability: its castable popup, as from the Abilities window (BRIG-146)
     private void ShowHotbarDetails(HotbarEntry entry)
     {
-        if ((WorldState.Hotbar.Resolve(entry) is { } slot) && (AbilityPanelOf(entry.Kind == HotbarKind.Spell, slot) is { } panel))
-            OpenCastablePopup(panel, slot);
+        if (WorldState.Hotbar.Resolve(entry) is { } slot)
+            ShowCastablePopup(entry.Kind == HotbarKind.Spell, slot);
     }
 
     //a right click: the castable popup of a learned ability, else the details of the status book
     private void ShowAbilityDetails(AbilityRow row)
     {
         if (row.Slot is { } slot)
-        {
-            if (AbilityPanelOf(row.IsSpell, slot) is { } panel)
-                OpenCastablePopup(panel, slot);
-        } else if (row.Entry is { } entry)
+            ShowCastablePopup(row.IsSpell, slot);
+        else if (row.Entry is { } entry)
             AbilityMetadataDetails.ShowEntry(entry, WorldHud.ViewportBounds);
+    }
+
+    //the castable popup of a book slot, from the hidden classic panel that holds it
+    private void ShowCastablePopup(bool isSpell, byte slot)
+    {
+        if (AbilityPanelOf(isSpell, slot) is { } panel)
+            OpenCastablePopup(panel, slot);
     }
 
     //the hidden classic panel that holds a book slot: the castable popup reads its chants

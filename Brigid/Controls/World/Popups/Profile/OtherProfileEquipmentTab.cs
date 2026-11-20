@@ -271,11 +271,7 @@ public sealed class OtherProfileEquipmentTab : PrefabPanel
         if (NationImage is not null)
             NationImage.Texture = NationIconTexture;
 
-        if (NationTextLabel is not null)
-        {
-            var nationMeta = DataContext.MetaFiles.GetNationMetadata();
-            NationTextLabel.Text = nationMeta?.Nations.TryGetValue(nationId, out var name) == true ? name : string.Empty;
-        }
+        NationTextLabel?.Text = DataContext.MetaFiles.GetNationName(nationId);
     }
 
     /// <summary>

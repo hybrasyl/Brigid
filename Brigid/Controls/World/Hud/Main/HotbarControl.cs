@@ -263,15 +263,13 @@ internal sealed class HotbarSlotControl : HudItemSlotControl
     private readonly ClockWedgeCache Wedges;
     private readonly Func<int> CurrentPage;
     private readonly UILabel KeyText;
-    private readonly UILabel CountText;
 
     //the slot reads the icon again only when the kind, the sprite or the colour changes; it keeps a read that found no
     //icon too, because the renderer does not cache such a read
     private (HotbarKind Kind, ushort Sprite, DisplayColor Color)? IconKey;
-    private uint ShownCount;
 
     public HotbarSlotControl(int index, string keyLabel, ClockWedgeCache wedges, Func<int> currentPage)
-        : base(true)
+        : base(true, showsCount: true)
     {
         Index = index;
         Wedges = wedges;
@@ -281,9 +279,6 @@ internal sealed class HotbarSlotControl : HudItemSlotControl
         KeyText = HudText.Label("key", ThemeRoles.Text);
         KeyText.Text = keyLabel;
         AddChild(KeyText);
-
-        CountText = HudText.Label("count", ThemeRoles.Text, HorizontalAlignment.Right);
-        AddChild(CountText);
     }
 
     /// <summary>The index of the slot, from 0.</summary>
@@ -296,8 +291,6 @@ internal sealed class HotbarSlotControl : HudItemSlotControl
     public HotbarEntryState State { get; private set; }
 
     internal string KeyShown => KeyText.Text;
-
-    internal string CountShown => CountText.Text;
 
     internal bool ShowsDimmed => Dimmed;
 
@@ -340,20 +333,13 @@ internal sealed class HotbarSlotControl : HudItemSlotControl
             SetIcon(entry is null ? null : iconSource(entry, state));
         }
 
-        var count = entry?.Kind == HotbarKind.Item ? state.Count : 0;
-
-        if (count != ShownCount)
-        {
-            ShownCount = count;
-            CountText.Text = count > 1 ? count.ToString(CultureInfo.InvariantCulture) : string.Empty;
-        }
+        ShowCount(entry?.Kind == HotbarKind.Item ? state.Count : 0);
     }
 
     public override void SetBounds(Rectangle bounds)
     {
         base.SetBounds(bounds);
         KeyText.SetBounds(new Rectangle(2, 0, bounds.Width - 2, TEXT_HEIGHT));
-        CountText.SetBounds(new Rectangle(0, bounds.Height - TEXT_HEIGHT, bounds.Width - 1, TEXT_HEIGHT));
     }
 
     //a click on an empty slot does nothing, and does not reach the world under the hotbar

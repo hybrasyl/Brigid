@@ -71,11 +71,7 @@ internal sealed class HudEffectSlot : UIElement
 
         var bounds = new Rectangle(ScreenX, ScreenY, Width, Height);
 
-        if (!TryDrawThemePart(spriteBatch, ThemeRoles.HudEffectSlot, bounds))
-        {
-            DrawRectClipped(spriteBatch, bounds, DialogPalette.SlotFill);
-            DrawBorderClipped(spriteBatch, bounds, ThemeColor(ThemeRoles.Divider));
-        }
+        DrawSlotBox(spriteBatch, bounds, ThemeRoles.HudEffectSlot);
 
         var icon = new Vector2(ScreenX + MainHudLayout.EffectIconInSlot.X, ScreenY + MainHudLayout.EffectIconInSlot.Y);
 

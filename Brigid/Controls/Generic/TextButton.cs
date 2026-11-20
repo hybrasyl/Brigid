@@ -15,7 +15,7 @@ namespace Brigid.Controls.Generic;
 ///     <see cref="World.Popups.WorldList.WorldListControl" />) so the pager / OK / Close affordances read identically
 ///     across the modernized dialog surfaces.
 /// </summary>
-public sealed class TextButton : UIPanel
+public sealed class TextButton : ButtonBase
 {
     private static readonly Color IdleFill = DialogPalette.ButtonIdleFill;
     private static readonly Color HoverFill = DialogPalette.ButtonHoverFill;
@@ -26,9 +26,6 @@ public sealed class TextButton : UIPanel
     //when non-Regular (e.g. FontStyle.Icon for the ↺ reset glyph), the label is drawn by this control through the
     //styled TextRenderer path instead of the plain UILabel, so the glyph resolves to the symbol face. See Draw.
     private readonly FontStyle LabelStyle;
-
-    private bool Hovered;
-    private bool Pressed;
 
     //optional accent for the label (e.g. a conflict warning); null = the default white/disabled behavior.
     private Color? TextColorOverride;
@@ -99,20 +96,6 @@ public sealed class TextButton : UIPanel
     protected internal override Color? DrawnBorderColor
         => BorderColor is null ? null : Enabled ? ThemeColor(ThemeRoles.Border) : ThemeColor(ThemeRoles.Divider);
 
-    //a state that the theme leaves out uses button.normal; with no theme the button keeps its flat look
-    protected override void DrawChrome(SpriteBatch spriteBatch, Rectangle bounds)
-    {
-        if (TryDrawThemePart(spriteBatch, StateRole, bounds, ThemeRoles.ButtonNormal))
-            return;
-
-        base.DrawChrome(spriteBatch, bounds);
-    }
-
-    private string StateRole
-        => !Enabled ? ThemeRoles.ButtonDisabled
-            : Pressed ? ThemeRoles.ButtonPressed
-            : Hovered ? ThemeRoles.ButtonHover : ThemeRoles.ButtonNormal;
-
     //Enabled has no change hook on UIElement, so callers flip state through here to refresh the visual
     public void SetEnabled(bool value)
     {
@@ -121,18 +104,6 @@ public sealed class TextButton : UIPanel
     }
 
     public void SetText(string text) => Label.Text = text;
-
-    /// <summary>
-    ///     Shows the hover or the pressed look with no mouse, for the primitive gallery. The button then takes no mouse
-    ///     input, so that the mouse does not set the state again.
-    /// </summary>
-    internal void ShowState(bool hovered, bool pressed)
-    {
-        IsHitTestVisible = false;
-        Hovered = hovered;
-        Pressed = pressed;
-        RefreshVisual();
-    }
 
     /// <summary>Tints the label (null restores the default white / disabled-grey behavior).</summary>
     public void SetTextColor(Color? color)
@@ -152,37 +123,7 @@ public sealed class TextButton : UIPanel
             Label.SetForegroundRole(ThemeRoles.Text);
     }
 
-    public override void OnMouseEnter()
-    {
-        Hovered = true;
-        RefreshVisual();
-    }
-
-    public override void OnMouseLeave()
-    {
-        Hovered = false;
-        Pressed = false;
-        RefreshVisual();
-    }
-
-    public override void OnMouseDown(MouseDownEvent e)
-    {
-        if (e.Button != MouseButton.Left)
-            return;
-
-        Pressed = true;
-        RefreshVisual();
-        e.Handled = true;
-    }
-
-    public override void OnMouseUp(MouseUpEvent e)
-    {
-        if (e.Button == MouseButton.Left)
-        {
-            Pressed = false;
-            RefreshVisual();
-        }
-    }
+    protected override void OnStateChanged() => RefreshVisual();
 
     public override void OnClick(ClickEvent e)
     {

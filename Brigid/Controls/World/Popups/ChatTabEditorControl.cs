@@ -166,7 +166,7 @@ public sealed class ChatTabEditorControl : CenteredModalPanel
         var content = ContentBounds;
         var y = content.Y + GAP;
 
-        Place(NameLabel, content.X, y, content.Width, LABEL_H);
+        NameLabel.SetBounds(new Rectangle(content.X, y, content.Width, LABEL_H));
         y += LABEL_H + GAP;
 
         FieldPane.X = content.X;
@@ -176,7 +176,7 @@ public sealed class ChatTabEditorControl : CenteredModalPanel
         NameBox.Width = content.Width;
         y += FIELD_H + GAP;
 
-        Place(ChannelsLabel, content.X, y, content.Width, LABEL_H);
+        ChannelsLabel.SetBounds(new Rectangle(content.X, y, content.Width, LABEL_H));
         y += LABEL_H + GAP;
 
         var columnWidth = content.Width / COLUMNS;
@@ -189,7 +189,7 @@ public sealed class ChatTabEditorControl : CenteredModalPanel
 
             box.X = x;
             box.Y = rowY + (ROW_H - CheckBox.DEFAULT_SIZE) / 2;
-            Place(label, x + CheckBox.DEFAULT_SIZE + 4, rowY, columnWidth - CheckBox.DEFAULT_SIZE - 4, ROW_H);
+            label.SetBounds(new Rectangle(x + CheckBox.DEFAULT_SIZE + 4, rowY, columnWidth - CheckBox.DEFAULT_SIZE - 4, ROW_H));
         }
     }
 
@@ -224,14 +224,6 @@ public sealed class ChatTabEditorControl : CenteredModalPanel
         AddChild(label);
 
         return label;
-    }
-
-    private static void Place(UIElement element, int x, int y, int width, int height)
-    {
-        element.X = x;
-        element.Y = y;
-        element.Width = width;
-        element.Height = height;
     }
 
     private static string LabelOf(ChatChannel channel) => channel == ChatChannel.Npc ? "NPC" : channel.ToString();

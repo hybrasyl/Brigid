@@ -140,6 +140,9 @@ public sealed partial class WorldScreen : IScreen
 
     //event detail popup (from events tab)
     private EventMetadataDetailsControl EventMetadataDetails = null!;
+
+    //the context menus and the details popups that a press outside closes (WorldScreen.Update), with their hide
+    private (UIPanel Popup, Action Hide)[] PressOutsidePopups = [];
     private ExchangeControl Exchange = null!;
     private OkPopupMessageControl ExchangeResultPopup = null!;
 
@@ -728,6 +731,16 @@ public sealed partial class WorldScreen : IScreen
         Root.AddChild(DoorContext);
         Root.AddChild(ChatTabMenu);
         Root.AddChild(ChatTabEditor);
+
+        PressOutsidePopups =
+        [
+            (AislingContext, AislingContext.Hide),
+            (DoorContext, DoorContext.Hide),
+            (ChatTabMenu, ChatTabMenu.Hide),
+            (AbilityMetadataDetails, AbilityMetadataDetails.Hide),
+            (EventMetadataDetails, EventMetadataDetails.Hide),
+            (InventoryLists, InventoryLists.Hide)
+        ];
 
         Root.AddChild(TownMapControl);
         Root.AddChild(ServerInfo);

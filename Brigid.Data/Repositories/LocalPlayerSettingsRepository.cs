@@ -85,13 +85,13 @@ public sealed class LocalPlayerSettingsRepository
         EnsureFileExists(MACRO_FILE);
     }
 
+    /// <summary>Uses <paramref name="folder" /> as the character folder, with no import and no default files.</summary>
+    internal void UseFolderForTests(string folder) => PlayerDirectory = folder;
+
     /// <summary>
     ///     True when the old in-game-folder location holds per-character config worth importing — a subdirectory of
     ///     <c>DataPath</c> containing at least one recognizable config file. Drives the one-time import offer.
     /// </summary>
-    /// <summary>Uses <paramref name="folder" /> as the character folder, with no import and no default files.</summary>
-    internal void UseFolderForTests(string folder) => PlayerDirectory = folder;
-
     public bool HasLegacyCharacterData()
     {
         if (string.IsNullOrEmpty(DataContext.DataPath) || !Directory.Exists(DataContext.DataPath))

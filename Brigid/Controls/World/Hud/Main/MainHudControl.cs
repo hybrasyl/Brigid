@@ -292,7 +292,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
 
     public Rectangle ViewportBounds => MainHudLayout.World;
 
-    public string PlayerName { get; private set; } = string.Empty;
+    public string PlayerName => Plate.PlayerName;
 
     //an empty place that the debug overlay names; it does not take the mouse, so the world under it still does
     private static UIPanel Place(string name, Rectangle bounds)
@@ -311,11 +311,7 @@ public sealed class MainHudControl : UIPanel, IWorldHud
     #region The shell
     public ChatInputControl ChatInput => ChatBox.Input;
 
-    public void SetPlayerName(string name)
-    {
-        PlayerName = name;
-        Plate.SetName(name);
-    }
+    public void SetPlayerName(string name) => Plate.SetName(name);
 
     public void ShowPersistentMessage(string text) => PersistentMessage.SetMessage(text);
 

@@ -395,6 +395,20 @@ public abstract class UIElement : IDisposable
            && ThemeArt.TryDraw(spriteBatch, role, bounds, shown is { } area ? Rectangle.Intersect(ClipRect, area) : ClipRect, fallbackRole);
 
     /// <summary>
+    ///     Draws a slot box in <paramref name="bounds" />: the theme part for <paramref name="role" /> (or
+    ///     <paramref name="fallbackRole" />), else the flat look, a <see cref="DialogPalette.SlotFill" /> fill with a border in
+    ///     the divider colour. Both are clipped to this element's ClipRect.
+    /// </summary>
+    protected void DrawSlotBox(SpriteBatch spriteBatch, Rectangle bounds, string role, string? fallbackRole = null)
+    {
+        if (TryDrawThemePart(spriteBatch, role, bounds, fallbackRole))
+            return;
+
+        DrawRectClipped(spriteBatch, bounds, DialogPalette.SlotFill);
+        DrawBorderClipped(spriteBatch, bounds, ThemeColor(ThemeRoles.Divider));
+    }
+
+    /// <summary>
     ///     True when the element is themed and the theme has a usable part for <paramref name="role" /> (see
     ///     <see cref="ThemeArt.HasPart" />). A control uses it to decide its layout before the draw, for example to show a
     ///     placeholder where art is absent. A part that the theme lists but whose image entry is absent or does not decode

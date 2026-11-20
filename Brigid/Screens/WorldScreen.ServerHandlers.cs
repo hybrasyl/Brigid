@@ -911,8 +911,7 @@ public sealed partial class WorldScreen
         StatusBook.SetLegendMarks(marks);
 
         //the Details window of the new hud reads the profile from state, and the activity log reads its marks (BRIG-151)
-        var nations = DataContext.MetaFiles.GetNationMetadata();
-        var nationName = nations?.Nations.TryGetValue(args.NationFlag, out var nation) == true ? nation : string.Empty;
+        var nationName = DataContext.MetaFiles.GetNationName(args.NationFlag);
         WorldState.SelfProfile.Update(args.ClassName, args.GuildName, args.GuildRank, args.CurrentTitle, nationName, marks);
 
         //ability metadata (skills/spells from sclass file)

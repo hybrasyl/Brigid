@@ -1,5 +1,4 @@
 #region
-using System.Globalization;
 using Brigid.Controls.Components;
 using Brigid.Definitions;
 using Brigid.Models;
@@ -18,26 +17,17 @@ namespace Brigid.Controls.World.Hud.Main.Windows;
 /// </summary>
 internal sealed class InventorySlotControl : HudItemSlotControl
 {
-    private const int COUNT_HEIGHT = 12;
-
-    private readonly UILabel CountText;
-
     /// <param name="slot">The inventory slot, from 1.</param>
     /// <param name="usable">False for a slot past the inventory size of today.</param>
     public InventorySlotControl(byte slot, bool usable)
-        : base(usable)
+        : base(usable, showsCount: true)
     {
         Slot = slot;
         Name = $"slot_{slot}";
-
-        CountText = HudText.Label("count", ThemeRoles.Text, HorizontalAlignment.Right);
-        AddChild(CountText);
     }
 
     /// <summary>The inventory slot, from 1.</summary>
     public byte Slot { get; }
-
-    internal string CountShown => CountText.Text;
 
     protected override string SlotRole => ThemeRoles.HudInventorySlot;
 
@@ -55,13 +45,7 @@ internal sealed class InventorySlotControl : HudItemSlotControl
     public void Show(IconTexture? icon, uint count)
     {
         SetIcon(icon);
-        CountText.Text = Icon is not null && (count > 1) ? count.ToString(CultureInfo.InvariantCulture) : string.Empty;
-    }
-
-    public override void SetBounds(Rectangle bounds)
-    {
-        base.SetBounds(bounds);
-        CountText.SetBounds(new Rectangle(0, bounds.Height - COUNT_HEIGHT, bounds.Width - 1, COUNT_HEIGHT));
+        ShowCount(Icon is not null ? count : 0);
     }
 
     public override void OnDoubleClick(DoubleClickEvent e)

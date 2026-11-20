@@ -218,6 +218,10 @@ public sealed class MetaFileRepository
         return NationMetadata.Parse(metaFile);
     }
 
+    /// <summary>The name of the nation <paramref name="nationId" /> from the "NationDesc" metadata file, or an empty string.</summary>
+    public string GetNationName(int nationId)
+        => GetNationMetadata()?.Nations.TryGetValue(nationId, out var name) == true ? name : string.Empty;
+
     /// <summary>
     ///     Returns merged NPC illustration metadata from both <c>npci.tbl</c> (inside <c>npcbase.dat</c>) and the
     ///     server-pushed <c>NPCIllust</c> metafile. <c>npci.tbl</c> variants occupy the low indices; metafile

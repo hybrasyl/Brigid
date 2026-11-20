@@ -1,5 +1,6 @@
 #region
 using System.Globalization;
+using Brigid.Extensions;
 using Brigid.ViewModel;
 #endregion
 
@@ -71,10 +72,9 @@ internal static class PersonalStats
             PersonalStat.Hit             => Number(attrs.Hit),
             PersonalStat.AttackPower     => Number(attrs.Dmg),
 
-            //the wire sends MR in tens of percent, as the extended stats panel shows it
-            PersonalStat.MagicResistance => Number(attrs.MagicResistance * 10),
-            PersonalStat.OffenseElement  => attrs.OffenseElement.ToString(),
-            PersonalStat.DefenseElement  => attrs.DefenseElement.ToString(),
+            PersonalStat.MagicResistance => Number(attrs.MagicResistancePercent),
+            PersonalStat.OffenseElement  => attrs.OffenseElement.Name,
+            PersonalStat.DefenseElement  => attrs.DefenseElement.Name,
             _                            => string.Empty
         };
 

@@ -250,7 +250,7 @@ public sealed class ExtendedStatsPanel : ExpandablePanel
         TrySetLabel(IDX_AC, attrs.Ac);
         TrySetLabel(IDX_DMG, attrs.Dmg);
         TrySetLabel(IDX_HIT, attrs.Hit);
-        TrySetLabel(IDX_MAGIC, attrs.MagicResistance * 10);
+        TrySetLabel(IDX_MAGIC, attrs.MagicResistancePercent);
 
         if (OffenseElement != attrs.OffenseElement)
         {

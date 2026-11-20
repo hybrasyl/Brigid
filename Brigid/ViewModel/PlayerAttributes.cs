@@ -55,6 +55,9 @@ public sealed class PlayerAttributes
     public byte Dmg { get; private set; }
     public byte Hit { get; private set; }
     public byte MagicResistance { get; private set; }
+
+    /// <summary>The magic resistance in percent: the wire sends it in tens of percent. The stats panels show this value.</summary>
+    public int MagicResistancePercent => MagicResistance * 10;
     public Element OffenseElement { get; private set; }
     public Element DefenseElement { get; private set; }
     public bool Blind { get; private set; }

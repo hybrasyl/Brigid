@@ -16,7 +16,6 @@ internal static class CameraPlacement
     private const int CLASSIC_TILE_TOP = 178;
     private const int LARGE_HEIGHT = 424;
     private const int LARGE_TILE_TOP = 208;
-    private const int HALF_TILE_WIDTH = 28;
 
     /// <summary>The camera offset for a world area of the size of <paramref name="viewport" />.</summary>
     public static Vector2 OffsetFor(Rectangle viewport)
@@ -26,6 +25,6 @@ internal static class CameraPlacement
                           (viewport.Height - CLASSIC_HEIGHT) * (LARGE_TILE_TOP - CLASSIC_TILE_TOP) / (double)(LARGE_HEIGHT - CLASSIC_HEIGHT));
 
         //the camera puts the tile at the centre plus the offset; the centre can be on a half pixel
-        return new Vector2(-HALF_TILE_WIDTH, tileTop - viewport.Height / 2f);
+        return new Vector2(-DaLibConstants.HALF_TILE_WIDTH, tileTop - viewport.Height / 2f);
     }
 }
