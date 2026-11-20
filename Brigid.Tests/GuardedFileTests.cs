@@ -108,6 +108,95 @@ public sealed class GuardedFileTests : IDisposable
         Assert.Equal("new", File.ReadAllText(file.Path));
     }
 
+    //the move that a held file blocks for a moment fails only on Windows, so a move that fails two times stands in for it
+    [Fact]
+    public void AMoveThatFailsTwoTimesIsTriedAgainOnEveryPlatform()
+    {
+        var file = FileNamed("Macro.cfg");
+        File.WriteAllText(file.Path, "old");
+        var moves = 0;
+
+        var result = file.Save(
+            path => File.WriteAllText(path, "new"),
+            (temp, target) =>
+            {
+                if (++moves < GuardedFile.MOVE_TRIES)
+                    throw new IOException("The process cannot access the file because it is being used by another process.");
+
+                File.Move(temp, target, true);
+            });
+
+        Assert.Equal(SaveResult.Saved, result);
+        Assert.Equal(GuardedFile.MOVE_TRIES, moves);
+        Assert.Equal("new", File.ReadAllText(file.Path));
+    }
+
+    [Fact]
+    public void AMoveThatFailsAtEveryTryFailsTheSave()
+    {
+        var file = FileNamed("Macro.cfg");
+        File.WriteAllText(file.Path, "old");
+        var moves = 0;
+
+        var result = file.Save(path => File.WriteAllText(path, "new"), (_, _) => throw new IOException($"held ({++moves})"));
+
+        Assert.Equal(SaveResult.Failed, result);
+        Assert.Equal(GuardedFile.MOVE_TRIES, moves);
+        Assert.Equal("old", File.ReadAllText(file.Path));
+        Assert.False(File.Exists(file.Path + GuardedFile.TEMP_SUFFIX));
+    }
+
+    //File.Exists is false when the check fails (a denied folder), and the read went on with the defaults: the next save
+    //wrote them over the file. A folder in the place of the file is one such path: File.Exists does not see it, and the
+    //read cannot open it
+    [Fact]
+    public void APathThatACheckCannotSeeIsUnreadableAndItsSaveIsRefused()
+    {
+        var file = FileNamed("keybinds.json");
+        Directory.CreateDirectory(file.Path);
+
+        Assert.Equal("empty", ReadText(file));
+
+        Assert.True(file.IsUnreadable);
+        Assert.False(file.WasMissing);
+        Assert.Equal(SaveResult.Unreadable, SaveText(file, "defaults"));
+    }
+
+    //the read opens the file itself, so a reader that fails gives an unreadable file, also when no check saw the file
+    [Fact]
+    public void AReadThatIsDeniedIsUnreadable()
+    {
+        var file = FileNamed("keybinds.json");
+
+        var text = file.Read<string>(_ => throw new UnauthorizedAccessException("denied"), "empty");
+
+        Assert.Equal("empty", text);
+        Assert.True(file.IsUnreadable);
+        Assert.False(file.WasMissing);
+    }
+
+    [Fact]
+    public void AMissingFolderIsMissing()
+    {
+        var file = new GuardedFile(Path.Combine(Folder, "gone", "Macro.cfg"), "macros");
+
+        Assert.Equal("empty", ReadText(file));
+        Assert.True(file.WasMissing);
+        Assert.False(file.IsUnreadable);
+    }
+
+    [Fact]
+    public void ARefusedFileRefusesItsSaves()
+    {
+        var file = FileNamed("brigid.cfg");
+        ReadText(file);
+
+        file.RefuseSavesUntilRead("the legacy file could not be read");
+
+        Assert.Equal(SaveResult.Unreadable, SaveText(file, "defaults"));
+        Assert.False(File.Exists(file.Path));
+    }
+
     [Fact]
     public void ASaveReplacesTheFileAndLeavesNoTemporaryFile()
     {
@@ -139,6 +228,7 @@ public sealed class GuardedFileTests : IDisposable
         var file = FileNamed("brigid.cfg");
 
         Assert.Equal("empty", ReadText(file));
+        Assert.True(file.WasMissing);
         Assert.False(file.IsUnreadable);
         Assert.Equal(SaveResult.Saved, SaveText(file, "defaults"));
         Assert.Equal("defaults", File.ReadAllText(file.Path));
@@ -168,20 +258,16 @@ public sealed class GuardedFileTests : IDisposable
         Assert.Equal(SaveResult.Saved, SaveText(file, "new"));
     }
 
-    //a lock that starts after the read: the client does not know that the file cannot be read, and each save fails
+    //a save that fails after the read: the client does not know that the file cannot be written, and each save fails. A
+    //lock does not block the move on Linux or macOS, so a folder in the place of the file makes the write fail there too
     [Fact]
     public void AWriteThatFailsIsFailedAndRaisesANotice()
     {
         var file = FileNamed("brigid.cfg");
-        File.WriteAllText(file.Path, "good");
+        Directory.CreateDirectory(file.Path);
 
         SaveResult result = SaveResult.Saved;
-        var refusals = RefusalsDuring(
-            () =>
-            {
-                using (new FileStream(file.Path, FileMode.Open, FileAccess.Read, FileShare.None))
-                    result = SaveText(file, "new");
-            });
+        var refusals = RefusalsDuring(() => result = SaveText(file, "new"));
 
         Assert.Equal(SaveResult.Failed, result);
         Assert.Equal([(file.Path, SaveResult.Failed)], refusals.Select(r => (r.File.Path, r.Result)));

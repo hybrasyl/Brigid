@@ -79,6 +79,88 @@ public sealed class SettingsFileSafetyTests : IDisposable
         Assert.Equal("qa.hybrasyl.com:2610", LauncherConfig.GetSelectedServer()?.Key);
     }
 
+    //a port that a hand edit put out of range was selected, and each connect to it failed
+    [Fact]
+    public void ALauncherConfigDropsAServerWithAPortOutOfRange()
+    {
+        var path = WriteFile(
+            "launcher.json",
+            "{ \"Servers\": [ { \"Host\": \"a.example\", \"Port\": 0 }, { \"Host\": \"b.example\", \"Port\": 70000 }, { \"Host\": \"qa.hybrasyl.com\", \"Port\": 2610 } ], \"SelectedServer\": \"b.example:70000\" }");
+
+        LauncherConfig.Load(path);
+
+        Assert.Equal(["qa.hybrasyl.com:2610"], LauncherConfig.Servers.Select(server => server.Key));
+        Assert.Equal("qa.hybrasyl.com:2610", LauncherConfig.GetSelectedServer()?.Key);
+    }
+
+    //a null record loaded, and each connect to its host threw
+    [Fact]
+    public void ATrustStoreDropsANullRecord()
+    {
+        var path = WriteFile("known-servers.json", "{ \"Version\": 2, \"Servers\": { \"self.example\": null } }");
+
+        CertificateTrustStore.Load(path);
+
+        Assert.Equal(CertificateTrustStore.RevocationModeFor("unknown.example"), CertificateTrustStore.RevocationModeFor("self.example"));
+        Assert.NotNull(CertificateTrustStore.OptionsFor("self.example"));
+    }
+
+    //File.Exists is false when the check fails, and the legacy settings loaded and were saved over brigid.cfg. A folder
+    //in the place of brigid.cfg is a path that a check cannot see and a read cannot open
+    [Fact]
+    public void ASettingsFileThatACheckCannotSeeDoesNotTakeTheLegacySettings()
+    {
+        var path = Path.Combine(Folder, "brigid.cfg");
+        Directory.CreateDirectory(path);
+        var legacy = WriteFile("Darkages.cfg", "Sound Volume : 9\n");
+        var volume = ClientSettings.SoundVolume;
+
+        try
+        {
+            ClientSettings.SoundVolume = 4;
+            ClientSettings.Load(path, legacy);
+
+            Assert.Equal(4, ClientSettings.SoundVolume);
+            Assert.Equal(SaveResult.Unreadable, ClientSettings.Save(path));
+        } finally
+        {
+            ClientSettings.SoundVolume = volume;
+        }
+    }
+
+    //the first save made brigid.cfg with the defaults, and the legacy file was not tried again
+    [Fact]
+    public void ALegacySettingsFileThatCannotBeReadIsTriedAgainAtTheNextStart()
+    {
+        var path = Path.Combine(Folder, "brigid.cfg");
+        var legacy = WriteFile("Darkages.cfg", "Sound Volume : 9\n");
+
+        using (new FileStream(legacy, FileMode.Open, FileAccess.Read, FileShare.None))
+            ClientSettings.Load(path, legacy);
+
+        Assert.Equal(SaveResult.Unreadable, ClientSettings.Save(path));
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void TheFirstStartSavesTheLegacySettingsToTheNewFile()
+    {
+        var path = Path.Combine(Folder, "brigid.cfg");
+        var legacy = WriteFile("Darkages.cfg", "Sound Volume : 9\n");
+        var volume = ClientSettings.SoundVolume;
+
+        try
+        {
+            ClientSettings.Load(path, legacy);
+
+            Assert.Equal(9, ClientSettings.SoundVolume);
+            Assert.Contains("Sound Volume : 9", File.ReadAllText(path));
+        } finally
+        {
+            ClientSettings.SoundVolume = volume;
+        }
+    }
+
     [Fact]
     public void ALockedTrustStoreKeepsTheAcceptedServers()
     {

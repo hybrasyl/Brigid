@@ -200,8 +200,9 @@ public static class CertificateTrustStore
 
         //a shipped pre-pin outranks a stored one: the flagship pin is a claim the client makes, not a
         //user preference, and letting a file override it would defeat the point of shipping it.
+        //a hand edit can leave a null record, and each connect to its host then threw
         foreach (var (server, entry) in model.Servers)
-            if (!PrePinned.ContainsKey(server))
+            if ((entry is not null) && !PrePinned.ContainsKey(server))
                 Entries[server] = entry;
     }
 

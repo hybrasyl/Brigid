@@ -32,7 +32,7 @@ using Pathfinder = Chaos.Pathfinding.Pathfinder;
 
 namespace Brigid.Screens;
 
-public sealed partial class WorldScreen : IScreen
+public sealed partial class WorldScreen : IScreen, ISaveNoticeHost
 {
     //walk queue: when walk animation is >= 75% complete, one walk can be queued
     private const float WALK_QUEUE_THRESHOLD = 0.75f;

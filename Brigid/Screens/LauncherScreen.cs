@@ -1,5 +1,6 @@
 #region
 using Brigid.Controls.Components;
+using Brigid.Controls.LobbyLogin;
 using Brigid.Data;
 using Brigid.Data.AssetPacks;
 using Brigid.Definitions;
@@ -27,7 +28,7 @@ namespace Brigid.Screens;
 ///         once and applies at the next start.
 ///     </para>
 /// </summary>
-public sealed class LauncherScreen : IScreen
+public sealed class LauncherScreen : IScreen, ISaveNoticeHost
 {
     private enum Mode
     {
@@ -68,6 +69,13 @@ public sealed class LauncherScreen : IScreen
     private static readonly Color BadColor = new(225, 130, 120);
 
     private readonly SystemTextPainter Painter = new();
+
+    //the saves that did not go through while the launcher shows, one line for each; a player who quits from the launcher
+    //saw none of them before
+    private readonly List<string> Notices = [];
+
+    private const int NOTICE_TOP_GAP = 8;
+    private const int NOTICE_BOTTOM_MARGIN = 4;
     private readonly string[] AddText = new string[3];
     private readonly Rectangle[] AddFieldBounds = new Rectangle[3];
     private readonly List<(Rectangle Row, Rectangle Remove, ServerEntry Entry)> DropdownRows = [];
@@ -191,7 +199,59 @@ public sealed class LauncherScreen : IScreen
         else
             DrawMain();
 
+        DrawNotices();
+
         spriteBatch.End();
+    }
+
+    /// <summary>Shows a save that did not go through below the panel (<see cref="SaveNotices.ShowOn" />).</summary>
+    public void ShowSaveNotice(GuardedFile file, SaveResult result) => Notices.Add(MenuAlerts.NotSavedLine(file, result));
+
+    /// <summary>The notices that the launcher shows, for the tests.</summary>
+    internal IReadOnlyList<string> NoticesForTests => Notices;
+
+    /// <summary>
+    ///     Breaks <paramref name="text" /> into lines at spaces, so that each line fits <paramref name="width" /> by
+    ///     <paramref name="measure" />. A word wider than the width has a line of its own.
+    /// </summary>
+    internal static List<string> WrapWords(string text, float width, Func<string, float> measure)
+    {
+        var lines = new List<string>();
+        var line = string.Empty;
+
+        foreach (var word in text.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var joined = line.Length == 0 ? word : $"{line} {word}";
+
+            if ((line.Length > 0) && (measure(joined) > width))
+            {
+                lines.Add(line);
+                line = word;
+            } else
+                line = joined;
+        }
+
+        if (line.Length > 0)
+            lines.Add(line);
+
+        return lines;
+    }
+
+    //below the panel, the newest last; the lines that do not fit above the bottom of the screen are not drawn
+    private void DrawNotices()
+    {
+        var y = (float)(Panel.Bottom + NOTICE_TOP_GAP);
+        var lineHeight = Painter.TextHeight(HINT_SIZE);
+
+        foreach (var notice in Notices)
+            foreach (var line in WrapWords(notice, Panel.Width, text => Painter.Measure(text, HINT_SIZE)))
+            {
+                if (y + lineHeight > ChaosGame.VIRTUAL_HEIGHT - NOTICE_BOTTOM_MARGIN)
+                    return;
+
+                Painter.DrawText(line, new Vector2(Panel.X, y), BadColor, HINT_SIZE);
+                y += lineHeight;
+            }
     }
 
     public void UnloadContent() => Painter.Dispose();
@@ -608,7 +668,7 @@ public sealed class LauncherScreen : IScreen
         if (string.IsNullOrWhiteSpace(host))
             return;
 
-        var port = int.TryParse(AddText[(int)AddField.Port], out var parsed) && parsed is >= 1 and <= 65535
+        var port = int.TryParse(AddText[(int)AddField.Port], out var parsed) && LauncherConfig.IsValidPort(parsed)
             ? parsed
             : LauncherConfig.DEFAULT_PORT;
 

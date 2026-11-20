@@ -80,6 +80,9 @@ public sealed class GuardedFile
 
     private volatile bool UnreadableFlag;
 
+    /// <summary>True when the last read found no file. A file that cannot be read is not missing.</summary>
+    public bool WasMissing { get; private set; }
+
     //one save at a time for this file: the saves share its temporary file
     private readonly Lock SaveGate = new();
 
@@ -93,22 +96,46 @@ public sealed class GuardedFile
     public static event Action<GuardedFile, SaveResult>? NotSaved;
 
     /// <summary>
-    ///     Reads the file through <see cref="DataDiagnostics.Try" />. A missing file gives <paramref name="empty" />. A file
-    ///     that cannot be read gives <paramref name="empty" /> and is marked unreadable.
+    ///     Reads the file through <see cref="DataDiagnostics.Try" />. A missing file gives <paramref name="empty" /> and
+    ///     sets <see cref="WasMissing" />. A file that cannot be read gives <paramref name="empty" /> and is marked
+    ///     unreadable.
     /// </summary>
+    /// <remarks>
+    ///     The read opens the file, and only a file that is not found is missing. <see cref="File.Exists" /> is also false
+    ///     when the check fails (a folder that is denied), so a file that a check could not see loaded as missing, the read
+    ///     succeeded with the defaults, and the next save wrote them over the player's file.
+    /// </remarks>
     public T Read<T>(Func<string, T> read, T empty)
     {
         var value = empty;
+        var missing = false;
         var ok = DataDiagnostics.Try(
             () =>
             {
-                if (File.Exists(Path))
+                try
+                {
                     value = read(Path);
+                } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    missing = true;
+                }
             }, $"read {FileName}");
 
         IsUnreadable = !ok;
+        WasMissing = ok && missing;
 
-        return ok ? value : empty;
+        return ok && !missing ? value : empty;
+    }
+
+    /// <summary>
+    ///     Refuses each save of the file, as a failed read does: the file is missing, and the file that it takes the place
+    ///     of could not be read (the legacy <c>Darkages.cfg</c> of <c>brigid.cfg</c>). A save of the defaults would make
+    ///     the file, and the client would not try the other file again.
+    /// </summary>
+    public void RefuseSavesUntilRead(string reason)
+    {
+        IsUnreadable = true;
+        DataDiagnostics.Log?.Invoke($"[data] {FileName} is not saved this session: {reason}");
     }
 
     /// <summary>
@@ -138,7 +165,11 @@ public sealed class GuardedFile
     ///     path that it is given, a file beside the target that then replaces the target, so a write that fails part way
     ///     keeps the old file.
     /// </summary>
-    public SaveResult Save(Action<string> write)
+    public SaveResult Save(Action<string> write) => Save(write, static (temp, target) => File.Move(temp, target, overwrite: true));
+
+    /// <param name="write">Writes the file to the path that it is given.</param>
+    /// <param name="move">Moves the written file over the target; the tests give a move that fails for a moment.</param>
+    internal SaveResult Save(Action<string> write, Action<string, string> move)
     {
         if (IsUnreadable)
         {
@@ -159,7 +190,7 @@ public sealed class GuardedFile
                     () =>
                     {
                         write(temp);
-                        MoveOver(temp, Path);
+                        MoveOver(temp, Path, move);
                     }, $"save {FileName}"))
                 return SaveResult.Saved;
 
@@ -178,12 +209,12 @@ public sealed class GuardedFile
 
     //a program that opens the new file just after the write (a virus scanner, the search indexer) makes the move fail
     //for a moment; the last failure goes on to the caller
-    private static void MoveOver(string temp, string target)
+    private static void MoveOver(string temp, string target, Action<string, string> move)
     {
         for (var tries = 1; ; tries++)
             try
             {
-                File.Move(temp, target, overwrite: true);
+                move(temp, target);
 
                 return;
             } catch (Exception ex) when ((ex is IOException or UnauthorizedAccessException) && (tries < MOVE_TRIES))

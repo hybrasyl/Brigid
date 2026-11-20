@@ -95,6 +95,9 @@ public static class LauncherConfig
         Load(FilePath);
     }
 
+    /// <summary>True when <paramref name="port" /> is a TCP port that a server can listen on (1 to 65535).</summary>
+    public static bool IsValidPort(int port) => port is >= 1 and <= 65535;
+
     /// <summary>Loads the config file at <paramref name="path" />, with no legacy migration. Internal for the tests.</summary>
     internal static void Load(string path)
     {
@@ -110,8 +113,9 @@ public static class LauncherConfig
                 file.MarkCorrupt(ex.Message);
             }
 
-        //a hand edit can leave a null entry or an entry with no host; such an entry has no server to connect to
-        Servers = [.. (model?.Servers ?? []).Where(server => (server is not null) && !string.IsNullOrWhiteSpace(server.Host))];
+        //a hand edit can leave a null entry, an entry with no host or a port out of range; such an entry has no server to
+        //connect to
+        Servers = [.. (model?.Servers ?? []).Where(server => (server is not null) && !string.IsNullOrWhiteSpace(server.Host) && IsValidPort(server.Port))];
         SelectedServer = model?.SelectedServer;
         AssetPath = model?.AssetPath;
         WindowMultiplier = model?.WindowMultiplier;
@@ -119,7 +123,7 @@ public static class LauncherConfig
 
         //migrate the pre-server-list shape: a single Host/Port becomes a list entry
         if (!string.IsNullOrWhiteSpace(model?.Host))
-            AddOrSelectServer(model.Host, model.Port is >= 1 and <= 65535 ? model.Port.Value : DEFAULT_PORT, null);
+            AddOrSelectServer(model.Host, model.Port is { } port && IsValidPort(port) ? port : DEFAULT_PORT, null);
 
         //ship with a default server so the dropdown is never empty
         if (Servers.Count == 0)

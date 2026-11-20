@@ -105,19 +105,32 @@ public static class ClientSettings
     ///     file exists. A <c>brigid.cfg</c> that cannot be read gives the defaults, and its save is refused, so the
     ///     defaults do not replace the player's settings (see <see cref="GuardedFile" />).
     /// </summary>
-    public static void Load()
-    {
-        var loadPath = File.Exists(FilePath) ? FilePath
-            : LegacyFilePath is { } legacy && File.Exists(legacy) ? legacy
-            : null;
+    public static void Load() => Load(FilePath, LegacyFilePath);
 
-        if (loadPath is null)
+    /// <summary>
+    ///     Loads <paramref name="path" />, or, when it is missing, the legacy file at <paramref name="legacyPath" />, and
+    ///     saves the legacy settings to <paramref name="path" />. Internal for the tests.
+    /// </summary>
+    /// <remarks>
+    ///     Only a file that the read does not find is missing: a check that fails is not a missing file, and the legacy
+    ///     settings then do not replace it. A legacy file that cannot be read refuses the saves of <paramref name="path" />
+    ///     for the session; a save of the defaults would make <paramref name="path" />, and the legacy file would not be
+    ///     tried again at the next start.
+    /// </remarks>
+    internal static void Load(string path, string? legacyPath)
+    {
+        var file = GuardedFile.ForSession(path, FILE_DESCRIPTION);
+        Load(path);
+
+        if (!file.WasMissing || legacyPath is null)
             return;
 
-        //first-run migration: if we just read the legacy file, persist to the new per-user location. A legacy file that
-        //could not be read is not migrated here; a later save writes the defaults to brigid.cfg, as before
-        if (Load(loadPath) && (loadPath != FilePath))
-            Save();
+        var legacy = GuardedFile.ForSession(legacyPath, FILE_DESCRIPTION);
+
+        if (!Load(legacyPath))
+            file.RefuseSavesUntilRead($"the legacy {legacy.FileName} could not be read, and it is tried again at the next start");
+        else if (!legacy.WasMissing)
+            Save(path);
     }
 
     /// <summary>

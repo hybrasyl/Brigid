@@ -97,6 +97,30 @@ public sealed class ExitRedirectTests
             expected,
             WorldScreen.ConnectionOutcomeFor((ConnectionEvent)connectionEvent, redirectInProgress, awaitingLogout, packetsWait));
 
+    //a close that waits for the packets before it goes back for the next frame; without that, a real close that came with
+    //packets in the queue never showed "Connection lost"
+    [Fact]
+    public void ACloseThatWaitsForPacketsIsDecidedAtTheNextFrame()
+    {
+        var pending = (int)ConnectionEvent.Closed;
+
+        Assert.Equal(WorldScreen.ConnectionOutcome.DecideNextFrame, WorldScreen.TakeConnectionOutcome(ref pending, false, false, true));
+        Assert.Equal((int)ConnectionEvent.Closed, pending);
+
+        Assert.Equal(WorldScreen.ConnectionOutcome.ConnectionLost, WorldScreen.TakeConnectionOutcome(ref pending, false, false, false));
+        Assert.Equal((int)ConnectionEvent.None, pending);
+    }
+
+    //the network thread can record a logout between the take and the put back; the logout stays
+    [Fact]
+    public void ALogoutRecordedSinceTheTakeStays()
+    {
+        var pending = (int)ConnectionEvent.LoggedOut;
+
+        Assert.Equal(WorldScreen.ConnectionOutcome.EndLogout, WorldScreen.TakeConnectionOutcome(ref pending, false, false, true));
+        Assert.Equal((int)ConnectionEvent.None, pending);
+    }
+
     //BRIG-180: the server's close can come on the network thread before the game loop handles the Redirect. The state is
     //then Disconnected, and the redirect must take its target from the state that the connection was in
     [Theory]

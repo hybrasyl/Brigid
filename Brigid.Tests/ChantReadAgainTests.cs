@@ -58,6 +58,24 @@ public sealed class ChantReadAgainTests : IDisposable
         Assert.Equal("kick", WorldState.SkillBook.GetSlot(2).Chant);
     }
 
+    //the world screen reads the chants again at world entry; a file that cannot be read then gave no chants, and every
+    //slot lost its chant
+    [Fact]
+    public void AReloadOfAFileThatCannotBeReadKeepsTheChants()
+    {
+        var skills = WriteFile("SkillBook.cfg", "SkillbookUsed\nAssail\nSkill:hya\n");
+        var spells = WriteFile("SpellBook.cfg", "SpellbookUsed\n" + SpellEntry("Armachd"));
+        AddSkill(1, "Assail");
+        AddSpell(1, "Armachd");
+
+        using (new FileStream(skills, FileMode.Open, FileAccess.Read, FileShare.None))
+        using (new FileStream(spells, FileMode.Open, FileAccess.Read, FileShare.None))
+            WorldState.ReloadChants();
+
+        Assert.Equal("hya", WorldState.SkillBook.GetSlot(1).Chant);
+        Assert.Equal("Armachd", WorldState.SpellBook.GetSlot(1).Chants?[0]);
+    }
+
     //a spell name and its ten chant lines
     private static string SpellEntry(string name) => $"{name}\nSpell0:{name}\n" + string.Concat(Enumerable.Range(1, 9).Select(i => $"Spell{i}:\n"));
 

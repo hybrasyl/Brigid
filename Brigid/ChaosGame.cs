@@ -912,30 +912,11 @@ public sealed class ChaosGame : Game
         Connection.ProcessPackets(PacketBuffer);
 
         Screens.Update(gameTime);
-        ShowSaveNotices();
+        SaveNotices.ShowOn(Screens.ActiveScreen);
 
         base.Update(gameTime);
     }
 
-    //a save that did not go through shows in the world on the orange bar, and in the lobby as a main-menu alert. On
-    //another screen (the launcher) it waits
-    private void ShowSaveNotices()
-    {
-        switch (Screens.ActiveScreen)
-        {
-            case WorldScreen world:
-                while (SaveNotices.TryTake(out var file, out var result))
-                    world.ShowSaveNotice(file, result);
-
-                break;
-
-            case LobbyLoginScreen lobby:
-                while (SaveNotices.TryTake(out var file, out var result))
-                    lobby.ShowSaveNotice(file, result);
-
-                break;
-        }
-    }
 
     #region Metadata Sync
     private void HandleMetaData(ServerPackets.MetafilePacket pkt)

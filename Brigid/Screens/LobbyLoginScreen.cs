@@ -24,7 +24,7 @@ using ServerEntry = DALib.Networking.Packets.Server.ServerEntry;
 
 namespace Brigid.Screens;
 
-public sealed class LobbyLoginScreen : IScreen
+public sealed class LobbyLoginScreen : IScreen, ISaveNoticeHost
 {
     private const string CONNECTION_LOST = "The connection to the server was lost.";
     private const string NOT_CONNECTED = "The client is not connected to the server.";

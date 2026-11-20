@@ -7,9 +7,10 @@ namespace Brigid.Systems;
 
 /// <summary>
 ///     The saves that did not go through (<see cref="GuardedFile.NotSaved" />) and wait to show to the player. The event
-///     can be raised on any thread, so it waits here; <c>ChaosGame</c> shows each one on the game loop, on the orange bar
-///     in the world and as a main-menu alert in the lobby. One on another screen (the launcher) waits for one of the two.
-///     <see cref="GuardedFile" /> raises one event for each file in a session. The texts are in <c>MenuAlerts</c>.
+///     can be raised on any thread, so it waits here; <c>ChaosGame</c> gives each one to the active screen on the game
+///     loop (<see cref="ShowOn" />): the orange bar in the world, a main-menu alert in the lobby, and a line below the
+///     panel in the launcher. <see cref="GuardedFile" /> raises one event for each file in a session. The texts are in
+///     <c>MenuAlerts</c>.
 /// </summary>
 public static class SaveNotices
 {
@@ -23,6 +24,19 @@ public static class SaveNotices
             GuardedFile.NotSaved += (file, result) => Waiting.Enqueue((file, result));
     }
 
+    /// <summary>
+    ///     Gives each waiting save to <paramref name="screen" /> when it shows them (<see cref="ISaveNoticeHost" />). On
+    ///     another screen they wait. Call it on the game loop.
+    /// </summary>
+    public static void ShowOn(object? screen)
+    {
+        if (screen is not ISaveNoticeHost host)
+            return;
+
+        while (TryTake(out var file, out var result))
+            host.ShowSaveNotice(file, result);
+    }
+
     /// <summary>Takes the next save that did not go through and waits to show.</summary>
     public static bool TryTake(out GuardedFile file, out SaveResult result)
     {
@@ -31,4 +45,11 @@ public static class SaveNotices
 
         return taken;
     }
+}
+
+/// <summary>A screen that shows the saves that did not go through (<see cref="SaveNotices.ShowOn" />).</summary>
+public interface ISaveNoticeHost
+{
+    /// <summary>Shows one save that did not go through, with why.</summary>
+    void ShowSaveNotice(GuardedFile file, SaveResult result);
 }

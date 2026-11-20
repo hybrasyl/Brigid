@@ -36,18 +36,26 @@ public sealed partial class WorldScreen
             _ => ConnectionOutcome.None
         };
 
+    /// <summary>
+    ///     Takes the connection event that waits in <paramref name="pendingEvent" /> and decides it
+    ///     (<see cref="ConnectionOutcomeFor" />). A close that is decided after the next drain goes back for the next frame,
+    ///     unless the network thread recorded another event since then (a logout).
+    /// </summary>
+    internal static ConnectionOutcome TakeConnectionOutcome(ref int pendingEvent, bool redirectInProgress, bool awaitingLogout, bool packetsWait)
+    {
+        var connectionEvent = (ConnectionEvent)Interlocked.Exchange(ref pendingEvent, (int)ConnectionEvent.None);
+        var outcome = ConnectionOutcomeFor(connectionEvent, redirectInProgress, awaitingLogout, packetsWait);
+
+        if (outcome == ConnectionOutcome.DecideNextFrame)
+            Interlocked.CompareExchange(ref pendingEvent, (int)ConnectionEvent.Closed, (int)ConnectionEvent.None);
+
+        return outcome;
+    }
+
     public void Update(GameTime gameTime)
     {
-        var connectionEvent = (ConnectionEvent)Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.None);
-
-        switch (ConnectionOutcomeFor(connectionEvent, RedirectInProgress, ExitFlow.IsAwaitingLogout, Game.Connection.Client.HasQueuedPackets))
+        switch (TakeConnectionOutcome(ref PendingConnectionEvent, RedirectInProgress, ExitFlow.IsAwaitingLogout, Game.Connection.Client.HasQueuedPackets))
         {
-            //a logout recorded since then stays
-            case ConnectionOutcome.DecideNextFrame:
-                Interlocked.CompareExchange(ref PendingConnectionEvent, (int)ConnectionEvent.Closed, (int)ConnectionEvent.None);
-
-                break;
-
             case ConnectionOutcome.EndLogout:
                 EndLogout();
 
