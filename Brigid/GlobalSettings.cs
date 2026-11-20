@@ -78,7 +78,10 @@ public static class GlobalSettings
     ///     and Shift+F11 opens the dev menu (BRIG-29). This keeps developer tools away from players by default. It is not
     ///     a security control: the client is open source, and a fork can remove it.
     /// </summary>
-    public static bool DevModulesEnabled { get; private set; }
+    public static bool DevModulesEnabled => DevModulesOverride ?? ResolveDevModulesEnabled(Environment.GetEnvironmentVariable);
+
+    //the tests set the setting; null reads the environment variable
+    private static bool? DevModulesOverride;
 
     static GlobalSettings() => InitializeCore();
 
@@ -87,8 +90,6 @@ public static class GlobalSettings
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
         ResolveConnectionConfig();
-
-        DevModulesEnabled = ResolveDevModulesEnabled(Environment.GetEnvironmentVariable);
 
         if (DevModulesEnabled)
             NoticeDebugLog.Write($"[dev-module] BRIGID_DEV_MODULES is set; dev modules load from {AppPaths.DevModulesDir}");
@@ -225,8 +226,8 @@ public static class GlobalSettings
     /// <summary>The dev module setting that the environment gives, through <paramref name="environment" />.</summary>
     internal static bool ResolveDevModulesEnabled(Func<string, string?> environment) => IsTruthy(environment(DEV_MODULES_VARIABLE));
 
-    /// <summary>Sets <see cref="DevModulesEnabled" />, for the tests; a test puts it back when it ends.</summary>
-    internal static void SetDevModulesEnabledForTests(bool enabled) => DevModulesEnabled = enabled;
+    /// <summary>Sets <see cref="DevModulesEnabled" />, for the tests; null reads the environment variable again. A test puts it back when it ends.</summary>
+    internal static void SetDevModulesEnabledForTests(bool? enabled) => DevModulesOverride = enabled;
 
     internal static bool IsTruthy(string? value)
     {

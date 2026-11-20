@@ -20,13 +20,11 @@ public sealed class DevModuleLoaderTests : IDisposable
     private readonly string Root = Directory.CreateTempSubdirectory("brigid-devmodules-").FullName;
     private readonly FakeDevHost Host = new();
 
-    private readonly bool OriginalSetting = GlobalSettings.DevModulesEnabled;
-
     public DevModuleLoaderTests() => DevModuleLoader.ResetForTest();
 
     public void Dispose()
     {
-        GlobalSettings.SetDevModulesEnabledForTests(OriginalSetting);
+        GlobalSettings.SetDevModulesEnabledForTests(null);
         DevModuleLoader.ResetForTest();
         Directory.Delete(Root, true);
     }
@@ -173,10 +171,25 @@ public sealed class DevModuleLoaderTests : IDisposable
         Assert.Single(DevModuleLoader.Modules);
     }
 
-    //the test process does not set BRIGID_DEV_MODULES, so the setting is off; a run that sets it gets its own value
+    //the setting read the variable once, and a test process that does not set it saw only the off direction: a setting
+    //that was always off stayed green. It reads the variable at each access now, so the test sets it both ways
     [Fact]
     public void TheSettingFollowsTheEnvironmentVariable()
-        => Assert.Equal(GlobalSettings.IsTruthy(Environment.GetEnvironmentVariable(GlobalSettings.DEV_MODULES_VARIABLE)), GlobalSettings.DevModulesEnabled);
+    {
+        var original = Environment.GetEnvironmentVariable(GlobalSettings.DEV_MODULES_VARIABLE);
+
+        try
+        {
+            Environment.SetEnvironmentVariable(GlobalSettings.DEV_MODULES_VARIABLE, "1");
+            Assert.True(GlobalSettings.DevModulesEnabled);
+
+            Environment.SetEnvironmentVariable(GlobalSettings.DEV_MODULES_VARIABLE, null);
+            Assert.False(GlobalSettings.DevModulesEnabled);
+        } finally
+        {
+            Environment.SetEnvironmentVariable(GlobalSettings.DEV_MODULES_VARIABLE, original);
+        }
+    }
 
     //the setting reads its own variable: a value of 1 there turns it on, and no other variable does
     [Fact]

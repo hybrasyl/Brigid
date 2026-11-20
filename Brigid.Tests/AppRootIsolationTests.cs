@@ -37,6 +37,36 @@ public sealed class AppRootIsolationTests : IDisposable
         Directory.Delete(Root, true);
     }
 
+    //a test that only asserts a file is absent passes when AppRoot ignores the override and reads the developer's own
+    //folder; this one sees it
+    [Fact]
+    public void TheAppFolderIsTheFolderOfTheOverride()
+    {
+        Assert.Equal(AppRoot, AppPaths.AppRoot);
+        Assert.StartsWith(AppRoot, AppPaths.KeybindsFile);
+        Assert.StartsWith(AppRoot, AppPaths.SettingsFile);
+    }
+
+    //the vendor-folder migration moves files; with the override it does not run, so a smoke run on Linux does not move a
+    //developer's legacy lowercase erisco folder
+    [Fact]
+    public void TheVendorFolderMigrationDoesNotRun()
+    {
+        var lines = new List<string>();
+        var original = DataDiagnostics.Log;
+        DataDiagnostics.Log = lines.Add;
+
+        try
+        {
+            AppPaths.MigrateLegacyVendorFolder();
+        } finally
+        {
+            DataDiagnostics.Log = original;
+        }
+
+        Assert.Equal([$"[paths] {AppPaths.APP_ROOT_VARIABLE} is set: the app folder is {AppRoot}, and no folder migration runs"], lines);
+    }
+
     [Fact]
     public void TheKeybindsOfTheDataFolderStayThere()
     {
@@ -46,6 +76,7 @@ public sealed class AppRootIsolationTests : IDisposable
         Keybinds.Load();
 
         Assert.True(File.Exists(legacy));
+        Assert.StartsWith(AppRoot, AppPaths.KeybindsFile);
         Assert.False(File.Exists(AppPaths.KeybindsFile));
     }
 

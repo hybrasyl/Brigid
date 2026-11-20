@@ -41,7 +41,6 @@ public sealed class SmokeServer : IAsyncLifetime
     public const int START_Y = 3;
 
     private const string SERVICE = "hybrasyl-server";
-    private const string PROJECT_PREFIX = "brigid-smoke-";
     private static readonly TimeSpan StartTimeout = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan CommandTimeout = TimeSpan.FromMinutes(5);
 
@@ -106,7 +105,7 @@ public sealed class SmokeServer : IAsyncLifetime
         """;
 
     private readonly SemaphoreSlim StartLock = new(1, 1);
-    private readonly string Project = PROJECT_PREFIX + Guid.NewGuid().ToString("N")[..8];
+    private readonly string Project = SmokeOwner.NewName(8);
     private string? OverrideFile;
     private string? ConfigFile;
 
@@ -124,6 +123,9 @@ public sealed class SmokeServer : IAsyncLifetime
     /// </summary>
     public async Task EnsureStartedAsync()
     {
+        if (SmokeEnvironment.ServerError is { } serverError)
+            throw new InvalidOperationException(serverError);
+
         await StartLock.WaitAsync();
 
         try
@@ -245,12 +247,14 @@ public sealed class SmokeServer : IAsyncLifetime
                  external: false
              """;
 
-    //a run that was killed (a cancelled test run, a crashed test host) leaves its stack, which holds the ports
+    //a run that was killed (a cancelled test run, a crashed test host) leaves its stack, which holds the ports. A stack
+    //whose test host still runs is another run that goes on: it stays, and the port check then stops this run
     private static async Task RemoveStaleStacksAsync()
     {
-        var projects = await RunDockerAsync(["compose", "ls", "--all", "--quiet", "--filter", $"name={PROJECT_PREFIX}"], "could not list the compose projects");
+        var projects = await RunDockerAsync(["compose", "ls", "--all", "--quiet", "--filter", $"name={SmokeOwner.PREFIX}"], "could not list the compose projects");
 
-        foreach (var project in projects.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        foreach (var project in projects.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                        .Where(project => SmokeOwner.IsStale(project, DateTime.MinValue, TimeSpan.Zero)))
             await RunAsync(["compose", "--project-name", project, "down", "--volumes", "--remove-orphans"], CommandTimeout, $"could not remove the stale smoke stack {project}");
     }
 

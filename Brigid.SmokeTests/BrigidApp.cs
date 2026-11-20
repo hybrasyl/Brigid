@@ -31,7 +31,7 @@ public sealed class BrigidApp : IAsyncDisposable
     private static readonly TimeSpan DefaultWait = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(100);
 
-    //a run that a killed test host left: older than this, its folder or file is not in use
+    //a name from before the owner's process id was in it: older than this, its folder or file is not in use
     private static readonly TimeSpan StaleAge = TimeSpan.FromHours(1);
     private static int Swept;
 
@@ -96,12 +96,15 @@ public sealed class BrigidApp : IAsyncDisposable
 
     private static async Task<BrigidApp> StartAsync(string testName)
     {
+        if (SmokeEnvironment.DataError is { } dataError)
+            throw new InvalidOperationException(dataError);
+
         var (clientDll, driverDll) = SmokeEnvironment.BuildPaths();
 
         if (Interlocked.Exchange(ref Swept, 1) == 0)
             SweepStaleTempEntries();
 
-        var root = Path.Combine(Path.GetTempPath(), "brigid-smoke-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), SmokeOwner.NewName(32));
         BrigidApp? app = null;
 
         try
@@ -141,8 +144,17 @@ public sealed class BrigidApp : IAsyncDisposable
             return app;
         } catch (Exception ex)
         {
-            //every failure here stops the client and removes the folder, so a failed start leaves nothing behind
-            var folder = app is null ? "(none)" : await app.SaveArtifactsAsync($"{testName}-start");
+            //every failure here stops the client and removes the folder, so a failed start leaves nothing behind. An
+            //artifact folder that cannot be made hid the real failure and skipped the cleanup
+            string folder;
+
+            try
+            {
+                folder = app is null ? "(none)" : await app.SaveArtifactsAsync($"{testName}-start");
+            } catch (Exception saveError) when (saveError is IOException or UnauthorizedAccessException)
+            {
+                folder = $"(not saved: {saveError.Message})";
+            }
 
             if (app is not null)
                 await app.DisposeAsync();
@@ -459,13 +471,14 @@ public sealed class BrigidApp : IAsyncDisposable
             }
     }
 
-    //the app folders and the server files of runs whose test host was killed, so DisposeAsync did not run
+    //the app folders and the server files of runs whose test host was killed, so DisposeAsync did not run. The age of a
+    //folder does not change when a file in it grows, so a long run looked stale; the owner's process id decides now
     private static void SweepStaleTempEntries()
     {
         var temp = new DirectoryInfo(Path.GetTempPath());
-        var before = DateTime.UtcNow - StaleAge;
 
-        foreach (var entry in temp.EnumerateFileSystemInfos("brigid-smoke-*").Where(entry => entry.LastWriteTimeUtc < before))
+        foreach (var entry in temp.EnumerateFileSystemInfos(SmokeOwner.PREFIX + "*")
+                                  .Where(entry => SmokeOwner.IsStale(entry.Name, entry.LastWriteTimeUtc, StaleAge)))
             try
             {
                 if (entry is DirectoryInfo folder)

@@ -13,45 +13,48 @@ namespace Brigid.SmokeTests;
 ///             (<see cref="SmokeServer" />). The specs that need a server skip without it.
 ///         </item>
 ///     </list>
-///     A smoke run is for a developer machine and a local server. It never connects to retail or production.
+///     A smoke run is for a developer machine and a local server. It never connects to retail or production. With
+///     <c>BRIGID_SMOKE=1</c> set, a data folder or a server checkout that is not there fails the tests, so a script that
+///     reads only the exit code sees it; only a server checkout that is not set skips.
 /// </summary>
 internal static class SmokeEnvironment
 {
     internal static string? DataPath => Environment.GetEnvironmentVariable("BRIGID_SMOKE_DATA");
 
-    internal static string? PacksPath => Value("BRIGID_SMOKE_PACKS");
+    internal static string? PacksPath => Value(Environment.GetEnvironmentVariable, "BRIGID_SMOKE_PACKS");
 
-    internal static string? ServerPath => Value("BRIGID_SMOKE_SERVER");
+    internal static string? ServerPath => Value(Environment.GetEnvironmentVariable, "BRIGID_SMOKE_SERVER");
 
-    /// <summary>Null when the specs that need a server can run, else why they skip.</summary>
-    internal static string? ServerSkipReason
-    {
-        get
-        {
-            if (SkipReason is { } reason)
-                return reason;
+    /// <summary>Null when the smoke tests run, else why they skip: <c>BRIGID_SMOKE</c> is not 1.</summary>
+    internal static string? SkipReason => SkipReasonFor(Environment.GetEnvironmentVariable);
 
-            if (ServerPath is not { } server || !File.Exists(Path.Combine(server, "docker-compose.yml")))
-                return "set BRIGID_SMOKE_SERVER to the server checkout (the folder with docker-compose.yml) to run the specs that need a server";
+    /// <summary>Null when the specs that need a server run, else why they skip.</summary>
+    internal static string? ServerSkipReason => ServerSkipReasonFor(Environment.GetEnvironmentVariable);
 
-            return null;
-        }
-    }
+    /// <summary>Null when the data folder holds the <c>*.dat</c> files, else what is wrong. A smoke test fails on it.</summary>
+    internal static string? DataError => DataErrorFor(Environment.GetEnvironmentVariable);
 
-    /// <summary>Null when the smoke tests can run, else why they skip.</summary>
-    internal static string? SkipReason
-    {
-        get
-        {
-            if (Value("BRIGID_SMOKE") != "1")
-                return "set BRIGID_SMOKE=1 to run the smoke tests";
+    /// <summary>Null when <c>BRIGID_SMOKE_SERVER</c> is not set or is a server checkout, else what is wrong. A server test fails on it.</summary>
+    internal static string? ServerError => ServerErrorFor(Environment.GetEnvironmentVariable);
 
-            if (DataPath is not { } data || !Directory.Exists(data) || !Directory.EnumerateFiles(data, "*.dat").Any())
-                return "set BRIGID_SMOKE_DATA to a Dark Ages data folder (the folder with the *.dat files)";
+    internal static string? SkipReasonFor(Func<string, string?> environment)
+        => Value(environment, "BRIGID_SMOKE") != "1" ? "set BRIGID_SMOKE=1 to run the smoke tests" : null;
 
-            return null;
-        }
-    }
+    internal static string? ServerSkipReasonFor(Func<string, string?> environment)
+        => SkipReasonFor(environment)
+           ?? (Value(environment, "BRIGID_SMOKE_SERVER") is null
+               ? "set BRIGID_SMOKE_SERVER to the server checkout (the folder with docker-compose.yml) to run the specs that need a server"
+               : null);
+
+    internal static string? DataErrorFor(Func<string, string?> environment)
+        => environment("BRIGID_SMOKE_DATA") is not { } data || !Directory.Exists(data) || !Directory.EnumerateFiles(data, "*.dat").Any()
+            ? "BRIGID_SMOKE=1 is set, but BRIGID_SMOKE_DATA is not a Dark Ages data folder (the folder with the *.dat files)"
+            : null;
+
+    internal static string? ServerErrorFor(Func<string, string?> environment)
+        => Value(environment, "BRIGID_SMOKE_SERVER") is { } server && !File.Exists(Path.Combine(server, "docker-compose.yml"))
+            ? $"BRIGID_SMOKE_SERVER is not a server checkout (it has no docker-compose.yml): {server}"
+            : null;
 
     /// <summary>The built client (<c>Brigid.dll</c>) and test driver, from <c>smoke-paths.txt</c>.</summary>
     internal static (string Client, string Driver) BuildPaths()
@@ -62,7 +65,7 @@ internal static class SmokeEnvironment
         return (paths["client"], paths["driver"]);
     }
 
-    private static string? Value(string name) => Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value.Trim() : null;
+    private static string? Value(Func<string, string?> environment, string name) => environment(name) is { Length: > 0 } value ? value.Trim() : null;
 }
 
 /// <summary>A smoke test: it skips unless <see cref="SmokeEnvironment.SkipReason" /> is null.</summary>
