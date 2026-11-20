@@ -6,6 +6,10 @@ namespace Brigid.Tests;
 // state with [Collection("Name")]. A collection with DisableParallelization runs alone; the others run beside other
 // test classes, and only their own classes run in series.
 
+// AppPaths.AppRoot is static, and every per-user path follows it. The tests that set BRIGID_APP_ROOT run alone.
+[CollectionDefinition("AppRoot", DisableParallelization = true)]
+public sealed class AppRootCollection;
+
 // AssetPackRegistry is static: RegisterForTest and ResetForTest change it. The tests that change it run alone.
 [CollectionDefinition("AssetPackRegistry", DisableParallelization = true)]
 public sealed class AssetPackRegistryCollection;
@@ -13,6 +17,10 @@ public sealed class AssetPackRegistryCollection;
 // DataDiagnostics.Log is static. The tests that replace it run alone.
 [CollectionDefinition("DataDiagnostics", DisableParallelization = true)]
 public sealed class DataDiagnosticsCollection;
+
+// DevModuleLoader keeps the loaded modules in a static list. The tests that load modules run alone.
+[CollectionDefinition("DevModules", DisableParallelization = true)]
+public sealed class DevModulesCollection;
 
 // DebugOverlay is static. The tests that change it run alone.
 [CollectionDefinition("DebugOverlay", DisableParallelization = true)]

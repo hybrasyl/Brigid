@@ -677,6 +677,9 @@ public static class WorldState
     /// </summary>
     public static void SubscribeTo(ConnectionManager connection)
     {
+        //state that world entry sets belongs here, not in the world screen, as the entity tracking does
+        connection.OnUserId += id => PlayerEntityId = id;
+
         connection.OnAddSkillToPane += args =>
         {
             var chant = LookupSkillChant(args.Name);

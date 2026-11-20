@@ -6,8 +6,18 @@ using Brigid.Data;
 using Brigid.Networking;
 #endregion
 
+//a temporary app folder (BRIGID_APP_ROOT, the smoke tests) keeps its own log, so the run does not touch the developer's
+//log. The log is not open yet, so a folder that cannot be made is written once the log is
+var appFolderReady = !AppPaths.IsAppRootOverridden || DataDiagnostics.Try(() => Directory.CreateDirectory(AppPaths.AppRoot), "create the app folder");
+
+if (AppPaths.IsAppRootOverridden && appFolderReady)
+    NoticeDebugLog.UseFolder(AppPaths.AppRoot);
+
 NoticeDebugLog.Reset();
 NoticeDebugLog.Write("Program.Main entered");
+
+if (!appFolderReady)
+    NoticeDebugLog.Write($"[paths] could not create {AppPaths.AppRoot}; the log stays in the app base directory");
 
 //route data-layer IO diagnostics (best-effort file writes that are caught, never rethrown) into the notice log
 DataDiagnostics.Log = NoticeDebugLog.Write;

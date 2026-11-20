@@ -19,9 +19,6 @@ public sealed partial class WorldScreen
     #region Server Event Wiring
     private void WireServerEvents()
     {
-        //player identity
-        Game.Connection.OnUserId += HandleUserId;
-
         //map assembly events
         Game.Connection.OnMapInfo += HandleMapInfo;
         Game.Connection.OnMapData += HandleMapData;

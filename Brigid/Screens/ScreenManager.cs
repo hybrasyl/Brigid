@@ -19,6 +19,14 @@ public sealed class ScreenManager : IDisposable
     /// </summary>
     public IScreen? ActiveScreen => Screens.Count > 0 ? Screens.Peek() : null;
 
+    /// <summary>
+    ///     Raised after the active screen changes: after <see cref="Push" /> (also through <see cref="Switch" />, once) and
+    ///     after <see cref="Pop" />. The new screen has its <see cref="IScreen.Root" /> by then. The argument is the new
+    ///     active screen, or null when the stack is empty. A panel that a listener added to the old root is disposed with it.
+    ///     Internal: the dev module host is the one listener, and it guards each module listener (BRIG-29).
+    /// </summary>
+    internal event Action<IScreen?>? ScreenChanged;
+
     public ScreenManager(ChaosGame game) => Game = game;
 
     /// <inheritdoc />
@@ -49,6 +57,7 @@ public sealed class ScreenManager : IDisposable
             return;
 
         RemoveTop();
+        ScreenChanged?.Invoke(ActiveScreen);
     }
 
     /// <summary>
@@ -60,6 +69,7 @@ public sealed class ScreenManager : IDisposable
         Screens.Push(screen);
         screen.Initialize(Game);
         screen.LoadContent(Game.GraphicsDevice);
+        ScreenChanged?.Invoke(screen);
     }
 
     private void RemoveTop()

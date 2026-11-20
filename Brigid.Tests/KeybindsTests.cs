@@ -253,26 +253,26 @@ public sealed class KeybindsTests
     public void Persistence_RoundTripsOverridesOnly()
     {
         Keybinds.ResetAll();
-        var previousDataPath = GlobalSettings.DataPath;
         var tempDir = Path.Combine(Path.GetTempPath(), "brigid-keybinds-test-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempDir);
-        GlobalSettings.DataPath = tempDir;
+
+        //the folder does not exist yet: a save into a new app folder makes it
+        var file = Path.Combine(tempDir, Keybinds.FILE_NAME);
 
         try
         {
             var custom = new KeyChord(Keys.F12, ChordMods.Meta | ChordMods.Shift);
             Keybinds.SetBinding(CommandId.Editor_Paste, custom);
-            Keybinds.Save();
+            Keybinds.Save(file);
 
             //command names — not ordinals — are the JSON keys, so reordering the enum can't corrupt saved
             //files. Assert the name is on disk (a numeric-key regression would still round-trip and hide this).
-            Assert.Contains("\"Editor_Paste\"", File.ReadAllText(Path.Combine(tempDir, Keybinds.FILE_NAME)));
+            Assert.Contains("\"Editor_Paste\"", File.ReadAllText(file));
 
             //wipe in-memory overrides, then reload from disk.
             Keybinds.ResetAll();
             Assert.Equal(Keybinds.Defaults[CommandId.Editor_Paste].Chord, Keybinds.Effective(CommandId.Editor_Paste).Primary);
 
-            Keybinds.Load();
+            Keybinds.Load(file);
             Assert.Equal(custom, Keybinds.Effective(CommandId.Editor_Paste).Primary);
 
             //untouched commands remain at their defaults (overrides-only file).
@@ -280,8 +280,98 @@ public sealed class KeybindsTests
         } finally
         {
             Keybinds.ResetAll();
-            GlobalSettings.DataPath = previousDataPath;
-            Directory.Delete(tempDir, recursive: true);
+
+            if (Directory.Exists(tempDir))
+                Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MoveFromDataFolder_MovesTheOldFileWhenTheAppFolderHasNone()
+    {
+        var root = Directory.CreateTempSubdirectory("brigid-keybinds-move-").FullName;
+
+        try
+        {
+            var data = Path.Combine(root, "data");
+            var target = Path.Combine(root, "app", Keybinds.FILE_NAME);
+            Directory.CreateDirectory(data);
+            File.WriteAllText(Path.Combine(data, Keybinds.FILE_NAME), "{\"old\":1}");
+
+            Assert.Equal(target, Keybinds.MoveFromDataFolder(data, target));
+            Assert.Equal("{\"old\":1}", File.ReadAllText(target));
+            Assert.False(File.Exists(Path.Combine(data, Keybinds.FILE_NAME)));
+        } finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MoveFromDataFolder_KeepsTheAppFolderFile()
+    {
+        var root = Directory.CreateTempSubdirectory("brigid-keybinds-move-").FullName;
+
+        try
+        {
+            var data = Path.Combine(root, "data");
+            var target = Path.Combine(root, "app", Keybinds.FILE_NAME);
+            Directory.CreateDirectory(data);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.WriteAllText(Path.Combine(data, Keybinds.FILE_NAME), "{\"old\":1}");
+            File.WriteAllText(target, "{\"new\":1}");
+
+            Assert.Equal(target, Keybinds.MoveFromDataFolder(data, target));
+            Assert.Equal("{\"new\":1}", File.ReadAllText(target));
+            Assert.True(File.Exists(Path.Combine(data, Keybinds.FILE_NAME)));
+        } finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MoveFromDataFolder_ReadsTheOldFileInPlaceWhenItCannotMoveOrCopyIt()
+    {
+        var root = Directory.CreateTempSubdirectory("brigid-keybinds-move-").FullName;
+
+        try
+        {
+            var data = Path.Combine(root, "data");
+            Directory.CreateDirectory(data);
+            var legacy = Path.Combine(data, Keybinds.FILE_NAME);
+            File.WriteAllText(legacy, "{\"old\":1}");
+
+            //a file stands where the app folder must be, so neither a move nor a copy can make the target
+            var blocker = Path.Combine(root, "app");
+            File.WriteAllText(blocker, "");
+            var target = Path.Combine(blocker, Keybinds.FILE_NAME);
+
+            Assert.Equal(legacy, Keybinds.MoveFromDataFolder(data, target));
+            Assert.True(File.Exists(legacy));
+        } finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("missing")]
+    public void MoveFromDataFolder_DoesNothingWithNoOldFile(string dataFolder)
+    {
+        var root = Directory.CreateTempSubdirectory("brigid-keybinds-move-").FullName;
+
+        try
+        {
+            var data = dataFolder.Length == 0 ? "" : Path.Combine(root, dataFolder);
+            var target = Path.Combine(root, "app", Keybinds.FILE_NAME);
+
+            Assert.Equal(target, Keybinds.MoveFromDataFolder(data, target));
+            Assert.False(File.Exists(target));
+        } finally
+        {
+            Directory.Delete(root, recursive: true);
         }
     }
 

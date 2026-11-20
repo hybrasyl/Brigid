@@ -73,6 +73,16 @@ public static class GlobalSettings
     /// </summary>
     public static bool RequireSwimmingSkill => false;
 
+    /// <summary>
+    ///     True when <c>BRIGID_DEV_MODULES</c> is set: the client loads the dev modules in <see cref="AppPaths.DevModulesDir" />
+    ///     and Shift+F11 opens the dev menu (BRIG-29). This keeps developer tools away from players by default. It is not
+    ///     a security control: the client is open source, and a fork can remove it.
+    /// </summary>
+    public static bool DevModulesEnabled => DevModulesOverride ?? IsTruthy(Environment.GetEnvironmentVariable(DEV_MODULES_VARIABLE));
+
+    //the tests set the setting; null reads the environment variable
+    private static bool? DevModulesOverride;
+
     static GlobalSettings() => InitializeCore();
 
     private static void InitializeCore()
@@ -80,6 +90,9 @@ public static class GlobalSettings
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
         ResolveConnectionConfig();
+
+        if (DevModulesEnabled)
+            NoticeDebugLog.Write($"[dev-module] BRIGID_DEV_MODULES is set; dev modules load from {AppPaths.DevModulesDir}");
 
         foreach (var name in PreLoadedAssemblies)
             Assembly.Load(name);
@@ -207,7 +220,13 @@ public static class GlobalSettings
     private static int ParsePort(string? value)
         => int.TryParse(value, out var p) && p is >= 1 and <= 65535 ? p : LauncherConfig.DEFAULT_PORT;
 
-    private static bool IsTruthy(string? value)
+    /// <summary>The environment variable that turns on the dev modules (BRIG-29).</summary>
+    internal const string DEV_MODULES_VARIABLE = "BRIGID_DEV_MODULES";
+
+    /// <summary>Sets <see cref="DevModulesEnabled" />, for the tests; null reads the environment variable again. A test puts it back when it ends.</summary>
+    internal static void SetDevModulesEnabledForTests(bool? enabled) => DevModulesOverride = enabled;
+
+    internal static bool IsTruthy(string? value)
     {
         var v = value?.Trim();
 

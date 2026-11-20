@@ -117,6 +117,9 @@ public sealed partial class WorldScreen : IScreen
     private MapFlags CurrentMapFlags;
     private short CurrentMapId;
 
+    /// <summary>The map that the screen shows, for the BRIG-184 test driver: its id, and true once its tiles are loaded.</summary>
+    internal (short Id, bool Loaded) MapState => (CurrentMapId, MapFile is not null);
+
     private DarknessRenderer DarknessRenderer = null!;
     private WeatherRenderer WeatherRenderer = null!;
     private OkPopupMessageControl DeleteConfirm = null!;
@@ -764,7 +767,6 @@ public sealed partial class WorldScreen : IScreen
     public void UnloadContent()
     {
         WorldState.UserOptions.SettingToggled -= HandleSettingToggled;
-        Game.Connection.OnUserId -= HandleUserId;
         Game.Connection.OnEchoReply -= HandleEchoReply;
         Game.Connection.OnMapInfo -= HandleMapInfo;
         Game.Connection.OnMapData -= HandleMapData;

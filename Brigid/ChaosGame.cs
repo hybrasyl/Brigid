@@ -7,6 +7,7 @@ using Brigid.Data;
 using Brigid.Data.AssetPacks;
 using DALib.Utility;
 using Brigid.Controls.Generic;
+using Brigid.DevModules;
 using Brigid.Networking;
 using Brigid.Networking.Definitions;
 using Brigid.Screens;
@@ -116,11 +117,17 @@ public sealed class ChaosGame : Game
     private static string MetaFilePath => AppPaths.MetaFileDir;
     private readonly MetaFileSync MetaSync;
     private readonly List<IServerPacket> PacketBuffer = [];
+
+    //the host of the dev modules (BRIG-29); null unless BRIGID_DEV_MODULES is set
+    private DevHost? DevModuleHost;
     private int CursorOffsetX;
     private int CursorOffsetY;
     private Texture2D? CursorTexture;
     internal volatile bool GcRequested;
     private bool ScreenshotRequested;
+
+    //the next full-frame capture (the BRIG-184 test driver): its file, and the call that gets the result; or null
+    private (string Path, Action<bool> Done)? FrameCapture;
     private int HandCursorOffsetX;
     private int HandCursorOffsetY;
     private Texture2D? HandCursorTexture;
@@ -314,6 +321,13 @@ public sealed class ChaosGame : Game
             SpriteBatch.End();
         }
 
+        //after the last pass, so that the capture has the UI, which the F12 screenshot leaves out
+        if (FrameCapture is { } capture)
+        {
+            FrameCapture = null;
+            capture.Done(SaveFrameCapture(capture.Path));
+        }
+
         FontEngine.Instance.SetNativeScale(1f, 1f);
 
         base.Draw(gameTime);
@@ -342,6 +356,58 @@ public sealed class ChaosGame : Game
     }
 
     public void RequestScreenshot() => ScreenshotRequested = true;
+
+    /// <summary>
+    ///     Saves the next drawn frame as a PNG at <paramref name="path" />: the whole window at its size, UI and cursor
+    ///     included, and then calls <paramref name="done" /> with true when the file was written. For the BRIG-184 test
+    ///     driver, which saves one when a smoke test fails. The player's screenshot (F12, <see cref="RequestScreenshot" />)
+    ///     stays the world layer only.
+    /// </summary>
+    internal void RequestFrameCapture(string path, Action<bool> done) => FrameCapture = (path, done);
+
+    //a capture is a diagnostic: a back buffer that cannot be read (a resize, a lost device) gives false, and the frame goes on
+    private bool SaveFrameCapture(string path)
+    {
+        try
+        {
+            return WriteFrameCapture(path);
+        } catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            NoticeDebugLog.Write($"[capture] the frame could not be read: {ex.GetType().Name}: {ex.Message}");
+
+            return false;
+        }
+    }
+
+    private bool WriteFrameCapture(string path)
+    {
+        var parameters = GraphicsDevice.PresentationParameters;
+        var width = parameters.BackBufferWidth;
+        var height = parameters.BackBufferHeight;
+        var pixels = new Color[width * height];
+        GraphicsDevice.GetBackBufferData(pixels);
+
+        //the back buffer's alpha is not part of the picture
+        var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Opaque);
+        using var image = SKImage.FromPixelCopy(info, MemoryMarshal.AsBytes(pixels.AsSpan()), width * 4);
+        using var png = image?.Encode(SKEncodedImageFormat.Png, 100);
+
+        if (png is null)
+        {
+            NoticeDebugLog.Write("[capture] the frame could not be encoded");
+
+            return false;
+        }
+
+        return DataDiagnostics.Try(
+            () =>
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                using var file = File.Create(path);
+                png.SaveTo(file);
+            },
+            "save the frame capture");
+    }
 
     private void SaveScreenshot()
     {
@@ -572,12 +638,16 @@ public sealed class ChaosGame : Game
             ClientSettings.Apply(launcherChoices);
 
         AssetPackRegistry.SelectUiTheme(ClientSettings.UiTheme);
-        //load keybind overrides (DataPath was resolved during config/launcher setup); pure defaults if absent.
+        //load keybind overrides from the app folder (DataPath was resolved during config/launcher setup, for the move of
+        //an older keybinds.json from the data folder); pure defaults if absent.
         Keybinds.Load();
         //LoadContent constructed FontEngine early (with the default face) so the launcher's frames have a non-null
         //Instance; now that ClientSettings is loaded, switch to the user's saved face before the lobby appears.
         FontEngine.Instance.SetActiveFont(ClientSettings.FontIndex);
         LoadCustomCursor();
+
+        //the data context, the screens and the dispatcher are ready here, and the first ScreenChanged is the lobby's
+        DevModuleHost = DevModuleLoader.Load(this);
         Screens.Switch(new LobbyLoginScreen());
     }
 
@@ -844,6 +914,8 @@ public sealed class ChaosGame : Game
 
     protected override void UnloadContent()
     {
+        //before the screens: a module can hold panels on a screen root
+        DevModuleLoader.UnloadAll();
         Window.ClientSizeChanged -= OnClientSizeChanged;
         CursorTexture?.Dispose();
         RenderTarget.Dispose();
@@ -866,12 +938,21 @@ public sealed class ChaosGame : Game
 
         SyncScalesToBackBuffer();
 
+        //a dev module that gives input pushes it here, so that the freeze below takes it into this update
+        DevModuleHost?.RaiseUpdateStarted(gameTime);
+
         //freeze buffered input for this frame before anything reads it
         InputBuffer.Update(IsActive);
 
-        //f11 — toggle debug overlay (handled globally before screen update)
+        //f11 — toggle debug overlay (handled globally before screen update); shift+f11 opens the dev menu instead while
+        //dev modules are on
         if (InputBuffer.WasKeyPressed(Keys.F11))
-            DebugOverlay.Toggle();
+        {
+            if (DevModuleHost is not null && (InputBuffer.IsKeyHeld(Keys.LeftShift) || InputBuffer.IsKeyHeld(Keys.RightShift)))
+                DevMenuControl.Toggle(Screens.ActiveScreen?.Root, DevModuleLoader.Modules, DevModuleHost.Log);
+            else
+                DebugOverlay.Toggle();
+        }
 
         //debug key layer — numpad acts as per-feature toggles, but only while the overlay is up. Gating the reads on
         //IsActive keeps the numpad free for normal use when debug is off.

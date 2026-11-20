@@ -26,8 +26,6 @@ public sealed partial class WorldScreen
     private const float MAP_DATA_TIMEOUT_MS = 10_000f;
 
     #region Map Assembly
-    private void HandleUserId(uint id) => WorldState.PlayerEntityId = id;
-
     private void HandleMapInfo(MapInfoPacket args)
     {
         WorldMap.HideMap();

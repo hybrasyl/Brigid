@@ -15,5 +15,17 @@
 
     <ItemGroup>
         <ProjectReference Include="..\Brigid\Brigid.csproj" />
+        <!-- the pure parts of the BRIG-184 test driver: the locator, the key map and the text pieces -->
+        <ProjectReference Include="..\Brigid.TestDriver\Brigid.TestDriver.csproj" />
     </ItemGroup>
+
+    <!-- The dev module of the loader tests: built first and copied to devmodule-sample/, not referenced, so it never
+         loads into the test process except through DevModuleLoader. -->
+    <ItemGroup>
+        <ProjectReference Include="..\Brigid.Tests.SampleModule\Brigid.Tests.SampleModule.csproj" ReferenceOutputAssembly="false" OutputItemType="SampleDevModuleAssembly" />
+    </ItemGroup>
+
+    <Target Name="CopySampleDevModule" AfterTargets="Build">
+        <Copy SourceFiles="@(SampleDevModuleAssembly)" DestinationFolder="$(OutDir)devmodule-sample" SkipUnchangedFiles="true" />
+    </Target>
 </Project>

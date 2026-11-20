@@ -182,10 +182,10 @@ public static class AssetPackRegistry
     /// </summary>
     private static void TryMigrateLegacyPacks(string assetsDir)
     {
-        if (string.IsNullOrEmpty(DataContext.DataPath))
+        if (AppPaths.LegacySource(DataContext.DataPath) is not { } dataPath)
             return;
 
-        var legacyDir = Path.Combine(DataContext.DataPath, LEGACY_PACK_SUBFOLDER);
+        var legacyDir = Path.Combine(dataPath, LEGACY_PACK_SUBFOLDER);
 
         try
         {

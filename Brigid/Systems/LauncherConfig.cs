@@ -78,8 +78,10 @@ public static class LauncherConfig
     ///     The pre-Erisco config location (<c>%AppData%\Brigid</c> on Windows, <c>~/.config/Brigid</c> on Unix). Read once
     ///     on first launch after the move so an existing user's server list and asset path migrate to the new home.
     /// </summary>
-    private static string LegacyFilePath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Brigid", LEGACY_FILE_NAME);
+    private static string? LegacyFilePath =>
+        AppPaths.LegacySource(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)) is { } folder
+            ? Path.Combine(folder, "Brigid", LEGACY_FILE_NAME)
+            : null;
 
     /// <summary>
     ///     Loads the config file into the static state. Missing/corrupt files yield a fresh default list. Always ensures at
@@ -126,9 +128,12 @@ public static class LauncherConfig
     /// </summary>
     private static void TryMigrateLegacyConfig()
     {
+        if (LegacyFilePath is not { } legacy)
+            return;
+
         try
         {
-            if (!File.Exists(LegacyFilePath))
+            if (!File.Exists(legacy))
                 return;
 
             //migrate when the new config is absent OR a 0-byte artifact of a crashed first Save (File.WriteAllText
@@ -138,7 +143,7 @@ public static class LauncherConfig
                 return;
 
             Directory.CreateDirectory(ConfigDirectory);
-            File.Copy(LegacyFilePath, FilePath, true);
+            File.Copy(legacy, FilePath, true);
         } catch
         {
             //best effort — a missing/locked legacy file just means a fresh default config

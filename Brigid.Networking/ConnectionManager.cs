@@ -59,7 +59,8 @@ public sealed class ConnectionManager : IDisposable
     public string AislingName { get; private set; } = string.Empty;
 
     /// <summary>
-    ///     The current map's metadata (map ID, dimensions, flags), updated on each map change.
+    ///     The current map's metadata (map ID, dimensions, flags), updated on each map change, and null from each redirect
+    ///     until the next map arrives.
     /// </summary>
     public Server.MapInfoPacket? MapInfo { get; private set; }
 
@@ -385,7 +386,7 @@ public sealed class ConnectionManager : IDisposable
         var keySaltSeed = redirect.TargetState == ConnectionState.Login ? string.Empty : redirect.Name;
         Client.ApplyCryptoKey(redirect.Seed, redirect.Key, keySaltSeed);
         Client.SetSequence(0);
-        EntryState = WorldEntryState.None;
+        ResetEntryForHop();
         PendingTargetState = redirect.TargetState;
 
         var identity = await ResolveRedirectIdentityAsync(redirect.EndPoint.Address);
@@ -811,6 +812,18 @@ public sealed class ConnectionManager : IDisposable
     public event ConnectionStateChangedHandler? StateChanged;
 
     /// <summary>
+    ///     Raised on the game thread, in <see cref="ProcessPackets" />, the first time it runs after a hop to a world
+    ///     server, before it dispatches any packet of that server. The state becomes <see cref="ConnectionState.World" />
+    ///     on a thread-pool thread before the client sends ClientJoin, so a world packet in the queue means the state was
+    ///     World already: the lobby screen switches to the world screen here, and the world screen gets every packet of
+    ///     world entry (the player id, the map, the player's own aisling, the status icons).
+    /// </summary>
+    public event Action? WorldEntering;
+
+    //true once WorldEntering was raised for the current hop; each redirect clears it
+    private bool WorldEnteringRaised;
+
+    /// <summary>
     ///     Sends a pickup request from a tile.
     /// </summary>
     public void PickupItem(int x, int y, byte destinationSlot)
@@ -822,13 +835,34 @@ public sealed class ConnectionManager : IDisposable
                 Y = (ushort)y
             });
 
+    //each hop starts its world entry again: the entry flags, WorldEntering, and the map, which is the map of the last
+    //connection, so that RequestMapData does not ask with the size of an earlier map
+    internal void ResetEntryForHop()
+    {
+        EntryState = WorldEntryState.None;
+        WorldEnteringRaised = false;
+        MapInfo = null;
+    }
+
+    /// <summary>Sets the state, for the tests of what depends on it.</summary>
+    internal void SetStateForTest(ConnectionState state) => State = state;
+
     /// <summary>
     ///     Processes queued inbound packets, driving state transitions. Call this from the game loop's Update method.
     /// </summary>
     public void ProcessPackets(List<IServerPacket> buffer)
     {
-        ProcessExtensionPackets();
         Client.DrainPackets(buffer);
+
+        //after the drain: a world packet in the buffer means the state was World before it, so the world screen exists
+        //before the dispatch below
+        if ((State == ConnectionState.World) && !WorldEnteringRaised)
+        {
+            WorldEnteringRaised = true;
+            WorldEntering?.Invoke();
+        }
+
+        ProcessExtensionPackets();
 
         foreach (var pkt in buffer)
             try

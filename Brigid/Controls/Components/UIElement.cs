@@ -79,6 +79,19 @@ public abstract class UIElement : IDisposable
         }
     } = true;
 
+    /// <summary>True when this element and each of its parents is <see cref="Visible" />.</summary>
+    public bool IsEffectivelyVisible
+    {
+        get
+        {
+            for (var current = this; current is not null; current = current.Parent)
+                if (!current.Visible)
+                    return false;
+
+            return true;
+        }
+    }
+
     public int Width { get; set; }
     public int X { get; set; }
     public int Y { get; set; }

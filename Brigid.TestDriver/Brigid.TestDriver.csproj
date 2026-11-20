@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!-- The BRIG-184 test driver: a dev module that Brigid.SmokeTests copies into the client's dev module folder. It is
+         never published and never ships to players. It references the client the way every dev module does:
+         Private=false, so the client is not copied beside it. -->
+    <PropertyGroup>
+        <IsPackable>false</IsPackable>
+        <IsPublishable>false</IsPublishable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Brigid\Brigid.csproj" Private="false" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Brigid.Tests" />
+    </ItemGroup>
+</Project>

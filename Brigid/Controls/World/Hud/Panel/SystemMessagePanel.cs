@@ -3,6 +3,7 @@ using Brigid.Collections;
 using Brigid.Controls.Components;
 using Brigid.Controls.Generic;
 using Brigid.Controls.Scrolling;
+using Brigid.Rendering;
 using Brigid.ViewModel;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -13,7 +14,8 @@ namespace Brigid.Controls.World.Hud.Panel;
 /// <summary>
 ///     Message history panel (Shift+F). Displays server message history (same text as the orange bar) in its own tab-sized
 ///     panel. Reads from the shared history list and preserves the per-message color (orange for system messages,
-///     whisper/group/guild colors for echoed chat).
+///     whisper/group/guild colors for echoed chat). A message that is wider than a line wraps onto the lines below it, so
+///     the history shows each message whole; the orange bar shows only the part that fits.
 /// </summary>
 public sealed class SystemMessagePanel : ExpandablePanel
 {
@@ -21,6 +23,17 @@ public sealed class SystemMessagePanel : ExpandablePanel
     private readonly ScrollBarControl Bar;
     private readonly ScrollBarBinder Binder;
     private readonly IReadOnlyList<Chat.OrangeBarMessage> History;
+    //the wrapped lines of History; the scroll model counts these lines, not the messages
+    private readonly WrappedHistory Wrapped = new();
+    private readonly FontGenerationStamp LayoutStamp = new();
+    //the messages added since the last wrap, and whether the next wrap must start again (a clear). The Chat events set
+    //them, not a change in History.Count: the history is a ring buffer, and its count stops changing when it is full
+    private int AddedSinceWrap;
+    private bool RewrapAll = true;
+    //the font generation at the last update: a window drag changes it at each frame, and the full wrap waits until it
+    //stays for one update
+    private int SeenGeneration = -1;
+    private readonly int LineWidth;
     //Offset is lines-from-bottom (0 = newest at bottom); Inverted maps wheel/page + the bar thumb accordingly
     private readonly ScrollModel Model = new() { Inverted = true };
     private readonly Rectangle NormalDisplayBounds;
@@ -29,9 +42,6 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
     private Rectangle DisplayBounds;
     private Rectangle ExpandedDisplayBounds;
-    //set by the Chat events, not by a change in History.Count: the history is a ring buffer, and its count stops
-    //changing when the buffer is full
-    private bool HistoryChanged = true;
     private UILabel[] Lines;
     private int MaxVisibleLines;
     private int RenderedScrollOffset = -1;
@@ -51,6 +61,7 @@ public sealed class SystemMessagePanel : ExpandablePanel
         Lines = new UILabel[MaxVisibleLines];
 
         var relX = displayBounds.X - panelBounds.X;
+        LineWidth = displayBounds.Width - ScrollBarControl.DEFAULT_WIDTH;
 
         for (var i = 0; i < MaxVisibleLines; i++)
         {
@@ -58,7 +69,7 @@ public sealed class SystemMessagePanel : ExpandablePanel
             {
                 Name = $"HistoryLine{i}",
                 X = relX,
-                Width = displayBounds.Width - ScrollBarControl.DEFAULT_WIDTH,
+                Width = LineWidth,
                 Height = GLYPH_HEIGHT,
                 PaddingLeft = 0,
                 PaddingTop = 0
@@ -118,7 +129,7 @@ public sealed class SystemMessagePanel : ExpandablePanel
                     Name = $"HistoryLine{i}",
                     X = relX,
                     Y = relY + NormalDisplayBounds.Height - (MaxVisibleLines - i) * GLYPH_HEIGHT,
-                    Width = NormalDisplayBounds.Width - ScrollBarControl.DEFAULT_WIDTH,
+                    Width = LineWidth,
                     Height = GLYPH_HEIGHT,
                     PaddingLeft = 0,
                     PaddingTop = 0,
@@ -143,9 +154,9 @@ public sealed class SystemMessagePanel : ExpandablePanel
         base.Dispose();
     }
 
-    private void OnChatCleared() => HistoryChanged = true;
+    private void OnChatCleared() => RewrapAll = true;
 
-    private void OnOrangeBarMessageAdded(Chat.OrangeBarMessage _) => HistoryChanged = true;
+    private void OnOrangeBarMessageAdded(Chat.OrangeBarMessage _) => AddedSinceWrap++;
 
     private void RefreshDisplay()
     {
@@ -155,12 +166,13 @@ public sealed class SystemMessagePanel : ExpandablePanel
         RenderedScrollOffset = Model.Offset;
 
         var maxLines = Math.Min(MaxVisibleLines, Lines.Length);
-        var startIndex = Math.Max(0, History.Count - maxLines - Model.Offset);
+        var lines = Wrapped.Lines;
+        var startIndex = Math.Max(0, lines.Count - maxLines - Model.Offset);
         var lineIndex = 0;
 
-        for (var i = startIndex; (i < History.Count) && (lineIndex < maxLines); i++)
+        for (var i = startIndex; (i < lines.Count) && (lineIndex < maxLines); i++)
         {
-            var msg = History[i];
+            var msg = lines[i];
             Lines[lineIndex].Text = msg.Text;
             Lines[lineIndex].ForegroundColor = msg.Color;
             lineIndex++;
@@ -193,7 +205,7 @@ public sealed class SystemMessagePanel : ExpandablePanel
         Bar.Visible = expanded;
         Bar.Height = DisplayBounds.Height;
 
-        Model.SetMetrics(History.Count, MaxVisibleLines);
+        Model.SetMetrics(Wrapped.Lines.Count, MaxVisibleLines);
 
         //show/hide labels based on current line count
         for (var i = 0; i < Lines.Length; i++)
@@ -232,13 +244,28 @@ public sealed class SystemMessagePanel : ExpandablePanel
 
         base.Update(gameTime);
 
-        if (HistoryChanged)
+        //a new face or window size changes the wrap, as a new message does. The full wrap of up to 1000 messages waits
+        //while the generation still changes at each update (a window drag)
+        var generation = FontEngine.Instance.Generation;
+        var layoutSettled = LayoutStamp.Changed && (generation == SeenGeneration);
+        SeenGeneration = generation;
+
+        if (RewrapAll || (AddedSinceWrap > 0) || layoutSettled)
         {
             var wasAtBottom = Model.Offset == 0;
-            HistoryChanged = false;
             RenderedScrollOffset = -1;
 
-            Model.SetMetrics(History.Count, MaxVisibleLines);
+            if (RewrapAll || layoutSettled)
+            {
+                Wrapped.Rebuild(History, LineWidth);
+                LayoutStamp.Mark();
+            } else
+                Wrapped.Append(History, AddedSinceWrap, LineWidth);
+
+            AddedSinceWrap = 0;
+            RewrapAll = false;
+
+            Model.SetMetrics(Wrapped.Lines.Count, MaxVisibleLines);
 
             //stick to the bottom when already there; otherwise keep the same lines-from-bottom offset. The offset counts
             //from the newest line, so an entry evicted from the full buffer needs no change to it

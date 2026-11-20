@@ -33,6 +33,8 @@
 
     <ItemGroup>
         <InternalsVisibleTo Include="Brigid.Tests" />
+        <!-- the BRIG-184 test driver dev module: the input seams of InputBuffer, the frame capture, and the map state and tile points of WorldScreen -->
+        <InternalsVisibleTo Include="Brigid.TestDriver" />
     </ItemGroup>
 
     <!-- On macOS, SslStream defaults to Apple's SecureTransport, which cannot go above TLS 1.2 — the
