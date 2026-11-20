@@ -2,6 +2,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Brigid.Collections;
 using Brigid.Controls.Components;
+using Brigid.Controls.LobbyLogin;
 using Brigid.Controls.World.Hud;
 using Brigid.Controls.World.Hud.Panel;
 using Brigid.Controls.World.Hud.Panel.Slots;
@@ -9,6 +10,7 @@ using Brigid.Controls.World.Popups;
 using Brigid.Controls.World.Popups.Options;
 using Brigid.Data;
 using Brigid.Data.Models;
+using Brigid.Data.Repositories;
 using Brigid.Extensions;
 using Brigid.Models;
 using Brigid.Systems;
@@ -480,8 +482,8 @@ public sealed partial class WorldScreen
                     spellSlot.Chants[i] = chantLines[i];
             }
 
-            SaveSpellChants();
-            WorldState.ReloadChants();
+            var entries = SpellChantEntries();
+            WorldState.SpellChantsSaved(entries, DataContext.LocalPlayerSettings.SaveSpellChants(entries));
         } else
         {
             foreach (var panel in new[]
@@ -496,12 +498,34 @@ public sealed partial class WorldScreen
                 skillSlot?.Chant = chantLines.Length > 0 ? chantLines[0] : string.Empty;
             }
 
-            SaveSkillChants();
-            WorldState.ReloadChants();
+            var entries = SkillChantEntries();
+            WorldState.SkillChantsSaved(entries, DataContext.LocalPlayerSettings.SaveSkillChants(entries));
         }
     }
 
     //--- cache / persistence helpers ---
+
+    /// <summary>Shows a save that did not go through on the orange bar (<see cref="SaveNotices" />).</summary>
+    public void ShowSaveNotice(GuardedFile file, SaveResult result) => WorldState.Chat.AddOrangeBarMessage(MenuAlerts.NotSavedLine(file, result));
+
+    //the files load at world entry, a relog (a new screen) or another character (see LocalFilesKey)
+    private void LoadLocalFilesOnEntry(string name)
+    {
+        var serverKey = ServerProfileKey.Resolve(GlobalSettings.LobbyHost, Game.Connection.ServerName);
+        var filesKey = $"{serverKey}/{name}";
+
+        if (filesKey == LocalFilesKey)
+            return;
+
+        LocalFilesKey = filesKey;
+        var importLegacy = ClientSettings.LegacyCharacterImport == ClientSettings.MigrationImport;
+        DataContext.LocalPlayerSettings.Initialize(name, serverKey, importLegacy);
+        LoadPlayerFamilyList();
+        LoadPlayerFriendList();
+        LoadPlayerMacros();
+        WorldState.ReloadChants();
+        LoadOwnProfile(name);
+    }
 
     private void LoadPlayerFamilyList()
     {
@@ -514,11 +538,11 @@ public sealed partial class WorldScreen
     {
         var family = StatusBook.GetFamilyMembers();
 
-        if (family is not null)
-        {
-            DataContext.LocalPlayerSettings.SaveFamilyList(family);
-            WorldList.SetFamilyNames(family);
-        }
+        if (family is null)
+            return;
+
+        DataContext.LocalPlayerSettings.SaveFamilyList(family);
+        WorldList.SetFamilyNames(family);
     }
 
     private void LoadPlayerFriendList()
@@ -532,9 +556,12 @@ public sealed partial class WorldScreen
     private void SavePlayerFriendList()
     {
         var names = OptionsModal.GetFriendNames();
+
         DataContext.LocalPlayerSettings.SaveFriendList(names);
         WorldList.SetFriendNames(names);
     }
+
+    private void SavePlayerMacros() => DataContext.LocalPlayerSettings.SaveMacros(OptionsModal.GetMacroValues());
 
     private void LoadPlayerMacros()
     {
@@ -542,7 +569,8 @@ public sealed partial class WorldScreen
         OptionsModal.SetMacros(macros);
     }
 
-    private void SaveSkillChants()
+    //the chants of the occupied skill slots, as the save writes them
+    private List<SkillChantEntry> SkillChantEntries()
     {
         var entries = new List<SkillChantEntry>();
 
@@ -563,10 +591,10 @@ public sealed partial class WorldScreen
                 });
         }
 
-        DataContext.LocalPlayerSettings.SaveSkillChants(entries);
+        return entries;
     }
 
-    private void SaveSpellChants()
+    private List<SpellChantEntry> SpellChantEntries()
     {
         var entries = new List<SpellChantEntry>();
 
@@ -587,7 +615,7 @@ public sealed partial class WorldScreen
             entries.Add(entry);
         }
 
-        DataContext.LocalPlayerSettings.SaveSpellChants(entries);
+        return entries;
     }
     #endregion
 

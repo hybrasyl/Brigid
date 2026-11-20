@@ -34,6 +34,22 @@ public sealed class GameClientTimeoutsCollection;
 [CollectionDefinition("UITextBoxFocus", DisableParallelization = true)]
 public sealed class UITextBoxFocusCollection;
 
+// The GameClient transport tests use a test timeout, which xunit supports only when the tests run alone: a teardown that
+// waits for itself deadlocks, and the timeout fails that test in place of a hung run.
+[CollectionDefinition("GameClientTransport", DisableParallelization = true)]
+public sealed class GameClientTransportCollection;
+
+// The settings files (Keybinds, ClientSettings, LauncherConfig, CertificateTrustStore) keep static state that their Load
+// and Save change. The tests that load or save them run in series with each other. UiThemeIdRoundTripTests saves
+// ClientSettings beside them: it uses its own path, and a locked or corrupt ClientSettings load changes no state.
+[CollectionDefinition("SettingsFiles")]
+public sealed class SettingsFilesCollection;
+
+// GuardedFile.NotSaved is static. The tests that listen to it run in series with each other, so a test can check an
+// event that has no listener.
+[CollectionDefinition("GuardedFileNotices")]
+public sealed class GuardedFileNoticesCollection;
+
 // WorldState is static. The tests that change it run alone.
 [CollectionDefinition("WorldState", DisableParallelization = true)]
 public sealed class WorldStateCollection;

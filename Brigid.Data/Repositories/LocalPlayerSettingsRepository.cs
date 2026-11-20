@@ -6,12 +6,28 @@ using Brigid.Data.Models;
 
 namespace Brigid.Data.Repositories;
 
+/// <summary>The per-character files that the client reads and saves.</summary>
+public enum CharacterFile
+{
+    FamilyList,
+    FriendList,
+    Macros,
+    SkillChants,
+    SpellChants,
+    ProfileText
+}
+
 /// <summary>
 ///     Manages per-character config files (macros, chants, friends, family) stored per-server, per-character under
 ///     <c>{AppPaths.ProfilesDir}/{serverKey}/{characterName}</c> — a writable per-user location, keyed by server so the
 ///     same character name on different servers no longer shares one folder. Legacy config from the old in-game-folder
 ///     location is imported once on init.
 /// </summary>
+/// <remarks>
+///     Each file is a <see cref="GuardedFile" />, made again at each open: a file that another program holds, or that is
+///     denied, loads as empty, and its save is refused until a read of it succeeds, so that empty data never replaces
+///     good data (BRIG-177). The client does not support a hand edit of these files while it runs.
+/// </remarks>
 public sealed class LocalPlayerSettingsRepository
 {
     private const string FAMILY_LIST_FILE = "Familylist.cfg";
@@ -19,14 +35,14 @@ public sealed class LocalPlayerSettingsRepository
     private const string MACRO_FILE = "Macro.cfg";
     private const string SKILL_BOOK_FILE = "SkillBook.cfg";
     private const string SPELL_BOOK_FILE = "SpellBook.cfg";
+    private const string PROFILE_TEXT_FILE = "profile.txt";
     private string PlayerDirectory { get; set; } = null!;
 
-    public string FamilyListPath => Path.Combine(PlayerDirectory, FAMILY_LIST_FILE);
-    public string FriendListPath => Path.Combine(PlayerDirectory, FRIEND_LIST_FILE);
+    //the files of this character, made again at each open, so that a new character or session reads each file again
+    private readonly Dictionary<CharacterFile, GuardedFile> Files = [];
 
     // ReSharper disable once ConditionIsAlwaysTrueOrFalseAccordingToNullableAPIContract
     public bool IsInitialized => PlayerDirectory is not null;
-    public string MacroPath => Path.Combine(PlayerDirectory, MACRO_FILE);
 
     /// <summary>
     ///     Joins a file name to the character folder. Returns false before Initialize, and for a name that is not a
@@ -42,8 +58,6 @@ public sealed class LocalPlayerSettingsRepository
 
     internal static string? CombineBareName(string directory, string fileName)
         => FileNames.IsSafeName(fileName) ? Path.Combine(directory, fileName) : null;
-    public string SkillBookPath => Path.Combine(PlayerDirectory, SKILL_BOOK_FILE);
-    public string SpellBookPath => Path.Combine(PlayerDirectory, SPELL_BOOK_FILE);
 
     private void EnsureFileExists(string fileName)
     {
@@ -63,8 +77,7 @@ public sealed class LocalPlayerSettingsRepository
     {
         //the character name is server-supplied — sanitize it before it becomes a path segment so a hostile/odd name
         //can't escape the profiles root. The legacy import still reads the raw-named legacy folder as its source.
-        PlayerDirectory = AppPaths.ProfileDir(serverKey, FileNames.ToSafeName(characterName));
-        DataDiagnostics.Try(() => Directory.CreateDirectory(PlayerDirectory), "create profile dir");
+        Open(AppPaths.ProfileDir(serverKey, FileNames.ToSafeName(characterName)));
 
         //only pull in the old in-game-folder config if the user opted into the one-time import
         if (importLegacy)
@@ -74,6 +87,37 @@ public sealed class LocalPlayerSettingsRepository
         EnsureFileExists(FRIEND_LIST_FILE);
         EnsureFileExists(MACRO_FILE);
     }
+
+    //a new character or session reads every file again, so a file that could not be read gets another try
+    private void Open(string directory)
+    {
+        PlayerDirectory = directory;
+        Files.Clear();
+
+        foreach (var file in Enum.GetValues<CharacterFile>())
+        {
+            var (name, description) = NameAndDescriptionOf(file);
+            Files[file] = new GuardedFile(Path.Combine(directory, name), description);
+        }
+
+        DataDiagnostics.Try(() => Directory.CreateDirectory(PlayerDirectory), "create profile dir");
+    }
+
+    /// <summary>Opens the repository on a folder, with no legacy import and no default files, for the tests.</summary>
+    internal void OpenForTests(string directory) => Open(directory);
+
+    //the file name, and what the file holds in the words of the player
+    private static (string Name, string Description) NameAndDescriptionOf(CharacterFile file)
+        => file switch
+        {
+            CharacterFile.FamilyList  => (FAMILY_LIST_FILE, "family list"),
+            CharacterFile.FriendList  => (FRIEND_LIST_FILE, "friend list"),
+            CharacterFile.Macros      => (MACRO_FILE, "macros"),
+            CharacterFile.SkillChants => (SKILL_BOOK_FILE, "skill chants"),
+            CharacterFile.SpellChants => (SPELL_BOOK_FILE, "spell chants"),
+            CharacterFile.ProfileText => (PROFILE_TEXT_FILE, "profile text"),
+            _                         => throw new ArgumentOutOfRangeException(nameof(file), file, null)
+        };
 
     /// <summary>
     ///     True when the old in-game-folder location holds per-character config worth importing — a subdirectory of
@@ -103,6 +147,14 @@ public sealed class LocalPlayerSettingsRepository
     }
 
     /// <summary>
+    ///     The legacy character folder, <c>{dataPath}/{characterName}</c>, or null when there is no data folder or the name
+    ///     is not a bare file name. The name comes from the server, and the legacy folder is always a direct child of the
+    ///     data folder, so a name that Path.Combine would follow out of the game folder does not import.
+    /// </summary>
+    internal static string? LegacyFolderFor(string? dataPath, string characterName)
+        => !string.IsNullOrEmpty(dataPath) && FileNames.IsSafeName(characterName) ? Path.Combine(dataPath, characterName) : null;
+
+    /// <summary>
     ///     One-time best-effort import of a character's legacy config from the old <c>{DataPath}/{characterName}</c>
     ///     location (where retail Dark Ages and older Brigid builds wrote it) into the new per-user profile directory.
     ///     Copies only files that don't already exist in the target, so it runs harmlessly on every init and does nothing
@@ -110,15 +162,8 @@ public sealed class LocalPlayerSettingsRepository
     /// </summary>
     private void ImportLegacyCharacterFiles(string characterName)
     {
-        if (string.IsNullOrEmpty(DataContext.DataPath))
+        if (LegacyFolderFor(DataContext.DataPath, characterName) is not { } legacyDir)
             return;
-
-        //characterName is server-supplied. The legacy folder is always a single direct child of DataPath, so a name
-        //that is not a bare file name does not import: Path.Combine would follow it out of the game folder
-        if (!FileNames.IsSafeName(characterName))
-            return;
-
-        var legacyDir = Path.Combine(DataContext.DataPath, characterName);
 
         if (!Directory.Exists(legacyDir) || string.Equals(legacyDir, PlayerDirectory, StringComparison.OrdinalIgnoreCase))
             return;
@@ -142,15 +187,10 @@ public sealed class LocalPlayerSettingsRepository
     /// <remarks>
     ///     File format: LF-delimited, first line is a header, then repeating pairs of (skill name, "Skill:" + chant text).
     /// </remarks>
-    private static List<SkillChantEntry> LoadChantBook(string path)
+    private static List<SkillChantEntry> ParseChantBook(string text)
     {
         var entries = new List<SkillChantEntry>();
-
-        if (!File.Exists(path))
-            return entries;
-
-        var lines = File.ReadAllText(path)
-                        .Split('\n');
+        var lines = text.Split('\n');
 
         //skip first line (header), then read pairs
         for (var i = 1; i < (lines.Length - 1); i += 2)
@@ -186,11 +226,7 @@ public sealed class LocalPlayerSettingsRepository
     public FamilyList LoadFamilyList()
     {
         var family = new FamilyList();
-
-        if (!File.Exists(FamilyListPath))
-            return family;
-
-        var lines = File.ReadAllLines(FamilyListPath);
+        var lines = Files[CharacterFile.FamilyList].Read(File.ReadAllLines, []);
 
         if (lines.Length > 0)
             family.Mother = lines[0];
@@ -229,26 +265,15 @@ public sealed class LocalPlayerSettingsRepository
     ///     Loads friend names from Friendlist.cfg. Returns the first 20 non-empty lines.
     /// </summary>
     public List<string> LoadFriendList()
-        => !File.Exists(FriendListPath)
-            ? []
-            : File.ReadAllLines(FriendListPath)
-                  .Where(line => !string.IsNullOrWhiteSpace(line))
-                  .Take(20)
-                  .ToList();
+        => Files[CharacterFile.FriendList].Read(File.ReadAllLines, [])
+           .Where(line => !string.IsNullOrWhiteSpace(line))
+           .Take(20)
+           .ToList();
 
     /// <summary>
     ///     Loads macro text from Macro.cfg. Returns a 10-element array of macro strings.
     /// </summary>
-    public string[] LoadMacros()
-    {
-        string[] lines = [];
-
-        //an unreadable file loads as no macros, and the failure is logged
-        if (File.Exists(MacroPath))
-            DataDiagnostics.Try(() => lines = File.ReadAllLines(MacroPath), "LoadMacros");
-
-        return ParseMacros(lines);
-    }
+    public string[] LoadMacros() => ParseMacros(Files[CharacterFile.Macros].Read(File.ReadAllLines, []));
 
     /// <summary>
     ///     Parses Macro.cfg lines into the 10 macro slots. A slot with no line is empty, never null: Initialize writes an
@@ -280,7 +305,23 @@ public sealed class LocalPlayerSettingsRepository
         return macros;
     }
 
-    public List<SkillChantEntry> LoadSkillChants() => LoadChantBook(SkillBookPath);
+    public List<SkillChantEntry> LoadSkillChants() => ParseChantBook(Files[CharacterFile.SkillChants].Read(File.ReadAllText, string.Empty));
+
+    /// <summary>Loads the skill chants. Returns false when the file cannot be read, so that the caller keeps the chants it has.</summary>
+    public bool TryLoadSkillChants(out List<SkillChantEntry> entries)
+    {
+        entries = LoadSkillChants();
+
+        return !Files[CharacterFile.SkillChants].IsUnreadable;
+    }
+
+    /// <summary>Loads the spell chants. Returns false when the file cannot be read, so that the caller keeps the chants it has.</summary>
+    public bool TryLoadSpellChants(out List<SpellChantEntry> entries)
+    {
+        entries = LoadSpellChants();
+
+        return !Files[CharacterFile.SpellChants].IsUnreadable;
+    }
 
     /// <summary>
     ///     Loads spell chant entries from SpellBook.cfg.
@@ -291,12 +332,8 @@ public sealed class LocalPlayerSettingsRepository
     public List<SpellChantEntry> LoadSpellChants()
     {
         var entries = new List<SpellChantEntry>();
-
-        if (!File.Exists(SpellBookPath))
-            return entries;
-
-        var lines = File.ReadAllText(SpellBookPath)
-                        .Split('\n');
+        var lines = Files[CharacterFile.SpellChants].Read(File.ReadAllText, string.Empty)
+            .Split('\n');
 
         //skip first line (header), then read groups of 11 (name + 10 chant lines)
         var i = 1;
@@ -341,8 +378,8 @@ public sealed class LocalPlayerSettingsRepository
     /// <summary>
     ///     Saves skill chant entries to a chant book config file.
     /// </summary>
-    private static void SaveChantBook(string path, List<SkillChantEntry> entries) => DataDiagnostics.Try(
-        () =>
+    private static SaveResult SaveChantBook(GuardedFile file, List<SkillChantEntry> entries) => file.Save(
+        path =>
         {
             using var writer = new StreamWriter(path, false, Encoding.UTF8);
             writer.NewLine = "\n";
@@ -354,12 +391,12 @@ public sealed class LocalPlayerSettingsRepository
                 writer.WriteLine(entry.Name);
                 writer.WriteLine($"Skill:{entry.Chant}");
             }
-        }, "SaveChantBook");
+        });
 
     /// <summary>
     ///     Saves the family list to Familylist.cfg.
     /// </summary>
-    public void SaveFamilyList(FamilyList family)
+    public SaveResult SaveFamilyList(FamilyList family)
     {
         var lines = new[]
         {
@@ -375,23 +412,23 @@ public sealed class LocalPlayerSettingsRepository
             family.Brother6
         };
 
-        DataDiagnostics.Try(() => File.WriteAllLines(FamilyListPath, lines), "SaveFamilyList");
+        return Files[CharacterFile.FamilyList].Save(path => File.WriteAllLines(path, lines));
     }
 
     /// <summary>
     ///     Saves friend names to Friendlist.cfg.
     /// </summary>
-    public void SaveFriendList(List<string> names) =>
-        DataDiagnostics.Try(() => File.WriteAllLines(FriendListPath, names.Take(20)), "SaveFriendList");
+    public SaveResult SaveFriendList(List<string> names)
+        => Files[CharacterFile.FriendList].Save(path => File.WriteAllLines(path, names.Take(20)));
 
     /// <summary>
     ///     Saves macro text to Macro.cfg.
     /// </summary>
-    public void SaveMacros(string[] macros)
+    public SaveResult SaveMacros(string[] macros)
     {
         var lines = FormatMacros(macros);
 
-        DataDiagnostics.Try(() => File.WriteAllLines(MacroPath, lines), "SaveMacros");
+        return Files[CharacterFile.Macros].Save(path => File.WriteAllLines(path, lines));
     }
 
     /// <summary>Formats the 10 macro slots as Macro.cfg lines; <see cref="ParseMacros" /> reads them back.</summary>
@@ -409,15 +446,15 @@ public sealed class LocalPlayerSettingsRepository
         return lines;
     }
 
-    public void SaveSkillChants(List<SkillChantEntry> entries) => SaveChantBook(SkillBookPath, entries);
+    public SaveResult SaveSkillChants(List<SkillChantEntry> entries) => SaveChantBook(Files[CharacterFile.SkillChants], entries);
 
     /// <summary>
     ///     Saves spell chant entries to SpellBook.cfg.
     /// </summary>
-    public void SaveSpellChants(List<SpellChantEntry> entries) => DataDiagnostics.Try(
-        () =>
+    public SaveResult SaveSpellChants(List<SpellChantEntry> entries) => Files[CharacterFile.SpellChants].Save(
+        path =>
         {
-            using var writer = new StreamWriter(SpellBookPath, false, Encoding.UTF8);
+            using var writer = new StreamWriter(path, false, Encoding.UTF8);
             writer.NewLine = "\n";
 
             writer.WriteLine("SpellbookUsed");
@@ -429,5 +466,55 @@ public sealed class LocalPlayerSettingsRepository
                 for (var i = 0; i < 10; i++)
                     writer.WriteLine($"Spell{i}:{entry.Chants[i]}");
             }
-        }, "SaveSpellChants");
+        });
+
+    /// <summary>Loads the player's own profile text from profile.txt, or an empty text.</summary>
+    public string LoadProfileText() => IsInitialized ? Files[CharacterFile.ProfileText].Read(File.ReadAllText, string.Empty) : string.Empty;
+
+    /// <summary>Saves the player's own profile text to profile.txt.</summary>
+    public SaveResult SaveProfileText(string text)
+    {
+        if (IsInitialized)
+            return Files[CharacterFile.ProfileText].Save(path => File.WriteAllText(path, text));
+
+        DataDiagnostics.Log?.Invoke("[data] did not save profile.txt: no character is open");
+
+        return SaveResult.Failed;
+    }
+
+    /// <summary>
+    ///     Loads the player's own portrait, <c>{name}.jpg</c> or a file named <c>{name}</c>, from the character folder, as
+    ///     retail does (BRIG-106). Gives no bytes when there is no portrait. Returns false when a portrait file exists but
+    ///     cannot be read, so that the caller keeps the portrait it has. The name comes from the server, so
+    ///     <see cref="TryGetFilePath" /> refuses a name that leaves the character folder.
+    /// </summary>
+    public bool TryLoadPortrait(string name, out byte[] portrait)
+    {
+        portrait = [];
+
+        if (string.IsNullOrEmpty(name))
+            return true;
+
+        foreach (var fileName in new[] { $"{name}.jpg", name })
+        {
+            if (!TryGetFilePath(fileName, out var path))
+                continue;
+
+            //the read opens the file: File.Exists is also false when the check fails, and the portrait was then cleared
+            var file = new GuardedFile(path, "portrait");
+            var bytes = file.Read(File.ReadAllBytes, (byte[]?)null);
+
+            if (file.IsUnreadable)
+                return false;
+
+            if (bytes is not null)
+            {
+                portrait = bytes;
+
+                return true;
+            }
+        }
+
+        return true;
+    }
 }

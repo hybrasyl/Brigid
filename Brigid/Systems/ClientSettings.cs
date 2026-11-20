@@ -38,6 +38,8 @@ public static class ClientSettings
     public static int Speed { get; set; } = 100;
     public static bool UseShiftKeyForAltPanels { get; set; } = true;
 
+    private const string FILE_DESCRIPTION = "settings";
+
     private static string FilePath => AppPaths.SettingsFile;
 
     //legacy in-game-folder location, read once on first run when the new file doesn't exist yet
@@ -100,133 +102,157 @@ public static class ClientSettings
     /// <summary>
     ///     Loads settings into static properties. Reads the per-user <c>brigid.cfg</c>; on first run (before it exists)
     ///     falls back to the legacy <c>Darkages.cfg</c> and migrates it to the new location. Uses defaults if neither
-    ///     file exists or the file is corrupt.
+    ///     file exists. A <c>brigid.cfg</c> that cannot be read gives the defaults, and its save is refused, so the
+    ///     defaults do not replace the player's settings (see <see cref="GuardedFile" />).
     /// </summary>
-    public static void Load()
-    {
-        var loadPath = File.Exists(FilePath) ? FilePath
-            : LegacyFilePath is { } legacy && File.Exists(legacy) ? legacy
-            : null;
+    public static void Load() => Load(FilePath, LegacyFilePath);
 
-        if (loadPath is null)
+    /// <summary>
+    ///     Loads <paramref name="path" />, or, when it is missing, the legacy file at <paramref name="legacyPath" />, and
+    ///     saves the legacy settings to <paramref name="path" />. Internal for the tests.
+    /// </summary>
+    /// <remarks>
+    ///     Only a file that the read does not find is missing: a check that fails is not a missing file, and the legacy
+    ///     settings then do not replace it. A legacy file that cannot be read refuses the saves of <paramref name="path" />
+    ///     for the session; a save of the defaults would make <paramref name="path" />, and the legacy file would not be
+    ///     tried again at the next start.
+    /// </remarks>
+    internal static void Load(string path, string? legacyPath)
+    {
+        var file = GuardedFile.ForSession(path, FILE_DESCRIPTION);
+        Load(path);
+
+        if (!file.WasMissing || legacyPath is null)
             return;
 
-        try
+        var legacy = GuardedFile.ForSession(legacyPath, FILE_DESCRIPTION);
+
+        if (!Load(legacyPath))
+            file.RefuseSavesUntilRead($"the legacy {legacy.FileName} could not be read, and it is tried again at the next start");
+        else if (!legacy.WasMissing)
+            Save(path);
+    }
+
+    /// <summary>
+    ///     Loads the settings file at <paramref name="path" /> into the static properties. Returns false when the file
+    ///     cannot be read, so the first-run migration does not save. Internal for the tests.
+    /// </summary>
+    internal static bool Load(string path)
+    {
+        var file = GuardedFile.ForSession(path, FILE_DESCRIPTION);
+        var lines = file.Read(File.ReadAllLines, []);
+
+        if (file.IsUnreadable)
+            return false;
+
+        foreach (var line in lines)
         {
-            foreach (var line in File.ReadLines(loadPath))
+            if (!TrySplit(line, out var key, out var value))
+                continue;
+
+            switch (key)
             {
-                if (!TrySplit(line, out var key, out var value))
-                    continue;
+                case "Sound Volume":
+                    if (int.TryParse(value, out var sv))
+                        SoundVolume = Math.Clamp(sv, 0, 10);
 
-                switch (key)
-                {
-                    case "Sound Volume":
-                        if (int.TryParse(value, out var sv))
-                            SoundVolume = Math.Clamp(sv, 0, 10);
+                    break;
 
-                        break;
+                case "Music Volume":
+                    if (int.TryParse(value, out var mv))
+                        MusicVolume = Math.Clamp(mv, 0, 10);
 
-                    case "Music Volume":
-                        if (int.TryParse(value, out var mv))
-                            MusicVolume = Math.Clamp(mv, 0, 10);
+                    break;
 
-                        break;
+                case "Ambience Volume":
+                    if (int.TryParse(value, out var av))
+                        AmbienceVolume = Math.Clamp(av, 0, 10);
 
-                    case "Ambience Volume":
-                        if (int.TryParse(value, out var av))
-                            AmbienceVolume = Math.Clamp(av, 0, 10);
+                    break;
 
-                        break;
+                case "doGroundAnimation":
+                    DoGroundAnimation = value == "1";
 
-                    case "doGroundAnimation":
-                        DoGroundAnimation = value == "1";
+                    break;
 
-                        break;
+                case "SkillSpellSelectByToggle":
+                    UseShiftKeyForAltPanels = value != "1";
 
-                    case "SkillSpellSelectByToggle":
-                        UseShiftKeyForAltPanels = value != "1";
+                    break;
 
-                        break;
+                case "GroupAnswer":
+                    GroupOpen = value == "1";
 
-                    case "GroupAnswer":
-                        GroupOpen = value == "1";
+                    break;
 
-                        break;
+                case "ScrollLevel":
+                    if (int.TryParse(value, out var sl))
+                        ScrollLevel = sl;
 
-                    case "ScrollLevel":
-                        if (int.TryParse(value, out var sl))
-                            ScrollLevel = sl;
+                    break;
 
-                        break;
+                case "UserClickMode":
+                    EnableProfileClick = value != "1";
 
-                    case "UserClickMode":
-                        EnableProfileClick = value != "1";
+                    break;
 
-                        break;
+                case "MonsterSayRecordMode":
+                    RecordNpcChat = value == "1";
 
-                    case "MonsterSayRecordMode":
-                        RecordNpcChat = value == "1";
+                    break;
 
-                        break;
+                case "GroupObjectOption":
+                    UseGroupWindow = value == "1";
 
-                    case "GroupObjectOption":
-                        UseGroupWindow = value == "1";
+                    break;
 
-                        break;
+                case "Chatting Mode":
+                    if (int.TryParse(value, out var cm))
+                        ChattingMode = cm;
 
-                    case "Chatting Mode":
-                        if (int.TryParse(value, out var cm))
-                            ChattingMode = cm;
+                    break;
 
-                        break;
+                case "Speed":
+                    if (int.TryParse(value, out var spd))
+                        Speed = spd;
 
-                    case "Speed":
-                        if (int.TryParse(value, out var spd))
-                            Speed = spd;
+                    break;
 
-                        break;
+                case "EngFont":
+                    if (int.TryParse(value, out var ef) && ef >= 0)
+                        FontIndex = ef;
 
-                    case "EngFont":
-                        if (int.TryParse(value, out var ef) && ef >= 0)
-                            FontIndex = ef;
+                    break;
 
-                        break;
+                case "ImportCharacterData":
+                    if (int.TryParse(value, out var ci))
+                        LegacyCharacterImport = ci;
 
-                    case "ImportCharacterData":
-                        if (int.TryParse(value, out var ci))
-                            LegacyCharacterImport = ci;
+                    break;
 
-                        break;
+                case "UiTheme":
+                    UiTheme = value.Length > 0 ? value : null;
 
-                    case "UiTheme":
-                        UiTheme = value.Length > 0 ? value : null;
-
-                        break;
-                }
+                    break;
             }
-        } catch
-        {
-            //corrupted file — use whatever defaults/partial state was already set
         }
 
-        //first-run migration: if we just read the legacy file, persist to the new per-user location
-        if (loadPath != FilePath)
-            Save();
+        return true;
     }
 
     /// <summary>
     ///     Saves the current settings to <c>brigid.cfg</c> (per-user app root) in the original format. Best-effort —
-    ///     never throws on a write failure.
+    ///     never throws on a write failure, and does not write a file whose read failed.
     /// </summary>
     public static void Save() => Save(FilePath);
 
     /// <summary>Saves the current settings to the file at <paramref name="path" />. Internal for the tests.</summary>
-    internal static void Save(string path) => DataDiagnostics.Try(
-        () =>
+    internal static SaveResult Save(string path) => GuardedFile.ForSession(path, FILE_DESCRIPTION).Save(
+        p =>
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            Directory.CreateDirectory(Path.GetDirectoryName(p)!);
 
-            using var writer = new StreamWriter(path, false);
+            using var writer = new StreamWriter(p, false);
             writer.WriteLine("Version: 9728");
             writer.WriteLine("Port: 5");
             writer.WriteLine($"Speed: {Speed}");
@@ -251,5 +277,5 @@ public static class ClientSettings
             writer.WriteLine($"UserClickMode : {(EnableProfileClick ? 0 : 1)}");
             writer.WriteLine($"MonsterSayRecordMode : {(RecordNpcChat ? 1 : 0)}");
             writer.WriteLine($"GroupObjectOption : {(UseGroupWindow ? 1 : 0)}");
-        }, "ClientSettings.Save");
+        });
 }

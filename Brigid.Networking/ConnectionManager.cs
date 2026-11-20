@@ -109,19 +109,50 @@ public sealed class ConnectionManager : IDisposable
     /// </summary>
     public ConnectionState State
     {
-        get;
+        get => StateValue;
+        private set => SetState(value, keepConnecting: false);
+    }
 
-        private set
+    private ConnectionState StateValue = ConnectionState.Disconnected;
+
+    //one lock for the read, the check and both writes, so HandleRedirect never sees Disconnected with an older
+    //StateAtClose, and a disconnect cannot replace a Connecting that the game loop sets at the same time. StateChanged is
+    //raised after the lock, so its handlers never run under it
+    private void SetState(ConnectionState value, bool keepConnecting, int? closedConnection = null)
+    {
+        ConnectionState old;
+
+        using (StateLock.EnterScope())
         {
-            if (field == value)
+            //a late close of a connection that a new one replaced: the new connection's state stays. A state that the
+            //new connection's packets set comes after its number, so the check and the write are one step here
+            if (closedConnection is { } closed && (closed != Client.CurrentConnection))
                 return;
 
-            var old = field;
-            field = value;
-            NoticeDebugLog.Write($"ConnectionState {old} -> {value}");
-            StateChanged?.Invoke(old, value);
+            old = State;
+
+            if ((old == value) || (keepConnecting && (old == ConnectionState.Connecting)))
+                return;
+
+            if (value == ConnectionState.Disconnected && old is ConnectionState.Lobby or ConnectionState.Login or ConnectionState.World)
+                StateAtClose = old;
+
+            StateValue = value;
         }
-    } = ConnectionState.Disconnected;
+
+        NoticeDebugLog.Write($"ConnectionState {old} -> {value}");
+        StateChanged?.Invoke(old, value);
+    }
+
+    /// <summary>Moves the state as a connection does, for the tests.</summary>
+    internal void SetStateForTests(ConnectionState state) => State = state;
+
+    //the state that the last connection was in when it closed. A server close sets Disconnected on the network thread,
+    //and a Redirect that came before the close is handled after it on the game loop; that redirect goes where its own
+    //connection sent it (BRIG-180). It is never reset: each connect clears the inbound queue, so a Redirect handled in
+    //Disconnected always comes from the connection that closed last
+    private ConnectionState StateAtClose = ConnectionState.Disconnected;
+    private readonly Lock StateLock = new();
 
     /// <summary>
     ///     The low-level TCP client used for packet I/O, encryption, and socket management.
@@ -1540,7 +1571,11 @@ public sealed class ConnectionManager : IDisposable
         PacketHandlers[(byte)ServerOpcode.Metafile] = HandleMetaData;
     }
 
-    private void HandlePacket(IServerPacket pkt)
+    /// <summary>
+    ///     Hands one packet to its handler. Internal so that a test can do that without the redirect follow-up of
+    ///     <see cref="ProcessPackets" />.
+    /// </summary>
+    internal void HandlePacket(IServerPacket pkt)
     {
         var handler = PacketHandlers[pkt.Opcode];
         NoticeDebugLog.Write($"inbound opcode=0x{pkt.Opcode:X2} handled={handler is not null} state={State}");
@@ -1592,7 +1627,13 @@ public sealed class ConnectionManager : IDisposable
     {
         var pkt = (Server.RedirectPacket)p;
 
-        var targetState = RedirectTargetFor(State);
+        //read the state and StateAtClose together: a close between two reads would send a world transfer to Login
+        ConnectionState sentFrom;
+
+        using (StateLock.EnterScope())
+            sentFrom = State == ConnectionState.Disconnected ? StateAtClose : State;
+
+        var targetState = RedirectTargetFor(sentFrom);
 
         //consumed: any redirect resolves the pending quit. A confirm that the server ignored is cleared when the grace
         //time ends (ClearExitConfirm), so it does not send a later world transfer to Login
@@ -1606,10 +1647,10 @@ public sealed class ConnectionManager : IDisposable
             pkt.RedirectId,
             targetState);
 
-        //order matters: fire the redirect event BEFORE Disconnect. Disconnect synchronously fires
-        //OnDisconnected → State setter → StateChanged, and the world-screen handler suppresses its
-        //"Connection lost" popup based on a flag set by OnRedirectReceived. Inverting this order
-        //races the popup against the redirect flag.
+        //fire the redirect event before Disconnect: a Disconnect of a live connection raises OnDisconnected at once, and
+        //the screens read the redirect flag that OnRedirectReceived sets. After a server close, the Disconnected came
+        //first, on the network thread; the screens then decide in Update, after the game loop handled this Redirect
+        //(WorldScreen.ConnectionOutcomeFor, LobbyLoginScreen.IsLostConnection).
         OnRedirectReceived?.Invoke(PendingRedirect.Value);
 
         //begin teardown — the redirect will be followed from the game loop once the old connection is fully dead.
@@ -1820,11 +1861,11 @@ public sealed class ConnectionManager : IDisposable
 
     private void HandleMetaData(IServerPacket p) => OnMetaData?.Invoke((Server.MetafilePacket)p);
 
-    private void HandleDisconnected()
-    {
-        if (State != ConnectionState.Connecting)
-            State = ConnectionState.Disconnected;
-    }
+    //runs on the network thread. The check and the write are one step under the state lock: the game loop can set
+    //Connecting for a redirect at the same time, and a Disconnected over it would show "Connection lost" during the hop.
+    //A close of a connection that is not the client's current one changes nothing. Internal for the tests
+    internal void HandleDisconnected(int connection)
+        => SetState(ConnectionState.Disconnected, keepConnecting: true, closedConnection: connection);
     #endregion
 }
 

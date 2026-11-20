@@ -115,6 +115,14 @@ public sealed class ChatInputControl : UIPanel
             dispatcher.ChatInputTextBox = TextBox;
     }
 
+    //the box goes away with its world screen: after a logout, the lobby has no chat box
+    public override void Dispose()
+    {
+        InputDispatcher.Instance?.ReleaseChatInput(TextBox);
+
+        base.Dispose();
+    }
+
     //--- events ---
 
     public event MessageSentHandler? MessageSent;

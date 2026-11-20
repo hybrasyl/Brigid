@@ -14,9 +14,19 @@ public sealed class SpellSlot : AbilitySlotControl
     public SpellType SpellType { get; set; }
     public string[] Chants { get; } = new string[10];
 
-    public SpellSlot()
+    public SpellSlot() => SetChants(null);
+
+    /// <summary>
+    ///     Replaces the ten chant lines: each line that <paramref name="chants" /> does not give is empty. A spell with no
+    ///     saved chants (null) then has no chant, and does not keep the lines of the last spell or of an older file.
+    /// </summary>
+    public void SetChants(string[]? chants) => CopyChants(chants, Chants);
+
+    internal static void CopyChants(string[]? from, string[] to)
     {
-        for (var i = 0; i < 10; i++)
-            Chants[i] = string.Empty;
+        Array.Fill(to, string.Empty);
+
+        if (from is not null)
+            Array.Copy(from, to, Math.Min(from.Length, to.Length));
     }
 }

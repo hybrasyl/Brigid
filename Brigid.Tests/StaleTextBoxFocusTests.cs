@@ -1,4 +1,5 @@
 using Brigid.Controls.Components;
+using Brigid.Definitions;
 using Xunit;
 
 namespace Brigid.Tests;
@@ -59,5 +60,39 @@ public class StaleTextBoxFocusTests
         dispatcher.ReleaseHiddenExplicitFocus();
 
         Assert.Null(dispatcher.ExplicitFocus);
+    }
+
+    //a box that kept IsFocused after a popup took the explicit focus: a click links it to the dispatcher again, and does
+    //not raise OnFocused, because the box was focused all the time (BRIG-175)
+    [Fact]
+    public void OnMouseDown_AStaleFocusedBoxTakesTheExplicitFocusAgain()
+    {
+        var (dispatcher, _, box) = FocusedLoginBox();
+        using var _ = dispatcher;
+        var focusedEvents = 0;
+        box.OnFocused += _ => focusedEvents++;
+
+        dispatcher.ClearExplicitFocus();
+
+        box.OnMouseDown(new MouseDownEvent { Button = MouseButton.Left, ScreenX = box.ScreenX + 1, ScreenY = box.ScreenY + 1 });
+
+        Assert.Same(box, dispatcher.ExplicitFocus);
+        Assert.Equal(0, focusedEvents);
+    }
+
+    [Fact]
+    public void OnMouseDown_AnUnfocusedBoxRaisesOnFocusedOnce()
+    {
+        var (dispatcher, _, box) = FocusedLoginBox();
+        using var _ = dispatcher;
+        box.IsFocused = false;
+        var focusedEvents = 0;
+        box.OnFocused += _ => focusedEvents++;
+
+        box.OnMouseDown(new MouseDownEvent { Button = MouseButton.Left, ScreenX = box.ScreenX + 1, ScreenY = box.ScreenY + 1 });
+
+        Assert.True(box.IsFocused);
+        Assert.Same(box, dispatcher.ExplicitFocus);
+        Assert.Equal(1, focusedEvents);
     }
 }

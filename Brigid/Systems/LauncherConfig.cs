@@ -37,6 +37,7 @@ public static class LauncherConfig
     //frozen: the config filename in the pre-Erisco home, used only to locate the file to migrate FROM. The live
     //config name is owned by AppPaths.ConfigFile and may diverge from this without affecting migration.
     private const string LEGACY_FILE_NAME = "config.json";
+    private const string FILE_DESCRIPTION = "server list";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -82,26 +83,29 @@ public static class LauncherConfig
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Brigid", LEGACY_FILE_NAME);
 
     /// <summary>
-    ///     Loads the config file into the static state. Missing/corrupt files yield a fresh default list. Always ensures at
-    ///     least the default <c>da0.kru.com:2610</c> server exists, and migrates the legacy single host/port shape (from the
-    ///     first version of this file) into a list entry.
+    ///     Loads the config file into the static state. A missing file yields a fresh default list. A file that cannot be
+    ///     read yields the defaults, and its save is refused, so the defaults do not replace the player's servers; a file
+    ///     that does not parse yields the defaults and is kept as a <c>.bad</c> copy (see <see cref="GuardedFile" />).
+    ///     Always ensures at least the default <c>da0.kru.com:2610</c> server exists, and migrates the legacy single
+    ///     host/port shape (from the first version of this file) into a list entry.
     /// </summary>
     public static void Load()
     {
         TryMigrateLegacyConfig();
+        Load(FilePath);
+    }
 
-        Model? model = null;
+    /// <summary>True when <paramref name="port" /> is a TCP port that a server can listen on (1 to 65535).</summary>
+    public static bool IsValidPort(int port) => port is >= 1 and <= 65535;
 
-        if (File.Exists(FilePath))
-            try
-            {
-                model = JsonSerializer.Deserialize<Model>(File.ReadAllText(FilePath), SerializerOptions);
-            } catch
-            {
-                //corrupt config — fall through to defaults
-            }
+    /// <summary>Loads the config file at <paramref name="path" />, with no legacy migration. Internal for the tests.</summary>
+    internal static void Load(string path)
+    {
+        var model = GuardedFile.ForSession(path, FILE_DESCRIPTION).ReadJson<Model>(SerializerOptions);
 
-        Servers = model?.Servers ?? [];
+        //a hand edit can leave a null entry, an entry with no host or a port out of range; such an entry has no server to
+        //connect to
+        Servers = [.. (model?.Servers ?? []).Where(server => (server is not null) && !string.IsNullOrWhiteSpace(server.Host) && IsValidPort(server.Port))];
         SelectedServer = model?.SelectedServer;
         AssetPath = model?.AssetPath;
         WindowMultiplier = model?.WindowMultiplier;
@@ -109,7 +113,7 @@ public static class LauncherConfig
 
         //migrate the pre-server-list shape: a single Host/Port becomes a list entry
         if (!string.IsNullOrWhiteSpace(model?.Host))
-            AddOrSelectServer(model.Host, model.Port is >= 1 and <= 65535 ? model.Port.Value : DEFAULT_PORT, null);
+            AddOrSelectServer(model.Host, model.Port is { } port && IsValidPort(port) ? port : DEFAULT_PORT, null);
 
         //ship with a default server so the dropdown is never empty
         if (Servers.Count == 0)
@@ -124,47 +128,63 @@ public static class LauncherConfig
     ///     once the new file exists or when there is nothing to migrate. Never throws — a failed migration just falls
     ///     through to default config on first launch.
     /// </summary>
-    private static void TryMigrateLegacyConfig()
+    private static void TryMigrateLegacyConfig() => TryMigrateLegacyConfig(LegacyFilePath, FilePath);
+
+    /// <summary>Copies the legacy config at <paramref name="legacyPath" /> to <paramref name="path" /> when <see cref="TakesLegacyConfig" />. Internal for the tests.</summary>
+    internal static void TryMigrateLegacyConfig(string legacyPath, string path)
+    {
+        if (!TakesLegacyConfig(path))
+            return;
+
+        //best effort: a missing or locked legacy file gives the default config
+        DataDiagnostics.Try(
+            () =>
+            {
+                if (!File.Exists(legacyPath))
+                    return;
+
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.Copy(legacyPath, path, true);
+            }, "copy the legacy launcher config");
+    }
+
+    /// <summary>
+    ///     True when the config at <paramref name="path" /> is not found, or is empty (a crash during the first save of an
+    ///     older client). A file that cannot be read is not replaced: <see cref="File.Exists" /> is also false when the check
+    ///     fails, so the legacy config was copied over a file that a check could not see.
+    /// </summary>
+    internal static bool TakesLegacyConfig(string path)
     {
         try
         {
-            if (!File.Exists(LegacyFilePath))
-                return;
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
 
-            //migrate when the new config is absent OR a 0-byte artifact of a crashed first Save (File.WriteAllText
-            //truncates before writing, so a mid-write crash leaves an empty file). A present, non-empty file is
-            //authoritative and left untouched — the overwrite below only ever replaces the empty placeholder.
-            if (File.Exists(FilePath) && (new FileInfo(FilePath).Length > 0))
-                return;
-
-            Directory.CreateDirectory(ConfigDirectory);
-            File.Copy(LegacyFilePath, FilePath, true);
-        } catch
+            return stream.Length == 0;
+        } catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
-            //best effort — a missing/locked legacy file just means a fresh default config
+            return true;
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
-    public static void Save()
+    /// <summary>Saves the config file. Best effort: a failed write is logged, and a file whose read failed is not written.</summary>
+    public static void Save() => Save(FilePath);
+
+    /// <summary>Saves the config to the file at <paramref name="path" />. Internal for the tests.</summary>
+    internal static SaveResult Save(string path)
     {
-        try
+        var model = new Model
         {
-            Directory.CreateDirectory(ConfigDirectory);
+            Servers = Servers,
+            SelectedServer = SelectedServer,
+            AssetPath = AssetPath,
+            WindowMultiplier = WindowMultiplier,
+            SuppressLauncher = SuppressLauncher
+        };
 
-            var model = new Model
-            {
-                Servers = Servers,
-                SelectedServer = SelectedServer,
-                AssetPath = AssetPath,
-                WindowMultiplier = WindowMultiplier,
-                SuppressLauncher = SuppressLauncher
-            };
-
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(model, SerializerOptions));
-        } catch
-        {
-            //best effort — don't crash on save failure
-        }
+        return GuardedFile.ForSession(path, FILE_DESCRIPTION).SaveJson(model, SerializerOptions);
     }
 
     /// <summary>Returns the currently-selected server, falling back to the first entry (or null if the list is empty).</summary>

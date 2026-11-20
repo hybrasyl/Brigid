@@ -205,7 +205,7 @@ public static class GlobalSettings
     }
 
     private static int ParsePort(string? value)
-        => int.TryParse(value, out var p) && p is >= 1 and <= 65535 ? p : LauncherConfig.DEFAULT_PORT;
+        => int.TryParse(value, out var p) && LauncherConfig.IsValidPort(p) ? p : LauncherConfig.DEFAULT_PORT;
 
     private static bool IsTruthy(string? value)
     {

@@ -154,6 +154,17 @@ public sealed class InputDispatcher : IDisposable
     /// </summary>
     public void ClearExplicitFocus() => SetExplicitFocus(null);
 
+    /// <summary>
+    ///     Forgets <paramref name="textBox" /> as the chat input when it is still the registered one. The world screen's
+    ///     chat box goes away with that screen, and the lobby that follows has no chat box, so the no-hand-over rule of
+    ///     <see cref="RemoveControl" /> holds there again.
+    /// </summary>
+    public void ReleaseChatInput(UITextBox textBox)
+    {
+        if (ChatInputTextBox == textBox)
+            ChatInputTextBox = null;
+    }
+
     //── control stack ──
 
     /// <summary>
@@ -203,20 +214,45 @@ public sealed class InputDispatcher : IDisposable
     }
 
     /// <summary>
-    ///     Removes a panel from the control stack. If the removed panel contains the
-    ///     explicitly focused element, clears explicit focus.
+    ///     Removes a panel from the control stack. If the removed panel contains the explicitly focused element, clears
+    ///     explicit focus. A panel that is not on the stack changes nothing: a Hide on a hidden panel calls this. A lower
+    ///     panel changes no focus in the panels above it, and gives its stashed focus to the panel directly above it. A
+    ///     shown text box outside the panel that has the focus keeps it.
     /// </summary>
     public void RemoveControl(UIPanel panel)
     {
-        ControlStack.Remove(panel);
+        var index = ControlStack.IndexOf(panel);
+
+        if (index < 0)
+            return;
+
+        var wasTop = index == (ControlStack.Count - 1);
+        ControlStack.RemoveAt(index);
 
         if (TextFocusKeepers.Remove(panel))
             return;
 
         StashedFocus.Remove(panel, out var stashed);
+        var focusWasInside = ExplicitFocusElement is not null && IsDescendantOf(panel, ExplicitFocusElement);
 
-        if (ExplicitFocusElement is not null && IsDescendantOf(panel, ExplicitFocusElement))
+        if (focusWasInside)
             ClearExplicitFocus();
+
+        if (!wasTop)
+        {
+            PassStashUp(panel, stashed, index);
+
+            if (!focusWasInside)
+                return;
+
+            //the stash now belongs to the panel above, so the focus goes to the top
+            stashed = null;
+        }
+
+        //a text box outside this panel that the player focused while this panel was on top keeps the keys: neither the
+        //stash nor the new top takes them from it
+        if (ExplicitFocusElement is UITextBox { IsFocused: true } live && IsEffectivelyVisible(live))
+            return;
 
         //prefer the focus that was active before this panel pushed (typically a textbox
         //in the panel below). without this, a popup over a login textbox would leave
@@ -239,9 +275,11 @@ public sealed class InputDispatcher : IDisposable
         //focus follows the stack top: after removal, the new top becomes the focus
         //target so keys route into it via Phase 1/1.5 before Phase 2 stack dispatch.
         //when the stack is now empty, leave focus clear (root-level hotkeys take over).
-        //exception: don't override the chat input textbox — it owns its focus track.
+        //exception: don't override the chat input textbox — it owns its focus track. the lobby has no chat box and gets
+        //no hand-over: a panel that holds the explicit focus blocks each click outside it (IsMouseBlocked)
         if (TopControl is { } newTop
             && IsEffectivelyVisible(newTop)
+            && ChatInputTextBox is not null
             && (ExplicitFocusElement != ChatInputTextBox))
             SetExplicitFocus(newTop);
     }
@@ -949,6 +987,25 @@ public sealed class InputDispatcher : IDisposable
 
     private static bool IsSelfOrDescendantOf(UIPanel ancestor, UIElement element)
         => (element == ancestor) || IsDescendantOf(ancestor, element);
+
+    //a stash of the panel above that is empty or points into the removed panel was set while the removed panel was open,
+    //so the focus to give back when the panel above closes is the removed panel's own stash. A panel that keeps the text
+    //focus (an open drop-down list) has no stash, so the stash goes to the first panel above it that has one
+    private void PassStashUp(UIPanel removed, UIElement? removedStash, int firstAboveIndex)
+    {
+        for (var i = firstAboveIndex; i < ControlStack.Count; i++)
+        {
+            var above = ControlStack[i];
+
+            if (!StashedFocus.TryGetValue(above, out var aboveStash))
+                continue;
+
+            if (aboveStash is null || IsSelfOrDescendantOf(removed, aboveStash))
+                StashedFocus[above] = removedStash;
+
+            return;
+        }
+    }
 
     /// <summary>
     ///     True if <paramref name="descendant" /> is a child, grandchild, etc. of <paramref name="ancestor" />.

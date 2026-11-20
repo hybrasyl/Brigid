@@ -40,14 +40,7 @@ public sealed partial class WorldScreen
             WorldState.PlayerName = args.Name;
             UpdateHuds(HudOps.SetPlayerName, args.Name);
             UpdateHuds(HudOps.SetServerName, Game.Connection.ServerName);
-            var serverKey = ServerProfileKey.Resolve(GlobalSettings.LobbyHost, Game.Connection.ServerName);
-            var importLegacy = ClientSettings.LegacyCharacterImport == ClientSettings.MigrationImport;
-            DataContext.LocalPlayerSettings.Initialize(args.Name, serverKey, importLegacy);
-            LoadPlayerFamilyList();
-            LoadPlayerFriendList();
-            LoadPlayerMacros();
-            WorldState.ReloadChants();
-            LoadOwnProfile(args.Name);
+            LoadLocalFilesOnEntry(args.Name);
 
             //the class — and so the SClass ability metadata behind the castable popup's Details tab — is only
             //revealed by a self-profile reply. Ask for one unsolicited (SelfProfileRequested stays false, so the
@@ -802,48 +795,17 @@ public sealed partial class WorldScreen
 
     private void HandleEditableProfileRequest() => Game.Connection.SendEditableProfile(PlayerPortrait, StatusBook.GetProfileText());
 
-    //the player's own portrait and profile text from the character folder, into the status book. This runs on each map
-    //change, so a changed portrait file shows after the next one; an unchanged portrait is not decoded again
+    //the player's own portrait and profile text from the character folder, into the status book, at world entry. A
+    //portrait file that cannot be read keeps the portrait that the screen has
     private void LoadOwnProfile(string name)
     {
-        var portrait = LoadPortraitFile(name);
-
-        if (!portrait.AsSpan().SequenceEqual(PlayerPortrait))
+        if (DataContext.LocalPlayerSettings.TryLoadPortrait(name, out var portrait))
         {
             PlayerPortrait = portrait;
             StatusBook.SetPortrait(portrait);
         }
 
-        StatusBook.SetProfileText(LoadProfileText());
-    }
-
-    //the name comes from the server, and the portrait goes back to it in the editable profile, so TryGetFilePath must
-    //refuse a name that leaves the character folder
-    private static byte[] LoadPortraitFile(string name)
-    {
-        if (string.IsNullOrEmpty(name))
-            return [];
-
-        if (DataContext.LocalPlayerSettings.TryGetFilePath($"{name}.jpg", out var jpgPath) && File.Exists(jpgPath))
-            return File.ReadAllBytes(jpgPath);
-
-        if (DataContext.LocalPlayerSettings.TryGetFilePath(name, out var noExtPath) && File.Exists(noExtPath))
-            return File.ReadAllBytes(noExtPath);
-
-        return [];
-    }
-
-    private static string LoadProfileText()
-        => DataContext.LocalPlayerSettings.TryGetFilePath("profile.txt", out var profilePath) && File.Exists(profilePath)
-            ? File.ReadAllText(profilePath)
-            : string.Empty;
-
-    private static void SaveProfileText(string text)
-    {
-        if (!DataContext.LocalPlayerSettings.TryGetFilePath("profile.txt", out var profilePath))
-            return;
-
-        DataDiagnostics.Try(() => File.WriteAllText(profilePath, text), "SaveProfileText");
+        StatusBook.SetProfileText(DataContext.LocalPlayerSettings.LoadProfileText());
     }
 
     private void HandleSelfProfile(SelfProfilePacket args)
@@ -910,7 +872,6 @@ public sealed partial class WorldScreen
 
         //family info — DALib self-profile has no spouse field; derived below from the group string.
         StatusBook.SetFamilyInfo(string.Empty);
-        LoadPlayerFamilyList();
 
         //paperdoll — render the player's full aisling at south-facing idle
         var playerEntity = WorldState.GetPlayerEntity();

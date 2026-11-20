@@ -2,6 +2,7 @@
 using System.Collections.Frozen;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Brigid.Data;
 using Brigid.Definitions;
 using Brigid.Networking;
 using Microsoft.Xna.Framework.Input;
@@ -416,34 +417,24 @@ public static class Keybinds
         Overrides.Clear();
     }
 
+    private const string FILE_DESCRIPTION = "key bindings";
+
+    private static string FilePath => Path.Combine(GlobalSettings.DataPath, FILE_NAME);
+
     /// <summary>
-    ///     Loads overrides-only from <c>keybinds.json</c>. Missing/corrupt file → pure defaults. Unknown
+    ///     Loads overrides-only from <c>keybinds.json</c>. Missing file → pure defaults. A file that cannot be read gives
+    ///     the defaults, and its save is refused, so the defaults do not replace the player's keys; a file that does not
+    ///     parse gives the defaults and is kept as <c>keybinds.json.bad</c> (see <see cref="GuardedFile" />). Unknown
     ///     command names (a renamed/removed <see cref="CommandId" /> or a hand-edited typo) are skipped
     ///     per-entry so one stale key doesn't discard every valid override.
     /// </summary>
-    public static void Load()
+    public static void Load() => Load(FilePath);
+
+    /// <summary>Loads the overrides from the file at <paramref name="path" />. Internal for the tests.</summary>
+    internal static void Load(string path)
     {
-        var path = Path.Combine(GlobalSettings.DataPath, FILE_NAME);
-
-        if (!File.Exists(path))
-            return;
-
         //string keys so an unknown command name can't fault the whole deserialize.
-        Dictionary<string, KeyBinding>? loaded;
-
-        try
-        {
-            loaded = JsonSerializer.Deserialize<Dictionary<string, KeyBinding>>(File.ReadAllText(path), JsonOptions);
-        } catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException or System.Security.SecurityException)
-        {
-            //Load() runs during startup (FinishAssetInitialization) with no enclosing handler, so a locked or
-            //permission-denied file must degrade to defaults rather than abort the launch.
-            NoticeDebugLog.Write($"[Keybinds] failed to load {FILE_NAME}: {ex.Message}");
-
-            return;
-        }
-
-        if (loaded is null)
+        if (GuardedFile.ForSession(path, FILE_DESCRIPTION).ReadJson<Dictionary<string, KeyBinding>>(JsonOptions) is not { } loaded)
             return;
 
         var skipped = 0;
@@ -463,23 +454,21 @@ public static class Keybinds
             NoticeDebugLog.Write($"[Keybinds] skipped {skipped} unknown command(s) in {FILE_NAME}");
     }
 
-    /// <summary>Writes overrides-only to <c>keybinds.json</c>. Defaults are never serialized.</summary>
-    public static void Save()
+    /// <summary>
+    ///     Writes overrides-only to <c>keybinds.json</c>. Defaults are never serialized. A failed write is logged, and
+    ///     a file whose read failed is not written.
+    /// </summary>
+    public static void Save() => Save(FilePath);
+
+    /// <summary>Writes the overrides to the file at <paramref name="path" />. Internal for the tests.</summary>
+    internal static SaveResult Save(string path)
     {
         Dictionary<CommandId, KeyBinding> snapshot;
 
         using (Gate.EnterScope())
             snapshot = new Dictionary<CommandId, KeyBinding>(Overrides);
 
-        var path = Path.Combine(GlobalSettings.DataPath, FILE_NAME);
-
-        try
-        {
-            File.WriteAllText(path, JsonSerializer.Serialize(snapshot, JsonOptions));
-        } catch (IOException ex)
-        {
-            NoticeDebugLog.Write($"[Keybinds] failed to save {FILE_NAME}: {ex.Message}");
-        }
+        return GuardedFile.ForSession(path, FILE_DESCRIPTION).SaveJson(snapshot, JsonOptions);
     }
 }
 

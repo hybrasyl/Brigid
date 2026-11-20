@@ -21,13 +21,20 @@ namespace Brigid.Tests;
 /// <remarks>
 ///     DALib's codec is a fixture here, not the subject — the frames are encoded and decoded with
 ///     the same codec on purpose, so any failure is attributable to the plumbing between them
-///     rather than to framing.
+///     rather than to framing. The server-close tests cover the teardown of BRIG-176: a server close frees the
+///     connection and raises OnDisconnected once, and keeps the packets that came before it. The connect tests after
+///     a close or a failed connect guard the new teardown; they passed on the old code too.
 /// </remarks>
+[Collection("GameClientTransport")]
 public class GameClientTransportTests
 {
     private static readonly PacketCodec Codec = new();
 
     private const int TIMEOUT_MS = 5000;
+
+    //a teardown that waits for itself deadlocks, and the Dispose at the end of the test then never returns; the timeout
+    //fails such a test in place of a hung run (the collection runs alone, which a timeout needs)
+    private const int TEST_TIMEOUT_MS = 20000;
 
     /// <summary>
     ///     A frame written to the accepted socket reaches the game loop as a typed packet — the
@@ -121,6 +128,254 @@ public class GameClientTransportTests
         Assert.False(client.Connected);
     }
 
+    /// <summary>
+    ///     A server close frees the client's socket, stream, buffer and token, and raises OnDisconnected once. Before,
+    ///     the receive loop only marked the connection dead, and each later teardown returned early, so the socket stayed
+    ///     half-closed (BRIG-176).
+    /// </summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task ServerClose_FreesTheConnectionAndRaisesOnDisconnectedOnce()
+    {
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+        var disconnects = 0;
+        client.OnDisconnected += _ => Interlocked.Increment(ref disconnects);
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+
+        listener.ShutdownSend();
+
+        Assert.True(await listener.ReadsEndOfStreamAsync(), "the client did not close its socket");
+
+        //the teardown frees the connection and then raises the event, so wait for the event
+        await WaitUntilAsync(() => Volatile.Read(ref disconnects) == 1);
+        Assert.False(client.HoldsConnection);
+
+        client.Disconnect();
+
+        Assert.Equal(1, Volatile.Read(ref disconnects));
+    }
+
+    /// <summary>
+    ///     The close event carries the number of its connection, and the next connection has a new number, so that the
+    ///     connection manager can ignore a late close of a connection that a new one replaced.
+    /// </summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task ServerClose_CarriesTheNumberOfItsConnection()
+    {
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+        var closed = -1;
+        client.OnDisconnected += connection => Volatile.Write(ref closed, connection);
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+        var first = client.CurrentConnection;
+
+        Assert.NotEqual(0, first);
+
+        listener.ShutdownSend();
+        await WaitUntilAsync(() => Volatile.Read(ref closed) != -1);
+
+        Assert.Equal(first, Volatile.Read(ref closed));
+
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+
+        Assert.NotEqual(first, client.CurrentConnection);
+    }
+
+    /// <summary>
+    ///     A Disconnect of a live connection raises OnDisconnected once, with the connection's number, after it releases
+    ///     the connect lock: a handler can then connect again on the same thread.
+    /// </summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task Disconnect_RaisesOnDisconnectedOnceWithTheConnectionsNumber()
+    {
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+        var closed = new List<int>();
+        client.OnDisconnected += connection => closed.Add(connection);
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+
+        client.Disconnect();
+        client.Disconnect();
+
+        Assert.Equal([client.CurrentConnection], closed);
+    }
+
+    /// <summary>A connect after a server close works (BRIG-176).</summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task ServerClose_ThenAConnectWorks()
+    {
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+        listener.ShutdownSend();
+        await WaitUntilAsync(() => !client.Connected);
+
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        var accepted = await listener.AcceptAsync();
+        await accepted.WriteAsync(Codec.EncodeServer(new AcceptConnectionPacket(), new CryptoState()));
+        await accepted.FlushAsync();
+
+        Assert.IsType<AcceptConnectionPacket>(await DrainOneAsync(client));
+    }
+
+    /// <summary>A connect after a connect that failed works (BRIG-176).</summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task FailedConnect_ThenAConnectWorks()
+    {
+        int closedPort;
+
+        using (var unused = new TcpListener(IPAddress.Loopback, 0))
+        {
+            unused.Start();
+            closedPort = ((IPEndPoint)unused.LocalEndpoint).Port;
+        }
+
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+
+        client.ResetCrypto();
+        await Assert.ThrowsAnyAsync<SocketException>(() => client.ConnectAsync("127.0.0.1", closedPort));
+
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        var accepted = await listener.AcceptAsync();
+        await accepted.WriteAsync(Codec.EncodeServer(new AcceptConnectionPacket(), new CryptoState()));
+        await accepted.FlushAsync();
+
+        Assert.IsType<AcceptConnectionPacket>(await DrainOneAsync(client));
+    }
+
+    /// <summary>
+    ///     A server sends a Redirect and then closes the connection. The teardown of the close keeps the packets that
+    ///     arrived before it, so the game loop still gets the Redirect (BRIG-176). The Redirect waits in the queue when the
+    ///     close is raised, so a screen that sees the close decides after the next drain.
+    /// </summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task ServerClose_KeepsThePacketsThatArrivedBeforeIt()
+    {
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+        bool? queuedAtClose = null;
+        client.OnDisconnected += _ => queuedAtClose = client.HasQueuedPackets;
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        var accepted = await listener.AcceptAsync();
+
+        var redirect = Codec.EncodeServer(
+            new RedirectPacket
+            {
+                IpAddress = IPAddress.Loopback,
+                Port = 2611,
+                EncryptionSeed = 1,
+                EncryptionKey = [1, 2, 3],
+                Name = "brigid",
+                RedirectId = 7
+            },
+            new CryptoState());
+
+        await accepted.WriteAsync(redirect);
+        await accepted.FlushAsync();
+        listener.ShutdownSend();
+        await WaitUntilAsync(() => queuedAtClose is not null);
+
+        Assert.True(queuedAtClose);
+        Assert.IsType<RedirectPacket>(await DrainOneAsync(client));
+        Assert.False(client.HasQueuedPackets);
+    }
+
+    /// <summary>
+    ///     A new connect can start after a server close ended the old pump set and before its teardown took the lock. The
+    ///     late teardown frees only the old connection: the new socket, stream and pumps stay, and the close of the old
+    ///     connection raises no event.
+    /// </summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task ServerClose_ALateTeardownLeavesTheConnectionThatReplacedIt()
+    {
+        using var first = new LoopbackListener();
+        using var second = new LoopbackListener();
+        using var client = new GameClient();
+        var closed = new List<int>();
+        client.OnDisconnected += number =>
+        {
+            lock (closed)
+                closed.Add(number);
+        };
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", first.Port);
+        _ = await first.AcceptAsync();
+        var oldConnection = client.CurrentConnection;
+
+        client.ServerCloseEndedForTests = () =>
+        {
+            client.ServerCloseEndedForTests = null;
+            client.ResetCrypto();
+            client.ConnectAsync("127.0.0.1", second.Port)
+                  .GetAwaiter()
+                  .GetResult();
+        };
+
+        var acceptSecond = second.AcceptAsync();
+        first.ShutdownSend();
+
+        Assert.True(await first.ReadsEndOfStreamAsync(), "the late teardown did not close the old socket");
+        _ = await acceptSecond;
+
+        //the event comes after the teardown closes the socket; give a wrong event the time to arrive
+        await Task.Delay(200);
+
+        lock (closed)
+            Assert.Empty(closed);
+
+        Assert.NotEqual(oldConnection, client.CurrentConnection);
+        Assert.True(client.Connected);
+        Assert.True(client.HoldsEveryPart);
+    }
+
+    /// <summary>A Disconnect returns after the receive loop ended, so the loop's buffer is not given back while it reads.</summary>
+    [Fact(Timeout = TEST_TIMEOUT_MS)]
+    public async Task Disconnect_WaitsForTheReceiveLoopToEnd()
+    {
+        using var listener = new LoopbackListener();
+        using var client = new GameClient();
+        var loopEnded = false;
+
+        client.ResetCrypto();
+        await client.ConnectAsync("127.0.0.1", listener.Port);
+        _ = await listener.AcceptAsync();
+
+        client.ReceiveLoopEndingForTests = () =>
+        {
+            Thread.Sleep(200);
+            Volatile.Write(ref loopEnded, true);
+        };
+
+        client.Disconnect();
+
+        Assert.True(Volatile.Read(ref loopEnded));
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        using var timeout = new CancellationTokenSource(TIMEOUT_MS);
+
+        while (!condition())
+            await Task.Delay(10, timeout.Token);
+    }
+
     private static async Task<IServerPacket> DrainOneAsync(GameClient client)
     {
         var buffer = new List<IServerPacket>();
@@ -181,6 +436,7 @@ public class GameClientTransportTests
     {
         private readonly TcpListener Listener;
         private TcpClient? Accepted;
+        private NetworkStream? AcceptedStream;
 
         public LoopbackListener()
         {
@@ -192,10 +448,37 @@ public class GameClientTransportTests
 
         public async Task<Stream> AcceptAsync()
         {
+            Accepted?.Dispose();
             Accepted = await Listener.AcceptTcpClientAsync()
                                      .WaitAsync(TimeSpan.FromMilliseconds(TIMEOUT_MS));
 
-            return Accepted.GetStream();
+            AcceptedStream = Accepted.GetStream();
+
+            return AcceptedStream;
+        }
+
+        //the server half-closes: the client reads the end of the stream, and the server can still read
+        public void ShutdownSend() => Accepted!.Client.Shutdown(SocketShutdown.Send);
+
+        //true when the client closes its side within the timeout
+        public async Task<bool> ReadsEndOfStreamAsync()
+        {
+            var buffer = new byte[256];
+            using var timeout = new CancellationTokenSource(TIMEOUT_MS);
+
+            try
+            {
+                //GetStream refuses a socket that is no longer connected, so read the stream from the accept
+                while (await AcceptedStream!.ReadAsync(buffer, timeout.Token) > 0) { }
+
+                return true;
+            } catch (OperationCanceledException)
+            {
+                return false;
+            } catch (IOException)
+            {
+                return true;
+            }
         }
 
         public void Dispose()

@@ -32,7 +32,7 @@ using Pathfinder = Chaos.Pathfinding.Pathfinder;
 
 namespace Brigid.Screens;
 
-public sealed partial class WorldScreen : IScreen
+public sealed partial class WorldScreen : IScreen, ISaveNoticeHost
 {
     //walk queue: when walk animation is >= 75% complete, one walk can be queued
     private const float WALK_QUEUE_THRESHOLD = 0.75f;
@@ -186,9 +186,25 @@ public sealed partial class WorldScreen : IScreen
         Closed
     }
 
+    //what Update does with a ConnectionEvent (ConnectionOutcomeFor)
+    internal enum ConnectionOutcome
+    {
+        None,
+        EndLogout,
+        ConnectionLost,
+
+        /// <summary>A close came while packets of the connection still wait: decide after the next drain.</summary>
+        DecideNextFrame
+    }
+
     //last transport state pushed to the HUDs, so the per-frame poll only writes on a change.
     private bool TransportSecure;
     private byte[] PlayerPortrait = [];
+
+    //the server and character whose local files this screen loaded. The files load once at world entry, not at each
+    //map change, so unsaved typing in Options stays. The client does not support a hand edit of these files while it
+    //runs: the next save writes over it
+    private string? LocalFilesKey;
     private SelfProfileTextEditorControl SelfProfileTextEditor = null!;
     private Direction? QueuedWalkDirection;
     //set on the game thread when a redirect arrives; HandleStateChanged, which can run on the network thread, reads and
@@ -317,6 +333,7 @@ public sealed partial class WorldScreen : IScreen
         };
         OptionsModal.SettingsRequested += () => Game.Connection.SendOptionToggle(UserOption.Request);
         OptionsModal.FriendsCommitted += SavePlayerFriendList;
+        OptionsModal.MacrosCommitted += SavePlayerMacros;
 
         //the keybind capture modal rides above the Options modal (ZIndex 11 > 10). The tab requests a rebind
         //for a command/slot; on commit we persist the override and repaint the tab underneath. Reset routes
@@ -557,7 +574,7 @@ public sealed partial class WorldScreen : IScreen
         SelfProfileTextEditor.OnSave += text =>
         {
             StatusBook.SetProfileText(text);
-            SaveProfileText(text);
+            DataContext.LocalPlayerSettings.SaveProfileText(text);
         };
 
         AbilityMetadataDetails = new AbilityMetadataDetailsControl
@@ -697,10 +714,6 @@ public sealed partial class WorldScreen : IScreen
 
         //build ui atlas after all hud controls are constructed
         UiRenderer.Instance?.BuildAtlas();
-
-        //load local portrait and profile text from character folder
-        var playerName = Game.Connection.AislingName;
-        LoadOwnProfile(playerName);
     }
 
     //single keybind-persistence seam: mutate the registry, persist, then repaint the Options tab. Both the

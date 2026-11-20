@@ -8,9 +8,10 @@ namespace Brigid.Networking.Definitions;
 
 #region GameClient Delegates
 /// <summary>
-///     Fired when the client is disconnected from the server.
+///     Fired when the client is disconnected from the server. <paramref name="connection" /> is the number of the
+///     connection that closed (see <c>GameClient.CurrentConnection</c>).
 /// </summary>
-public delegate void DisconnectedHandler();
+public delegate void DisconnectedHandler(int connection);
 #endregion
 
 #region ConnectionManager Delegates

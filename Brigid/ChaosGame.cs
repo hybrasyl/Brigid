@@ -912,6 +912,7 @@ public sealed class ChaosGame : Game
         Connection.ProcessPackets(PacketBuffer);
 
         Screens.Update(gameTime);
+        SaveNotices.ShowOn(Screens.ActiveScreen);
 
         base.Update(gameTime);
     }

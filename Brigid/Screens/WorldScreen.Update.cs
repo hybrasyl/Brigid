@@ -14,29 +14,65 @@ namespace Brigid.Screens;
 
 public sealed partial class WorldScreen
 {
+    /// <summary>
+    ///     What Update does with a connection event. A close that came before the game loop handled the server's Redirect
+    ///     does nothing: the redirect is under way, and its own result (Login, World, or a connect that fails) decides. A
+    ///     close while packets of the connection still wait is decided after the next drain, because a server can send a
+    ///     Redirect and close between the drain and this update. A close in the grace time is the logout (Exit to Menu goes
+    ///     to the login screen, and Exit Game closes the client). Any other close is a lost connection.
+    /// </summary>
+    internal static ConnectionOutcome ConnectionOutcomeFor(
+        ConnectionEvent connectionEvent,
+        bool redirectInProgress,
+        bool awaitingLogout,
+        bool packetsWait)
+        => connectionEvent switch
+        {
+            ConnectionEvent.LoggedOut => ConnectionOutcome.EndLogout,
+            ConnectionEvent.Closed when redirectInProgress => ConnectionOutcome.None,
+            ConnectionEvent.Closed when packetsWait => ConnectionOutcome.DecideNextFrame,
+            ConnectionEvent.Closed when awaitingLogout => ConnectionOutcome.EndLogout,
+            ConnectionEvent.Closed => ConnectionOutcome.ConnectionLost,
+            _ => ConnectionOutcome.None
+        };
+
+    /// <summary>
+    ///     Takes the connection event that waits in <paramref name="pendingEvent" /> and decides it
+    ///     (<see cref="ConnectionOutcomeFor" />). A close that is decided after the next drain goes back for the next frame,
+    ///     unless the network thread recorded another event since then (a logout).
+    /// </summary>
+    internal static ConnectionOutcome TakeConnectionOutcome(ref int pendingEvent, bool redirectInProgress, bool awaitingLogout, bool packetsWait)
+    {
+        var connectionEvent = (ConnectionEvent)Interlocked.Exchange(ref pendingEvent, (int)ConnectionEvent.None);
+        var outcome = ConnectionOutcomeFor(connectionEvent, redirectInProgress, awaitingLogout, packetsWait);
+
+        if (outcome == ConnectionOutcome.DecideNextFrame)
+            Interlocked.CompareExchange(ref pendingEvent, (int)ConnectionEvent.Closed, (int)ConnectionEvent.None);
+
+        return outcome;
+    }
+
+    /// <summary>
+    ///     True when the exit grace time waits this frame: while a redirect connects, and while a close waits for the
+    ///     packets before it, which can hold the logout Redirect. A grace time that ended then cleared the exit confirm, and
+    ///     the logout went back to the world.
+    /// </summary>
+    internal static bool ExitGraceWaits(bool redirectInProgress, ConnectionOutcome outcome)
+        => redirectInProgress || (outcome == ConnectionOutcome.DecideNextFrame);
+
     public void Update(GameTime gameTime)
     {
-        switch ((ConnectionEvent)Interlocked.Exchange(ref PendingConnectionEvent, (int)ConnectionEvent.None))
+        var outcome = TakeConnectionOutcome(ref PendingConnectionEvent, RedirectInProgress, ExitFlow.IsAwaitingLogout, Game.Connection.Client.HasQueuedPackets);
+
+        switch (outcome)
         {
-            case ConnectionEvent.LoggedOut:
-                EndLogout();
-
-                return;
-
-            //a close that came before the game loop handled the server's Redirect: the redirect is under way now, and its
-            //own result (Login, World, or a connect that fails) decides
-            case ConnectionEvent.Closed when RedirectInProgress:
-                break;
-
-            //a close in the grace time is the logout (Exit to Menu goes to the login screen, and Exit Game closes the
-            //client); any other close is a lost connection
-            case ConnectionEvent.Closed when ExitFlow.IsAwaitingLogout:
+            case ConnectionOutcome.EndLogout:
                 EndLogout();
 
                 return;
 
             //a world transfer that cannot connect also ends here, so its loading bar goes
-            case ConnectionEvent.Closed:
+            case ConnectionOutcome.ConnectionLost:
                 MapLoading.Hide();
                 DisconnectPopup.Show("Connection lost.");
 
@@ -59,7 +95,7 @@ public sealed partial class WorldScreen
         //the confirmation confirms by itself when its time ends. After the confirm, a logout goes through
         //HandleStateChanged; when the grace time ends with no logout, Exit to Menu leaves the player in the world, and
         //Exit Game closes the client
-        switch (ExitFlow.Tick(elapsedMs / 1000f, RedirectInProgress))
+        switch (ExitFlow.Tick(elapsedMs / 1000f, ExitGraceWaits(RedirectInProgress, outcome)))
         {
             case ExitStep.Confirm:
                 ConfirmExit();

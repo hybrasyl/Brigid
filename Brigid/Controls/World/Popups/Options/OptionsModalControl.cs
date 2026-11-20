@@ -26,7 +26,8 @@ namespace Brigid.Controls.World.Popups.Options;
 ///         legacy OK/Cancel (save/discard) split is replaced by lossless auto-save (both persist locally).</item>
 ///     </list>
 ///     Settings/Friends server/host coordination is exposed via <see cref="SettingsRequested" /> (request option
-///     data on show) and <see cref="FriendsCommitted" /> (the host saves + mirrors the friend list).
+///     data on show), <see cref="FriendsCommitted" /> (the host saves + mirrors the friend list),
+///     <see cref="MacrosCommitted" /> (the host saves the macros). The modal reads and writes no character file itself.
 /// </summary>
 public sealed class OptionsModalControl : CenteredModalPanel
 {
@@ -87,6 +88,9 @@ public sealed class OptionsModalControl : CenteredModalPanel
 
     /// <summary>Raised when the Friends tab is committed (tab-left/close), so the host can save + mirror the list.</summary>
     public event Action? FriendsCommitted;
+
+    /// <summary>Raised when the Macros tab commits; the host saves the macros.</summary>
+    public event Action? MacrosCommitted;
 
     /// <summary>Raised when a Keybinds row's chord field is clicked, so the host can open the capture modal for
     ///     that command/slot.</summary>
@@ -340,7 +344,7 @@ public sealed class OptionsModalControl : CenteredModalPanel
         switch (tab)
         {
             case OptionsTab.Macros:
-                DataContext.LocalPlayerSettings.SaveMacros(GetMacroValues());
+                MacrosCommitted?.Invoke();
 
                 break;
 

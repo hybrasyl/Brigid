@@ -24,7 +24,7 @@ using ServerEntry = DALib.Networking.Packets.Server.ServerEntry;
 
 namespace Brigid.Screens;
 
-public sealed class LobbyLoginScreen : IScreen
+public sealed class LobbyLoginScreen : IScreen, ISaveNoticeHost
 {
     private const string CONNECTION_LOST = "The connection to the server was lost.";
     private const string NOT_CONNECTED = "The client is not connected to the server.";
@@ -298,11 +298,15 @@ public sealed class LobbyLoginScreen : IScreen
         MaybeShowTrustPrompt();
         MaybeShowInsecurePrompt();
 
-        if (ConnectionLost)
+        if (ConnectionLost && !DecidesLaterForQueuedPackets(FollowingRedirect, Game.Connection.Client.HasQueuedPackets))
         {
             ConnectionLost = false;
-            StopWaitsOnConnectionLoss();
-            ShowOffline();
+
+            if (IsLostConnection(FollowingRedirect, Game.Connection.State))
+            {
+                StopWaitsOnConnectionLoss();
+                ShowOffline();
+            }
         }
 
         StopWaitsThatTimedOut();
@@ -576,6 +580,9 @@ public sealed class LobbyLoginScreen : IScreen
 
     private void OnLobbyLoginPopupMessageOk() => LobbyLoginPopupMessage.Hide();
 
+    /// <summary>Shows a save that did not go through as a main-menu alert (<see cref="SaveNotices" />).</summary>
+    public void ShowSaveNotice(GuardedFile file, SaveResult result) => Menu.Alerts.Add(MenuAlerts.NotSaved(file, result));
+
     //── once-per-process alert that the audio libraries are missing ──
     private void MaybeAddNoSoundAlert()
     {
@@ -698,6 +705,22 @@ public sealed class LobbyLoginScreen : IScreen
                 break;
         }
     }
+
+    /// <summary>
+    ///     Whether a close that the network thread reported is a lost connection, decided on the game loop. A server can
+    ///     send a Redirect and close in one read: the close then comes before the game loop handles the Redirect, and the
+    ///     redirect goes on to the next server, so a form that waits keeps waiting (BRIG-180). A redirect that cannot
+    ///     connect goes to Disconnected, which is a lost connection.
+    /// </summary>
+    internal static bool IsLostConnection(bool followingRedirect, ConnectionState state)
+        => !followingRedirect || (state == ConnectionState.Disconnected);
+
+    /// <summary>
+    ///     Whether a close waits for the next drain before <see cref="IsLostConnection" /> decides. A server close keeps
+    ///     the packets that came before it, and a Redirect and a close can come between the drain and this update. While
+    ///     no redirect is under way and packets wait, the screen decides after the game loop handles them.
+    /// </summary>
+    internal static bool DecidesLaterForQueuedPackets(bool followingRedirect, bool packetsWait) => packetsWait && !followingRedirect;
 
     private void OnConnectionError(string error)
     {

@@ -12,6 +12,7 @@ namespace Brigid.Tests;
 ///     round-trip through <c>keybinds.json</c>. Every test calls <see cref="Keybinds.ResetAll" /> first
 ///     because the registry is process-global static.
 /// </summary>
+[Collection("SettingsFiles")]
 public sealed class KeybindsTests
 {
     //simulates a Windows/Linux key event: pressing Ctrl sets BOTH Ctrl and Meta (same physical key),
