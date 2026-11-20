@@ -466,6 +466,21 @@ public sealed class MetaFileSyncTests : IDisposable
         Assert.Equal(1, Completions);
     }
 
+    //a time limit that stops the oldest file requests the next file at once; it waited another time limit before
+    [Fact]
+    public void Tick_RequestsTheNextFileWhenTheOldestStops()
+    {
+        var sync = NewSync();
+        sync.OnChecksums(Listing("ItemInfo0", "ItemInfo1"));
+        sync.OnData("ItemInfo0", ContentChecksum, Compress([9, 9]));
+        sync.OnData("ItemInfo0", ContentChecksum, Compress([9, 9]));
+
+        Wait(sync, TIMEOUT_MS);
+
+        Assert.Equal(1, sync.PendingCount);
+        Assert.Equal(["ItemInfo0", "ItemInfo1", "ItemInfo0", "ItemInfo0", "ItemInfo1"], Requests);
+    }
+
     //the server answers in order: a slow download of the whole catalog keeps the files that wait, while answers come
     [Fact]
     public void Tick_AnAnswerRestartsTheTimeOfTheFilesThatWait()

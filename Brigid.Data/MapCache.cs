@@ -82,7 +82,7 @@ public static class MapCache
     {
         var path = PathFor(directory, mapId);
 
-        return DataDiagnostics.Try(
+        return DataDiagnostics.TryWrite(
             () =>
             {
                 Directory.CreateDirectory(directory);

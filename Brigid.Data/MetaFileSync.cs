@@ -202,15 +202,17 @@ public sealed class MetaFileSync
         Silences++;
         WaitStart = Clock.GetTimestamp();
 
-        //the server answers in order, so the oldest file is the one it is on; a request again for each file that waits
-        //gave a slow server one request for each file at each time limit
-        var oldest = Pending.GetAt(0).Key;
-
         foreach (var entry in Pending.Values.ToArray())
             if (TriesOf(entry) > MAX_REQUESTS)
                 Stop(entry, "has no answer");
-            else if (entry.Name == oldest)
-                RequestAgain(entry, "has no answer", TriesOf(entry));
+
+        //the server answers in order, so the oldest file that is left is the one it is on; a request again for each file
+        //that waits gave a slow server one request for each file at each time limit
+        if (Pending.Count > 0)
+        {
+            var oldest = Pending.GetAt(0).Value;
+            RequestAgain(oldest, "has no answer", TriesOf(oldest));
+        }
 
         if (Pending.Count == 0)
             Complete();

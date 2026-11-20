@@ -146,6 +146,14 @@ public sealed class MetaFileCacheTests : IDisposable
         Assert.Equal(["Light"], OnDisk());
     }
 
+    //only a write takes the Linux file-size error as an IO failure; in other work it is a bug, and it goes through
+    [Fact]
+    public void OnlyAWriteTakesTheFileSizeErrorAsAFailure()
+    {
+        Assert.False(DataDiagnostics.TryWrite(() => throw new ArgumentOutOfRangeException("value"), "write"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => DataDiagnostics.Try(() => throw new ArgumentOutOfRangeException("index"), "encode"));
+    }
+
     [Fact]
     public void PruneUnlisted_DeletesATemporaryFileThatAWriteLeft()
     {

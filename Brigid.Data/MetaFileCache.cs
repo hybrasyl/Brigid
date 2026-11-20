@@ -100,7 +100,7 @@ public static class MetaFileCache
         var path = Path.Combine(directory, name);
         var temp = path + TEMP_SUFFIX;
 
-        if (DataDiagnostics.Try(
+        if (DataDiagnostics.TryWrite(
                 () =>
                 {
                     Directory.CreateDirectory(directory);

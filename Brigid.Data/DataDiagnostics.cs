@@ -15,11 +15,16 @@ public static class DataDiagnostics
     ///     Runs a file operation, catching (and logging) only IO/permission failures so the caller never crashes on a
     ///     denied/locked/full write. Non-IO exceptions propagate. Returns true on success.
     /// </summary>
-    /// <remarks>
-    ///     On Linux a write over the file-size limit (EFBIG) arrives as <see cref="ArgumentOutOfRangeException" />, so it
-    ///     is an IO failure here too; keep other work that can throw it out of <paramref name="io" />.
-    /// </remarks>
-    public static bool Try(Action io, string what)
+    public static bool Try(Action io, string what) => Run(io, what, catchesFileTooLarge: false);
+
+    /// <summary>
+    ///     Runs a write of a file, as <see cref="Try" /> does. On Linux a write over the file-size limit (EFBIG) arrives as
+    ///     <see cref="ArgumentOutOfRangeException" />, so it is an IO failure here too. Give it only the write: other work
+    ///     that throws that exception is a bug, and <see cref="Try" /> lets it through.
+    /// </summary>
+    public static bool TryWrite(Action write, string what) => Run(write, what, catchesFileTooLarge: true);
+
+    private static bool Run(Action io, string what, bool catchesFileTooLarge)
     {
         try
         {
@@ -27,7 +32,7 @@ public static class DataDiagnostics
 
             return true;
         } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException
-                                       or ArgumentOutOfRangeException)
+                                     || (catchesFileTooLarge && ex is ArgumentOutOfRangeException))
         {
             Log?.Invoke($"[data] IO failed ({what}): {ex.GetType().Name}: {ex.Message}");
 

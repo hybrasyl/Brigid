@@ -1,3 +1,4 @@
+using Brigid.Data;
 using Brigid.Data.Repositories;
 using DALib.Data;
 using Xunit;
@@ -110,6 +111,30 @@ public sealed class MetaFileRepositoryTests : IDisposable
         ListOnly("sevent1");
 
         Assert.Equal("Lower-case event", Repository.GetAll("SEvent").Single().Single().Key);
+    }
+
+    //a list is a set with no order, and the events of SEvent1, SEvent2 and on came back in hash order
+    [Fact]
+    public void AScanGivesTheFilesInNameOrder()
+    {
+        WriteMetaFile(Root, "SEvent10", new MetaFileEntry("Tenth event"));
+        ListOnly("SEvent2", "SEvent10", "SEvent1");
+
+        Assert.Equal(["Listed event", "Tenth event", "Stale event"], Repository.GetAll("SEvent").Select(file => file.Single().Key));
+
+        Repository.ForgetListedNames();
+
+        Assert.Equal(["Listed event", "Tenth event", "Stale event"], Repository.GetAll("SEvent").Select(file => file.Single().Key));
+    }
+
+    //a write that stopped between its temporary file and the move left SEvent1.tmp, and the scan before the first list read
+    //it as one more event file
+    [Fact]
+    public void AScanWithNoListSkipsATemporaryFile()
+    {
+        WriteMetaFile(Root, "SEvent1" + MetaFileCache.TEMP_SUFFIX, new MetaFileEntry("Half-written event"));
+
+        Assert.Equal(2, Repository.GetAll("SEvent").Count);
     }
 
     //a world transfer gives a new list before its sync completes and builds the index again

@@ -21,7 +21,8 @@ public sealed class MetaFileRepository
         Access = FileAccess.Read,
         Mode = FileMode.Open,
         Options = FileOptions.SequentialScan,
-        Share = FileShare.ReadWrite
+        //the sync moves a new file over the old one, which a reader without delete sharing blocks
+        Share = FileShare.ReadWrite | FileShare.Delete
     };
 
     //reads the server-pushed metafile cache that MetaFileSync writes; must match its write location
@@ -68,26 +69,30 @@ public sealed class MetaFileRepository
     //the files whose names start with the prefix. With a list, the listed files that are there, each opened by its listed
     //name: a stale file that the prune could not delete is never opened, and a listed file whose name changed case is
     //found where the file system finds it (the prune cannot delete such a file on Windows either, and the sync then finds
-    //it under the listed name). With no list, every file in the folder; a folder that cannot be listed gives none
+    //it under the listed name). With no list, every file in the folder but a temporary file that a write left; a folder
+    //that cannot be listed gives none. In name order, so the events of SEvent1, SEvent2 and on keep one order
     private (string Path, string Name)[] ScanFiles(string prefix)
     {
         var directory = MetaFileDirectory;
+        IEnumerable<(string Path, string Name)> files;
 
         if (Listed is { } listed)
-            return
-            [
-                .. listed.Where(name => name.StartsWithI(prefix))
-                         .Select(name => (Path: Path.Combine(directory, name), Name: name))
-                         .Where(file => File.Exists(file.Path))
-            ];
+            files = listed.Where(name => name.StartsWithI(prefix))
+                          .Select(name => (Path: Path.Combine(directory, name), Name: name))
+                          .Where(file => File.Exists(file.Path));
+        else
+        {
+            string[] paths = [];
 
-        string[] paths = [];
+            //the sync completion builds the item index from the game loop, outside the packet handler's catch
+            if (!Directory.Exists(directory) || !DataDiagnostics.Try(() => paths = Directory.GetFiles(directory), $"list the {prefix} metafiles"))
+                return [];
 
-        //the sync completion builds the item index from the game loop, outside the packet handler's catch
-        if (!Directory.Exists(directory) || !DataDiagnostics.Try(() => paths = Directory.GetFiles(directory), $"list the {prefix} metafiles"))
-            return [];
+            files = paths.Select(path => (Path: path, Name: Path.GetFileName(path)))
+                         .Where(file => file.Name.StartsWithI(prefix) && !file.Name.EndsWith(MetaFileCache.TEMP_SUFFIX, StringComparison.OrdinalIgnoreCase));
+        }
 
-        return [.. paths.Select(path => (Path: path, Name: Path.GetFileName(path))).Where(file => file.Name.StartsWithI(prefix))];
+        return [.. files.OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)];
     }
 
     /// <summary>
@@ -193,7 +198,8 @@ public sealed class MetaFileRepository
 
         foreach (var name in itemNames)
         {
-            if (!ItemIndex.TryGetValue(name, out var fileName) || ListedNameFor(fileName) is null)
+            //the index can hold a name from an earlier list or a folder scan; the file is opened by its listed name
+            if (!ItemIndex.TryGetValue(name, out var indexedName) || ListedNameFor(indexedName) is not { } fileName)
                 continue;
 
             if (!fileGroups.TryGetValue(fileName, out var names))
