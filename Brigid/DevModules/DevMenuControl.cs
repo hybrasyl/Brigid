@@ -26,22 +26,25 @@ internal sealed class DevMenuControl : CenteredModalPanel
     {
         Name = PANEL_NAME;
         AddRows(modules, log);
-        OnClose += Remove;
     }
 
     /// <summary>
     ///     Opens the menu on <paramref name="root" />, or closes it when it is open there. Does nothing with no root (the
     ///     launcher screen). The control stack takes the focus from a text box while the menu is open and gives it back
-    ///     when the menu closes.
+    ///     when the menu closes. A closed menu stays on the root, hidden: it closes from a click on one of its rows, and a
+    ///     removal then disposed the row while the dispatch still used it. The modules do not change in a session.
     /// </summary>
     internal static void Toggle(UIPanel? root, IReadOnlyList<IDevModule> modules, Action<string> log)
     {
         if (root is null)
             return;
 
-        if (root.FindChild<DevMenuControl>(PANEL_NAME) is { } open)
+        if (root.FindChild<DevMenuControl>(PANEL_NAME) is { } menuOnRoot)
         {
-            open.Hide();
+            if (menuOnRoot.Visible)
+                menuOnRoot.Hide();
+            else
+                menuOnRoot.Show();
 
             return;
         }
@@ -116,5 +119,4 @@ internal sealed class DevMenuControl : CenteredModalPanel
     }
 
     //the menu is made again at each open, so a close removes it from its parent
-    private void Remove() => Parent?.RemoveChild(PANEL_NAME);
 }

@@ -112,7 +112,13 @@ public sealed class DevMenuControlTests
 
         DevMenuControl.Toggle(root, [], Log.Add);
 
-        Assert.Null(root.FindChild<DevMenuControl>("devmenu"));
+        //the closed menu stays, hidden, so a close from one of its own rows disposes nothing during the dispatch
+        Assert.Same(menu, root.FindChild<DevMenuControl>("devmenu"));
+        Assert.False(menu.Visible);
+
+        DevMenuControl.Toggle(root, [], Log.Add);
+
+        Assert.True(menu.Visible);
     }
 
     [Fact]

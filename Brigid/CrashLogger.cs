@@ -1,3 +1,5 @@
+using Brigid.Data;
+
 namespace Brigid;
 
 /// <summary>
@@ -27,7 +29,8 @@ internal static class CrashLogger
     {
         try
         {
-            var dir = Path.Combine(AppContext.BaseDirectory, LOG_DIR);
+            //a temporary app folder (BRIGID_APP_ROOT, a smoke run) keeps its crash logs, as it keeps its notice log
+            var dir = Path.Combine(AppPaths.IsAppRootOverridden ? AppPaths.AppRoot : AppContext.BaseDirectory, LOG_DIR);
             Directory.CreateDirectory(dir);
 
             //yyyy-MM-dd_HH-mm-ss avoids the colon characters that are illegal in Windows filenames

@@ -35,8 +35,10 @@ public sealed class BrigidApp : IAsyncDisposable
 
     private readonly Process Client;
     private readonly List<string> Output = [];
+    private readonly Lock OutputGate = new();
     private bool Started;
     private readonly List<string> Captures = [];
+    private readonly Lock CapturesGate = new();
     private DriverClient? Driver;
 
     private BrigidApp(string root, Process client)
@@ -53,7 +55,7 @@ public sealed class BrigidApp : IAsyncDisposable
     {
         get
         {
-            lock (Output)
+            using (OutputGate.EnterScope())
                 return Output.ToArray();
         }
     }
@@ -80,10 +82,19 @@ public sealed class BrigidApp : IAsyncDisposable
             await body(app);
         } catch (Exception ex)
         {
-            var folder = await app.SaveArtifactsAsync(testName);
+            //an artifact that cannot be saved must not take the place of the failure of the test
+            string folder;
 
-            if (server is not null)
-                await File.WriteAllTextAsync(Path.Combine(folder, "server.log"), await server.LogsAsync());
+            try
+            {
+                folder = await app.SaveArtifactsAsync(testName);
+
+                if (server is not null)
+                    await File.WriteAllTextAsync(Path.Combine(folder, "server.log"), await server.LogsAsync());
+            } catch (Exception saveError)
+            {
+                folder = $"(not saved: {saveError.GetType().Name}: {saveError.Message})";
+            }
 
             throw new SmokeFailure($"{ex.Message}{Environment.NewLine}Artifacts: {folder}", ex);
         } finally
@@ -302,7 +313,7 @@ public sealed class BrigidApp : IAsyncDisposable
     {
         var path = (await SendAsync("screenshot"))["path"]!.GetValue<string>();
 
-        lock (Captures)
+        using (CapturesGate.EnterScope())
             Captures.Add(path);
 
         return path;
@@ -373,7 +384,7 @@ public sealed class BrigidApp : IAsyncDisposable
         if (line is null)
             return;
 
-        lock (Output)
+        using (OutputGate.EnterScope())
             Output.Add(line);
     }
 
@@ -393,13 +404,13 @@ public sealed class BrigidApp : IAsyncDisposable
 
         string[] captures;
 
-        lock (Captures)
+        using (CapturesGate.EnterScope())
             captures = Captures.ToArray();
 
         foreach (var capture in captures.Where(File.Exists))
             File.Copy(capture, Path.Combine(folder, Path.GetFileName(capture)), true);
 
-        lock (Output)
+        using (OutputGate.EnterScope())
             File.WriteAllLines(Path.Combine(folder, "client.log"), Output);
 
         return folder;

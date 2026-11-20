@@ -61,11 +61,20 @@ public sealed class TestDriverModule : IDevModule
         if (Host is null || Server is null)
             return;
 
+        //a throw here would remove the listener, and the client would stay open with no test: it closes the client
+        //instead, so the test fails at once with the reason in the log
         if (Context is null)
-        {
-            Context = new DriverContext(Host, SdlInput.WindowId(Host.Game.Window.Handle));
-            Host.Log($"test driver: the window is on display {SdlInput.MoveToSecondDisplay(Host.Game.Window.Handle)}");
-        }
+            try
+            {
+                Context = new DriverContext(Host, SdlInput.WindowId(Host.Game.Window.Handle));
+                Host.Log($"test driver: the window is on display {SdlInput.MoveToSecondDisplay(Host.Game.Window.Handle)}");
+            } catch (Exception ex)
+            {
+                Host.Log($"test driver: could not start, so the client closes: {ex}");
+                Host.Game.Exit();
+
+                return;
+            }
 
         //the test asked to quit, or it is gone (it ended, was cancelled, or its process stopped): a client must not stay
         //open with no test

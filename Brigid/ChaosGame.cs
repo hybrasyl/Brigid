@@ -365,7 +365,21 @@ public sealed class ChaosGame : Game
     /// </summary>
     internal void RequestFrameCapture(string path, Action<bool> done) => FrameCapture = (path, done);
 
+    //a capture is a diagnostic: a back buffer that cannot be read (a resize, a lost device) gives false, and the frame goes on
     private bool SaveFrameCapture(string path)
+    {
+        try
+        {
+            return WriteFrameCapture(path);
+        } catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            NoticeDebugLog.Write($"[capture] the frame could not be read: {ex.GetType().Name}: {ex.Message}");
+
+            return false;
+        }
+    }
+
+    private bool WriteFrameCapture(string path)
     {
         var parameters = GraphicsDevice.PresentationParameters;
         var width = parameters.BackBufferWidth;
@@ -376,7 +390,14 @@ public sealed class ChaosGame : Game
         //the back buffer's alpha is not part of the picture
         var info = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Opaque);
         using var image = SKImage.FromPixelCopy(info, MemoryMarshal.AsBytes(pixels.AsSpan()), width * 4);
-        using var png = image.Encode(SKEncodedImageFormat.Png, 100);
+        using var png = image?.Encode(SKEncodedImageFormat.Png, 100);
+
+        if (png is null)
+        {
+            NoticeDebugLog.Write("[capture] the frame could not be encoded");
+
+            return false;
+        }
 
         return DataDiagnostics.Try(
             () =>
