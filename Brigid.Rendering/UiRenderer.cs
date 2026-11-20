@@ -167,7 +167,8 @@ public sealed class UiRenderer : IDisposable
 
     /// <summary>
     ///     Loads a single EPF frame from setoa.dat (GUI palette) and caches the resulting texture. The first call for a given
-    ///     file bulk-caches all frames.
+    ///     file bulk-caches all frames. A frame past the end of a loaded file gives <see cref="MissingTexture" /> and does
+    ///     not load the file again.
     /// </summary>
     public Texture2D GetEpfTexture(string fileName, int frameIndex)
     {
@@ -175,6 +176,9 @@ public sealed class UiRenderer : IDisposable
 
         if (Cache.TryGetValue(key, out var cached))
             return cached;
+
+        if (EpfFrameCounts.TryGetValue(fileName, out var frameCount) && ((frameIndex < 0) || (frameIndex >= frameCount)))
+            return MissingTexture;
 
         var images = DataContext.UserControls.GetEpfImages(fileName);
 
@@ -523,8 +527,7 @@ public sealed class UiRenderer : IDisposable
         //legacy path: frame iconId of legends.epf — GetEpfTexture caches under its own "epf:legends.epf:{i}" key,
         //so we don't re-cache under "legend:{iconId}". The legend: key is reserved for modern-pack results, which
         //means a pack registering mid-session (hypothetical; no hot-reload today) would still be picked up on the
-        //first uncached lookup after registration. An id past the last frame is not looked up, because a frame that is not
-        //in the cache loads the whole sheet again.
+        //first uncached lookup after registration. An id past the last frame gives null, not the missing texture.
         return iconId < GetEpfFrameCount("legends.epf") ? GetEpfTexture("legends.epf", iconId) : null;
     }
 

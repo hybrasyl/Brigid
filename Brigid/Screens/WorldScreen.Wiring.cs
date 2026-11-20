@@ -312,7 +312,13 @@ public sealed partial class WorldScreen
             if (slot is null)
                 return;
 
-            if (NpcSession.CurrentMenuType is MenuType.ShowPlayerItems or MenuType.ShowPlayerSkills or MenuType.ShowPlayerSpells)
+            if (NpcSession.CurrentMenuType is MenuType.ShowPlayerItems)
+                Game.Connection.SendItemMenuResponse(
+                    NpcSession.SourceObjectType,
+                    sourceId,
+                    NpcSession.PursuitId,
+                    slot.Value);
+            else if (NpcSession.CurrentMenuType is MenuType.ShowPlayerSkills or MenuType.ShowPlayerSpells)
                 Game.Connection.SendMenuResponse(
                     NpcSession.SourceObjectType,
                     sourceId,

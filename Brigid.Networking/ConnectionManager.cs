@@ -146,6 +146,16 @@ public sealed class ConnectionManager : IDisposable
         Client.Send(packet);
     }
 
+    //an item send that names an inventory slot: a slot that a swap holds is refused, because the server can have moved
+    //another item into it
+    private void SendUnlessHeld<T>(byte slot, T packet) where T : IClientPacket
+    {
+        if (Swaps.Holds(slot))
+            return;
+
+        SendIfWorld(packet);
+    }
+
     /// <inheritdoc />
     public void Dispose() => Client.Dispose();
 
@@ -343,11 +353,8 @@ public sealed class ConnectionManager : IDisposable
         int x,
         int y,
         int count = 1)
-    {
-        if (Swaps.Holds(sourceSlot))
-            return;
-
-        SendIfWorld(
+        => SendUnlessHeld(
+            sourceSlot,
             new Cli.DropItemPacket
             {
                 Slot = sourceSlot,
@@ -355,24 +362,19 @@ public sealed class ConnectionManager : IDisposable
                 Y = (ushort)y,
                 Count = (uint)count
             });
-    }
 
     /// <summary>
     ///     Sends an item give request to a creature/NPC.
     /// </summary>
     public void DropItemOnCreature(byte sourceSlot, uint targetId, byte count = 1)
-    {
-        if (Swaps.Holds(sourceSlot))
-            return;
-
-        SendIfWorld(
+        => SendUnlessHeld(
+            sourceSlot,
             new Cli.DropItemOnCreaturePacket
             {
                 Slot = sourceSlot,
                 TargetId = targetId,
                 Count = count
             });
-    }
 
     /// <summary>
     ///     Follows a pending redirect onto the next hop. Async because login and world are
@@ -827,18 +829,14 @@ public sealed class ConnectionManager : IDisposable
     ///     Sends a pickup request from a tile.
     /// </summary>
     public void PickupItem(int x, int y, byte destinationSlot)
-    {
-        if (Swaps.Holds(destinationSlot))
-            return;
-
-        SendIfWorld(
+        => SendUnlessHeld(
+            destinationSlot,
             new Cli.PickupItemPacket
             {
                 Slot = destinationSlot,
                 X = (ushort)x,
                 Y = (ushort)y
             });
-    }
 
     /// <summary>
     ///     Processes queued inbound packets, driving state transitions. Call this from the game loop's Update method.
@@ -1232,6 +1230,18 @@ public sealed class ConnectionManager : IDisposable
     public void SendIgnoreRequest() => SendIfWorld(Cli.IgnorePacket.Request());
 
     /// <summary>
+    ///     Sends the answer to a menu of the player's items: the inventory slot of the item that the player selected. A slot
+    ///     that a swap holds is refused, as for the other item sends.
+    /// </summary>
+    public void SendItemMenuResponse(byte objectType, uint entityId, ushort pursuitId, byte inventorySlot)
+    {
+        if (Swaps.Holds(inventorySlot))
+            return;
+
+        SendMenuResponse(objectType, entityId, pursuitId, inventorySlot);
+    }
+
+    /// <summary>
     ///     Sends a menu interaction response (pursuit selection / text / option).
     /// </summary>
     public void SendMenuResponse(
@@ -1392,13 +1402,7 @@ public sealed class ConnectionManager : IDisposable
     /// <summary>
     ///     Sends an item use request (equip, consume).
     /// </summary>
-    public void UseItem(byte slot)
-    {
-        if (Swaps.Holds(slot))
-            return;
-
-        SendIfWorld(new Cli.UseItemPacket { Slot = slot });
-    }
+    public void UseItem(byte slot) => SendUnlessHeld(slot, new Cli.UseItemPacket { Slot = slot });
 
     /// <summary>
     ///     Sends a skill use request.
